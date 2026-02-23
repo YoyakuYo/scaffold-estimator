@@ -66,43 +66,12 @@ async function bootstrap() {
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // CORS configuration
-  // In development: allow all origins
-  // In production: allow FRONTEND_URL (comma-separated), plus .onrender.com subdomains
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  const allowedOrigins: string[] = [];
-  const rawOrigins = process.env.FRONTEND_URL || process.env.CORS_ORIGINS || '';
-  if (rawOrigins) {
-    rawOrigins.split(',').forEach((o) => {
-      const trimmed = o.trim().replace(/\/+$/, '');
-      if (trimmed) allowedOrigins.push(trimmed);
-    });
-  }
-  if (!isProduction) {
-    allowedOrigins.push('http://localhost:3001', 'http://127.0.0.1:3001');
-  }
-
-  logger.log(`CORS allowed origins: ${allowedOrigins.length ? allowedOrigins.join(', ') : '(all in dev)'}`);
-
+  // CORS — allow all origins.
+  // Auth is handled by JWT Bearer tokens, not cookies, so CORS origin
+  // restrictions add no security. This avoids breakage across Vercel,
+  // Render, custom domains, PWA installs, and localhost.
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin) return callback(null, true);
-
-      const normalized = origin.replace(/\/+$/, '');
-
-      if (!isProduction) return callback(null, true);
-
-      if (allowedOrigins.includes(normalized)) return callback(null, true);
-
-      // Auto-allow .onrender.com subdomains (both services are on Render)
-      if (/^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(normalized)) {
-        return callback(null, true);
-      }
-
-      logger.warn(`CORS rejected origin: ${origin} — allowed: [${allowedOrigins.join(', ')}]`);
-      callback(null, false);
-    },
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
