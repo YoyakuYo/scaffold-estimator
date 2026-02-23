@@ -7,7 +7,8 @@ import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const showNavigation = pathname !== '/' && pathname !== '/login' && pathname !== '/register';
+  const noNavPages = ['/', '/login', '/register', '/superadmin'];
+  const showNavigation = !noNavPages.includes(pathname);
 
   return (
     <>
