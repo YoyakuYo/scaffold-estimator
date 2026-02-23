@@ -16,11 +16,15 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
+    statusBarStyle: 'black-translucent',
     title: '足場見積',
   },
   formatDetection: {
     telephone: false,
+  },
+  other: {
+    'msapplication-TileImage': '/icons/icon-144x144.png',
+    'msapplication-config': 'none',
   },
 };
 
@@ -39,15 +43,16 @@ export default function RootLayout({
   return (
     <html lang="ja" suppressHydrationWarning>
       <head>
-        {/* PWA Meta Tags */}
         <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-        <link rel="icon" href="/icons/icon-192x192.png" sizes="192x192" type="image/png" />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+        <link rel="icon" href="/icons/icon-32x32.png" sizes="32x32" type="image/png" />
+        <link rel="icon" href="/icons/icon-16x16.png" sizes="16x16" type="image/png" />
+        <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="application-name" content="足場見積" />
         <meta name="apple-mobile-web-app-title" content="足場見積" />
-        <meta name="msapplication-TileColor" content="#2563eb" />
+        <meta name="msapplication-TileColor" content="#0f172a" />
+        <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
       </head>
       <body className={`${notoSansJP.variable} font-sans antialiased`}>
         <Providers>

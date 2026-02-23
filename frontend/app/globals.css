@@ -26,6 +26,58 @@ body {
   }
 }
 
+/* ── Window Controls Overlay (PWA title bar integration) ── */
+@supports (app-region: drag) {
+  .app-titlebar {
+    app-region: drag;
+  }
+  .app-titlebar-nodrag {
+    app-region: no-drag;
+  }
+}
+
+@media (display-mode: window-controls-overlay) {
+  .app-titlebar {
+    position: fixed;
+    top: 0;
+    left: env(titlebar-area-x, 0);
+    width: env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, 40px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+    background: #0f172a;
+    color: white;
+  }
+  .app-main-content {
+    padding-top: env(titlebar-area-height, 40px);
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: auto;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+}
+
 /* Upload progress bar animation */
 @keyframes progress {
   0%   { width: 0%; }

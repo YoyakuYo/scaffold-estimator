@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Navigation } from '@/components/navigation';
 import { Heartbeat } from '@/components/heartbeat';
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
+import { AppTitlebar } from '@/components/app-titlebar';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,13 +13,16 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {showNavigation && (
-        <>
-          <Navigation />
-          <Heartbeat />
-        </>
-      )}
-      {children}
+      <AppTitlebar />
+      <div className="app-main-content">
+        {showNavigation && (
+          <>
+            <Navigation />
+            <Heartbeat />
+          </>
+        )}
+        {children}
+      </div>
       <PwaInstallPrompt />
     </>
   );
