@@ -53,7 +53,7 @@ export default function DashboardPage() {
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   if (isAdmin) {
     return <AdminDashboard />;
@@ -419,6 +419,7 @@ function AdminDashboard() {
                           </p>
                         </div>
                         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                          u.role === 'superadmin' ? 'bg-amber-100 text-amber-700' :
                           u.role === 'admin' ? 'bg-red-100 text-red-700' :
                           u.role === 'estimator' ? 'bg-blue-100 text-blue-700' :
                           'bg-gray-100 text-gray-600'

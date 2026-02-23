@@ -24,7 +24,7 @@ export function Navigation() {
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   const handleLogout = () => {
     authApi.logout();

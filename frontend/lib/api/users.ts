@@ -2,7 +2,7 @@ import apiClient from './client';
 
 // ─── Types ──────────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'estimator' | 'viewer';
+export type UserRole = 'superadmin' | 'admin' | 'estimator' | 'viewer';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 

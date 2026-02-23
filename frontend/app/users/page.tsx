@@ -86,7 +86,7 @@ function UsersPage() {
     retry: false,
   });
 
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   const { data: users, isLoading, isError, error } = useQuery<UserProfile[]>({
     queryKey: ['users'],

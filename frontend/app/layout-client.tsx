@@ -8,8 +8,9 @@ import { AppTitlebar } from '@/components/app-titlebar';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const noNavPages = ['/', '/login', '/register', '/superadmin'];
-  const showNavigation = !noNavPages.includes(pathname);
+  const noNavPages = ['/', '/login', '/register'];
+  const isSuperAdminArea = pathname.startsWith('/superadmin');
+  const showNavigation = !noNavPages.includes(pathname) && !isSuperAdminArea;
 
   return (
     <>

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
-import { useMutation } from '@tanstack/react-query';
+import { usersApi } from '@/lib/api/users';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Shield, LogIn, Loader2, AlertCircle } from 'lucide-react';
 
 export default function SuperAdminPage() {
@@ -12,10 +13,22 @@ export default function SuperAdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
+  const hasToken = !!authApi.getToken();
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: usersApi.getProfile,
+    enabled: hasToken,
+    retry: false,
+  });
+
   const loginMutation = useMutation({
     mutationFn: authApi.login,
-    onSuccess: () => {
-      router.push('/dashboard');
+    onSuccess: (res) => {
+      if (res.user?.role === 'admin' || res.user?.role === 'superadmin') {
+        router.push('/superadmin/dashboard');
+        return;
+      }
+      setError('This account is not allowed to access Super Admin.');
     },
     onError: (err: any) => {
       setError(
@@ -31,6 +44,12 @@ export default function SuperAdminPage() {
     setError('');
     loginMutation.mutate({ email, password });
   };
+
+  useEffect(() => {
+    if (profile?.role === 'admin' || profile?.role === 'superadmin') {
+      router.replace('/superadmin/dashboard');
+    }
+  }, [profile, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -100,7 +119,7 @@ export default function SuperAdminPage() {
 
           <div className="mt-6 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <p className="text-xs text-slate-500 text-center">
-              このページは管理者専用です。一般ユーザーは
+              このページは管理者専用です。既存の管理者アカウントでログインできます。一般ユーザーは
               <a href="/login" className="text-blue-600 hover:underline ml-1">
                 通常のログイン
               </a>

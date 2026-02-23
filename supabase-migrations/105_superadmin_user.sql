@@ -163,7 +163,7 @@ VALUES (
   'a0000000-0000-0000-0000-000000000001',
   'YOUR_EMAIL',           -- ← replace with your email
   'YOUR_BCRYPT_HASH',     -- ← replace with bcrypt hash of your password
-  'admin',
+  'superadmin',
   'YOUR_FIRST_NAME',      -- ← replace with your name
   'Admin',
   TRUE,
@@ -171,7 +171,7 @@ VALUES (
 )
 ON CONFLICT (email) DO UPDATE SET
   password_hash = EXCLUDED.password_hash,
-  role = 'admin',
+  role = 'superadmin',
   is_active = TRUE,
   approval_status = 'approved';
 

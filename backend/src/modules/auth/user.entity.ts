@@ -7,7 +7,7 @@ import {
   Index,
 } from 'typeorm';
 
-export type UserRole = 'admin' | 'estimator' | 'viewer';
+export type UserRole = 'superadmin' | 'admin' | 'estimator' | 'viewer';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 @Entity('users')

@@ -57,7 +57,7 @@ export class MessagingService {
         .innerJoin('users', 'u', 'u.id = m.sender_id')
         .where('m.conversation_id = :cid', { cid: c.id })
         .andWhere('m.read_at IS NULL')
-        .andWhere('u.role != :role', { role: 'admin' })
+        .andWhere('u.role NOT IN (:...adminRoles)', { adminRoles: ['admin', 'superadmin'] })
         .getCount();
       result.push({
         ...c,
@@ -100,7 +100,7 @@ export class MessagingService {
     conv.updatedAt = new Date();
     await this.conversationRepository.save(conv);
     const sender = await this.userRepository.findOne({ where: { id: senderId } });
-    if (sender?.role === 'admin') {
+    if (sender?.role === 'admin' || sender?.role === 'superadmin') {
       await this.notificationsService
         .create(conv.userId, 'new_message', 'New message from support', {
           body: body.trim().slice(0, 100) + (body.length > 100 ? '…' : ''),
