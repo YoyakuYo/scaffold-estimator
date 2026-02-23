@@ -3,11 +3,10 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usersApi, UserProfile, UserRole, CreateUserPayload } from '@/lib/api/users';
+import { usersApi, UserProfile, UserRole } from '@/lib/api/users';
 import { useI18n } from '@/lib/i18n';
 import {
   Users,
-  UserPlus,
   Shield,
   Eye,
   Calculator,
@@ -43,7 +42,6 @@ function UsersPage() {
   const searchParams = useSearchParams();
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -61,15 +59,6 @@ function UsersPage() {
       setFilterStatus(filterParam);
     }
   }, [filterParam]);
-
-  // Form state for create
-  const [createForm, setCreateForm] = useState<CreateUserPayload>({
-    email: '',
-    password: '',
-    role: 'estimator',
-    firstName: '',
-    lastName: '',
-  });
 
   // Form state for edit
   const [editForm, setEditForm] = useState({
@@ -110,15 +99,6 @@ function UsersPage() {
     return user.approvalStatus === filterStatus;
   }) || [];
 
-  const createMutation = useMutation({
-    mutationFn: usersApi.createUser,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      setShowCreateModal(false);
-      setCreateForm({ email: '', password: '', role: 'estimator', firstName: '', lastName: '' });
-    },
-  });
-
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => usersApi.updateUser(id, data),
     onSuccess: () => {
@@ -156,10 +136,6 @@ function UsersPage() {
     },
   });
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    createMutation.mutate(createForm);
-  };
 
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,18 +244,9 @@ function UsersPage() {
               )}
             </h1>
             <p className="text-gray-500 mt-1">
-              {locale === 'ja' ? 'チームメンバーの管理と権限設定' : 'Manage team members and permissions'}
+              {locale === 'ja' ? 'ユーザーの承認・権限管理' : 'Approve registrations and manage permissions'}
             </p>
           </div>
-          {isAdmin && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              <UserPlus className="h-5 w-5" />
-              {locale === 'ja' ? '新規ユーザー' : 'Add User'}
-            </button>
-          )}
         </div>
 
         {/* Filter Tabs */}
@@ -297,6 +264,8 @@ function UsersPage() {
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   filterStatus === filter.key
                     ? 'bg-blue-600 text-white'
+                    : filter.key === 'pending' && filter.count > 0
+                    ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'
                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                 }`}
               >
@@ -507,111 +476,6 @@ function UsersPage() {
               )}
         </div>
       </div>
-
-      {/* ─── Create User Modal ─── */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900">
-                {locale === 'ja' ? '新規ユーザー作成' : 'Create New User'}
-              </h2>
-              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-gray-100 rounded-md">
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {locale === 'ja' ? '姓' : 'Last Name'}
-                  </label>
-                  <input
-                    type="text"
-                    value={createForm.lastName}
-                    onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {locale === 'ja' ? '名' : 'First Name'}
-                  </label>
-                  <input
-                    type="text"
-                    value={createForm.firstName}
-                    onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? 'メールアドレス' : 'Email'} *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="user@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? 'パスワード' : 'Password'} *
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={createForm.password}
-                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="••••••••"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? '権限' : 'Role'} *
-                </label>
-                <select
-                  value={createForm.role}
-                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as UserRole })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="estimator">{locale === 'ja' ? '積算担当' : 'Estimator'}</option>
-                  <option value="viewer">{locale === 'ja' ? '閲覧者' : 'Viewer'}</option>
-                </select>
-              </div>
-              {createMutation.isError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-                  {(createMutation.error as any)?.response?.data?.message || (locale === 'ja' ? '作成に失敗しました' : 'Failed to create user')}
-                </div>
-              )}
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  {locale === 'ja' ? 'キャンセル' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {createMutation.isPending
-                    ? (locale === 'ja' ? '作成中...' : 'Creating...')
-                    : (locale === 'ja' ? '作成' : 'Create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ─── Edit User Modal ─── */}
       {editingUser && (
