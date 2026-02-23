@@ -201,6 +201,7 @@ export const translations = {
     wallsUnit: { ja: '面', en: 'walls' },
     stairsUnit: { ja: '箇所', en: 'points' },
     calcError: { ja: '計算に失敗しました。入力値を確認してください。', en: 'Calculation failed. Please check your input values.' },
+    networkError: { ja: 'サーバーに接続できません。バックエンドが起動しているか、NEXT_PUBLIC_BACKEND_URL を確認してください。', en: 'Cannot reach the server. Make sure the backend is running and NEXT_PUBLIC_BACKEND_URL is correct.' },
     calcButton: { ja: '積算を実行', en: 'Calculate' },
     calculating: { ja: '計算中...', en: 'Calculating...' },
     selectOneWall: { ja: '少なくとも1面を選択してください', en: 'Please select at least one wall' },

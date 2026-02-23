@@ -988,19 +988,30 @@ export default function ScaffoldPage() {
         </div>
 
         {/* Error message */}
-        {calculateMutation.isError && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-            <div className="text-red-700 text-sm">
-              <span>{t('scaffold', 'calcError')}</span>
-              {(calculateMutation.error as Error)?.message && (
-                <span className="block mt-1 text-red-500">
-                  {(calculateMutation.error as Error).message}
-                </span>
-              )}
+        {calculateMutation.isError && (() => {
+          const err = calculateMutation.error as Error & { code?: string; response?: { status?: number } };
+          const isNetworkError =
+            err?.code === 'ERR_NETWORK' ||
+            err?.message === 'Network Error' ||
+            (err?.message && String(err.message).toLowerCase().includes('network'));
+          return (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <div className="text-red-700 text-sm">
+                {isNetworkError ? (
+                  <span>{t('scaffold', 'networkError')}</span>
+                ) : (
+                  <>
+                    <span>{t('scaffold', 'calcError')}</span>
+                    {err?.message && (
+                      <span className="block mt-1 text-red-500">{err.message}</span>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Calculate Button */}
         <button
