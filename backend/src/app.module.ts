@@ -47,6 +47,15 @@ import { CompanyModule } from './modules/company/company.module';
               synchronize: false,
               logging: configService.get('NODE_ENV') === 'development',
               ssl: { rejectUnauthorized: false },
+              connectTimeoutMS: 10000,
+              extra: {
+                connectionTimeoutMillis: 10000,
+                query_timeout: 30000,
+                statement_timeout: 30000,
+                idle_in_transaction_session_timeout: 60000,
+              },
+              retryAttempts: 5,
+              retryDelay: 3000,
             };
           } catch (e) {
             logger.warn(`Could not parse DATABASE_URL, falling back to individual params: ${(e as Error).message}`);
@@ -91,13 +100,22 @@ import { CompanyModule } from './modules/company/company.module';
           host: dbHost,
           port: dbPort,
           username: dbUsername,
-          password: dbPassword.trim(), // Trim any whitespace
+          password: dbPassword.trim(),
           database: dbName,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
-          synchronize: false, // Disabled - use Supabase SQL migrations instead
+          synchronize: false,
           logging: configService.get('NODE_ENV') === 'development',
           ssl: { rejectUnauthorized: false },
+          connectTimeoutMS: 10000,
+          extra: {
+            connectionTimeoutMillis: 10000,
+            query_timeout: 30000,
+            statement_timeout: 30000,
+            idle_in_transaction_session_timeout: 60000,
+          },
+          retryAttempts: 5,
+          retryDelay: 3000,
         };
       },
     }),
