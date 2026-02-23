@@ -341,7 +341,7 @@ function ScaffoldResultPage() {
                   </>
                 )}
                 <button
-                  onClick={() => router.push('/scaffold')}
+                  onClick={() => router.push(`/scaffold?edit=${configId}`)}
                   className="flex items-center gap-2 text-gray-600 hover:text-gray-800 px-4 py-3 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <RefreshCw className="h-4 w-4" />

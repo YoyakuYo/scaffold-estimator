@@ -61,10 +61,12 @@ export interface ScaffoldConfiguration {
   drawingId?: string;
   mode: 'auto' | 'manual';
   scaffoldType: 'kusabi' | 'wakugumi';
+  structureType?: '改修工事' | 'S造' | 'RC造';
   buildingHeightMm: number;
   walls: Array<{
     side: string;
     wallLengthMm: number;
+    wallHeightMm?: number;
     enabled: boolean;
     stairAccessCount: number;
     segments?: WallSegment[];
@@ -72,7 +74,6 @@ export interface ScaffoldConfiguration {
   scaffoldWidthMm: number;
   preferredMainTatejiMm: number;
   topGuardHeightMm: number;
-  // Wakugumi-specific
   frameSizeMm?: number;
   habakiCountPerSpan?: number;
   endStopperType?: 'nuno' | 'frame';
@@ -224,6 +225,17 @@ export const scaffoldConfigsApi = {
   createAndCalculate: async (dto: CreateScaffoldConfigDto): Promise<CalculationResult> => {
     const response = await apiClient.post<CalculationResult>('/scaffold-configs', dto, {
       timeout: 60000, // 60s — calculation can be slow for complex multi-segment walls
+    });
+    return response.data;
+  },
+
+  /** Update existing config + recalculate (same body as create). */
+  updateAndRecalculate: async (
+    id: string,
+    dto: CreateScaffoldConfigDto,
+  ): Promise<CalculationResult> => {
+    const response = await apiClient.patch<CalculationResult>(`/scaffold-configs/${id}`, dto, {
+      timeout: 60000,
     });
     return response.data;
   },

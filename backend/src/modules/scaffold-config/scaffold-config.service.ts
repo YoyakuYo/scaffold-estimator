@@ -195,6 +195,119 @@ export class ScaffoldConfigService {
     return { config: savedConfig, result, quantities: savedQuantities };
   }
 
+  /**
+   * Update an existing configuration and recalculate (same result shape as createAndCalculate).
+   */
+  async updateAndRecalculate(
+    configId: string,
+    dto: CreateScaffoldConfigDto,
+    userId: string,
+  ): Promise<{ config: ScaffoldConfiguration; result: ScaffoldCalculationResult; quantities: CalculatedQuantity[] }> {
+    const config = await this.getConfig(configId);
+    const scaffoldType = dto.scaffoldType || config.scaffoldType || 'kusabi';
+    this.logger.log(`Updating and recalculating ${scaffoldType} config ${configId}`);
+
+    const wallsToCalculate = dto.walls.map((w) => ({
+      side: w.side,
+      wallLengthMm: w.wallLengthMm,
+      wallHeightMm: w.wallHeightMm,
+      stairAccessCount: w.stairAccessCount,
+      kaidanCount: w.kaidanCount,
+      kaidanOffsets: w.kaidanOffsets,
+      segments: w.segments,
+    }));
+
+    await this.quantityRepo.delete({ configId });
+
+    config.mode = dto.mode;
+    config.scaffoldType = scaffoldType;
+    config.structureType = dto.structureType || '改修工事';
+    config.buildingHeightMm = Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0);
+    config.walls = wallsToCalculate.map((w) => ({
+      side: w.side,
+      wallLengthMm: w.wallLengthMm,
+      wallHeightMm: w.wallHeightMm,
+      enabled: true,
+      stairAccessCount: w.stairAccessCount,
+      ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
+    }));
+    config.scaffoldWidthMm = dto.scaffoldWidthMm;
+    config.preferredMainTatejiMm = dto.preferredMainTatejiMm ?? 1800;
+    config.topGuardHeightMm = dto.topGuardHeightMm ?? 900;
+    config.frameSizeMm = dto.frameSizeMm ?? 1700;
+    config.habakiCountPerSpan = dto.habakiCountPerSpan ?? 2;
+    config.endStopperType = dto.endStopperType ?? 'nuno';
+    config.rentalType = dto.rentalType ?? null;
+    config.rentalStartDate = dto.rentalStartDate ? new Date(dto.rentalStartDate) : null;
+    config.rentalEndDate = dto.rentalEndDate ? new Date(dto.rentalEndDate) : null;
+
+    let result: ScaffoldCalculationResult;
+    if (scaffoldType === 'wakugumi') {
+      result = this.calculatorWakugumiService.calculate({
+        walls: wallsToCalculate,
+        structureType: dto.structureType || '改修工事',
+        scaffoldWidthMm: dto.scaffoldWidthMm,
+        frameSizeMm: dto.frameSizeMm || 1700,
+        habakiCountPerSpan: dto.habakiCountPerSpan || 2,
+        endStopperType: dto.endStopperType || 'nuno',
+        topGuardHeightMm: dto.topGuardHeightMm || 900,
+      });
+    } else {
+      result = this.calculatorService.calculate({
+        walls: wallsToCalculate,
+        structureType: dto.structureType || '改修工事',
+        scaffoldWidthMm: dto.scaffoldWidthMm,
+        preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
+        topGuardHeightMm: dto.topGuardHeightMm || 900,
+      });
+    }
+
+    config.calculationResult = {
+      ...result,
+      ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
+    };
+    config.status = 'calculated';
+    await this.configRepo.save(config);
+
+    const priceMap = await this.buildPriceMap(scaffoldType);
+    const quantityEntities: CalculatedQuantity[] = [];
+    for (const comp of result.summary) {
+      let price = 0;
+      if (comp.category === '布材' && comp.sizeSpec) {
+        const size = comp.sizeSpec;
+        const nunoCodes = [
+          `KUSABI-TESURI-${size}`,
+          `KUSABI-STOPPER-${size}`,
+          `KUSABI-NEGR-${size}`,
+          `KUSABI-BEARER-${size}`,
+        ];
+        const prices = nunoCodes
+          .map((code) => priceMap.get(code))
+          .filter((p): p is number => p !== undefined && p > 0);
+        if (prices.length > 0) {
+          price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+        }
+      } else if (comp.materialCode) {
+        price = priceMap.get(comp.materialCode) || 0;
+      }
+      quantityEntities.push(
+        this.quantityRepo.create({
+          configId: config.id,
+          componentType: comp.type,
+          componentName: comp.nameJp,
+          sizeSpec: comp.sizeSpec,
+          unit: comp.unit,
+          calculatedQuantity: comp.quantity,
+          adjustedQuantity: null,
+          unitPrice: price,
+          sortOrder: comp.sortOrder,
+        }),
+      );
+    }
+    const savedQuantities = await this.quantityRepo.save(quantityEntities);
+    return { config, result, quantities: savedQuantities };
+  }
+
   async getConfig(id: string): Promise<ScaffoldConfiguration> {
     const config = await this.configRepo.findOne({
       where: { id },

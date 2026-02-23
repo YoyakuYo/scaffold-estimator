@@ -157,6 +157,7 @@ export const translations = {
   scaffold: {
     title: { ja: '足場積算', en: 'Scaffold Calculator' },
     subtitle: { ja: '壁の長さと建物の高さを入力して、材料数量を自動計算します', en: 'Enter wall lengths and building height to auto-calculate material quantities' },
+    loadingConfig: { ja: '設定を読み込み中…', en: 'Loading configuration…' },
     modeSelect: { ja: 'モード選択', en: 'Mode Selection' },
     manualMode: { ja: '手動入力', en: 'Manual Input' },
     manualModeDesc: { ja: '壁の長さ・高さを直接入力', en: 'Enter wall lengths & height directly' },

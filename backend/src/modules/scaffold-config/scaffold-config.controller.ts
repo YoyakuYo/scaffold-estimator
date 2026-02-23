@@ -68,6 +68,22 @@ export class ScaffoldConfigController {
   }
 
   /**
+   * PATCH /scaffold-configs/:id
+   * Update config with new inputs and recalculate (same body as POST).
+   */
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'estimator')
+  async updateAndRecalculate(
+    @Param('id') id: string,
+    @Body() dto: CreateScaffoldConfigDto,
+    @CurrentUser() user: any,
+  ) {
+    this.logger.log(`Updating scaffold config ${id}`);
+    return await this.configService.updateAndRecalculate(id, dto, user.id);
+  }
+
+  /**
    * GET /scaffold-configs?projectId=xxx
    */
   @Get()

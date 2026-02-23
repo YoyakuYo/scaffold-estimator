@@ -196,6 +196,59 @@ function ScaffoldPageContent() {
     }
   }, [searchParams]);
 
+  const editConfigId = searchParams.get('edit') ?? null;
+
+  const { data: editConfig, isLoading: editConfigLoading } = useQuery({
+    queryKey: ['scaffold-config', editConfigId!],
+    queryFn: () => scaffoldConfigsApi.get(editConfigId!),
+    enabled: !!editConfigId,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (!editConfigId || !editConfig) return;
+    setScaffoldType(editConfig.scaffoldType);
+    setStructureType(editConfig.structureType || '改修工事');
+    setScaffoldWidthMm(editConfig.scaffoldWidthMm ?? 600);
+    setPreferredMainTatejiMm(editConfig.preferredMainTatejiMm ?? 1800);
+    setTopGuardHeightMm(editConfig.topGuardHeightMm ?? 900);
+    setFrameSizeMm(editConfig.frameSizeMm ?? 1700);
+    setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
+    setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
+    setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
+    const wallList = editConfig.walls ?? [];
+    if (wallList.length > 0) {
+      const buildingH = editConfig.buildingHeightMm ?? 3000;
+      const mapped: WallState[] = wallList.map((w: any) => {
+        const segs = w.segments && Array.isArray(w.segments) ? w.segments : [];
+        const isMulti = segs.length > 0;
+        const lengthMm = isMulti ? calcTotalFromSegments(segs) : (w.wallLengthMm ?? 0);
+        return {
+          side: w.side,
+          enabled: w.enabled !== false,
+          lengthMm,
+          heightMm: w.wallHeightMm ?? buildingH,
+          stairAccessCount: w.stairAccessCount ?? 0,
+          kaidanCount: 0,
+          kaidanOffsets: [],
+          isMultiSegment: isMulti,
+          segments: segs.length > 0 ? segs : [{ lengthMm: w.wallLengthMm ?? 0, offsetMm: 0 }],
+        };
+      });
+      setWalls(mapped);
+      setAiPrefilled(true);
+    }
+    const poly = editConfig.calculationResult?.polygonVertices;
+    if (Array.isArray(poly) && poly.length >= 3) {
+      setPolygonVertices(
+        poly.map((p: { x?: number; y?: number; xFrac?: number; yFrac?: number }) => ({
+          x: p.x ?? p.xFrac ?? 0,
+          y: p.y ?? p.yFrac ?? 0,
+        })),
+      );
+    }
+  }, [editConfigId, editConfig]);
+
   // ─── Fetch rules from backend ───────────────────────────
   const { data: rules } = useQuery<ScaffoldRules>({
     queryKey: ['scaffold-rules'],
@@ -203,10 +256,17 @@ function ScaffoldPageContent() {
     staleTime: 1000 * 60 * 30,
   });
 
-  // ─── Calculate mutation ─────────────────────────────────
   const calculateMutation = useMutation({
-    mutationFn: (dto: CreateScaffoldConfigDto) =>
-      scaffoldConfigsApi.createAndCalculate(dto),
+    mutationFn: ({
+      dto,
+      configId,
+    }: {
+      dto: CreateScaffoldConfigDto;
+      configId?: string | null;
+    }) =>
+      configId
+        ? scaffoldConfigsApi.updateAndRecalculate(configId, dto)
+        : scaffoldConfigsApi.createAndCalculate(dto),
     onSuccess: (data) => {
       router.push(`/scaffold/${data.config.id}`);
     },
@@ -318,34 +378,41 @@ function ScaffoldPageContent() {
       return;
     }
 
-    calculateMutation.mutate({
-      projectId: 'default-project',
+    const dto: CreateScaffoldConfigDto = {
+      projectId: editConfig?.projectId ?? 'default-project',
       mode: 'manual',
       scaffoldType,
       structureType,
       walls: enabledWalls,
       scaffoldWidthMm,
-      // Kusabi-specific
       ...(scaffoldType === 'kusabi' && {
         preferredMainTatejiMm,
         topGuardHeightMm,
       }),
-      // Wakugumi-specific
       ...(scaffoldType === 'wakugumi' && {
         frameSizeMm,
         habakiCountPerSpan,
         endStopperType,
       }),
-      // Send actual polygon shape for plan/3D views
       ...(polygonVertices.length >= 3 && {
-        buildingOutline: polygonVertices.map(v => ({ xFrac: v.x, yFrac: v.y })),
+        buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
       }),
-    });
+    };
+    calculateMutation.mutate({ dto, configId: editConfigId });
   };
 
   // ═══════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════
+
+  if (editConfigId && editConfigLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-600">{t('scaffold', 'loadingConfig')}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
