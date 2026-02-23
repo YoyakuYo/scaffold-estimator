@@ -33,23 +33,42 @@ export class AuthService {
 
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.userRepository.findOne({ where: { email } });
-    if (user && (await bcrypt.compare(password, user.passwordHash))) {
-      // Check if user is approved
-      if (user.approvalStatus !== 'approved') {
-        throw new UnauthorizedException(
-          user.approvalStatus === 'pending'
-            ? 'Your account is pending admin approval. Please wait for approval before logging in.'
-            : 'Your account has been rejected. Please contact support.',
-        );
-      }
-      // Check if user is active
-      if (!user.isActive) {
-        throw new UnauthorizedException('Your account has been deactivated. Please contact support.');
-      }
-      const { passwordHash, ...result } = user;
-      return result;
+
+    // DEBUG — remove after login is confirmed working
+    console.log('[AUTH DEBUG] login attempt:', {
+      email,
+      userFound: !!user,
+      hashStored: user ? `${user.passwordHash.substring(0, 10)}...len=${user.passwordHash.length}` : 'N/A',
+      approvalStatus: user?.approvalStatus,
+      isActive: user?.isActive,
+      role: user?.role,
+    });
+
+    if (!user) {
+      console.log('[AUTH DEBUG] FAIL: user not found in DB');
+      return null;
     }
-    return null;
+
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    console.log('[AUTH DEBUG] bcrypt.compare result:', passwordMatch);
+
+    if (!passwordMatch) {
+      console.log('[AUTH DEBUG] FAIL: password does not match hash');
+      return null;
+    }
+
+    if (user.approvalStatus !== 'approved') {
+      throw new UnauthorizedException(
+        user.approvalStatus === 'pending'
+          ? 'Your account is pending admin approval. Please wait for approval before logging in.'
+          : 'Your account has been rejected. Please contact support.',
+      );
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Your account has been deactivated. Please contact support.');
+    }
+    const { passwordHash, ...result } = user;
+    return result;
   }
 
   async login(user: any) {
