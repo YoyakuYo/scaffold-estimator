@@ -32,7 +32,7 @@ export async function seedInitialData(dataSource: DataSource): Promise<void> {
       companyId: company.id,
       email: adminEmail,
       passwordHash: hashedPassword,
-      role: 'admin',
+      role: 'superadmin',
       firstName: 'Admin',
       lastName: 'User',
       isActive: true,

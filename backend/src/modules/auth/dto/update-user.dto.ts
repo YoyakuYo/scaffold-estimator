@@ -7,7 +7,7 @@ export class UpdateUserDto {
   email?: string;
 
   @IsOptional()
-  @IsEnum(['admin', 'estimator', 'viewer'])
+  @IsEnum(['superadmin', 'estimator', 'viewer'])
   role?: UserRole;
 
   @IsOptional()

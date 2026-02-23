@@ -85,7 +85,7 @@ export class InitialSchema1700000000001 implements MigrationInterface {
           {
             name: 'role',
             type: 'enum',
-            enum: ['admin', 'estimator', 'viewer'],
+            enum: ['superadmin', 'estimator', 'viewer'],
             default: "'viewer'",
           },
           {
