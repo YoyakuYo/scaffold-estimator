@@ -12,11 +12,12 @@ import { Company } from './company.entity';
 import { CompanyBranch } from '../company/company-branch.entity';
 import { LoginHistory } from './login-history.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { Subscription } from '../subscription/subscription.entity';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Company, CompanyBranch, LoginHistory, Subscription]),
+    TypeOrmModule.forFeature([User, Company, CompanyBranch, LoginHistory]),
+    forwardRef(() => SubscriptionModule),
     forwardRef(() => NotificationsModule),
     PassportModule,
     JwtModule.registerAsync({

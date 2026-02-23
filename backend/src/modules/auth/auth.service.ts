@@ -12,11 +12,13 @@ import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto';
 import { RegisterDto } from './dto/register.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
-import { Inject, forwardRef } from '@nestjs/common';
-import { Subscription } from '../subscription/subscription.entity';
+import { Inject, forwardRef, Logger } from '@nestjs/common';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -26,33 +28,24 @@ export class AuthService {
     private loginHistoryRepository: Repository<LoginHistory>,
     @InjectRepository(CompanyBranch)
     private branchRepository: Repository<CompanyBranch>,
-    @InjectRepository(Subscription)
-    private subscriptionRepository: Repository<Subscription>,
     private jwtService: JwtService,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
+    @Inject(forwardRef(() => SubscriptionService))
+    private subscriptionService: SubscriptionService,
     private mailerService: MailerService,
   ) {}
 
+  /** Create trial subscription when user is approved/created. Non-blocking so register never fails. */
   private async ensureTrialSubscriptionForUser(user: User): Promise<void> {
     if (!user || user.role === 'superadmin') return;
-
-    const existing = await this.subscriptionRepository.findOne({ where: { userId: user.id } });
-    if (existing) return;
-
-    const trialStart = new Date();
-    const trialEnd = new Date(trialStart);
-    trialEnd.setDate(trialEnd.getDate() + 14);
-
-    const sub = this.subscriptionRepository.create({
-      userId: user.id,
-      companyId: user.companyId || null,
-      plan: 'free_trial',
-      status: 'trialing',
-      trialStart,
-      trialEnd,
-    });
-    await this.subscriptionRepository.save(sub);
+    try {
+      await this.subscriptionService.ensureSubscriptionForUser(user.id);
+    } catch (err) {
+      this.logger.warn(
+        `Could not ensure subscription for user ${user.id} (subscriptions table may be missing): ${(err as Error).message}`,
+      );
+    }
   }
 
   async validateUser(email: string, password: string): Promise<any> {
