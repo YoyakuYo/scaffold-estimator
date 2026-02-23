@@ -117,8 +117,6 @@ export default function ProfilePage() {
                 <span className="font-medium">
                   {profile.role === 'superadmin'
                     ? (locale === 'ja' ? 'スーパー管理者' : 'Super Admin')
-                    : profile.role === 'admin'
-                    ? (locale === 'ja' ? '管理者' : 'Admin')
                     : profile.role === 'estimator'
                     ? (locale === 'ja' ? '積算担当' : 'Estimator')
                     : (locale === 'ja' ? '閲覧者' : 'Viewer')}

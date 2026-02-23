@@ -26,7 +26,6 @@ import {
 
 const ROLE_CONFIG: Record<UserRole, { label: string; labelJa: string; color: string; icon: any }> = {
   superadmin: { label: 'Super Admin', labelJa: 'スーパー管理者', color: 'bg-amber-100 text-amber-700', icon: Shield },
-  admin: { label: 'Admin', labelJa: '管理者', color: 'bg-red-100 text-red-700', icon: Shield },
   estimator: { label: 'Estimator', labelJa: '積算担当', color: 'bg-blue-100 text-blue-700', icon: Calculator },
   viewer: { label: 'Viewer', labelJa: '閲覧者', color: 'bg-gray-100 text-gray-700', icon: Eye },
 };
@@ -87,7 +86,7 @@ function UsersPage() {
     retry: false,
   });
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = currentUser?.role === 'superadmin';
 
   const { data: users, isLoading, isError, error } = useQuery<UserProfile[]>({
     queryKey: ['users'],
@@ -582,7 +581,6 @@ function UsersPage() {
                   onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as UserRole })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="admin">{locale === 'ja' ? '管理者' : 'Admin'}</option>
                   <option value="estimator">{locale === 'ja' ? '積算担当' : 'Estimator'}</option>
                   <option value="viewer">{locale === 'ja' ? '閲覧者' : 'Viewer'}</option>
                 </select>
@@ -672,7 +670,6 @@ function UsersPage() {
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="admin">{locale === 'ja' ? '管理者' : 'Admin'}</option>
                   <option value="estimator">{locale === 'ja' ? '積算担当' : 'Estimator'}</option>
                   <option value="viewer">{locale === 'ja' ? '閲覧者' : 'Viewer'}</option>
                 </select>

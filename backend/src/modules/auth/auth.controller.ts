@@ -82,84 +82,84 @@ export class AuthController {
   // ─── User Management (Admin Only) ────────────────────────
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('users')
   async listUsers(@CurrentUser() user: any) {
     return this.authService.listUsers(undefined);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('admin/stats')
   async getPlatformStats() {
     return this.authService.getPlatformStats();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('users/online')
   async getOnlineUsers() {
     return this.authService.getOnlineUsers();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('users/:id/login-history')
   async getLoginHistory(@Param('id') id: string) {
     return this.authService.getLoginHistory(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('users/:id')
   async getUser(@Param('id') id: string) {
     return this.authService.getUser(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Post('users')
   async createUser(@CurrentUser() admin: any, @Body() dto: CreateUserDto) {
     return this.authService.createUser(dto, admin.companyId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Put('users/:id')
   async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.authService.updateUser(id, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Post('users/:id/reset-password')
   async adminResetPassword(@Param('id') id: string, @Body() dto: AdminResetPasswordDto) {
     return this.authService.adminResetPassword(id, dto.newPassword);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Delete('users/:id')
   async deactivateUser(@Param('id') id: string) {
     return this.authService.deactivateUser(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Post('users/:id/approve')
   async approveUser(@Param('id') id: string) {
     return this.authService.approveUser(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Post('users/:id/reject')
   async rejectUser(@Param('id') id: string) {
     return this.authService.rejectUser(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('users/pending/count')
   async getPendingUsersCount() {
     const count = await this.authService.getPendingUsersCount();

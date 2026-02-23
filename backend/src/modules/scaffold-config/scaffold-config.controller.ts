@@ -58,7 +58,7 @@ export class ScaffoldConfigController {
    */
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async createAndCalculate(
     @Body() dto: CreateScaffoldConfigDto,
     @CurrentUser() user: any,
@@ -73,7 +73,7 @@ export class ScaffoldConfigController {
    */
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async updateAndRecalculate(
     @Param('id') id: string,
     @Body() dto: CreateScaffoldConfigDto,
@@ -109,7 +109,7 @@ export class ScaffoldConfigController {
    */
   @Post('materials/seed')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async seedMaterials() {
     return await this.configService.seedMaterials();
   }
@@ -120,7 +120,7 @@ export class ScaffoldConfigController {
    */
   @Patch('materials/bulk')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async bulkUpdatePrices(
     @Body() body: { updates: Array<{ id: string; rentalPriceMonthly: number }> },
   ) {
@@ -133,7 +133,7 @@ export class ScaffoldConfigController {
    */
   @Patch('materials/:materialId')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async updateMaterialPrice(
     @Param('materialId') materialId: string,
     @Body() body: { rentalPriceMonthly?: number; purchasePrice?: number; isActive?: boolean },
@@ -147,7 +147,7 @@ export class ScaffoldConfigController {
    */
   @Post('materials/upload-price-table')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
@@ -218,7 +218,7 @@ export class ScaffoldConfigController {
    */
   @Post('materials/apply-price-table')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async applyPriceTable(@Body() body: { matches: Array<{ materialId: string; newPrice: number }> }) {
     if (!body.matches || body.matches.length === 0) {
       throw new BadRequestException('No price matches provided');
@@ -274,7 +274,7 @@ export class ScaffoldConfigController {
    */
   @Patch('quantities/:quantityId')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async updateQuantity(
     @Param('quantityId') quantityId: string,
     @Body() dto: UpdateQuantityDto,
@@ -291,7 +291,7 @@ export class ScaffoldConfigController {
    */
   @Post(':id/review')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async markReviewed(@Param('id') configId: string) {
     return await this.configService.markReviewed(configId);
   }
@@ -302,7 +302,7 @@ export class ScaffoldConfigController {
    */
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async deleteConfig(@Param('id') configId: string) {
     this.logger.log(`Deleting scaffold config ${configId}`);
     await this.configService.deleteConfig(configId);

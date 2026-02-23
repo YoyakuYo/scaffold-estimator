@@ -25,7 +25,7 @@ export class QuotationController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async create(@Body() dto: CreateQuotationDto, @CurrentUser() user: any) {
     return await this.quotationService.create(dto, user.id);
   }
@@ -42,7 +42,7 @@ export class QuotationController {
 
   @Patch('items/:itemId/price')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async updateItemPrice(
     @Param('itemId') itemId: string,
     @Body('unitPrice') unitPrice: number,
@@ -56,14 +56,14 @@ export class QuotationController {
    */
   @Post(':id/repopulate-prices')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async repopulatePrices(@Param('id') id: string, @CurrentUser() user: any) {
     return await this.quotationService.repopulatePrices(id, user.id);
   }
 
   @Post(':id/finalize')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'estimator')
+  @Roles('superadmin', 'estimator')
   async finalize(@Param('id') id: string) {
     return await this.quotationService.finalize(id);
   }

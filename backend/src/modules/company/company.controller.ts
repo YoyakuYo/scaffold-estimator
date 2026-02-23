@@ -30,7 +30,7 @@ export class CompanyController {
 
   @Put()
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   async updateCompany(@CurrentUser() user: any, @Body() dto: UpdateCompanyDto) {
     return this.companyService.updateCompany(user.companyId, dto);
   }
@@ -49,14 +49,14 @@ export class CompanyController {
 
   @Post('branches')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   async createBranch(@CurrentUser() user: any, @Body() dto: CreateBranchDto) {
     return this.companyService.createBranch(user.companyId, dto);
   }
 
   @Put('branches/:branchId')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   async updateBranch(
     @CurrentUser() user: any,
     @Param('branchId') branchId: string,
@@ -67,7 +67,7 @@ export class CompanyController {
 
   @Delete('branches/:branchId')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   async deleteBranch(@CurrentUser() user: any, @Param('branchId') branchId: string) {
     return this.companyService.deleteBranch(user.companyId, branchId);
   }

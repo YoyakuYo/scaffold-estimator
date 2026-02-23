@@ -31,7 +31,7 @@ export function SuperAdminDashboardContent() {
     queryFn: usersApi.getProfile,
     retry: false,
   });
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = currentUser?.role === 'superadmin';
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['admin-stats'],

@@ -55,7 +55,7 @@ export class MessagingController {
 
   /** List all conversations (admin). */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('admin/conversations')
   async listConversations() {
     return this.messagingService.getAllConversations();
@@ -63,7 +63,7 @@ export class MessagingController {
 
   /** Get messages in a conversation (admin). */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Get('admin/conversations/:id/messages')
   async getConversationMessages(@CurrentUser() user: any, @Param('id') id: string) {
     return this.messagingService.getMessages(id, user.id, true);
@@ -71,7 +71,7 @@ export class MessagingController {
 
   /** Admin replies to a conversation. */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Post('admin/conversations/:id/reply')
   async adminReply(
     @CurrentUser() admin: any,
@@ -88,7 +88,7 @@ export class MessagingController {
 
   /** Admin marks conversation as read. */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('superadmin')
   @Post('admin/conversations/:id/mark-read')
   async adminMarkRead(@CurrentUser() admin: any, @Param('id') id: string) {
     await this.messagingService.markAsRead(id, admin.id);

@@ -19,7 +19,7 @@ export default function AdminMessagesPage() {
     queryFn: usersApi.getProfile,
     retry: false,
   });
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdmin = currentUser?.role === 'superadmin';
 
   const { data: conversations, isLoading: convLoading } = useQuery({
     queryKey: ['admin-conversations'],
@@ -157,7 +157,7 @@ export default function AdminMessagesPage() {
                     </div>
                   ) : (
                     messages?.map((msg: Message) => {
-                      const isAdminMsg = msg.sender?.role === 'admin' || msg.sender?.role === 'superadmin';
+                      const isAdminMsg = msg.sender?.role === 'superadmin';
                       return (
                         <div
                           key={msg.id}

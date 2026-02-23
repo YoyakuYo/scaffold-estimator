@@ -24,7 +24,7 @@ export default function SuperAdminPage() {
   const loginMutation = useMutation({
     mutationFn: authApi.login,
     onSuccess: (res) => {
-      if (res.user?.role === 'admin' || res.user?.role === 'superadmin') {
+      if (res.user?.role === 'superadmin') {
         router.push('/superadmin/dashboard');
         return;
       }
@@ -46,7 +46,7 @@ export default function SuperAdminPage() {
   };
 
   useEffect(() => {
-    if (profile?.role === 'admin' || profile?.role === 'superadmin') {
+    if (profile?.role === 'superadmin') {
       router.replace('/superadmin/dashboard');
     }
   }, [profile, router]);
