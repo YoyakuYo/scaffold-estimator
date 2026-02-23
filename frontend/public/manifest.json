@@ -1,0 +1,47 @@
+{
+  "name": "仮設工事見積システム - Scaffold Estimator",
+  "short_name": "足場見積",
+  "description": "Production-grade scaffolding estimation platform for Japanese construction companies",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "ja",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "新規見積もり",
+      "short_name": "見積もり",
+      "description": "Create a new scaffold estimate",
+      "url": "/scaffold"
+    },
+    {
+      "name": "見積書一覧",
+      "short_name": "見積書",
+      "description": "View quotations",
+      "url": "/quotations"
+    },
+    {
+      "name": "AIアシスタント",
+      "short_name": "AI",
+      "description": "AI-powered estimation assistant",
+      "url": "/ai"
+    }
+  ]
+}

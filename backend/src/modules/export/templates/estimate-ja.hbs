@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>仮設工事見積書</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Noto Sans JP', sans-serif;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    
+    .container { 
+      width: 210mm; 
+      min-height: 297mm; 
+      padding: 10mm; 
+      margin: 0 auto;
+      background: white;
+    }
+    
+    .header { 
+      display: flex; 
+      justify-content: space-between; 
+      margin-bottom: 10mm; 
+      border-bottom: 2px solid #000;
+      padding-bottom: 5mm;
+    }
+    
+    .company-info { 
+      font-size: 14px; 
+    }
+    
+    .company-info strong {
+      font-size: 16px;
+      display: block;
+      margin-bottom: 5px;
+    }
+    
+    .estimate-title { 
+      font-size: 24px; 
+      font-weight: bold; 
+      text-align: center; 
+      margin: 10mm 0; 
+    }
+    
+    .project-info {
+      border: 1px solid #000;
+      padding: 5mm;
+      margin-bottom: 10mm;
+      font-size: 12px;
+    }
+    
+    .project-info .row { 
+      display: flex; 
+      margin-bottom: 3mm; 
+    }
+    
+    .project-info .row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .project-info .label { 
+      width: 30%; 
+      font-weight: bold; 
+    }
+    
+    .project-info .value { 
+      width: 70%; 
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10mm;
+      font-size: 11px;
+    }
+    
+    th, td { 
+      border: 1px solid #000; 
+      padding: 3mm; 
+      text-align: right; 
+    }
+    
+    th { 
+      background-color: #f0f0f0; 
+      font-weight: bold; 
+      text-align: center; 
+    }
+    
+    td.label { 
+      text-align: left; 
+    }
+    
+    .total-section { 
+      margin-top: 5mm; 
+      text-align: right; 
+      font-size: 13px; 
+      font-weight: bold; 
+    }
+    
+    .grand-total { 
+      font-size: 16px; 
+      margin-top: 3mm; 
+      border-top: 2px solid #000;
+      padding-top: 3mm;
+    }
+    
+    .notes { 
+      margin-top: 10mm; 
+      font-size: 11px; 
+      border-top: 1px solid #ccc;
+      padding-top: 5mm;
+    }
+    
+    .stamp-area {
+      position: absolute;
+      right: 20px;
+      top: 40px;
+      width: 80px;
+      height: 80px;
+      border: 1px dotted #ccc;
+      text-align: center;
+      padding-top: 25px;
+      font-size: 10px;
+      color: #999;
+    }
+    
+    @media print {
+      .container {
+        margin: 0;
+        padding: 10mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="company-info">
+        <strong>{{company.name}}</strong>
+        {{#if company.address}}{{company.address}}<br>{{/if}}
+        {{#if company.phone}}TEL: {{company.phone}}{{/if}}
+      </div>
+      <div>
+        見積日: {{formatDate issueDate}}<br>
+        見積番号: {{estimateNumber}}<br>
+        有効期限: {{formatDate validUntilDate}}
+      </div>
+    </div>
+    
+    <div class="estimate-title">仮設工事見積書</div>
+    
+    <div class="project-info">
+      <div class="row">
+        <div class="label">発注先:</div>
+        <div class="value">{{clientName}}</div>
+      </div>
+      <div class="row">
+        <div class="label">工事名:</div>
+        <div class="value">{{projectName}}</div>
+      </div>
+      <div class="row">
+        <div class="label">工事場所:</div>
+        <div class="value">{{projectLocation}}</div>
+      </div>
+      <div class="row">
+        <div class="label">構造種別:</div>
+        <div class="value">{{structureType}}</div>
+      </div>
+      <div class="row">
+        <div class="label">工期:</div>
+        <div class="value">{{formatDate rentalStartDate}} ～ {{formatDate rentalEndDate}}</div>
+      </div>
+    </div>
+    
+    <h2 style="font-size: 14px; margin-bottom: 5mm;">費用内訳</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 40%;">項目</th>
+          <th style="width: 15%;">数量</th>
+          <th style="width: 15%;">単価</th>
+          <th style="width: 20%;">金額</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each costBreakdown}}
+        <tr>
+          <td class="label">{{this.name}}</td>
+          <td style="text-align: right;">{{this.quantity}}</td>
+          <td style="text-align: right;">{{formatCurrency this.unitPrice}}</td>
+          <td style="text-align: right;">{{formatCurrency this.calculatedAmount}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    
+    <div class="total-section">
+      <div>小計: {{formatCurrency subtotalJpy}}</div>
+      <div>消費税(10%): {{formatCurrency taxJpy}}</div>
+      <div class="grand-total">合計: {{formatCurrency totalJpy}}</div>
+    </div>
+    
+    <h2 style="font-size: 14px; margin-top: 10mm; margin-bottom: 5mm;">仮設材詳細</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 40%;">部品名</th>
+          <th style="width: 15%;">数量</th>
+          <th style="width: 15%;">単位</th>
+          <th style="width: 15%;">単価</th>
+          <th style="width: 15%;">小計</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each billOfMaterials.components}}
+        <tr>
+          <td class="label">{{this.componentName}}</td>
+          <td style="text-align: right;">{{this.quantity}}</td>
+          <td style="text-align: center;">{{this.unit}}</td>
+          <td style="text-align: right;">{{formatCurrency this.unitPrice}}</td>
+          <td style="text-align: right;">{{formatCurrency (multiply this.quantity this.unitPrice)}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    
+    <div class="notes">
+      <strong>備考:</strong><br>
+      上記金額は税込み価格です。<br>
+      {{#if notes}}{{notes}}{{else}}本見積書の有効期限は発行日より30日間です。{{/if}}
+    </div>
+    
+    <div class="stamp-area">
+      {{#if company.stamp}}
+      <img src="{{company.stamp}}" style="width: 100%;" alt="Company Stamp">
+      {{else}}
+      印
+      {{/if}}
+    </div>
+  </div>
+</body>
+</html>

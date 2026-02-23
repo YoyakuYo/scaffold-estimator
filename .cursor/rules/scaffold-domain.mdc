@@ -1,0 +1,230 @@
+---
+alwaysApply: true
+---
+
+# Scaffold Estimation Domain Knowledge (足場積算ドメイン知識)
+
+## Overview
+This application estimates scaffold material quantities for construction projects in Japan.
+**Two scaffold types are supported:**
+1. **くさび式足場 (Kusabi)** — Wedge-type scaffold, individual posts
+2. **枠組足場 (Wakugumi)** — Frame scaffold, pre-fabricated frames
+
+Workflow: Select Type → Select Walls → Configure Settings → Calculate Quantities → Review Table → Export Excel / View 2D/3D
+
+---
+
+## Scaffold Type 1: くさび式足場 (Kusabi) — MA Series
+
+### Post Catalog (支柱 MA, φ48.6mm)
+| Code | Length | Weight |
+|------|--------|--------|
+| MA-2 | 225mm | — |
+| MA-4 | 450mm | 2.1kg |
+| MA-6 | 600mm | — |
+| MA-9 | 900mm | 3.8kg |
+| MA-13 | 1350mm | — |
+| MA-18 | 1800mm | 6.9kg |
+| MA-27 | 2700mm | 10.0kg |
+| MA-36 | 3600mm | 13.2kg |
+
+### Span Sizes (標準スパン)
+Available: **600, 900, 1200, 1500, 1800** mm
+
+### Scaffold Width (足場幅)
+Options: **600, 900, 1200** mm (distance front↔back)
+
+### Level Height: ALWAYS 1800mm between levels (fixed)
+
+### User Inputs
+1. **建物の高さ (Building Height)** — mm
+2. **壁面選択 (Wall Selection)** — per wall: length + stair count
+3. **足場幅 (Scaffold Width)** — 600, 900, 1200mm
+4. **支柱サイズ (Main Tateji)** — 1800, 2700, 3600mm
+5. **上部支柱 (Top Guard)** — 900, 1350, 1800mm
+6. **階段数 (Stair Access)** — per wall, 0-4
+
+### Component Layout Rules (1 Span, 1 Level)
+
+| Component | Location | Qty per Span | Rule |
+|-----------|----------|-------------|------|
+| **ブレス** (Brace) | OUTER face | **1** | X-brace, size=span length |
+| **手摺/布材** (Tesuri/Nuno) | INNER face | **2** | Horizontal bars at 2 heights |
+| **踏板/アンチ** (Anchi/Plank) | Between rows | **1** | Sits on width yokoji |
+| **巾木/ハバキ** (Habaki) | Front + Back | **2** | Toe boards, size=span length |
+
+---
+
+## Scaffold Type 2: 枠組足場 (Wakugumi) — Frame Scaffold
+
+### Frame Sizes (建枠サイズ)
+Options: **1700, 1800, 1900** mm — determines level height (variable)
+
+### Span Sizes (imperial-derived)
+Available: **610, 914, 1219, 1524, 1829** mm
+
+### Scaffold Width (足場幅)
+Options: **600, 900, 1200** mm (same as kusabi)
+
+### Level Height: = Frame Size (variable: 1700/1800/1900mm)
+
+### User Inputs
+1. **建物の高さ (Building Height)** — mm
+2. **壁面選択 (Wall Selection)** — per wall: length + stair count
+3. **足場幅 (Scaffold Width)** — 600, 900, 1200mm
+4. **建枠サイズ (Frame Size)** — 1700, 1800, 1900mm
+5. **巾木枚数 (Habaki Count)** — 1 or 2 per span
+6. **端部タイプ (End Stopper)** — 布材 (nuno) or 枠 (frame)
+7. **階段数 (Stair Access)** — per wall, 0-4
+
+### Component Layout Rules (1 Span, 1 Level)
+
+| Component | Location | Qty per Span | Rule |
+|-----------|----------|-------------|------|
+| **建枠** (Frame) | Both rows | **shared at boundary** | (N+1) × 2 rows × L levels |
+| **ブレス** (Brace) | BOTH faces | **2** | X-brace, front + back |
+| **下桟** (Shitasan) | BOTH faces | **2** | Bottom horizontal only |
+| **手摺** (Tesuri) | — | **0** | NOT used in wakugumi |
+| **踏板** (Plank) | Between rows | **1** | Same as kusabi |
+| **巾木** (Habaki) | Front + Back | **1 or 2** | User-selectable |
+| **端部** (End Stopper) | Wall ends | nuno: 4/level, frame: 2/level | User-selectable type |
+
+### Key Differences from Kusabi
+- **Primary structure**: Frames (建枠) instead of individual posts (支柱)
+- **Braces**: BOTH faces (front + back), not just outer
+- **Horizontal bars**: 下桟 (Shitasan, bottom only) instead of 手摺 (Tesuri)
+- **Level height**: Variable (frame size) instead of fixed 1800mm
+- **Habaki**: User-selectable 1 or 2 per span
+- **End stoppers**: User-selectable type (nuno bars or frame type)
+- **Span sizes**: Imperial-derived (610, 914, 1219, 1524, 1829mm)
+
+---
+
+## Common Rules (Both Types)
+
+### Double Row (前後2列)
+All calculations use **2 rows** (front + back)
+
+### Sharing Principle (共用)
+Adjacent spans share the post/frame at the boundary:
+- Post/Frame positions per wall = `spans + 1`
+
+### Base Yokoji / Negarami (根がらみ) — BASE LEVEL ONLY
+- Span direction: `N × 2` (front + back)
+- Width direction: `N+1` (every post position)
+
+### Anchi Layout by Width
+- 600mm → 1 full anchi (500mm wide)
+- 900mm → 1 full anchi (500mm) + 1 half anchi (240mm)
+- 1200mm → 2 full anchi (500mm each)
+
+### Stair Sets (階段セット)
+- Each access point is a complete vertical stair tower
+- Stair replaces 1 full anchi per level per access point (for width ≥ 900mm)
+- For 600mm width: extended bay pattern (no anchi removal)
+
+### Jack Base
+- Range: 0~300mm adjustable
+- Count only, no size spec in quotation
+
+## Output
+1. **足場材料見積書 (Excel)** — Per-wall columns + total, Japanese names
+2. **2D足場図 (SVG)** — Per-wall 2D assembly view with print/PDF/DXF export
+3. **3D足場図 (Three.js)** — Interactive 3D view with polygon layout
+
+## AI Features (AI機能)
+
+### Vision AI Drawing Reader
+- **Service**: [vision-analysis.service.ts](mdc:backend/src/modules/ai/vision-analysis.service.ts)
+- **Controller**: [ai.controller.ts](mdc:backend/src/modules/ai/ai.controller.ts)
+- **Frontend**: [ai/page.tsx](mdc:frontend/app/ai/page.tsx) - Vision tab
+- Uses GPT-4o Vision to analyze construction drawings and extract:
+  - Building shape, height, floor count
+  - Structure type (改修工事/S造/RC造)
+  - Wall dimensions (side, length, height)
+  - Drawing type, scale, confidence score
+- **API**: `POST /api/v1/ai/vision/analyze` (base64) or `/ai/vision/analyze-file` (file upload)
+
+### Chat Estimation Assistant
+- **Service**: [chat-assistant.service.ts](mdc:backend/src/modules/ai/chat-assistant.service.ts)
+- **Frontend**: [ai/page.tsx](mdc:frontend/app/ai/page.tsx) - Chat tab
+- Natural language chat interface for scaffold estimation questions
+- Can suggest scaffold configurations as structured JSON actions
+- **API**: `POST /api/v1/ai/chat`
+
+### Anomaly Detection / Quality Review
+- **Service**: [anomaly-detection.service.ts](mdc:backend/src/modules/ai/anomaly-detection.service.ts)
+- **Frontend**: [ai/page.tsx](mdc:frontend/app/ai/page.tsx) - Quality Review tab
+- Two-layer detection:
+  1. Rule-based checks (always works): wall count, height sanity, stair access, scaffold width
+  2. AI-powered analysis (when OpenAI available): ratio checks, missing components, safety concerns
+- **API**: `POST /api/v1/ai/anomaly-detect`
+
+### AI Module Setup
+- **Module**: [ai.module.ts](mdc:backend/src/modules/ai/ai.module.ts)
+- **Service**: [ai.service.ts](mdc:backend/src/modules/ai/ai.service.ts)
+- Requires `OPENAI_API_KEY` environment variable
+- Gracefully degrades when API key not set (rule-based checks still work)
+
+## User Management & Authentication
+
+### User Roles
+- **admin**: Full access, can manage users
+- **estimator**: Can create/edit estimates
+- **viewer**: Read-only access
+
+### User Management
+- **Backend**: [auth.service.ts](mdc:backend/src/modules/auth/auth.service.ts) - `createUser`, `listUsers`, `updateUser`, `adminResetPassword`, `deactivateUser`
+- **Controller**: [auth.controller.ts](mdc:backend/src/modules/auth/auth.controller.ts)
+- **Frontend Admin UI**: [users/page.tsx](mdc:frontend/app/users/page.tsx)
+- **Frontend Profile**: [profile/page.tsx](mdc:frontend/app/profile/page.tsx)
+- **API Client**: [users.ts](mdc:frontend/lib/api/users.ts)
+- **Endpoints**:
+  - `GET /api/v1/auth/profile` - Get current user
+  - `PUT /api/v1/auth/profile` - Update own profile
+  - `POST /api/v1/auth/change-password` - Change own password
+  - `GET /api/v1/auth/users` - List users (admin)
+  - `POST /api/v1/auth/users` - Create user (admin)
+  - `PUT /api/v1/auth/users/:id` - Update user (admin)
+  - `POST /api/v1/auth/users/:id/reset-password` - Reset password (admin)
+  - `DELETE /api/v1/auth/users/:id` - Deactivate user (admin)
+
+## PWA / Desktop Installation
+
+### Progressive Web App
+- **Manifest**: [manifest.json](mdc:frontend/public/manifest.json)
+- **Service Worker**: [sw.js](mdc:frontend/public/sw.js)
+- **Icons**: [icons/icon.svg](mdc:frontend/public/icons/icon.svg)
+- **Layout**: [layout.tsx](mdc:frontend/app/layout.tsx) - Includes PWA meta tags and SW registration
+- Installable on Windows/Mac/Linux via browser
+- Offline support for core features
+- One-click installation from browser
+
+## File References
+
+### Core Scaffold Calculation
+- Backend kusabi calculator: [scaffold-calculator.service.ts](mdc:backend/src/modules/scaffold-config/scaffold-calculator.service.ts)
+- Backend wakugumi calculator: [scaffold-calculator-wakugumi.service.ts](mdc:backend/src/modules/scaffold-config/scaffold-calculator-wakugumi.service.ts)
+- Kusabi rules: [scaffold-rules.ts](mdc:backend/src/modules/scaffold-config/scaffold-rules.ts)
+- Wakugumi rules: [scaffold-rules-wakugumi.ts](mdc:backend/src/modules/scaffold-config/scaffold-rules-wakugumi.ts)
+- Config entity: [scaffold-config.entity.ts](mdc:backend/src/modules/scaffold-config/scaffold-config.entity.ts)
+- Excel export: [scaffold-excel.service.ts](mdc:backend/src/modules/scaffold-config/scaffold-excel.service.ts)
+
+### Frontend Pages
+- Dashboard: [dashboard/page.tsx](mdc:frontend/app/dashboard/page.tsx) - Marketing-focused landing page
+- Scaffold calculator: [scaffold/page.tsx](mdc:frontend/app/scaffold/page.tsx)
+- Scaffold result: [scaffold/[configId]/page.tsx](mdc:frontend/app/scaffold/[configId]/page.tsx)
+- AI Assistant: [ai/page.tsx](mdc:frontend/app/ai/page.tsx)
+- User Management: [users/page.tsx](mdc:frontend/app/users/page.tsx)
+- User Profile: [profile/page.tsx](mdc:frontend/app/profile/page.tsx)
+- 2D view: [scaffold-2d-view.tsx](mdc:frontend/app/scaffold/[configId]/scaffold-2d-view.tsx)
+- 3D view: [scaffold-3d-view.tsx](mdc:frontend/app/scaffold/[configId]/scaffold-3d-view.tsx)
+
+### API Clients
+- Scaffold configs: [scaffold-configs.ts](mdc:frontend/lib/api/scaffold-configs.ts)
+- AI features: [ai.ts](mdc:frontend/lib/api/ai.ts)
+- User management: [users.ts](mdc:frontend/lib/api/users.ts)
+- Authentication: [auth.ts](mdc:frontend/lib/api/auth.ts)
+
+### Database
+- DB migration: [015_add_scaffold_type.sql](mdc:supabase-migrations/015_add_scaffold_type.sql)
