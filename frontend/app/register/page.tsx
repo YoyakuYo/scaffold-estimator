@@ -107,10 +107,16 @@ export default function RegisterPage() {
           {registerMutation.isError && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2">
               <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">
-                  {(registerMutation.error as any)?.response?.data?.message ||
-                    t('register', 'registerButton') + ' ' + (locale === 'ja' ? 'に失敗しました' : 'failed')}
+                  {(() => {
+                    const err = registerMutation.error as any;
+                    const msg = err?.response?.data?.message;
+                    if (Array.isArray(msg)) return msg.join(locale === 'ja' ? ' / ' : ' / ');
+                    if (msg && typeof msg === 'string') return msg;
+                    if (!err?.response) return locale === 'ja' ? '接続できません。バックエンドが起動しているか確認してください。' : 'Could not connect. Check that the backend is running.';
+                    return t('register', 'registerButton') + ' ' + (locale === 'ja' ? 'に失敗しました' : 'failed');
+                  })()}
                 </p>
               </div>
             </div>
