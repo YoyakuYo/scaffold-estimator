@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 
 const ROLE_CONFIG: Record<UserRole, { label: string; labelJa: string; color: string; icon: any }> = {
+  superadmin: { label: 'Super Admin', labelJa: 'スーパー管理者', color: 'bg-amber-100 text-amber-700', icon: Shield },
   admin: { label: 'Admin', labelJa: '管理者', color: 'bg-red-100 text-red-700', icon: Shield },
   estimator: { label: 'Estimator', labelJa: '積算担当', color: 'bg-blue-100 text-blue-700', icon: Calculator },
   viewer: { label: 'Viewer', labelJa: '閲覧者', color: 'bg-gray-100 text-gray-700', icon: Eye },
