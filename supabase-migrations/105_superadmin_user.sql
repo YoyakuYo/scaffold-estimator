@@ -174,4 +174,4 @@ ON CONFLICT (email) DO UPDATE SET
 
 -- ── 7. Verify ───────────────────────────────────────────────
 SELECT '✅ Setup complete!' AS status;
-SELECT id, email, role, is_active, approval_status FROM users WHERE role = 'admin';
+SELECT id, email, role, is_active, approval_status FROM users WHERE email = 'omarsowbarca45@gmail.com';
