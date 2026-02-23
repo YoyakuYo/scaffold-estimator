@@ -20,7 +20,7 @@ export class LoginHistory {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ name: 'ip_address', nullable: true })
+  @Column({ name: 'ip_address', type: 'varchar', nullable: true })
   ipAddress: string | null;
 
   @Column({ name: 'user_agent', type: 'text', nullable: true })

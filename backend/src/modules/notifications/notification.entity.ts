@@ -29,7 +29,7 @@ export class Notification {
   @Column({ type: 'text', nullable: true })
   body: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   link: string | null;
 
   @Column({ name: 'read_at', type: 'timestamptz', nullable: true })

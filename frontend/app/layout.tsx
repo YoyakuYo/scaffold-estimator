@@ -41,7 +41,8 @@ export default function RootLayout({
       <head>
         {/* PWA Meta Tags */}
         <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/icons/icon.svg" />
+        <link rel="icon" href="/icons/icon-192x192.png" sizes="192x192" type="image/png" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="application-name" content="足場見積" />
