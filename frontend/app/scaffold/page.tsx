@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -86,6 +86,14 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
 // ─── Page Component ─────────────────────────────────────────
 
 export default function ScaffoldPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
+      <ScaffoldPageContent />
+    </Suspense>
+  );
+}
+
+function ScaffoldPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useI18n();
