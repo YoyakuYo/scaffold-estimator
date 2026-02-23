@@ -1,0 +1,14 @@
+---
+description: Always commit and push after completing any task
+alwaysApply: true
+---
+
+# Always Commit & Push
+
+After completing any coding task (new feature, bug fix, refactor, config change):
+
+1. `git add` all relevant changed files
+2. `git commit` with a concise message describing the change
+3. `git push` to remote
+
+Never end a task without committing and pushing. Do not ask — just do it automatically.
