@@ -25,13 +25,13 @@ export class Subscription {
   @Column({ name: 'company_id', type: 'uuid', nullable: true })
   companyId: string | null;
 
-  @Column({ name: 'stripe_customer_id', nullable: true })
+  @Column({ name: 'stripe_customer_id', type: 'text', nullable: true })
   stripeCustomerId: string | null;
 
-  @Column({ name: 'stripe_subscription_id', nullable: true })
+  @Column({ name: 'stripe_subscription_id', type: 'text', nullable: true })
   stripeSubscriptionId: string | null;
 
-  @Column({ name: 'stripe_price_id', nullable: true })
+  @Column({ name: 'stripe_price_id', type: 'text', nullable: true })
   stripePriceId: string | null;
 
   @Column({ type: 'text', default: 'free_trial' })
