@@ -4,7 +4,7 @@ export type Locale = 'ja' | 'en';
 export const translations = {
   // ─── Common / Shared ───────────────────────────────────────────
   common: {
-    appName: { ja: '仮設工事見積システム', en: 'Scaffold Estimation System' },
+    appName: { ja: '足場積算システム', en: 'Scaffolding Estimator' },
     logout: { ja: 'ログアウト', en: 'Logout' },
     loading: { ja: '読み込み中...', en: 'Loading...' },
     error: { ja: 'エラー', en: 'Error' },
@@ -31,7 +31,7 @@ export const translations = {
 
   // ─── Login Page ────────────────────────────────────────────────
   login: {
-    title: { ja: '仮設工事見積システム', en: 'Scaffold Estimation System' },
+    title: { ja: '足場積算システム', en: 'Scaffolding Estimator' },
     subtitle: { ja: 'ログインしてください', en: 'Please sign in' },
     email: { ja: 'メールアドレス', en: 'Email' },
     password: { ja: 'パスワード', en: 'Password' },
@@ -70,7 +70,7 @@ export const translations = {
 
   // ─── Dashboard ─────────────────────────────────────────────────
   dashboard: {
-    title: { ja: '足場積算システム', en: 'Scaffold Estimation System' },
+    title: { ja: '足場積算システム', en: 'Scaffolding Estimator' },
     subtitle: { ja: 'くさび式足場の材料数量計算・見積・コスト計算・2D/3D組立図作成・エクスポート', en: 'Kusabi scaffold: material calc, quotation, cost analysis, 2D/3D assembly & export' },
     workflow: { ja: 'ワークフロー', en: 'Workflow' },
     step1: { ja: '1. 入力（図面/手入力）', en: '1. Input (Drawing/Manual)' },
@@ -478,31 +478,31 @@ export const translations = {
 
   // ─── Dashboard Marketing / Features ────────────────────────────────
   features: {
-    // Hero Section
-    heroTitle: { ja: '次世代の足場見積システム', en: 'Next-Generation Scaffold Estimation Platform' },
-    heroSubtitle: { ja: 'AIを活用した自動化、チーム管理、デスクトップアプリ対応。見積もり時間を90%削減。', en: 'AI-powered automation, team management, desktop app support. Reduce estimation time by 90%.' },
+    // Hero Section (used in dashboard/features blocks)
+    heroTitle: { ja: '足場積算システム', en: 'Scaffolding Estimator' },
+    heroSubtitle: { ja: '図面取込・手入力とAIアシスタントで足場数量を算出。見積書と2D/3Dまで。', en: 'Calculate scaffolding from drawings or manual input, with an AI assistant. Quotations and 2D/3D included.' },
     heroCta: { ja: '今すぐ始める', en: 'Get Started' },
     heroCtaSecondary: { ja: '機能を見る', en: 'View Features' },
 
     // AI Features
-    aiTitle: { ja: 'AI パワード機能', en: 'AI-Powered Features' },
-    aiSubtitle: { ja: '図面解析AIとチャットAIで見積もりを革新', en: 'Revolutionize estimation with AI drawing analysis and chat AI' },
-    aiVisionTitle: { ja: '図面AI読取り', en: 'AI Drawing Reader' },
-    aiVisionDesc: { ja: 'AIが図面を自動分析。建物形状・高さ・壁面寸法を自動抽出。', en: 'AI auto-analyzes drawings. Extracts building shape, height, wall dimensions automatically.' },
-    aiChatTitle: { ja: 'チャット見積もりアシスタント', en: 'Chat Estimation Assistant' },
-    aiChatDesc: { ja: '自然言語で質問。AIが足場設定を提案し、見積もりをサポート。', en: 'Ask in natural language. AI suggests scaffold configurations and supports estimation.' },
-    aiAnomalyTitle: { ja: '品質チェックAI', en: 'Quality Review AI' },
-    aiAnomalyDesc: { ja: '数量の異常値や安全上の問題を自動検出。重大なエラーを未然に防止。', en: 'Auto-detect quantity anomalies and safety issues. Prevent critical errors before they happen.' },
+    aiTitle: { ja: 'AI機能', en: 'AI Features' },
+    aiSubtitle: { ja: '図面解析とチャットで積算を補助', en: 'Drawing analysis and chat to assist your takeoff' },
+    aiVisionTitle: { ja: '図面スキャン（AI読取り）', en: 'Drawing scan (AI reader)' },
+    aiVisionDesc: { ja: 'PDF・DXF・画像をアップロードすると、AIが建物形状・高さ・壁面寸法を抽出。', en: 'Upload PDF, DXF, or images; the AI extracts building shape, height, and wall dimensions.' },
+    aiChatTitle: { ja: 'AI積算アシスタント', en: 'AI estimation assistant' },
+    aiChatDesc: { ja: '自然言語で質問。足場設定の提案や数量の確認をAIがサポート。', en: 'Ask in plain language. The AI suggests scaffold settings and helps check quantities.' },
+    aiAnomalyTitle: { ja: '品質チェック', en: 'Quality check' },
+    aiAnomalyDesc: { ja: '数量の異常や安全面の懸念を自動検出。積算ミスを防ぐ。', en: 'Automatically flags quantity anomalies and safety concerns to avoid estimation errors.' },
 
     // Core Features
-    coreTitle: { ja: 'コア機能', en: 'Core Features' },
-    coreSubtitle: { ja: 'プロフェッショナルな見積もりワークフロー', en: 'Professional Estimation Workflow' },
-    coreCalcTitle: { ja: '高精度積算', en: 'High-Precision Calculation' },
-    coreCalcDesc: { ja: 'くさび式・枠組足場に対応。構造パターン別の自動計算。', en: 'Supports kusabi & wakugumi. Auto-calculation by structure pattern.' },
-    coreQuotationTitle: { ja: '見積書作成', en: 'Quotation Generation' },
-    coreQuotationDesc: { ja: '材料費・諸経費を自動計算。Excel/PDFで即座に出力。', en: 'Auto-calculate material & overhead costs. Export to Excel/PDF instantly.' },
-    coreVisualizationTitle: { ja: '2D/3D可視化', en: '2D/3D Visualization' },
-    coreVisualizationDesc: { ja: '組立図を2D/3Dで確認。CAD/BIM形式でエクスポート可能。', en: 'View assembly drawings in 2D/3D. Export to CAD/BIM formats.' },
+    coreTitle: { ja: '主な機能', en: 'Main features' },
+    coreSubtitle: { ja: '図面取込・手入力・AI補助で足場数量を積算', en: 'Scaffolding quantity takeoff from drawings, manual entry, or AI assistance' },
+    coreCalcTitle: { ja: '足場数量積算', en: 'Scaffold quantity takeoff' },
+    coreCalcDesc: { ja: 'くさび式・枠組足場に対応。手入力または図面から寸法を取得して計算。', en: 'Supports kusabi and frame scaffold. Enter dimensions manually or from drawings.' },
+    coreQuotationTitle: { ja: '見積書', en: 'Quotations' },
+    coreQuotationDesc: { ja: '材料費・諸経費を自動計算し、Excel/PDFで出力。', en: 'Material and overhead costs calculated automatically; export to Excel or PDF.' },
+    coreVisualizationTitle: { ja: '2D/3D組立図', en: '2D/3D assembly' },
+    coreVisualizationDesc: { ja: '組立図を2D/3Dで表示。PDF/DXF/OBJでエクスポート可能。', en: 'View assembly in 2D and 3D. Export to PDF, DXF, or OBJ.' },
 
     // Team Management
     teamTitle: { ja: 'チーム管理', en: 'Team Management' },
@@ -521,34 +521,34 @@ export const translations = {
     pwaOfflineDesc: { ja: 'インターネット接続なしでも基本機能が利用可能。', en: 'Core features available without internet connection.' },
 
     // Benefits / Value Props
-    benefitsTitle: { ja: 'なぜ選ぶのか', en: 'Why Choose Us' },
-    benefit1Title: { ja: '時間削減', en: 'Time Savings' },
-    benefit1Desc: { ja: '見積もり時間を90%削減。手作業の計算ミスをゼロに。', en: 'Reduce estimation time by 90%. Eliminate manual calculation errors.' },
-    benefit2Title: { ja: '精度向上', en: 'Accuracy' },
-    benefit2Desc: { ja: 'AI品質チェックで重大なエラーを未然に防止。', en: 'AI quality checks prevent critical errors before they happen.' },
-    benefit3Title: { ja: 'チーム連携', en: 'Team Collaboration' },
-    benefit3Desc: { ja: '複数ユーザーで見積もりを共有・管理。権限でアクセス制御。', en: 'Share and manage estimates with multiple users. Access control by role.' },
-    benefit4Title: { ja: 'プロフェッショナル', en: 'Professional' },
-    benefit4Desc: { ja: '標準化された見積書フォーマット。顧客への信頼度向上。', en: 'Standardized quotation format. Build customer trust.' },
+    benefitsTitle: { ja: '選ばれる理由', en: 'Why use it' },
+    benefit1Title: { ja: '図面から積算', en: 'From drawings' },
+    benefit1Desc: { ja: '複数形式の図面をスキャン。手入力とAIで必要な足場数量を算出。', en: 'Scan drawings in multiple formats. Use manual input and AI to calculate the scaffolding you need.' },
+    benefit2Title: { ja: '手入力とAIの両立', en: 'Manual + AI' },
+    benefit2Desc: { ja: '寸法を直接入力するか、AIアシスタントに質問して積算を補助。', en: 'Enter dimensions yourself or use the AI assistant to help with takeoff and checks.' },
+    benefit3Title: { ja: '見積・2D/3Dまで', en: 'Quotes & 2D/3D' },
+    benefit3Desc: { ja: '材料数量から見積書を自動作成。2D/3D組立図で確認・エクスポート。', en: 'Generate quotations from material quantities. Review and export 2D/3D assembly drawings.' },
+    benefit4Title: { ja: 'くさび式・枠組対応', en: 'Kusabi & frame' },
+    benefit4Desc: { ja: 'くさび式足場と枠組足場の両方に対応。標準的な積算ルールで計算。', en: 'Supports both kusabi and frame scaffold. Calculates using standard takeoff rules.' },
 
     // Stats / Metrics
-    statsTitle: { ja: '実績', en: 'Results' },
-    stat1Label: { ja: '時間削減', en: 'Time Saved' },
-    stat1Value: { ja: '90%', en: '90%' },
-    stat2Label: { ja: '精度向上', en: 'Accuracy' },
-    stat2Value: { ja: '99%+', en: '99%+' },
-    stat3Label: { ja: '対応構造', en: 'Structure Types' },
-    stat3Value: { ja: '3種類', en: '3 Types' },
-    stat4Label: { ja: '出力形式', en: 'Export Formats' },
-    stat4Value: { ja: '7種類', en: '7 Formats' },
+    statsTitle: { ja: '概要', en: 'At a glance' },
+    stat1Label: { ja: '入力方法', en: 'Input' },
+    stat1Value: { ja: '図面・手入力', en: 'Drawing & manual' },
+    stat2Label: { ja: '足場タイプ', en: 'Scaffold types' },
+    stat2Value: { ja: '2種類', en: '2 types' },
+    stat3Label: { ja: 'AI補助', en: 'AI assist' },
+    stat3Value: { ja: '図面・チャット', en: 'Vision & chat' },
+    stat4Label: { ja: '出力', en: 'Export' },
+    stat4Value: { ja: 'Excel/PDF/CAD', en: 'Excel/PDF/CAD' },
   },
 
   // ─── Landing Page (public marketing) ─────────────────────────────
   landing: {
-    appName: { ja: '仮設工事見積システム', en: 'Scaffold Estimation System' },
-    tagline: { ja: '建設・仮設業向け 足場材料の積算・見積・2D/3D図を一元管理', en: 'All-in-one scaffold quantity takeoff, quotation & 2D/3D for construction' },
-    heroTitle: { ja: '足場見積を、シンプルに。', en: 'Scaffold estimation, simplified.' },
-    heroSubtitle: { ja: 'くさび式・枠組足場の材料数量計算から見積書・組立図まで。現場と事務所で同じツールを。', en: 'From kusabi & frame scaffold quantity takeoff to quotations and assembly drawings. One tool for site and office.' },
+    appName: { ja: '足場積算システム', en: 'Scaffolding Estimator' },
+    tagline: { ja: '図面の取込・手入力またはAI補助で足場数量を算出。見積書と2D/3D組立図まで一括で。', en: 'Scan drawings or enter dimensions manually—with an AI assistant to help calculate the scaffolding you need. Quotations and 2D/3D assembly drawings included.' },
+    heroTitle: { ja: '図面から足場数量を積算。手入力とAIで正確に。', en: 'A scaffolding estimator that reads your drawings and helps you calculate what you need.' },
+    heroSubtitle: { ja: 'PDF・DXF・画像など複数形式の図面をアップロードするか、寸法を手入力。AIアシスタントが積算を補助し、くさび式・枠組足場の材料数量を算出します。', en: 'Upload drawings in PDF, DXF, or image formats—or enter dimensions manually. The AI assistant helps you calculate material quantities for kusabi and frame scaffold.' },
     installTitle: { ja: 'アプリをインストール', en: 'Install the app' },
     installSubtitle: { ja: 'PCにインストールすると、ブラウザを開かずにすぐ起動。オフラインでも基本機能が使えます。', en: 'Install on your PC to launch without opening a browser. Core features work offline.' },
     installCta: { ja: 'インストールする', en: 'Install' },
@@ -556,7 +556,7 @@ export const translations = {
     afterInstall: { ja: 'インストール後はログインまたは新規登録で利用開始', en: 'After installing, log in or create an account to get started' },
     logIn: { ja: 'ログイン', en: 'Log in' },
     register: { ja: '新規登録', en: 'Create account' },
-    forConstruction: { ja: '建設・仮設業のためのツール', en: 'Built for construction & scaffolding' },
+    forConstruction: { ja: '足場積算専用ツール', en: 'Scaffolding estimator' },
     sectionFeatures: { ja: '主な機能', en: 'Features' },
     sectionWhy: { ja: '選ばれる理由', en: 'Why use it' },
     sectionInstall: { ja: 'インストールして使う', en: 'Install & use' },
