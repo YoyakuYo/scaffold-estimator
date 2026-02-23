@@ -12,7 +12,6 @@ import {
   Loader2,
   FileSpreadsheet,
   Box,
-  Building2,
   Eye,
   History,
   Trash2,
@@ -22,16 +21,9 @@ import {
   ExternalLink,
   Copy,
   Receipt,
-  Bot,
-  ShieldCheck,
   Users,
   User,
-  Download as DownloadIcon,
-  CheckCircle,
-  TrendingUp,
   Clock,
-  Target,
-  Sparkles,
   Layers,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
@@ -112,37 +104,11 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ─── Hero Section ───────────────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              {t('features', 'heroTitle')}
-            </h1>
-            <p className="text-xl md:text-2xl text-blue-100 mb-8 max-w-3xl mx-auto">
-              {t('features', 'heroSubtitle')}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={() => router.push('/scaffold')}
-                className="px-8 py-4 bg-white text-blue-600 rounded-xl font-semibold text-lg hover:bg-blue-50 transition-colors shadow-lg flex items-center justify-center gap-2"
-              >
-                <Calculator className="h-5 w-5" />
-                {t('features', 'heroCta')}
-              </button>
-              <button
-                onClick={() => window.scrollTo({ top: document.getElementById('features')?.offsetTop || 0, behavior: 'smooth' })}
-                className="px-8 py-4 bg-blue-500/20 text-white border-2 border-white/30 rounded-xl font-semibold text-lg hover:bg-blue-500/30 transition-colors flex items-center justify-center gap-2"
-              >
-                {t('features', 'heroCtaSecondary')}
-                <ArrowRight className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* ─── Intro (usage, not marketing) ─────────────────────────── */}
+        <p className="text-gray-600 mb-6">
+          {t('dashboard', 'dashboardIntro')}
+        </p>
         {/* ─── Pending Users Alert (Admin Only) ──────────────────────── */}
         {isAdmin && pendingCount && pendingCount.count > 0 && (
           <div className="mb-6 bg-amber-50 border-2 border-amber-300 rounded-xl p-4">
@@ -173,232 +139,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ─── Stats Section ────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-          {[
-            { icon: Clock, label: t('features', 'stat1Label'), value: t('features', 'stat1Value'), iconColor: 'text-blue-600' },
-            { icon: Target, label: t('features', 'stat2Label'), value: t('features', 'stat2Value'), iconColor: 'text-green-600' },
-            { icon: Building2, label: t('features', 'stat3Label'), value: t('features', 'stat3Value'), iconColor: 'text-purple-600' },
-            { icon: DownloadIcon, label: t('features', 'stat4Label'), value: t('features', 'stat4Value'), iconColor: 'text-amber-600' },
-          ].map((stat, i) => (
-            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
-              <stat.icon className={`h-8 w-8 ${stat.iconColor} mx-auto mb-2`} />
-              <div className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</div>
-              <div className="text-sm text-gray-500">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* ─── AI Features Section ──────────────────────────────────── */}
-        <div id="features" className="mb-16">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold mb-3">
-              <Sparkles className="h-4 w-4" />
-              {t('features', 'aiTitle')}
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">{t('features', 'aiTitle')}</h2>
-            <p className="text-gray-600">{t('features', 'aiSubtitle')}</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              {
-                icon: Eye,
-                title: t('features', 'aiVisionTitle'),
-                desc: t('features', 'aiVisionDesc'),
-                bgColor: 'bg-purple-100',
-                hoverBg: 'group-hover:bg-purple-200',
-                iconColor: 'text-purple-600',
-                borderHover: 'hover:border-purple-400',
-                textColor: 'text-purple-600',
-                action: () => router.push('/ai?tab=vision'),
-              },
-              {
-                icon: Bot,
-                title: t('features', 'aiChatTitle'),
-                desc: t('features', 'aiChatDesc'),
-                bgColor: 'bg-blue-100',
-                hoverBg: 'group-hover:bg-blue-200',
-                iconColor: 'text-blue-600',
-                borderHover: 'hover:border-blue-400',
-                textColor: 'text-blue-600',
-                action: () => router.push('/ai?tab=chat'),
-              },
-              {
-                icon: ShieldCheck,
-                title: t('features', 'aiAnomalyTitle'),
-                desc: t('features', 'aiAnomalyDesc'),
-                bgColor: 'bg-green-100',
-                hoverBg: 'group-hover:bg-green-200',
-                iconColor: 'text-green-600',
-                borderHover: 'hover:border-green-400',
-                textColor: 'text-green-600',
-                action: () => router.push('/ai?tab=anomaly'),
-              },
-            ].map((feature, i) => (
-              <div
-                key={i}
-                onClick={feature.action}
-                className={`bg-white rounded-xl shadow-sm border-2 border-gray-200 ${feature.borderHover} hover:shadow-lg transition-all p-6 cursor-pointer group`}
-              >
-                <div className={`w-12 h-12 rounded-xl ${feature.bgColor} flex items-center justify-center mb-4 ${feature.hoverBg} transition-colors`}>
-                  <feature.icon className={`h-6 w-6 ${feature.iconColor}`} />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-sm text-gray-600 mb-4">{feature.desc}</p>
-                <div className={`flex items-center gap-2 ${feature.textColor} text-sm font-medium`}>
-                  {locale === 'ja' ? '詳細を見る' : 'Learn More'}
-                  <ArrowRight className="h-4 w-4" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── Core Features Section ───────────────────────────────── */}
-        <div className="mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">{t('features', 'coreTitle')}</h2>
-            <p className="text-gray-600">{t('features', 'coreSubtitle')}</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              {
-                icon: Calculator,
-                title: t('features', 'coreCalcTitle'),
-                desc: t('features', 'coreCalcDesc'),
-                bgColor: 'bg-blue-100',
-                iconColor: 'text-blue-600',
-              },
-              {
-                icon: Receipt,
-                title: t('features', 'coreQuotationTitle'),
-                desc: t('features', 'coreQuotationDesc'),
-                bgColor: 'bg-green-100',
-                iconColor: 'text-green-600',
-              },
-              {
-                icon: Box,
-                title: t('features', 'coreVisualizationTitle'),
-                desc: t('features', 'coreVisualizationDesc'),
-                bgColor: 'bg-purple-100',
-                iconColor: 'text-purple-600',
-              },
-            ].map((feature, i) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className={`w-12 h-12 rounded-xl ${feature.bgColor} flex items-center justify-center mb-4`}>
-                  <feature.icon className={`h-6 w-6 ${feature.iconColor}`} />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-sm text-gray-600">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── Team Management Section (Admin Only) ─────────────────────────────── */}
-        {isAdmin && (
-          <div className="mb-16">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">{t('features', 'teamTitle')}</h2>
-              <p className="text-gray-600">{t('features', 'teamSubtitle')}</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[
-                {
-                  icon: Users,
-                  title: t('features', 'teamUsersTitle'),
-                  desc: t('features', 'teamUsersDesc'),
-                  action: () => router.push('/users'),
-                },
-                {
-                  icon: User,
-                  title: t('features', 'teamProfileTitle'),
-                  desc: t('features', 'teamProfileDesc'),
-                  action: () => router.push('/profile'),
-                },
-              ].map((feature, i) => (
-              <div
-                key={i}
-                onClick={feature.action}
-                className="bg-white rounded-xl shadow-sm border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all p-6 cursor-pointer group"
-              >
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
-                  <feature.icon className="h-6 w-6 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-sm text-gray-600 mb-4">{feature.desc}</p>
-                <div className="flex items-center gap-2 text-blue-600 text-sm font-medium">
-                  {locale === 'ja' ? '管理画面へ' : 'Go to Management'}
-                  <ArrowRight className="h-4 w-4" />
-                </div>
-              </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ─── PWA / Desktop App Section ────────────────────────────── */}
-        <div className="mb-16">
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-8 border border-indigo-200">
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="flex-1">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold mb-3">
-                  <DownloadIcon className="h-3 w-3" />
-                  {t('features', 'pwaTitle')}
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('features', 'pwaTitle')}</h2>
-                <p className="text-gray-600 mb-4">{t('features', 'pwaSubtitle')}</p>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium text-gray-900">{t('features', 'pwaInstallTitle')}</p>
-                      <p className="text-sm text-gray-600">{t('features', 'pwaInstallDesc')}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium text-gray-900">{t('features', 'pwaOfflineTitle')}</p>
-                      <p className="text-sm text-gray-600">{t('features', 'pwaOfflineDesc')}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex-shrink-0">
-                <div className="w-32 h-32 bg-white rounded-2xl shadow-lg flex items-center justify-center">
-                  <DownloadIcon className="h-16 w-16 text-indigo-600" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ─── Benefits Section ─────────────────────────────────────── */}
-        <div className="mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">{t('features', 'benefitsTitle')}</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc'), bgColor: 'bg-blue-100', iconColor: 'text-blue-600' },
-              { icon: Target, title: t('features', 'benefit2Title'), desc: t('features', 'benefit2Desc'), bgColor: 'bg-green-100', iconColor: 'text-green-600' },
-              { icon: Users, title: t('features', 'benefit3Title'), desc: t('features', 'benefit3Desc'), bgColor: 'bg-purple-100', iconColor: 'text-purple-600' },
-              { icon: CheckCircle, title: t('features', 'benefit4Title'), desc: t('features', 'benefit4Desc'), bgColor: 'bg-amber-100', iconColor: 'text-amber-600' },
-            ].map((benefit, i) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className={`w-10 h-10 rounded-lg ${benefit.bgColor} flex items-center justify-center mb-4`}>
-                  <benefit.icon className={`h-5 w-5 ${benefit.iconColor}`} />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{benefit.title}</h3>
-                <p className="text-sm text-gray-600">{benefit.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── Quick Start Section ──────────────────────────────────── */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-12">
+        {/* ─── Quick Start ────────────────────────────────────────── */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -416,7 +158,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ─── History Section (Collapsible) ───────────────────────── */}
+        {/* ─── History ────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <button
             onClick={() => setHistoryOpen(!historyOpen)}
@@ -613,6 +355,41 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* ─── Admin (Admin Only) ─────────────────────────────────── */}
+        {isAdmin && (
+          <div className="mt-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('features', 'teamTitle')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                onClick={() => router.push('/users')}
+                className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900">{t('features', 'teamUsersTitle')}</div>
+                  <div className="text-sm text-gray-500">{t('features', 'teamUsersDesc')}</div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
+              </button>
+              <button
+                onClick={() => router.push('/profile')}
+                className="bg-white rounded-xl border border-gray-200 p-5 text-left hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <User className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900">{t('features', 'teamProfileTitle')}</div>
+                  <div className="text-sm text-gray-500">{t('features', 'teamProfileDesc')}</div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-gray-400 ml-auto" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

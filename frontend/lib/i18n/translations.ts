@@ -77,6 +77,7 @@ export const translations = {
     step3: { ja: '3. 見積・コスト', en: '3. Quotation & Cost' },
     step4: { ja: '4. 2D/3D組立図', en: '4. 2D/3D Assembly' },
     step5: { ja: '5. エクスポート（Excel/PDF/CAD/BIM）', en: '5. Export (Excel/PDF/CAD/BIM)' },
+    dashboardIntro: { ja: 'ここから足場積算・見積・2D/3Dの作業を開始できます。', en: 'Start scaffold calculation, quotations, and 2D/3D from here.' },
     quickStartTitle: { ja: '足場積算を開始', en: 'Start Scaffold Estimation' },
     quickStartDesc: { ja: '図面アップロード or 手動入力 → 寸法を確認・編集 → 積算計算', en: 'Upload drawing or enter manually → Review & edit dimensions → Calculate' },
     quickStep1Title: { ja: '図面アップロード or 手入力', en: 'Upload Drawing or Enter Manually' },
@@ -538,6 +539,25 @@ export const translations = {
     stat3Value: { ja: '3種類', en: '3 Types' },
     stat4Label: { ja: '出力形式', en: 'Export Formats' },
     stat4Value: { ja: '7種類', en: '7 Formats' },
+  },
+
+  // ─── Landing Page (public marketing) ─────────────────────────────
+  landing: {
+    appName: { ja: '仮設工事見積システム', en: 'Scaffold Estimation System' },
+    tagline: { ja: '建設・仮設業向け 足場材料の積算・見積・2D/3D図を一元管理', en: 'All-in-one scaffold quantity takeoff, quotation & 2D/3D for construction' },
+    heroTitle: { ja: '足場見積を、シンプルに。', en: 'Scaffold estimation, simplified.' },
+    heroSubtitle: { ja: 'くさび式・枠組足場の材料数量計算から見積書・組立図まで。現場と事務所で同じツールを。', en: 'From kusabi & frame scaffold quantity takeoff to quotations and assembly drawings. One tool for site and office.' },
+    installTitle: { ja: 'アプリをインストール', en: 'Install the app' },
+    installSubtitle: { ja: 'PCにインストールすると、ブラウザを開かずにすぐ起動。オフラインでも基本機能が使えます。', en: 'Install on your PC to launch without opening a browser. Core features work offline.' },
+    installCta: { ja: 'インストールする', en: 'Install' },
+    installCtaUnavailable: { ja: 'このブラウザではインストールに「⋮」メニュー → アプリをインストール をご利用ください', en: 'Use browser menu (⋮) → Install app to add to your device' },
+    afterInstall: { ja: 'インストール後はログインまたは新規登録で利用開始', en: 'After installing, log in or create an account to get started' },
+    logIn: { ja: 'ログイン', en: 'Log in' },
+    register: { ja: '新規登録', en: 'Create account' },
+    forConstruction: { ja: '建設・仮設業のためのツール', en: 'Built for construction & scaffolding' },
+    sectionFeatures: { ja: '主な機能', en: 'Features' },
+    sectionWhy: { ja: '選ばれる理由', en: 'Why use it' },
+    sectionInstall: { ja: 'インストールして使う', en: 'Install & use' },
   },
 } as const;
 

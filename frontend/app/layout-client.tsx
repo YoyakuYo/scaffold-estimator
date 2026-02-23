@@ -7,7 +7,7 @@ import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const showNavigation = pathname !== '/login' && pathname !== '/register';
+  const showNavigation = pathname !== '/' && pathname !== '/login' && pathname !== '/register';
 
   return (
     <>
