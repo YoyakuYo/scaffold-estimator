@@ -3,11 +3,8 @@
 -- Run this in Supabase SQL Editor
 -- ============================================================
 -- INSTRUCTIONS:
---   1. Replace YOUR_EMAIL with your real email
---   2. Replace YOUR_BCRYPT_HASH with a bcrypt hash of your password
---      Generate one at: https://bcrypt-generator.com/ (use 10 rounds)
---   3. Replace YOUR_FIRST_NAME with your name
---   4. Run in Supabase SQL Editor
+--   1. Run in Supabase SQL Editor
+--   2. Super admin: omarsowbarca45@gmail.com
 -- ============================================================
 --
 -- The backend uses its own auth (bcrypt + JWT), NOT Supabase Auth.
@@ -161,10 +158,10 @@ INSERT INTO users (id, company_id, email, password_hash, role, first_name, last_
 VALUES (
   'b0000000-0000-0000-0000-000000000099',
   'a0000000-0000-0000-0000-000000000001',
-  'YOUR_EMAIL',           -- ← replace with your email
-  'YOUR_BCRYPT_HASH',     -- ← replace with bcrypt hash of your password
+  'omarsowbarca45@gmail.com',
+  '$2b$10$mJokbgKSccKxTic5KJgPTu2yDRg04xNqJqcafYLh0wSNfK5/ROn3u',
   'superadmin',
-  'YOUR_FIRST_NAME',      -- ← replace with your name
+  'Omar'
   'Admin',
   TRUE,
   'approved'

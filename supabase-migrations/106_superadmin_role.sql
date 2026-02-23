@@ -6,14 +6,20 @@
 -- admin-protected endpoints, so no per-endpoint changes are needed in SQL.
 -- ============================================================
 
--- Set the platform owner (from migration 105) to superadmin role
+-- Set by fixed UUID (from migration 105)
 UPDATE users
 SET role = 'superadmin',
     updated_at = now()
 WHERE id = 'b0000000-0000-0000-0000-000000000099';
 
--- Also catch anyone who was inserted via email (in case id differs)
--- Only updates if the user belongs to the Platform Admin company
+-- Set by email (in case UUID differs)
+UPDATE users
+SET role = 'superadmin',
+    updated_at = now()
+WHERE email = 'omarsowbarca45@gmail.com'
+  AND role = 'admin';
+
+-- Catch any other admin in the Platform Admin company
 UPDATE users
 SET role = 'superadmin',
     updated_at = now()
