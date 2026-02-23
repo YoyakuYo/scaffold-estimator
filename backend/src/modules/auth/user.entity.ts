@@ -27,7 +27,7 @@ export class User {
   @Column({ name: 'password_hash' })
   passwordHash: string;
 
-  @Column({ type: 'enum', enum: ['admin', 'estimator', 'viewer'], default: 'viewer' })
+  @Column({ type: 'text', default: 'viewer' })
   role: UserRole;
 
   @Column({ name: 'first_name', nullable: true })
@@ -39,12 +39,7 @@ export class User {
   @Column({ default: true, name: 'is_active' })
   isActive: boolean;
 
-  @Column({ 
-    type: 'enum', 
-    enum: ['pending', 'approved', 'rejected'], 
-    default: 'pending',
-    name: 'approval_status' 
-  })
+  @Column({ type: 'text', default: 'pending', name: 'approval_status' })
   approvalStatus: ApprovalStatus;
 
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
