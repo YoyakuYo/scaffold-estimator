@@ -1,16 +1,17 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
-import { Shield, Users, MessageSquare, User, LogOut, CreditCard } from 'lucide-react';
+import { Shield, Users, MessageSquare, User, LogOut, CreditCard, Globe } from 'lucide-react';
 import { authApi } from '@/lib/api/auth';
 import { useI18n } from '@/lib/i18n';
 
 export function SuperAdminNavigation() {
   const router = useRouter();
   const pathname = usePathname();
-  const { locale } = useI18n();
+  const { locale, setLocale } = useI18n();
 
   const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
+  const toggleLocale = () => setLocale(locale === 'ja' ? 'en' : 'ja');
 
   const navItems = [
     { path: '/superadmin/dashboard', matchAlso: ['/dashboard'], label: t('Dashboard', 'ダッシュボード'), icon: Shield },
@@ -54,13 +55,24 @@ export function SuperAdminNavigation() {
             })}
           </div>
         </div>
-        <button
-          onClick={() => authApi.logout()}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-red-300 hover:bg-slate-800 transition-colors"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          <span>{t('Logout', 'ログアウト')}</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleLocale}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            title={locale === 'ja' ? 'Switch to English' : '日本語に切り替え'}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            <span>{locale === 'ja' ? 'EN' : 'JP'}</span>
+          </button>
+          <div className="w-px h-5 bg-slate-700 mx-0.5" />
+          <button
+            onClick={() => authApi.logout()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-red-300 hover:bg-slate-800 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span>{t('Logout', 'ログアウト')}</span>
+          </button>
+        </div>
       </div>
     </nav>
   );
