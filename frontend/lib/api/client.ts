@@ -42,60 +42,37 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Skip auth redirect in dev mode
-    const token = Cookies.get('access_token');
-    if (token === 'dev-mode-token') {
-      return Promise.reject(error);
-    }
-
-    // Only handle 401 errors (authentication failures)
     if (error.response?.status === 401 && !isLoggingOut) {
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isLoginPage = currentPath === '/login';
+      const publicPages = ['/', '/login', '/register', '/superadmin'];
+      const isPublicPage = publicPages.includes(currentPath);
       const requestUrl = error.config?.url || '';
       const isAuthEndpoint = requestUrl.includes('/auth/login');
-      const isUploadEndpoint = requestUrl.includes('/drawings/upload');
-      
-      // Don't logout if:
-      // 1. We're already on the login page
-      // 2. It's the login endpoint itself (login failure, not logout)
-      // 3. It's a network error (no response)
-      // 4. We're already in the process of logging out
-      if (!isLoginPage && !isAuthEndpoint && error.response && !isLoggingOut) {
+
+      if (!isPublicPage && !isAuthEndpoint && error.response) {
         const errorMessage = error.response?.data?.message || '';
         const errorCode = error.response?.data?.error || '';
-        
-        // Only logout on actual authentication errors, not other 401s
-        // Check if it's an auth-related error message
-        const isAuthError = 
-          errorMessage.includes('Unauthorized') || 
-          errorMessage.includes('Invalid token') || 
+
+        const isAuthError =
+          errorMessage.includes('Unauthorized') ||
+          errorMessage.includes('Invalid token') ||
           errorMessage.includes('Token expired') ||
           errorMessage.includes('authentication') ||
           errorCode === 'Unauthorized';
-        
-        // Don't logout on login credential failures
+
         const isLoginFailure = errorMessage.includes('Invalid credentials');
-        
-        // For upload errors, be more lenient - don't logout immediately
-        // unless it's clearly an auth issue
+
         if (isAuthError && !isLoginFailure) {
-          // Only clear token and redirect if it's a real auth error
           isLoggingOut = true;
           Cookies.remove('access_token', { path: '/' });
-          if (currentPath !== '/login' && typeof window !== 'undefined') {
-            // Small delay to prevent multiple redirects
+          if (typeof window !== 'undefined') {
             setTimeout(() => {
-              window.location.href = '/login';
+              window.location.href = '/';
               isLoggingOut = false;
             }, 100);
           } else {
             isLoggingOut = false;
           }
-        } else if (isUploadEndpoint) {
-          // For upload errors that aren't clearly auth-related, don't logout
-          // Just let the error bubble up to the component
-          console.warn('Upload failed with 401, but not logging out:', errorMessage);
         }
       }
     }

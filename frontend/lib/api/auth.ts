@@ -62,8 +62,8 @@ export const authApi = {
   },
 
   logout: () => {
-    Cookies.remove('access_token');
-    window.location.href = '/login';
+    Cookies.remove('access_token', { path: '/' });
+    window.location.href = '/';
   },
 
   getToken: (): string | undefined => {

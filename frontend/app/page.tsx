@@ -24,16 +24,20 @@ import {
 import { useI18n } from '@/lib/i18n';
 import { usePwaInstall } from '@/lib/pwa-install-context';
 import { usersApi } from '@/lib/api/users';
+import { authApi } from '@/lib/api/auth';
 
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
   const { canInstall, triggerInstall } = usePwaInstall();
 
+  const hasToken = !!authApi.getToken();
+
   const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: usersApi.getProfile,
     retry: false,
+    enabled: hasToken,
     staleTime: 1000 * 60 * 5,
   });
   useEffect(() => {

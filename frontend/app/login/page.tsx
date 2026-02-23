@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
 import { useMutation } from '@tanstack/react-query';
 import { Globe } from 'lucide-react';
-import Cookies from 'js-cookie';
 import { useI18n } from '@/lib/i18n';
 
 export default function LoginPage() {
@@ -29,12 +28,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     loginMutation.mutate({ email, password });
-  };
-
-  /** Dev mode: skip login and go straight to dashboard */
-  const handleDevLogin = () => {
-    Cookies.set('access_token', 'dev-mode-token', { expires: 7, path: '/' });
-    router.push('/dashboard');
   };
 
   const toggleLocale = () => {
@@ -131,8 +124,7 @@ export default function LoginPage() {
           </div>
         </form>
 
-        {/* Registration Link */}
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-2">
           <p className="text-sm text-gray-600">
             {locale === 'ja' ? 'アカウントをお持ちでないですか？' : "Don't have an account?"}{' '}
             <a
@@ -142,20 +134,16 @@ export default function LoginPage() {
               {locale === 'ja' ? '新規登録' : 'Sign up'}
             </a>
           </p>
-        </div>
-
-        {/* Dev mode bypass */}
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <button
-            onClick={handleDevLogin}
-            className="w-full flex justify-center py-2 px-4 border-2 border-dashed border-orange-300 rounded-md text-sm font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors"
-          >
-            {t('login', 'devMode')}
-          </button>
-          <p className="mt-2 text-xs text-gray-400 text-center">
-            {t('login', 'devModeHint')}
+          <p className="text-sm">
+            <a
+              href="/"
+              className="text-gray-500 hover:text-gray-700"
+            >
+              {locale === 'ja' ? '← トップページへ戻る' : '← Back to home'}
+            </a>
           </p>
         </div>
+
       </div>
     </div>
   );
