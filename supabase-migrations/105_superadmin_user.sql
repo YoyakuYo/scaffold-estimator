@@ -36,10 +36,35 @@ CREATE TABLE IF NOT EXISTS companies (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── 2. Drop conflicting users table if it uses different schema
--- Migration 100 creates a users table with organization_id (no password_hash).
--- The backend needs company_id + password_hash. Drop and recreate.
+-- ── 2. Recreate users table for backend auth schema ─────────
+-- Migration 100 may have created a users table with organization_id
+-- and RLS policies. We need to drop everything and recreate with
+-- company_id + password_hash that the backend expects.
+
+-- Drop RLS policies that reference users table
+DO $$ DECLARE pol RECORD;
+BEGIN
+  FOR pol IN
+    SELECT policyname, tablename
+    FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'users'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+  END LOOP;
+END $$;
+
+-- Drop all tables from migration 100 that conflict
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS login_history CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS branches CASCADE;
+DROP TABLE IF EXISTS organizations CASCADE;
+
+-- Drop helper functions from migration 100
+DROP FUNCTION IF EXISTS public.get_my_organization_id() CASCADE;
+DROP FUNCTION IF EXISTS public.get_my_branch_id() CASCADE;
+DROP FUNCTION IF EXISTS public.get_my_role() CASCADE;
 
 CREATE TABLE users (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
