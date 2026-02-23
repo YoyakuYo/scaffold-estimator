@@ -4,7 +4,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
-import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Brain, Users, User } from 'lucide-react';
+import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Brain, Users, User, Shield, MessageSquare } from 'lucide-react';
+import { NotificationBell } from '@/components/notification-bell';
 import { useI18n, type Locale } from '@/lib/i18n';
 
 export function Navigation() {
@@ -77,6 +78,7 @@ export function Navigation() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             {/* Profile Link */}
             <button
               onClick={() => router.push('/profile')}

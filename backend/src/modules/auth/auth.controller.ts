@@ -29,7 +29,13 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @Post('login')
   async login(@Request() req: any, @Body() loginDto: LoginDto) {
-    return this.authService.login(req.user);
+    const result = await this.authService.login(req.user);
+    await this.authService.onLoginSuccess(
+      req.user.id,
+      req.ip || req.connection?.remoteAddress,
+      req.headers?.['user-agent'],
+    );
+    return result;
   }
 
   // ─── Public Registration ──────────────────────────────────
@@ -65,13 +71,42 @@ export class AuthController {
     return this.authService.changePassword(user.id, dto);
   }
 
+  // ─── Heartbeat (presence) ─────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Post('heartbeat')
+  async heartbeat(@CurrentUser() user: any) {
+    return this.authService.heartbeat(user.id);
+  }
+
   // ─── User Management (Admin Only) ────────────────────────
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('users')
   async listUsers(@CurrentUser() user: any) {
-    return this.authService.listUsers(user.companyId);
+    return this.authService.listUsers(undefined);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('admin/stats')
+  async getPlatformStats() {
+    return this.authService.getPlatformStats();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('users/online')
+  async getOnlineUsers() {
+    return this.authService.getOnlineUsers();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('users/:id/login-history')
+  async getLoginHistory(@Param('id') id: string) {
+    return this.authService.getLoginHistory(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

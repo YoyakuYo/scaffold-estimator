@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { Navigation } from '@/components/navigation';
+import { Heartbeat } from '@/components/heartbeat';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -9,7 +10,12 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {showNavigation && <Navigation />}
+      {showNavigation && (
+        <>
+          <Navigation />
+          <Heartbeat />
+        </>
+      )}
       {children}
     </>
   );

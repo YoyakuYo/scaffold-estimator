@@ -21,10 +21,6 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  companyTaxId?: string;
-
-  @IsOptional()
-  @IsString()
   companyAddress?: string;
 
   @IsOptional()

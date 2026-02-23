@@ -114,4 +114,22 @@ export const usersApi = {
     const res = await apiClient.get<{ count: number }>('/auth/users/pending/count');
     return res.data;
   },
+
+  /** Get online users (admin only) */
+  getOnlineUsers: async (): Promise<(UserProfile & { lastActiveAt?: string | null })[]> => {
+    const res = await apiClient.get('/auth/users/online');
+    return res.data;
+  },
+
+  /** Get login history for a user (admin only) */
+  getLoginHistory: async (userId: string): Promise<{ id: string; userId: string; ipAddress: string | null; userAgent: string | null; createdAt: string }[]> => {
+    const res = await apiClient.get(`/auth/users/${userId}/login-history`);
+    return res.data;
+  },
+
+  /** Platform stats for super admin dashboard (admin only) */
+  getPlatformStats: async (): Promise<{ totalUsers: number; pendingUsers: number; totalCompanies: number; onlineCount: number }> => {
+    const res = await apiClient.get('/auth/admin/stats');
+    return res.data;
+  },
 };

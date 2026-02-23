@@ -11,50 +11,76 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ScaffoldConfigModule } from './modules/scaffold-config/scaffold-config.module';
 import { QuotationModule } from './modules/quotation/quotation.module';
 import { AiModule } from './modules/ai/ai.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MailerModule } from './modules/mailer/mailer.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      // In production (e.g. Render), env vars come from the platform — don't require .env file
+      ignoreEnvFile: process.env.NODE_ENV === 'production',
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const logger = new Logger('DatabaseConfig');
-        
-        // Try DATABASE_URL first (if it's a complete connection string from Supabase)
-        const databaseUrl = configService.get('DATABASE_URL');
-        if (databaseUrl && databaseUrl.includes('@') && databaseUrl.includes('://')) {
-          logger.log('Using DATABASE_URL connection string directly');
+
+        // Try connection URL first (Render: DATABASE_URL or INTERNAL_DATABASE_URL; Supabase/Railway: DATABASE_URL)
+        const databaseUrl =
+          configService.get('INTERNAL_DATABASE_URL') || configService.get('DATABASE_URL');
+        if (databaseUrl && typeof databaseUrl === 'string' && databaseUrl.includes('://')) {
+          logger.log('Using DATABASE_URL / INTERNAL_DATABASE_URL connection string');
           try {
             const urlObj = new URL(databaseUrl);
-            logger.log(`Connecting to: ${urlObj.protocol}//${urlObj.username}@${urlObj.hostname}:${urlObj.port}${urlObj.pathname}`);
+            const safeUrl =
+              `${urlObj.protocol}//${urlObj.username}@${urlObj.hostname}:${urlObj.port}${urlObj.pathname}`;
+            logger.log(`Connecting to: ${safeUrl}`);
             return {
               type: 'postgres',
               url: databaseUrl,
               entities: [__dirname + '/**/*.entity{.ts,.js}'],
               migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
-              synchronize: false, // Disabled - use Supabase SQL migrations instead
+              synchronize: false,
               logging: configService.get('NODE_ENV') === 'development',
               ssl: { rejectUnauthorized: false },
             };
           } catch (e) {
-            logger.warn(`Could not parse DATABASE_URL, falling back to individual params: ${e.message}`);
+            logger.warn(`Could not parse DATABASE_URL, falling back to individual params: ${(e as Error).message}`);
           }
         }
-        
-        // Fallback: Use individual parameters (all from env — no hardcoded secrets)
+
+        // Fallback: individual parameters (DB_* or PGHOST/PGUSER/PGPASSWORD for Render/Railway)
         logger.log('Using individual connection parameters');
-        const dbHost = configService.get('DB_HOST');
-        const dbPort = parseInt(configService.get('DB_PORT', '5432'), 10);
-        const dbUsername = configService.get('DB_USERNAME');
-        const dbPassword = configService.get('DB_PASSWORD');
-        const dbName = configService.get('DB_NAME', 'postgres');
+        const dbHost =
+          configService.get('DB_HOST') || configService.get('PGHOST');
+        const dbPort = parseInt(
+          configService.get('DB_PORT') || configService.get('PGPORT') || '5432',
+          10,
+        );
+        const dbUsername =
+          configService.get('DB_USERNAME') || configService.get('PGUSER');
+        const dbPassword =
+          configService.get('DB_PASSWORD') || configService.get('PGPASSWORD');
+        const dbName =
+          configService.get('DB_NAME') || configService.get('PGDATABASE') || 'postgres';
 
         if (!dbHost || !dbUsername || !dbPassword) {
-          logger.error('DB_HOST, DB_USERNAME, and DB_PASSWORD are required in .env');
-          throw new Error('Database configuration is required (DB_HOST, DB_USERNAME, DB_PASSWORD)');
+          const missing = [
+            !dbHost && 'DB_HOST or PGHOST',
+            !dbUsername && 'DB_USERNAME or PGUSER',
+            !dbPassword && 'DB_PASSWORD or PGPASSWORD',
+          ]
+            .filter(Boolean)
+            .join(', ');
+          logger.error(
+            `Database config missing: ${missing}. Set these in Render Environment, or set DATABASE_URL / INTERNAL_DATABASE_URL (full connection string).`,
+          );
+          throw new Error(
+            `Database configuration is required. Set DB_HOST, DB_USERNAME, DB_PASSWORD (or DATABASE_URL / INTERNAL_DATABASE_URL) in your environment variables.`,
+          );
         }
 
         logger.log(`Connecting to ${dbHost}:${dbPort}/${dbName}`);
@@ -110,6 +136,9 @@ import { AiModule } from './modules/ai/ai.module';
     ScaffoldConfigModule,
     QuotationModule,
     AiModule,
+    MessagingModule,
+    NotificationsModule,
+    MailerModule,
   ],
 })
 export class AppModule {}

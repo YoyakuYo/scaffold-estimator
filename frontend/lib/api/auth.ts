@@ -24,7 +24,6 @@ export interface RegisterPayload {
   firstName: string;
   lastName: string;
   companyName: string;
-  companyTaxId?: string;
   companyAddress?: string;
   companyPhone?: string;
   companyEmail?: string;
@@ -63,5 +62,10 @@ export const authApi = {
 
   getToken: (): string | undefined => {
     return Cookies.get('access_token');
+  },
+
+  heartbeat: async (): Promise<{ ok: boolean }> => {
+    const response = await apiClient.post<{ ok: boolean }>('/auth/heartbeat', {});
+    return response.data;
   },
 };

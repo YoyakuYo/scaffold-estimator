@@ -18,7 +18,6 @@ export default function RegisterPage() {
     firstName: '',
     lastName: '',
     companyName: '',
-    companyTaxId: '',
     companyAddress: '',
     companyPhone: '',
     companyEmail: '',
@@ -185,17 +184,6 @@ export default function RegisterPage() {
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('register', 'companyTaxId')}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.companyTaxId}
-                      onChange={(e) => setFormData({ ...formData, companyTaxId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       {t('register', 'companyPhone')}

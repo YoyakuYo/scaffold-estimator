@@ -5,9 +5,13 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, ApprovalStatus } from './user.entity';
 import { Company } from './company.entity';
+import { LoginHistory } from './login-history.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto';
 import { RegisterDto } from './dto/register.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailerService } from '../mailer/mailer.service';
+import { Inject, forwardRef } from '@nestjs/common';
 
 @Injectable()
 export class AuthService {
@@ -16,7 +20,12 @@ export class AuthService {
     private userRepository: Repository<User>,
     @InjectRepository(Company)
     private companyRepository: Repository<Company>,
+    @InjectRepository(LoginHistory)
+    private loginHistoryRepository: Repository<LoginHistory>,
     private jwtService: JwtService,
+    @Inject(forwardRef(() => NotificationsService))
+    private notificationsService: NotificationsService,
+    private mailerService: MailerService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -55,6 +64,46 @@ export class AuthService {
     };
   }
 
+  /** Call after successful login: record login history and set last_active_at. */
+  async onLoginSuccess(userId: string, ip?: string, userAgent?: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) return;
+    user.lastActiveAt = new Date();
+    await this.userRepository.save(user);
+    const entry = this.loginHistoryRepository.create({
+      userId,
+      ipAddress: ip || null,
+      userAgent: userAgent || null,
+    });
+    await this.loginHistoryRepository.save(entry);
+  }
+
+  /** Heartbeat: update last_active_at (call from frontend every ~60s). */
+  async heartbeat(userId: string): Promise<{ ok: boolean }> {
+    await this.userRepository.update(userId, { lastActiveAt: new Date() });
+    return { ok: true };
+  }
+
+  /** List users considered "online" (last_active_at within last 3 minutes). Admin only. */
+  async getOnlineUsers(): Promise<any[]> {
+    const cutoff = new Date(Date.now() - 3 * 60 * 1000);
+    const users = await this.userRepository.find({
+      where: { isActive: true, approvalStatus: 'approved' },
+      order: { lastActiveAt: 'DESC' },
+    });
+    const online = users.filter((u) => u.lastActiveAt && u.lastActiveAt >= cutoff);
+    return online.map(({ passwordHash, ...rest }) => rest);
+  }
+
+  /** Get login history for a user. Admin only. */
+  async getLoginHistory(userId: string, limit = 50): Promise<LoginHistory[]> {
+    return this.loginHistoryRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
+
   async validateToken(token: string): Promise<User> {
     try {
       const payload = this.jwtService.verify(token);
@@ -84,7 +133,7 @@ export class AuthService {
     // Create company
     const company = new Company();
     company.name = dto.companyName;
-    company.taxId = dto.companyTaxId || '';
+    company.taxId = '';
     company.address = dto.companyAddress || '';
     company.phone = dto.companyPhone || '';
     company.email = dto.companyEmail || dto.email;
@@ -144,7 +193,7 @@ export class AuthService {
   }
 
   /**
-   * List all users (optionally filter by companyId).
+   * List all users. If companyId is provided, filter by it; otherwise (admin) return all.
    */
   async listUsers(companyId?: string): Promise<any[]> {
     const where: any = {};
@@ -259,6 +308,13 @@ export class AuthService {
 
     user.approvalStatus = 'approved';
     const saved = await this.userRepository.save(user);
+    await this.notificationsService
+      .create(userId, 'approval', 'Account approved', {
+        body: 'Your account has been approved. You can now log in.',
+        link: '/login',
+      })
+      .catch(() => {});
+    await this.mailerService.sendApprovalEmail(user.email).catch(() => {});
     const { passwordHash, ...result } = saved;
     return result;
   }
@@ -277,6 +333,13 @@ export class AuthService {
     user.approvalStatus = 'rejected';
     user.isActive = false; // Also deactivate rejected users
     const saved = await this.userRepository.save(user);
+    await this.notificationsService
+      .create(userId, 'rejection', 'Account not approved', {
+        body: 'Your account request was not approved. Please contact support if you have questions.',
+        link: '/login',
+      })
+      .catch(() => {});
+    await this.mailerService.sendRejectionEmail(user.email).catch(() => {});
     const { passwordHash, ...result } = saved;
     return result;
   }
@@ -286,5 +349,28 @@ export class AuthService {
    */
   async getPendingUsersCount(): Promise<number> {
     return this.userRepository.count({ where: { approvalStatus: 'pending' } });
+  }
+
+  /**
+   * Platform-wide stats for super admin dashboard.
+   */
+  async getPlatformStats(): Promise<{
+    totalUsers: number;
+    pendingUsers: number;
+    totalCompanies: number;
+    onlineCount: number;
+  }> {
+    const [totalUsers, pendingUsers, totalCompanies, onlineUsers] = await Promise.all([
+      this.userRepository.count(),
+      this.getPendingUsersCount(),
+      this.companyRepository.count(),
+      this.getOnlineUsers(),
+    ]);
+    return {
+      totalUsers,
+      pendingUsers,
+      totalCompanies,
+      onlineCount: onlineUsers.length,
+    };
   }
 }

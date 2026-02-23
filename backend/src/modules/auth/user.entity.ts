@@ -47,6 +47,9 @@ export class User {
   })
   approvalStatus: ApprovalStatus;
 
+  @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
+  lastActiveAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
