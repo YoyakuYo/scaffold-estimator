@@ -13,15 +13,15 @@ export function SuperAdminNavigation() {
   const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
 
   const navItems = [
-    { path: '/superadmin/dashboard', label: t('Dashboard', 'ダッシュボード'), icon: Shield },
-    { path: '/users', label: t('Users', 'ユーザー'), icon: Users },
-    { path: '/admin/messages', label: t('Messages', 'メッセージ'), icon: MessageSquare },
-    { path: '/profile', label: t('Profile', 'プロフィール'), icon: User },
+    { path: '/superadmin/dashboard', matchAlso: ['/dashboard'], label: t('Dashboard', 'ダッシュボード'), icon: Shield },
+    { path: '/users', matchAlso: [] as string[], label: t('Users', 'ユーザー'), icon: Users },
+    { path: '/admin/messages', matchAlso: [] as string[], label: t('Messages', 'メッセージ'), icon: MessageSquare },
+    { path: '/profile', matchAlso: [] as string[], label: t('Profile', 'プロフィール'), icon: User },
   ];
 
   return (
     <nav className="bg-slate-950 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center justify-center w-7 h-7 rounded bg-amber-500/20">
             <Shield className="h-4 w-4 text-amber-400" />
@@ -35,7 +35,9 @@ export function SuperAdminNavigation() {
           <div className="hidden sm:flex items-center gap-1 ml-4">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.path || pathname.startsWith(`${item.path}/`);
+              const active = pathname === item.path
+                || pathname.startsWith(`${item.path}/`)
+                || item.matchAlso.some((p) => pathname === p || pathname.startsWith(`${p}/`));
               return (
                 <button
                   key={item.path}
