@@ -1,6 +1,6 @@
 -- ============================================================
 -- SUPER ADMIN — SELF-CONTAINED SETUP
--- Run this in Supabase SQL Editor (creates tables if needed)
+-- Run this in Supabase SQL Editor
 -- ============================================================
 -- INSTRUCTIONS:
 --   1. Replace YOUR_EMAIL with your real email
@@ -9,8 +9,16 @@
 --   3. Replace YOUR_FIRST_NAME with your name
 --   4. Run in Supabase SQL Editor
 -- ============================================================
+--
+-- The backend uses its own auth (bcrypt + JWT), NOT Supabase Auth.
+-- It expects: companies, users (with company_id, password_hash),
+-- and company_branches tables.
+--
+-- If migration 100 (organizations/branches) was already run,
+-- those tables are separate and won't conflict.
+-- ============================================================
 
--- ── 1. Create companies table if it doesn't exist ───────────
+-- ── 1. Create companies table (backend auth schema) ─────────
 CREATE TABLE IF NOT EXISTS companies (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT NOT NULL,
@@ -28,8 +36,12 @@ CREATE TABLE IF NOT EXISTS companies (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── 2. Create users table if it doesn't exist ───────────────
-CREATE TABLE IF NOT EXISTS users (
+-- ── 2. Drop conflicting users table if it uses different schema
+-- Migration 100 creates a users table with organization_id (no password_hash).
+-- The backend needs company_id + password_hash. Drop and recreate.
+DROP TABLE IF EXISTS users CASCADE;
+
+CREATE TABLE users (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id       UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   email            TEXT NOT NULL UNIQUE,
@@ -40,11 +52,15 @@ CREATE TABLE IF NOT EXISTS users (
   is_active        BOOLEAN NOT NULL DEFAULT TRUE,
   approval_status  TEXT NOT NULL DEFAULT 'pending',
   last_active_at   TIMESTAMPTZ,
+  branch_id        UUID,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── 3. Create company_branches table if it doesn't exist ────
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_company_id ON users (company_id);
+
+-- ── 3. Create company_branches table ────────────────────────
 CREATE TABLE IF NOT EXISTS company_branches (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id       UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -62,7 +78,50 @@ CREATE TABLE IF NOT EXISTS company_branches (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── 4. Insert platform owner company ────────────────────────
+-- ── 4. Create other tables the backend expects ──────────────
+CREATE TABLE IF NOT EXISTS scaffold_configs (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id       UUID REFERENCES companies(id) ON DELETE CASCADE,
+  created_by       UUID,
+  scaffold_type    TEXT NOT NULL DEFAULT 'kusabi',
+  building_height  NUMERIC,
+  scaffold_width   NUMERIC,
+  post_size        NUMERIC,
+  top_guard        NUMERIC,
+  structure_type   TEXT DEFAULT 'steel',
+  walls            JSONB DEFAULT '[]',
+  quantities       JSONB DEFAULT '[]',
+  span_config      JSONB DEFAULT '[]',
+  status           TEXT DEFAULT 'calculated',
+  frame_size       NUMERIC,
+  habaki_count     INTEGER DEFAULT 2,
+  end_stopper_type TEXT DEFAULT 'nuno',
+  rental_period    JSONB,
+  branch_id        UUID,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS login_history (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL,
+  ip_address  TEXT,
+  user_agent  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'info',
+  title       TEXT NOT NULL,
+  body        TEXT,
+  link        TEXT,
+  read_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ── 5. Insert platform owner company ────────────────────────
 INSERT INTO companies (id, name, email)
 VALUES (
   'a0000000-0000-0000-0000-000000000001',
@@ -71,8 +130,8 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- ── 5. Insert super admin user ──────────────────────────────
--- ⚠️  REPLACE the placeholders below before running!
+-- ── 6. Insert super admin user ──────────────────────────────
+-- ⚠️  REPLACE the 3 placeholders below before running!
 INSERT INTO users (id, company_id, email, password_hash, role, first_name, last_name, is_active, approval_status)
 VALUES (
   'b0000000-0000-0000-0000-000000000099',
@@ -91,5 +150,6 @@ ON CONFLICT (email) DO UPDATE SET
   is_active = TRUE,
   approval_status = 'approved';
 
--- ── 6. Verify ───────────────────────────────────────────────
+-- ── 7. Verify ───────────────────────────────────────────────
+SELECT '✅ Setup complete!' AS status;
 SELECT id, email, role, is_active, approval_status FROM users WHERE role = 'admin';
