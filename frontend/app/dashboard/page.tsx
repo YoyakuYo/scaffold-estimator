@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-configs';
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { messagesApi, ConversationWithUser } from '@/lib/api/messages';
+import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { useI18n } from '@/lib/i18n';
 import Link from 'next/link';
 import {
@@ -39,6 +40,7 @@ import {
   CheckCircle,
   XCircle,
   Zap,
+  CreditCard,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -545,6 +547,13 @@ function UserDashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+  const { data: subscription } = useQuery({
+    queryKey: ['my-subscription'],
+    queryFn: subscriptionsApi.getMine,
+    retry: false,
+    refetchInterval: 30000,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (configId: string) => scaffoldConfigsApi.delete(configId),
     onSuccess: () => {
@@ -559,10 +568,52 @@ function UserDashboard() {
     }
   };
 
+  const hasBillingAccess = subscription?.hasAccess ?? true;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <p className="text-gray-600 mb-6">{t('dashboard', 'dashboardIntro')}</p>
+
+        {subscription && (
+          <div
+            className={`rounded-xl border p-5 mb-6 ${
+              hasBillingAccess ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+            }`}
+          >
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-sm text-gray-600">
+                  {locale === 'ja' ? 'サブスクリプション' : 'Subscription'}
+                </p>
+                <p className="font-semibold text-gray-900">
+                  {subscription.plan} / {subscription.status}
+                </p>
+                {subscription.status === 'trialing' && (
+                  <p className="text-sm text-amber-700 mt-1">
+                    {locale === 'ja'
+                      ? `無料トライアル残り ${subscription.trialDaysRemaining} 日`
+                      : `Free trial: ${subscription.trialDaysRemaining} day(s) remaining`}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => router.push('/billing')}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+              >
+                <CreditCard className="h-4 w-4" />
+                {locale === 'ja' ? '請求を管理' : 'Manage Billing'}
+              </button>
+            </div>
+            {!hasBillingAccess && (
+              <p className="text-sm text-red-700 mt-3">
+                {locale === 'ja'
+                  ? 'トライアル期間が終了しました。請求ページで有料プランを開始してください。'
+                  : 'Your trial has ended. Start a paid plan from Billing to continue using core features.'}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Quick Start */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
@@ -573,7 +624,8 @@ function UserDashboard() {
             </div>
             <button
               onClick={() => router.push('/scaffold')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2"
+              disabled={!hasBillingAccess}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Calculator className="h-5 w-5" />
               {t('dashboard', 'quickStartButton')}

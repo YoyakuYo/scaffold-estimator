@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
-import { Shield, Users, MessageSquare, User, LogOut } from 'lucide-react';
+import { Shield, Users, MessageSquare, User, LogOut, CreditCard } from 'lucide-react';
 import { authApi } from '@/lib/api/auth';
 import { useI18n } from '@/lib/i18n';
 
@@ -15,6 +15,7 @@ export function SuperAdminNavigation() {
   const navItems = [
     { path: '/superadmin/dashboard', matchAlso: ['/dashboard'], label: t('Dashboard', 'ダッシュボード'), icon: Shield },
     { path: '/users', matchAlso: [] as string[], label: t('Users', 'ユーザー'), icon: Users },
+    { path: '/superadmin/subscribers', matchAlso: [] as string[], label: t('Subscribers', '購読者'), icon: CreditCard },
     { path: '/admin/messages', matchAlso: [] as string[], label: t('Messages', 'メッセージ'), icon: MessageSquare },
     { path: '/profile', matchAlso: [] as string[], label: t('Profile', 'プロフィール'), icon: User },
   ];

@@ -37,6 +37,7 @@ async function bootstrap() {
   // Get Express instance and configure body parsers with 50 MB limit
   // This allows large SVG / base64 image payloads for PDF exports
   const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use('/api/v1/subscriptions/webhook', express.raw({ type: 'application/json' }));
   expressApp.use(express.json({ limit: '50mb' }));
   expressApp.use(express.urlencoded({ limit: '50mb', extended: true }));
   // Note: multipart/form-data is handled by multer via FileInterceptor, not body-parser

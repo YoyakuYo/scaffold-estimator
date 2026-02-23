@@ -16,6 +16,7 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
+  CreditCard,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -265,6 +266,13 @@ export function SuperAdminDashboardContent() {
           >
             <MessageSquare className="h-5 w-5" />
             {t('supportMessages', 'Support Messages', 'サポートメッセージ')}
+          </Link>
+          <Link
+            href="/superadmin/subscribers"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            <CreditCard className="h-5 w-5" />
+            {t('subscribers', 'Subscribers', '購読者')}
           </Link>
         </div>
       </div>

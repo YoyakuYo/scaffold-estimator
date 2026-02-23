@@ -13,6 +13,7 @@ import { RegisterDto } from './dto/register.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
 import { Inject, forwardRef } from '@nestjs/common';
+import { Subscription } from '../subscription/subscription.entity';
 
 @Injectable()
 export class AuthService {
@@ -25,11 +26,34 @@ export class AuthService {
     private loginHistoryRepository: Repository<LoginHistory>,
     @InjectRepository(CompanyBranch)
     private branchRepository: Repository<CompanyBranch>,
+    @InjectRepository(Subscription)
+    private subscriptionRepository: Repository<Subscription>,
     private jwtService: JwtService,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
     private mailerService: MailerService,
   ) {}
+
+  private async ensureTrialSubscriptionForUser(user: User): Promise<void> {
+    if (!user || user.role === 'superadmin') return;
+
+    const existing = await this.subscriptionRepository.findOne({ where: { userId: user.id } });
+    if (existing) return;
+
+    const trialStart = new Date();
+    const trialEnd = new Date(trialStart);
+    trialEnd.setDate(trialEnd.getDate() + 14);
+
+    const sub = this.subscriptionRepository.create({
+      userId: user.id,
+      companyId: user.companyId || null,
+      plan: 'free_trial',
+      status: 'trialing',
+      trialStart,
+      trialEnd,
+    });
+    await this.subscriptionRepository.save(sub);
+  }
 
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.userRepository.findOne({ where: { email } });
@@ -231,6 +255,7 @@ export class AuthService {
     user.approvalStatus = 'approved'; // Admin-created users are auto-approved
 
     const saved = await this.userRepository.save(user);
+    await this.ensureTrialSubscriptionForUser(saved);
     const { passwordHash: _pw, ...result } = saved;
     return result;
   }
@@ -351,6 +376,7 @@ export class AuthService {
 
     user.approvalStatus = 'approved';
     const saved = await this.userRepository.save(user);
+    await this.ensureTrialSubscriptionForUser(saved);
     await this.notificationsService
       .create(userId, 'approval', 'Account approved', {
         body: 'Your account has been approved. You can now log in.',

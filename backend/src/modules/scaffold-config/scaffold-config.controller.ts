@@ -29,9 +29,10 @@ import { ScaffoldExcelService } from './scaffold-excel.service';
 import { ScaffoldPdfService } from './scaffold-pdf.service';
 import { ScaffoldCadService } from './scaffold-cad.service';
 import { PriceTableParserService } from './price-table-parser.service';
+import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 
 @Controller('scaffold-configs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionActiveGuard)
 export class ScaffoldConfigController {
   private readonly logger = new Logger(ScaffoldConfigController.name);
 
