@@ -1,10 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
-import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Brain, Users, User, Shield, MessageSquare } from 'lucide-react';
+import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Brain, Users, User, Shield, MessageSquare, Building2 } from 'lucide-react';
 import { NotificationBell } from '@/components/notification-bell';
 import { useI18n, type Locale } from '@/lib/i18n';
 
@@ -12,6 +13,8 @@ export function Navigation() {
   const router = useRouter();
   const pathname = usePathname();
   const { locale, setLocale, t } = useI18n();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   // Check current user's role to conditionally show Users link
   const { data: currentUser } = useQuery({
@@ -36,6 +39,7 @@ export function Navigation() {
     { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
     { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
     { path: '/ai', label: locale === 'ja' ? 'AI' : 'AI', icon: Brain },
+    { path: '/company', label: t('nav', 'company'), icon: Building2 },
     ...(isAdmin ? [{ path: '/users', label: locale === 'ja' ? 'ユーザー' : 'Users', icon: Users }] : []),
     { path: '/settings', label: t('nav', 'settings'), icon: Settings },
   ];
@@ -78,31 +82,33 @@ export function Navigation() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <NotificationBell />
-            {/* Profile Link */}
-            <button
-              onClick={() => router.push('/profile')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-              title={locale === 'ja' ? 'プロフィール' : 'Profile'}
-            >
-              <User className="h-4 w-4" />
-            </button>
-            {/* Language Switcher */}
-            <button
-              onClick={toggleLocale}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
-              title={locale === 'ja' ? 'Switch to English' : '日本語に切り替え'}
-            >
-              <Globe className="h-4 w-4" />
-              <span>{locale === 'ja' ? 'EN' : 'JP'}</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="text-gray-500 hover:text-gray-700 flex items-center space-x-2 px-3 py-2"
-            >
-              <LogOut className="h-4 w-4" />
-              <span suppressHydrationWarning>{t('common', 'logout')}</span>
-            </button>
+            {mounted && (
+              <>
+                <NotificationBell />
+                <button
+                  onClick={() => router.push('/profile')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                  title={locale === 'ja' ? 'プロフィール' : 'Profile'}
+                >
+                  <User className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={toggleLocale}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
+                  title={locale === 'ja' ? 'Switch to English' : '日本語に切り替え'}
+                >
+                  <Globe className="h-4 w-4" />
+                  <span>{locale === 'ja' ? 'EN' : 'JP'}</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="text-gray-500 hover:text-gray-700 flex items-center space-x-2 px-3 py-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>{t('common', 'logout')}</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -9,12 +9,13 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { User } from './user.entity';
 import { Company } from './company.entity';
+import { CompanyBranch } from '../company/company-branch.entity';
 import { LoginHistory } from './login-history.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Company, LoginHistory]),
+    TypeOrmModule.forFeature([User, Company, CompanyBranch, LoginHistory]),
     forwardRef(() => NotificationsModule),
     PassportModule,
     JwtModule.registerAsync({

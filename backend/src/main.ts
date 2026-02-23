@@ -66,20 +66,42 @@ async function bootstrap() {
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // CORS - Allow all origins in development, specific origin in production
-  const allowedOrigins = process.env.FRONTEND_URL 
-    ? [process.env.FRONTEND_URL]
-    : ['http://localhost:3001', 'http://127.0.0.1:3001'];
-  
+  // CORS configuration
+  // In development: allow all origins
+  // In production: allow FRONTEND_URL (comma-separated), plus .onrender.com subdomains
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  const allowedOrigins: string[] = [];
+  const rawOrigins = process.env.FRONTEND_URL || process.env.CORS_ORIGINS || '';
+  if (rawOrigins) {
+    rawOrigins.split(',').forEach((o) => {
+      const trimmed = o.trim().replace(/\/+$/, '');
+      if (trimmed) allowedOrigins.push(trimmed);
+    });
+  }
+  if (!isProduction) {
+    allowedOrigins.push('http://localhost:3001', 'http://127.0.0.1:3001');
+  }
+
+  logger.log(`CORS allowed origins: ${allowedOrigins.length ? allowedOrigins.join(', ') : '(all in dev)'}`);
+
   app.enableCors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+
+      const normalized = origin.replace(/\/+$/, '');
+
+      if (!isProduction) return callback(null, true);
+
+      if (allowedOrigins.includes(normalized)) return callback(null, true);
+
+      // Auto-allow .onrender.com subdomains (both services are on Render)
+      if (/^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(normalized)) {
+        return callback(null, true);
       }
+
+      logger.warn(`CORS rejected origin: ${origin} — allowed: [${allowedOrigins.join(', ')}]`);
+      callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

@@ -26,6 +26,7 @@ export const translations = {
     scaffold: { ja: '足場積算', en: 'Scaffold Calc' },
     quotations: { ja: '見積一覧', en: 'Quotations' },
     settings: { ja: '単価設定', en: 'Price Settings' },
+    company: { ja: '会社情報', en: 'Company' },
   },
 
   // ─── Login Page ────────────────────────────────────────────────

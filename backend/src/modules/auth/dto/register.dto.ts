@@ -30,4 +30,29 @@ export class RegisterDto {
   @IsOptional()
   @IsEmail()
   companyEmail?: string;
+
+  // Structured Japanese address fields
+  @IsOptional()
+  @IsString()
+  companyPostalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  companyPrefecture?: string;
+
+  @IsOptional()
+  @IsString()
+  companyCity?: string;
+
+  @IsOptional()
+  @IsString()
+  companyTown?: string;
+
+  @IsOptional()
+  @IsString()
+  companyAddressLine?: string;
+
+  @IsOptional()
+  @IsString()
+  companyBuilding?: string;
 }

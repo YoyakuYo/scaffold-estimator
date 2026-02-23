@@ -27,6 +27,12 @@ export interface RegisterPayload {
   companyAddress?: string;
   companyPhone?: string;
   companyEmail?: string;
+  companyPostalCode?: string;
+  companyPrefecture?: string;
+  companyCity?: string;
+  companyTown?: string;
+  companyAddressLine?: string;
+  companyBuilding?: string;
 }
 
 export interface RegisterResponse {

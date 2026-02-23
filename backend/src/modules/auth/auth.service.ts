@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole, ApprovalStatus } from './user.entity';
 import { Company } from './company.entity';
+import { CompanyBranch } from '../company/company-branch.entity';
 import { LoginHistory } from './login-history.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto';
@@ -22,6 +23,8 @@ export class AuthService {
     private companyRepository: Repository<Company>,
     @InjectRepository(LoginHistory)
     private loginHistoryRepository: Repository<LoginHistory>,
+    @InjectRepository(CompanyBranch)
+    private branchRepository: Repository<CompanyBranch>,
     private jwtService: JwtService,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
@@ -130,14 +133,35 @@ export class AuthService {
       throw new ConflictException('このメールアドレスは既に使用されています。');
     }
 
-    // Create company
+    // Create company with structured address
     const company = new Company();
     company.name = dto.companyName;
     company.taxId = '';
     company.address = dto.companyAddress || '';
     company.phone = dto.companyPhone || '';
     company.email = dto.companyEmail || dto.email;
+    company.postalCode = dto.companyPostalCode || '';
+    company.prefecture = dto.companyPrefecture || '';
+    company.city = dto.companyCity || '';
+    company.town = dto.companyTown || '';
+    company.addressLine = dto.companyAddressLine || '';
+    company.building = dto.companyBuilding || '';
     const savedCompany = await this.companyRepository.save(company);
+
+    // Create default headquarters branch with the same address
+    const hqBranch = this.branchRepository.create({
+      companyId: savedCompany.id,
+      name: '本社',
+      isHeadquarters: true,
+      postalCode: dto.companyPostalCode || '',
+      prefecture: dto.companyPrefecture || '',
+      city: dto.companyCity || '',
+      town: dto.companyTown || '',
+      addressLine: dto.companyAddressLine || '',
+      building: dto.companyBuilding || '',
+      phone: dto.companyPhone || '',
+    });
+    await this.branchRepository.save(hqBranch);
 
     // Create user with pending status
     const salt = await bcrypt.genSalt(10);
