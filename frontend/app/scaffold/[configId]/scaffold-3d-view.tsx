@@ -32,6 +32,8 @@ const C = {
   stair:      0x60a5fa,
   stairRail:  0x3b82f6,
   habaki:     0xf59e0b,
+  frame:      0xb0c4de,
+  frameDark:  0x7a93af,
   ground:     0xf8fafc,
   bg:         0xeef3f8,
   grid:       0xd9e3ef,
@@ -272,6 +274,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
       const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.4, roughness: 0.5 });
       const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.3, roughness: 0.5 });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
+      const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.55, roughness: 0.3 });
+      const frameDarkMat = new THREE.MeshStandardMaterial({ color: C.frameDark, metalness: 0.5, roughness: 0.35 });
 
       const widthM = result.scaffoldWidthMm / 1000;
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -321,6 +325,58 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const mesh = new THREE.Mesh(geo, pipeDarkMat);
         mesh.position.set(x, y, z);
         parent.add(mesh);
+      }
+
+      /**
+       * Renders a wakugumi portal frame (建枠) at position (px, baseY) spanning from z=0 to z=widthM.
+       * Shape: two vertical legs + horizontal top bar + curved outward bottom legs.
+       * Based on FT-917/FT-1217C specs: 329mm bottom curve, 1219mm straight, 152mm top bar.
+       */
+      function addWakugumiFrame(
+        parent: THREE.Object3D,
+        px: number,
+        baseY: number,
+        frameH: number,
+        wid: number,
+        fr = PIPE_R * 1.15,
+      ) {
+        const bottomRatio = 0.194;
+        const topBarRatio = 0.089;
+        const bottomH = frameH * bottomRatio;
+        const topBarH = frameH * topBarRatio;
+        const straightH = frameH - bottomH - topBarH;
+        const splayOut = 0.04;
+
+        // Bottom curved legs (splay outward then go vertical)
+        const legBotY = baseY;
+        const legStraightY = baseY + bottomH;
+        const legTopY = legStraightY + straightH;
+        const frameTopY = legTopY + topBarH;
+
+        for (const pz of [0, wid]) {
+          const outerZ = pz === 0 ? pz - splayOut : pz + splayOut;
+          // Bottom curved/angled section (foot splays outward)
+          addPipe(parent, px, legBotY, outerZ, px, legStraightY, pz, frameMat, fr);
+          // Straight vertical section
+          addPipe(parent, px, legStraightY, pz, px, legTopY, pz, frameMat, fr);
+          // Top short vertical into crossbar
+          addPipe(parent, px, legTopY, pz, px, frameTopY, pz, frameMat, fr);
+
+          // Joint rings at transitions
+          const jGeo = new THREE.CylinderGeometry(fr * 2, fr * 2, 0.012, 10);
+          const jBot = new THREE.Mesh(jGeo, frameDarkMat);
+          jBot.position.set(px, legStraightY, pz);
+          parent.add(jBot);
+          const jTop = new THREE.Mesh(jGeo.clone(), frameDarkMat);
+          jTop.position.set(px, legTopY, pz);
+          parent.add(jTop);
+        }
+
+        // Top horizontal crossbar connecting front and back legs
+        addPipe(parent, px, frameTopY, 0, px, frameTopY, wid, frameDarkMat, fr * 1.1);
+        // Mid-crossbar for structural look
+        const midCrossY = legStraightY + straightH * 0.5;
+        addPipe(parent, px, midCrossY, 0, px, midCrossY, wid, frameDarkMat, fr * 0.6);
       }
 
       /**
@@ -412,14 +468,25 @@ export default function Scaffold3DView({ result }: { result: any }) {
           }
         }
 
-        // ── Vertical posts ─────────────────────────────
-        for (const px of postX) {
-          for (const pz of [0, widthM]) {
-            addPipe(group, px, JACK_H, pz, px, JACK_H + totalPostH, pz, pipeMat);
-            for (let lv = 0; lv <= levels; lv++) {
-              addJoint(group, px, JACK_H + lv * LEVEL_H, pz);
+        // ── Vertical posts / frames ──────────────────
+        if (isWakugumi) {
+          // Wakugumi: render portal frames (建枠) at each post position per level
+          for (const px of postX) {
+            for (let lv = 0; lv < levels; lv++) {
+              const frameBaseY = JACK_H + lv * LEVEL_H;
+              addWakugumiFrame(group, px, frameBaseY, LEVEL_H, widthM);
             }
-            addJoint(group, px, JACK_H + totalPostH, pz);
+          }
+        } else {
+          // Kusabi: individual vertical pipes
+          for (const px of postX) {
+            for (const pz of [0, widthM]) {
+              addPipe(group, px, JACK_H, pz, px, JACK_H + totalPostH, pz, pipeMat);
+              for (let lv = 0; lv <= levels; lv++) {
+                addJoint(group, px, JACK_H + lv * LEVEL_H, pz);
+              }
+              addJoint(group, px, JACK_H + totalPostH, pz);
+            }
           }
         }
 
