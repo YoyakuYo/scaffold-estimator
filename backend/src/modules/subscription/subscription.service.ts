@@ -88,12 +88,23 @@ export class SubscriptionService {
     return subscription;
   }
 
+  /** Subscription is at company level: only the company subscribes; all users under that company have access. */
   async hasActiveAccess(userId: string, role?: string): Promise<boolean> {
     if (role === 'superadmin') return true;
-    let sub = await this.ensureSubscriptionForUser(userId);
-    sub = await this.expireTrialIfNeeded(sub);
-    if (sub.status === 'active') return true;
-    if (sub.status === 'trialing' && sub.trialEnd && sub.trialEnd > new Date()) return true;
+    const user = await this.getUserOrFail(userId);
+    const companyId = user.companyId;
+    if (!companyId) return false;
+    let subs = await this.subscriptionRepository.find({ where: { companyId } });
+    if (subs.length === 0) {
+      await this.ensureSubscriptionForUser(userId);
+      subs = await this.subscriptionRepository.find({ where: { companyId } });
+    }
+    const now = new Date();
+    for (const sub of subs) {
+      const s = await this.expireTrialIfNeeded(sub);
+      if (s.status === 'active') return true;
+      if (s.status === 'trialing' && s.trialEnd && s.trialEnd > now) return true;
+    }
     return false;
   }
 

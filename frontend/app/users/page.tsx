@@ -21,6 +21,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Building2,
+  MapPin,
 } from 'lucide-react';
 
 const ROLE_CONFIG: Record<UserRole, { label: string; labelJa: string; color: string; icon: any }> = {
@@ -75,22 +77,30 @@ function UsersPage() {
     retry: false,
   });
 
-  const isAdmin = currentUser?.role === 'superadmin';
+  const isSuperAdmin = currentUser?.role === 'superadmin';
+  const isEstimator = currentUser?.role === 'estimator';
+  const canManageUsers = isSuperAdmin || isEstimator;
 
   const { data: users, isLoading, isError, error } = useQuery<UserProfile[]>({
     queryKey: ['users'],
     queryFn: usersApi.listUsers,
     retry: false,
-    enabled: isAdmin, // Only fetch if user is admin
+    enabled: canManageUsers,
   });
 
-  // Get pending count
   const { data: pendingCount } = useQuery({
     queryKey: ['pending-count'],
     queryFn: usersApi.getPendingCount,
     retry: false,
-    enabled: isAdmin,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: isSuperAdmin,
+    refetchInterval: 30000,
+  });
+
+  const { data: companies } = useQuery({
+    queryKey: ['admin-companies'],
+    queryFn: usersApi.listCompanies,
+    retry: false,
+    enabled: isSuperAdmin,
   });
 
   // Filter users by approval status
@@ -187,19 +197,15 @@ function UsersPage() {
     setOpenMenuId(null);
   };
 
-  // Redirect non-admin users away from this page
+  // Redirect users who cannot manage users (viewer)
   useEffect(() => {
-    if (currentUser && !isAdmin) {
-      // Small delay to show the access denied message briefly, then redirect
-      const timer = setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
+    if (currentUser && !canManageUsers) {
+      const timer = setTimeout(() => router.push('/dashboard'), 2000);
       return () => clearTimeout(timer);
     }
-  }, [currentUser, isAdmin, router]);
+  }, [currentUser, canManageUsers, router]);
 
-  // Show permission denied message if not admin
-  if (currentUser && !isAdmin) {
+  if (currentUser && !canManageUsers) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -210,8 +216,8 @@ function UsersPage() {
             </h1>
             <p className="text-gray-600 mb-2">
               {locale === 'ja'
-                ? 'ユーザー管理機能は管理者のみが利用できます。'
-                : 'User management is only available to administrators.'}
+                ? 'ユーザー管理は管理者または積算担当（招待のみ）が利用できます。'
+                : 'User management is available to administrators or estimators (invite only).'}
             </p>
             <p className="text-sm text-gray-500 mb-4">
               {locale === 'ja'
@@ -244,13 +250,56 @@ function UsersPage() {
               )}
             </h1>
             <p className="text-gray-500 mt-1">
-              {locale === 'ja' ? 'ユーザーの承認・権限管理' : 'Approve registrations and manage permissions'}
+              {isSuperAdmin
+                ? (locale === 'ja' ? '会社・ユーザー一覧・承認・権限管理' : 'Companies, users, approval and permissions')
+                : (locale === 'ja' ? '自社ユーザー一覧・招待' : 'Company users and invites')}
             </p>
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        {isAdmin && users && users.length > 0 && (
+        {/* Super Admin: Companies overview (user count, branches) */}
+        {isSuperAdmin && companies && companies.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+            <div className="px-6 py-3 border-b border-gray-200 flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              <h2 className="text-lg font-semibold text-gray-900">
+                {locale === 'ja' ? '会社一覧（人数・支店）' : 'Companies (user count & branches)'}
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{locale === 'ja' ? '会社名' : 'Company'}</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{locale === 'ja' ? 'ユーザー数' : 'Users'}</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{locale === 'ja' ? '支店' : 'Branches'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {companies.map((c) => (
+                    <tr key={c.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-3 font-medium text-gray-900">{c.name}</td>
+                      <td className="px-6 py-3 text-sm text-gray-600">{c.userCount}</td>
+                      <td className="px-6 py-3 text-sm text-gray-600">
+                        {c.branches.length === 0
+                          ? '—'
+                          : c.branches.map((b) => (
+                              <span key={b.id} className="inline-flex items-center gap-1 mr-2">
+                                <MapPin className="h-3 w-3 text-gray-400" />
+                                {b.name}{b.isHeadquarters ? ` (${locale === 'ja' ? '本社' : 'HQ'})` : ''}
+                              </span>
+                            ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Filter Tabs (super admin sees all; estimator sees only their company) */}
+        {isSuperAdmin && users && users.length > 0 && (
           <div className="flex gap-2 mb-6">
             {[
               { key: 'all' as const, label: locale === 'ja' ? 'すべて' : 'All', count: users.length },
@@ -302,7 +351,7 @@ function UsersPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? 'ユーザー' : 'User'}
+                    {locale === 'ja' ? '会社 / ユーザー' : 'Company / User'}
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     {locale === 'ja' ? 'メール' : 'Email'}
@@ -341,10 +390,13 @@ function UsersPage() {
                             {(user.firstName?.[0] || user.email[0]).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">
+                            <p className="font-semibold text-gray-900">
+                              {user.companyName || (locale === 'ja' ? '（会社名なし）' : '(No company)')}
+                            </p>
+                            <p className="text-sm text-gray-600 mt-0.5">
                               {user.firstName || user.lastName
                                 ? `${user.lastName || ''} ${user.firstName || ''}`.trim()
-                                : '—'}
+                                : user.email}
                             </p>
                           </div>
                         </div>
@@ -400,8 +452,8 @@ function UsersPage() {
                           </button>
                           {openMenuId === user.id && (
                             <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                              {/* Approve/Reject for pending users */}
-                              {user.approvalStatus === 'pending' && (
+                              {/* Approve/Reject only for super admin */}
+                              {isSuperAdmin && user.approvalStatus === 'pending' && (
                                 <>
                                   <button
                                     onClick={() => { handleApprove(user); setOpenMenuId(null); }}

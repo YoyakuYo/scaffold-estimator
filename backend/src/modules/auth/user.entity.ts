@@ -5,7 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Company } from './company.entity';
 
 export type UserRole = 'superadmin' | 'estimator' | 'viewer';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
@@ -20,6 +23,10 @@ export class User {
 
   @Column({ name: 'company_id' })
   companyId: string;
+
+  @ManyToOne(() => Company, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'company_id' })
+  company?: Company;
 
   @Column({ unique: true })
   email: string;

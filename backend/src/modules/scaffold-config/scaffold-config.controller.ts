@@ -271,7 +271,7 @@ export class ScaffoldConfigController {
    */
   @Patch('quantities/:quantityId')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async updateQuantity(
     @Param('quantityId') quantityId: string,
     @Body() dto: UpdateQuantityDto,
@@ -288,7 +288,7 @@ export class ScaffoldConfigController {
    */
   @Post(':id/review')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async markReviewed(@Param('id') configId: string) {
     return await this.configService.markReviewed(configId);
   }
@@ -299,7 +299,7 @@ export class ScaffoldConfigController {
    */
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async deleteConfig(@Param('id') configId: string) {
     this.logger.log(`Deleting scaffold config ${configId}`);
     await this.configService.deleteConfig(configId);

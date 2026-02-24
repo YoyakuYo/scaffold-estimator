@@ -110,18 +110,26 @@ export default function ProfilePage() {
           </h2>
 
           {profile && (
-            <div className="mb-4 flex items-center gap-2">
-              <Shield className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-gray-600">
-                {t('profile', 'role') + ': '}
-                <span className="font-medium">
-                  {profile.role === 'superadmin'
-                    ? t('profile', 'roleSuperAdmin')
-                    : profile.role === 'estimator'
-                    ? t('profile', 'roleEstimator')
-                    : t('profile', 'roleViewer')}
+            <div className="mb-4 space-y-1">
+              {profile.companyName && (
+                <p className="text-sm font-semibold text-gray-900">{profile.companyName}</p>
+              )}
+              <p className="text-sm text-gray-600">
+                {[profile.lastName, profile.firstName].filter(Boolean).join(' ') || profile.email}
+              </p>
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-blue-500" />
+                <span className="text-sm text-gray-600">
+                  {t('profile', 'role') + ': '}
+                  <span className="font-medium">
+                    {profile.role === 'superadmin'
+                      ? t('profile', 'roleSuperAdmin')
+                      : profile.role === 'estimator'
+                      ? t('profile', 'roleEstimator')
+                      : t('profile', 'roleViewer')}
                 </span>
-              </span>
+                </span>
+              </div>
             </div>
           )}
 

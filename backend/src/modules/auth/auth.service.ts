@@ -257,7 +257,7 @@ export class AuthService {
 
   /**
    * List all users. If companyId is provided, filter by it; otherwise return all.
-   * Excludes superadmin (platform owner) so they do not appear in User Management.
+   * Excludes superadmin (platform owner). Each user includes companyName for display (company name first, then user name).
    */
   async listUsers(companyId?: string): Promise<any[]> {
     const where: any = {};
@@ -266,20 +266,31 @@ export class AuthService {
     }
     const users = await this.userRepository.find({
       where,
+      relations: ['company'],
       order: { createdAt: 'DESC' },
     });
     return users
       .filter((u) => u.role !== 'superadmin')
-      .map(({ passwordHash, ...rest }) => rest);
+      .map((u) => {
+        const { passwordHash, company, ...rest } = u;
+        const row: any = rest;
+        if (company) row.companyName = company.name;
+        return row;
+      });
   }
 
   /**
-   * Get a single user by ID.
+   * Get a single user by ID (optionally with company for display).
    */
-  async getUser(userId: string): Promise<any> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+  async getUser(userId: string, options?: { withCompany?: boolean }): Promise<any> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: options?.withCompany ? ['company'] : undefined,
+    });
     if (!user) throw new NotFoundException('ユーザーが見つかりません。');
-    const { passwordHash, ...result } = user;
+    const { passwordHash, company, ...rest } = user;
+    const result: any = rest;
+    if (company) result.companyName = company.name;
     return result;
   }
 
@@ -355,10 +366,10 @@ export class AuthService {
   }
 
   /**
-   * Get current user profile from JWT payload.
+   * Get current user profile (includes companyName for display: company name, then user name).
    */
   async getProfile(userId: string): Promise<any> {
-    return this.getUser(userId);
+    return this.getUser(userId, { withCompany: true });
   }
 
   /**
@@ -439,5 +450,38 @@ export class AuthService {
       totalCompanies,
       onlineCount: onlineUsers.length,
     };
+  }
+
+  /**
+   * List all companies for super admin: company name, user count, branches (enterprise). Each company visible with how many people and which branch.
+   */
+  async listCompaniesForSuperAdmin(): Promise<
+    Array<{ id: string; name: string; userCount: number; branches: Array<{ id: string; name: string; isHeadquarters: boolean }> }>
+  > {
+    const companies = await this.companyRepository.find({ order: { name: 'ASC' } });
+    const userIdsByCompany = await this.userRepository
+      .createQueryBuilder('u')
+      .select('u.company_id', 'companyId')
+      .addSelect('COUNT(*)', 'count')
+      .where('u.role != :role', { role: 'superadmin' })
+      .groupBy('u.company_id')
+      .getRawMany<{ companyId: string; count: string }>();
+    const countMap = new Map(userIdsByCompany.map((r) => [r.companyId, parseInt(r.count, 10)]));
+    const allBranches = await this.branchRepository.find({ order: { name: 'ASC' } });
+    const branchesByCompany = new Map<string, typeof allBranches>();
+    for (const b of allBranches) {
+      if (!branchesByCompany.has(b.companyId)) branchesByCompany.set(b.companyId, []);
+      branchesByCompany.get(b.companyId)!.push(b);
+    }
+    return companies.map((c) => ({
+      id: c.id,
+      name: c.name,
+      userCount: countMap.get(c.id) ?? 0,
+      branches: (branchesByCompany.get(c.id) || []).map((b) => ({
+        id: b.id,
+        name: b.name,
+        isHeadquarters: b.isHeadquarters,
+      })),
+    }));
   }
 }

@@ -97,13 +97,14 @@ export class AuthController {
     return this.authService.heartbeat(user.id);
   }
 
-  // ─── User Management (Admin Only) ────────────────────────
+  // ─── User Management: Super Admin (all) or Estimator (invite + list company users) ────────────────────────
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
+  @Roles('superadmin', 'estimator')
   @Get('users')
   async listUsers(@CurrentUser() user: any) {
-    return this.authService.listUsers(undefined);
+    const companyId = user.role === 'superadmin' ? undefined : user.companyId;
+    return this.authService.listUsers(companyId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -111,6 +112,13 @@ export class AuthController {
   @Get('admin/stats')
   async getPlatformStats() {
     return this.authService.getPlatformStats();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Get('admin/companies')
+  async listCompanies(@CurrentUser() user: any) {
+    return this.authService.listCompaniesForSuperAdmin();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -128,35 +136,35 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
+  @Roles('superadmin', 'estimator')
   @Get('users/:id')
   async getUser(@Param('id') id: string) {
-    return this.authService.getUser(id);
+    return this.authService.getUser(id, { withCompany: true });
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
+  @Roles('superadmin', 'estimator')
   @Post('users')
   async createUser(@CurrentUser() admin: any, @Body() dto: CreateUserDto) {
     return this.authService.createUser(dto, admin.companyId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
+  @Roles('superadmin', 'estimator')
   @Put('users/:id')
   async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.authService.updateUser(id, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
+  @Roles('superadmin', 'estimator')
   @Post('users/:id/reset-password')
   async adminResetPassword(@Param('id') id: string, @Body() dto: AdminResetPasswordDto) {
     return this.authService.adminResetPassword(id, dto.newPassword);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
+  @Roles('superadmin', 'estimator')
   @Delete('users/:id')
   async deactivateUser(@Param('id') id: string) {
     return this.authService.deactivateUser(id);

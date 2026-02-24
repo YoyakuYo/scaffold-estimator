@@ -23,7 +23,7 @@ export class EstimateController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async createEstimate(
     @Body() createEstimateDto: CreateEstimateDto,
     @CurrentUser() user: any,
@@ -54,7 +54,7 @@ export class EstimateController {
 
   @Patch(':id/bom')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async updateBillOfMaterials(
     @Param('id') id: string,
     @Body() updateBOMDto: UpdateBOMDto,

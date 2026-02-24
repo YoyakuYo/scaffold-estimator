@@ -11,6 +11,7 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   companyId: string;
+  companyName?: string;
   firstName: string | null;
   lastName: string | null;
   isActive: boolean;
@@ -130,6 +131,12 @@ export const usersApi = {
   /** Platform stats for super admin dashboard (admin only) */
   getPlatformStats: async (): Promise<{ totalUsers: number; pendingUsers: number; totalCompanies: number; onlineCount: number }> => {
     const res = await apiClient.get('/auth/admin/stats');
+    return res.data;
+  },
+
+  /** List all companies with user count and branches (super admin only) */
+  listCompanies: async (): Promise<Array<{ id: string; name: string; userCount: number; branches: Array<{ id: string; name: string; isHeadquarters: boolean }> }>> => {
+    const res = await apiClient.get('/auth/admin/companies');
     return res.data;
   },
 };

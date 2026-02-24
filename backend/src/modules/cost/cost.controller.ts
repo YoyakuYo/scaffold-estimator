@@ -31,7 +31,7 @@ export class CostController {
 
   @Post('estimates/:estimateId/calculate')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async calculateCosts(
     @Param('estimateId') estimateId: string,
     @CurrentUser() user: any,
@@ -50,7 +50,7 @@ export class CostController {
 
   @Patch('line-items/:id')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async updateCostLineItem(
     @Param('id') id: string,
     @Body() updateDto: UpdateCostLineItemDto,

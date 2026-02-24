@@ -19,7 +19,7 @@ export class RolesGuard implements CanActivate {
     if (user.role === 'superadmin') return true;
     if (requiredRoles.some((role) => user.role === role)) return true;
     throw new ForbiddenException(
-      'Your role does not allow this action. Only estimator or administrator can perform it.',
+      'Your role does not allow this action.',
     );
   }
 }

@@ -32,7 +32,7 @@ export class DrawingController {
 
   @Post('upload')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({

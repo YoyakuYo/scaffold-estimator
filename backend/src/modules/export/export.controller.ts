@@ -20,7 +20,7 @@ export class ExportController {
 
   @Get('estimates/:estimateId')
   @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   async generateExport(
     @Param('estimateId') estimateId: string,
     @Query('format') format: 'pdf' | 'excel',
