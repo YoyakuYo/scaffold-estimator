@@ -543,6 +543,11 @@ If you own a domain name, you can use it for free on all platforms.
 - **Node version**: Ensure platform supports Node.js 18+
 - **Dependencies**: Verify all dependencies are in `package.json`
 
+#### "No open ports detected" (Render)
+- The app **must** listen on the port Render provides. The backend uses `process.env.PORT` and binds to `0.0.0.0` so Render can detect it.
+- If you still see this, the app is likely **crashing or hanging before it opens a port** (e.g. database connection timeout during startup). Fix the database connection first (use Supabase **pooler** URL; see below). Render will then see the port once the app starts successfully.
+- **Do not** set a fixed PORT in Render unless instructed; Render injects PORT automatically (e.g. 10000).
+
 #### Database Connection Fails
 - **Check credentials**: Verify environment variables are correct
 - **Network**: Ensure database allows connections from deployment platform
