@@ -248,7 +248,6 @@ export const translations = {
     levelsUnit: { ja: '段', en: 'lvl' },
     tabTable: { ja: '見積表', en: 'Quotation' },
     tab3d: { ja: '3D表示', en: '3D View' },
-    tabPlan: { ja: '平面図', en: 'Plan View' },
     noResult: { ja: '計算結果が見つかりません', en: 'No calculation results found' },
     spanConfig: { ja: 'スパン構成', en: 'Span Configuration' },
     wallLengthLabel: { ja: '壁長:', en: 'Wall:' },
