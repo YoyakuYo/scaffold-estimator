@@ -75,7 +75,7 @@ export default function LoginPage() {
               {isSuperAdminError && (
                 <p className="text-sm">
                   <a href="/superadmin" className="font-medium underline hover:text-red-800">
-                    {locale === 'ja' ? 'スーパー管理者ログインへ' : 'Go to Super Admin login'}
+                    {t('loginExtra', 'superAdminLogin')}
                   </a>
                 </p>
               )}
@@ -138,12 +138,12 @@ export default function LoginPage() {
 
         <div className="mt-6 text-center space-y-2">
           <p className="text-sm text-gray-600">
-            {locale === 'ja' ? 'アカウントをお持ちでないですか？' : "Don't have an account?"}{' '}
+            {t('loginExtra', 'noAccount')}{' '}
             <a
               href="/register"
               className="text-blue-600 hover:text-blue-700 font-medium"
             >
-              {locale === 'ja' ? '新規登録' : 'Sign up'}
+              {t('loginExtra', 'signUp')}
             </a>
           </p>
           <p className="text-sm">
@@ -151,7 +151,7 @@ export default function LoginPage() {
               href="/"
               className="text-gray-500 hover:text-gray-700"
             >
-              {locale === 'ja' ? '← トップページへ戻る' : '← Back to home'}
+              {t('loginExtra', 'backToHome')}
             </a>
           </p>
         </div>

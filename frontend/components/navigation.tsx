@@ -49,9 +49,9 @@ export function Navigation() {
     { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
     { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
     { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
-    { path: '/billing', label: locale === 'ja' ? '請求' : 'Billing', icon: CreditCard },
-    { path: '/support', label: locale === 'ja' ? 'サポート' : 'Support', icon: MessageSquare },
-    ...(isAdmin ? [{ path: '/users', label: locale === 'ja' ? 'ユーザー' : 'Users', icon: Users }] : []),
+    { path: '/billing', label: t('nav2', 'billing'), icon: CreditCard },
+    { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
+    ...(isAdmin ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
     { path: '/settings', label: t('nav', 'settings'), icon: Settings },
   ];
 
@@ -108,7 +108,7 @@ export function Navigation() {
                 <button
                   onClick={() => router.push('/profile')}
                   className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-                  title={locale === 'ja' ? 'プロフィール' : 'Profile'}
+                  title={t('nav2', 'profileTooltip')}
                 >
                   <User className="h-3.5 w-3.5" />
                 </button>

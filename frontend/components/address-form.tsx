@@ -21,7 +21,7 @@ interface AddressFormProps {
 }
 
 export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [looking, setLooking] = useState(false);
   const [found, setFound] = useState(false);
 
@@ -85,7 +85,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       {/* Postal Code */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          {ja ? '郵便番号' : 'Postal Code'}
+          {t('address', 'postalCode')}
         </label>
         <div className="flex gap-2">
           <div className="relative flex-1 max-w-[200px]">
@@ -113,20 +113,18 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
             ) : (
               <Search className="h-4 w-4" />
             )}
-            {ja ? '住所検索' : 'Lookup'}
+            {t('address', 'lookup')}
           </button>
         </div>
         <p className="mt-1 text-xs text-gray-500">
-          {ja
-            ? '7桁入力で住所が自動入力されます'
-            : 'Address auto-fills when 7 digits are entered'}
+          {t('address', 'autoFillHint')}
         </p>
       </div>
 
       {/* Prefecture */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          {ja ? '都道府県' : 'Prefecture'}
+          {t('address', 'prefecture')}
         </label>
         <select
           value={value.prefecture}
@@ -134,7 +132,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
           disabled={disabled}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
         >
-          <option value="">{ja ? '選択してください' : 'Select...'}</option>
+          <option value="">{t('address', 'selectPrefecture')}</option>
           {PREFECTURES.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -146,7 +144,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       {/* City / Ward */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          {ja ? '市区町村' : 'City / Ward'}
+          {t('address', 'city')}
         </label>
         <input
           type="text"
@@ -161,7 +159,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       {/* Town area */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          {ja ? '町域' : 'Town / Area'}
+          {t('address', 'town')}
         </label>
         <input
           type="text"
@@ -176,7 +174,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       {/* Street / Block number */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          {ja ? '番地' : 'Street / Block Number'}
+          {t('address', 'street')}
         </label>
         <input
           type="text"
@@ -191,7 +189,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       {/* Building name */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          {ja ? '建物名・部屋番号' : 'Building / Room'}
+          {t('address', 'buildingRoom')}
         </label>
         <input
           type="text"

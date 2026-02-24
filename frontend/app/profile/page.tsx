@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const queryClient = useQueryClient();
 
   // Profile form state
@@ -95,10 +95,10 @@ export default function ProfilePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <User className="h-8 w-8 text-blue-600" />
-            {locale === 'ja' ? 'プロフィール' : 'Profile'}
+            {t('profile', 'title')}
           </h1>
           <p className="text-gray-500 mt-1">
-            {locale === 'ja' ? 'アカウント情報の管理' : 'Manage your account settings'}
+            {t('profile', 'subtitle')}
           </p>
         </div>
 
@@ -106,20 +106,20 @@ export default function ProfilePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Mail className="h-5 w-5 text-gray-400" />
-            {locale === 'ja' ? '基本情報' : 'Basic Information'}
+            {t('profile', 'basicInfo')}
           </h2>
 
           {profile && (
             <div className="mb-4 flex items-center gap-2">
               <Shield className="h-4 w-4 text-blue-500" />
               <span className="text-sm text-gray-600">
-                {locale === 'ja' ? '権限: ' : 'Role: '}
+                {t('profile', 'role') + ': '}
                 <span className="font-medium">
                   {profile.role === 'superadmin'
-                    ? (locale === 'ja' ? 'スーパー管理者' : 'Super Admin')
+                    ? t('profile', 'roleSuperAdmin')
                     : profile.role === 'estimator'
-                    ? (locale === 'ja' ? '積算担当' : 'Estimator')
-                    : (locale === 'ja' ? '閲覧者' : 'Viewer')}
+                    ? t('profile', 'roleEstimator')
+                    : t('profile', 'roleViewer')}
                 </span>
               </span>
             </div>
@@ -129,7 +129,7 @@ export default function ProfilePage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? '姓' : 'Last Name'}
+                  {t('profile', 'lastName')}
                 </label>
                 <input
                   type="text"
@@ -140,7 +140,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? '名' : 'First Name'}
+                  {t('profile', 'firstName')}
                 </label>
                 <input
                   type="text"
@@ -152,7 +152,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {locale === 'ja' ? 'メールアドレス' : 'Email'}
+                {t('profile', 'email')}
               </label>
               <input
                 type="email"
@@ -165,13 +165,13 @@ export default function ProfilePage() {
             {updateProfileMutation.isSuccess && (
               <div className="flex items-center gap-2 text-green-600 text-sm">
                 <Check className="h-4 w-4" />
-                {locale === 'ja' ? 'プロフィールを更新しました' : 'Profile updated successfully'}
+                {t('profile', 'profileUpdated')}
               </div>
             )}
             {updateProfileMutation.isError && (
               <div className="flex items-center gap-2 text-red-600 text-sm">
                 <AlertTriangle className="h-4 w-4" />
-                {(updateProfileMutation.error as any)?.response?.data?.message || (locale === 'ja' ? '更新に失敗しました' : 'Update failed')}
+                {(updateProfileMutation.error as any)?.response?.data?.message || t('profile', 'updateFailed')}
               </div>
             )}
 
@@ -186,7 +186,7 @@ export default function ProfilePage() {
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                {locale === 'ja' ? '保存' : 'Save'}
+                {t('common', 'save')}
               </button>
             </div>
           </form>
@@ -196,13 +196,13 @@ export default function ProfilePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Lock className="h-5 w-5 text-gray-400" />
-            {locale === 'ja' ? 'パスワード変更' : 'Change Password'}
+            {t('profile', 'changePassword')}
           </h2>
 
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {locale === 'ja' ? '現在のパスワード' : 'Current Password'}
+                {t('profile', 'currentPassword')}
               </label>
               <input
                 type="password"
@@ -214,7 +214,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {locale === 'ja' ? '新しいパスワード' : 'New Password'}
+                {t('profile', 'newPassword')}
               </label>
               <input
                 type="password"
@@ -227,7 +227,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {locale === 'ja' ? '新しいパスワード（確認）' : 'Confirm New Password'}
+                {t('profile', 'confirmPassword')}
               </label>
               <input
                 type="password"
@@ -243,7 +243,7 @@ export default function ProfilePage() {
               />
               {passwordForm.confirmPassword && !passwordsMatch && (
                 <p className="text-red-500 text-xs mt-1">
-                  {locale === 'ja' ? 'パスワードが一致しません' : 'Passwords do not match'}
+                  {t('profile', 'passwordMismatch')}
                 </p>
               )}
             </div>
@@ -251,13 +251,13 @@ export default function ProfilePage() {
             {changePasswordMutation.isSuccess && (
               <div className="flex items-center gap-2 text-green-600 text-sm">
                 <Check className="h-4 w-4" />
-                {locale === 'ja' ? 'パスワードを変更しました' : 'Password changed successfully'}
+                {t('profile', 'passwordChanged')}
               </div>
             )}
             {changePasswordMutation.isError && (
               <div className="flex items-center gap-2 text-red-600 text-sm">
                 <AlertTriangle className="h-4 w-4" />
-                {(changePasswordMutation.error as any)?.response?.data?.message || (locale === 'ja' ? 'パスワード変更に失敗しました' : 'Password change failed')}
+                {(changePasswordMutation.error as any)?.response?.data?.message || t('profile', 'passwordChangeFailed')}
               </div>
             )}
 
@@ -272,7 +272,7 @@ export default function ProfilePage() {
                 ) : (
                   <Lock className="h-4 w-4" />
                 )}
-                {locale === 'ja' ? 'パスワード変更' : 'Change Password'}
+                {t('profile', 'changePassword')}
               </button>
             </div>
           </form>
