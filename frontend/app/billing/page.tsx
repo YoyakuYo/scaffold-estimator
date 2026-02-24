@@ -3,16 +3,24 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
-import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays } from 'lucide-react';
+import { usersApi } from '@/lib/api/users';
+import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield } from 'lucide-react';
 
 export default function BillingPage() {
   const { locale } = useI18n();
   const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
 
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: usersApi.getProfile,
+    retry: false,
+  });
+
   const { data: subscription, isLoading, isError } = useQuery({
     queryKey: ['my-subscription'],
     queryFn: subscriptionsApi.getMine,
     refetchInterval: 30000,
+    enabled: profile?.role !== 'superadmin',
   });
 
   const checkoutMutation = useMutation({
@@ -28,6 +36,35 @@ export default function BillingPage() {
       window.location.href = url;
     },
   });
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (profile.role === 'superadmin') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
+            <Shield className="h-14 w-14 text-amber-600 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-amber-900 mb-2">
+              {t('Platform owner', 'プラットフォーム管理者')}
+            </h1>
+            <p className="text-amber-800">
+              {t(
+                'You are not required to subscribe. Your role is to manage the platform and verify user subscriptions.',
+                'ご自身のアカウントでサブスクリプションは不要です。ユーザーの契約・支払いを管理する役割です。',
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

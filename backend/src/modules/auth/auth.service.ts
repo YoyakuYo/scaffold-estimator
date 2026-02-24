@@ -123,14 +123,16 @@ export class AuthService {
     return { ok: true };
   }
 
-  /** List users considered "online" (last_active_at within last 3 minutes). Admin only. */
+  /** List users considered "online" (last_active_at within last 3 minutes). Excludes superadmin (platform owner). Admin only. */
   async getOnlineUsers(): Promise<any[]> {
     const cutoff = new Date(Date.now() - 3 * 60 * 1000);
     const users = await this.userRepository.find({
       where: { isActive: true, approvalStatus: 'approved' },
       order: { lastActiveAt: 'DESC' },
     });
-    const online = users.filter((u) => u.lastActiveAt && u.lastActiveAt >= cutoff);
+    const online = users.filter(
+      (u) => u.role !== 'superadmin' && u.lastActiveAt && u.lastActiveAt >= cutoff,
+    );
     return online.map(({ passwordHash, ...rest }) => rest);
   }
 

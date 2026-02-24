@@ -204,6 +204,10 @@ SUPABASE_ANON_KEY=your-key
 SUPABASE_SERVICE_ROLE_KEY=your-key
 ```
 
+   **⚠️ Using Supabase from Render (important):** If your database is **Supabase**, do **not** use the direct connection (port 5432). Use the **Connection pooler** (port **6543**) or you will often see "Connection terminated due to connection timeout". In Supabase: Project Settings → Database → "Connection string" → choose **"Transaction"** (pooler) and copy the URI. It looks like:
+   `postgresql://postgres.[ref]:[PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres`
+   Set that as **DATABASE_URL** (or **INTERNAL_DATABASE_URL**) on Render so the backend uses the pooler. Leave DB_HOST/DB_PORT unused when using a full URL.
+
 6. **Run Migrations**:
    - Use Render's "Shell" feature to run:
      ```bash
@@ -320,10 +324,11 @@ These services are **100% FREE forever** and work with any backend deployment pl
    - Go to Project Settings → Database
    - Copy connection string or individual values:
      - Host: `db.xxxxx.supabase.co`
-     - Port: `5432`
+     - Port: `5432` (direct) or **6543** (pooler — use this for Render/Railway)
      - Database: `postgres`
      - User: `postgres`
      - Password: (the one you set)
+   - **For backend on Render/Railway:** use the **Connection pooler** (Transaction mode, port **6543**). The direct connection (5432) often times out from cloud runtimes. In Database settings, open "Connection string" → "URI" and choose the **Transaction** (pooler) tab; use that URL as `DATABASE_URL`.
 4. **Use in Backend**:
    - Add these to your backend environment variables
    - Supabase is free forever with 500MB storage
@@ -542,6 +547,7 @@ If you own a domain name, you can use it for free on all platforms.
 - **Check credentials**: Verify environment variables are correct
 - **Network**: Ensure database allows connections from deployment platform
 - **SSL**: Some platforms require SSL connections (add `?sslmode=require` to connection string)
+- **"Connection terminated due to connection timeout" (Render + Supabase)**: Use Supabase’s **connection pooler** (port **6543**), not the direct connection (5432). Set **DATABASE_URL** to the pooler URI from Supabase → Project Settings → Database → Connection string → **Transaction** (pooler). See the Render environment variables section above.
 
 #### Redis Connection Fails
 - **Check URL**: Verify Redis connection string format

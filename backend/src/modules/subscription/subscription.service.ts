@@ -257,27 +257,30 @@ export class SubscriptionService {
     const userMap = new Map(users.map((u) => [u.id, u]));
     const now = Date.now();
 
-    return subscriptions.map((sub) => {
-      const user = userMap.get(sub.userId);
-      const trialDaysRemaining =
-        sub.trialEnd && sub.status === 'trialing'
-          ? Math.max(0, Math.ceil((sub.trialEnd.getTime() - now) / (1000 * 60 * 60 * 24)))
-          : 0;
-      return {
-        ...sub,
-        trialDaysRemaining,
-        user: user
-          ? {
-              id: user.id,
-              email: user.email,
-              role: user.role,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              companyId: user.companyId,
-            }
-          : null,
-      };
-    });
+    return subscriptions
+      .map((sub) => {
+        const user = userMap.get(sub.userId);
+        if (user?.role === 'superadmin') return null;
+        const trialDaysRemaining =
+          sub.trialEnd && sub.status === 'trialing'
+            ? Math.max(0, Math.ceil((sub.trialEnd.getTime() - now) / (1000 * 60 * 60 * 24)))
+            : 0;
+        return {
+          ...sub,
+          trialDaysRemaining,
+          user: user
+            ? {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                companyId: user.companyId,
+              }
+            : null,
+        };
+      })
+      .filter(Boolean);
   }
 
   async adminExtendTrial(userId: string, days: number): Promise<Subscription> {

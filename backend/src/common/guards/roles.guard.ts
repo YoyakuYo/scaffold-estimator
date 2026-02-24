@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { UserRole } from '../../modules/auth/user.entity';
@@ -17,6 +17,9 @@ export class RolesGuard implements CanActivate {
     }
     const { user } = context.switchToHttp().getRequest();
     if (user.role === 'superadmin') return true;
-    return requiredRoles.some((role) => user.role === role);
+    if (requiredRoles.some((role) => user.role === role)) return true;
+    throw new ForbiddenException(
+      'Your role does not allow this action. Only estimator or administrator can perform it.',
+    );
   }
 }

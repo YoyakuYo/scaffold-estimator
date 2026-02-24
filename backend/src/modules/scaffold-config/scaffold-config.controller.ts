@@ -55,11 +55,9 @@ export class ScaffoldConfigController {
 
   /**
    * POST /scaffold-configs
-   * Create configuration + run calculation in one step.
+   * Create configuration + run calculation in one step. All authenticated users (viewer, estimator, superadmin) can create.
    */
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
   async createAndCalculate(
     @Body() dto: CreateScaffoldConfigDto,
     @CurrentUser() user: any,
@@ -70,11 +68,9 @@ export class ScaffoldConfigController {
 
   /**
    * PATCH /scaffold-configs/:id
-   * Update config with new inputs and recalculate (same body as POST).
+   * Update config with new inputs and recalculate (same body as POST). All authenticated users can update.
    */
   @Patch(':id')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
   async updateAndRecalculate(
     @Param('id') id: string,
     @Body() dto: CreateScaffoldConfigDto,

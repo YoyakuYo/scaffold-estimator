@@ -48,15 +48,15 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
               synchronize: false,
               logging: configService.get('NODE_ENV') === 'development',
               ssl: { rejectUnauthorized: false },
-              connectTimeoutMS: 20000,
+              connectTimeoutMS: 35000,
               extra: {
-                connectionTimeoutMillis: 20000,
+                connectionTimeoutMillis: 35000,
                 idleTimeoutMillis: 20000,
                 max: 10,
                 keepAlive: true,
               },
-              retryAttempts: 5,
-              retryDelay: 3000,
+              retryAttempts: 6,
+              retryDelay: 5000,
             };
           } catch (e) {
             logger.warn(`Could not parse DATABASE_URL, falling back to individual params: ${(e as Error).message}`);
@@ -108,15 +108,15 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
           synchronize: false,
           logging: configService.get('NODE_ENV') === 'development',
           ssl: { rejectUnauthorized: false },
-          connectTimeoutMS: 20000,
+          connectTimeoutMS: 35000,
           extra: {
-            connectionTimeoutMillis: 20000,
+            connectionTimeoutMillis: 35000,
             idleTimeoutMillis: 20000,
             max: 10,
             keepAlive: true,
           },
-          retryAttempts: 5,
-          retryDelay: 3000,
+          retryAttempts: 6,
+          retryDelay: 5000,
         };
       },
     }),
