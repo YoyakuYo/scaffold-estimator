@@ -62,7 +62,12 @@ export const authApi = {
   },
 
   logout: () => {
-    Cookies.remove('access_token', { path: '/' });
+    // Use same path (and domain in production) as when the cookie was set, so it is actually removed
+    const options: { path: string; domain?: string } = { path: '/' };
+    if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+      options.domain = window.location.hostname;
+    }
+    Cookies.remove('access_token', options);
     window.location.href = '/';
   },
 

@@ -64,7 +64,11 @@ apiClient.interceptors.response.use(
 
         if (isAuthError && !isLoginFailure) {
           isLoggingOut = true;
-          Cookies.remove('access_token', { path: '/' });
+          const removeOpts: { path: string; domain?: string } = { path: '/' };
+          if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
+            removeOpts.domain = window.location.hostname;
+          }
+          Cookies.remove('access_token', removeOpts);
           if (typeof window !== 'undefined') {
             setTimeout(() => {
               window.location.href = '/';
