@@ -15,7 +15,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   const loginMutation = useMutation({
-    mutationFn: authApi.login,
+    mutationFn: (creds: { email: string; password: string }) =>
+      authApi.login(creds),
     onSuccess: () => {
       router.push('/dashboard');
     },
@@ -23,6 +24,10 @@ export default function LoginPage() {
       setError(err.response?.data?.message || t('login', 'failed'));
     },
   });
+
+  const isSuperAdminError =
+    typeof error === 'string' &&
+    (error.includes('Super admin') || error.includes('/superadmin'));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +70,15 @@ export default function LoginPage() {
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit} suppressHydrationWarning>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded" suppressHydrationWarning>
-              {error}
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded space-y-2" suppressHydrationWarning>
+              <p>{error}</p>
+              {isSuperAdminError && (
+                <p className="text-sm">
+                  <a href="/superadmin" className="font-medium underline hover:text-red-800">
+                    {locale === 'ja' ? 'スーパー管理者ログインへ' : 'Go to Super Admin login'}
+                  </a>
+                </p>
+              )}
             </div>
           )}
           <div className="space-y-4" suppressHydrationWarning>

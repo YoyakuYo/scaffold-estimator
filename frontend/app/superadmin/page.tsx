@@ -6,9 +6,11 @@ import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Shield, LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 export default function SuperAdminPage() {
   const router = useRouter();
+  const { locale } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,7 +24,8 @@ export default function SuperAdminPage() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: authApi.login,
+    mutationFn: (creds: { email: string; password: string }) =>
+      authApi.login({ ...creds, superadmin: true }),
     onSuccess: (res) => {
       if (res.user?.role === 'superadmin') {
         router.push('/superadmin/dashboard');
@@ -66,9 +69,16 @@ export default function SuperAdminPage() {
           {error && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2 text-sm">
               <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">ログインに失敗しました</p>
                 <p className="mt-1 text-red-600">{error}</p>
+                {error.includes('normal login') && (
+                  <p className="mt-2">
+                    <a href="/login" className="font-medium underline hover:text-red-800">
+                      {locale === 'ja' ? '通常ログインへ' : 'Go to normal login'}
+                    </a>
+                  </p>
+                )}
               </div>
             </div>
           )}

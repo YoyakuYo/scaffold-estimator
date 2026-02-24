@@ -4,6 +4,8 @@ import Cookies from 'js-cookie';
 export interface LoginCredentials {
   email: string;
   password: string;
+  /** Set true only when logging in via /superadmin. Backend rejects cross-use. */
+  superadmin?: boolean;
 }
 
 export interface AuthResponse {

@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -29,6 +30,23 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @Post('login')
   async login(@Request() req: any, @Body() loginDto: LoginDto) {
+    const isSuperAdminLogin = loginDto.superadmin === true;
+    const userRole = req.user?.role;
+
+    if (isSuperAdminLogin) {
+      if (userRole !== 'superadmin') {
+        throw new ForbiddenException(
+          'This account must use the normal login page. Super Admin login is only for platform administrators.',
+        );
+      }
+    } else {
+      if (userRole === 'superadmin') {
+        throw new ForbiddenException(
+          'Super admin accounts must use the Super Admin login page at /superadmin.',
+        );
+      }
+    }
+
     const result = await this.authService.login(req.user);
     await this.authService.onLoginSuccess(
       req.user.id,
