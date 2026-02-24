@@ -21,12 +21,14 @@ import {
   CheckCircle,
   Building2,
   Layers,
+  Map,
   Ruler,
   ShieldCheck,
   RefreshCw,
   ClipboardCheck,
 } from 'lucide-react';
 import Scaffold2DView from './scaffold-2d-view';
+import ScaffoldPlanView from './scaffold-plan-view';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -38,7 +40,7 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
   ),
 });
 
-type TabView = 'table' | 'perside' | '2d' | '3d';
+type TabView = 'table' | 'perside' | '2d' | 'plan' | '3d';
 
 export default function ScaffoldResultPageWrapper() {
   return (
@@ -59,7 +61,7 @@ function ScaffoldResultPage() {
   // Support ?tab=3d, ?tab=2d from external links
   const initialTab = (searchParams.get('tab') as TabView) || 'table';
   const [activeTab, setActiveTab] = useState<TabView>(
-    ['table', 'perside', '2d', '3d'].includes(initialTab) ? initialTab : 'table'
+    ['table', 'perside', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
   );
 
   // Fetch config (includes calculationResult)
@@ -251,6 +253,17 @@ function ScaffoldResultPage() {
             {t('result', 'tab2d')}
           </button>
           <button
+            onClick={() => setActiveTab('plan')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'plan'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Map className="h-4 w-4" />
+            {t('result', 'tabPlan')}
+          </button>
+          <button
             onClick={() => setActiveTab('3d')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === '3d'
@@ -267,6 +280,7 @@ function ScaffoldResultPage() {
         {activeTab === 'table' && <QuotationTable result={result} />}
         {activeTab === 'perside' && <PerSideBreakdown result={result} />}
         {activeTab === '2d' && <Scaffold2DView result={result} />}
+        {activeTab === 'plan' && <ScaffoldPlanView result={result} />}
         {activeTab === '3d' && <Scaffold3DView result={result} />}
 
         {/* ─── Review & Approve Section ──────────────────────── */}

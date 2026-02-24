@@ -268,6 +268,7 @@ export const translations = {
     view3dLabel: { ja: '3D表示', en: '3D View' },
     view2dLabel: { ja: '2D組立図', en: '2D Assembly' },
     tab2d: { ja: '2D組立図', en: '2D Drawing' },
+    tabPlan: { ja: '平面図（全壁）', en: 'Plan (All Walls)' },
     print: { ja: '印刷', en: 'Print' },
     legendPost: { ja: '支柱', en: 'Post' },
     legendBrace: { ja: 'ブレス', en: 'Brace' },

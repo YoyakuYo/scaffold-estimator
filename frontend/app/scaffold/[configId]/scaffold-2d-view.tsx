@@ -16,6 +16,9 @@ const TESURI_STROKE = 2;
 const PLANK_H_PX = 7;
 const HABAKI_H_PX = 5;
 const DIMENSION_OFFSET = 28;
+const FRAME_WIDTH_PX = 14;
+const FRAME_SPLAY_PX = 5;
+const FRAME_BOTTOM_RATIO = 0.194;
 
 // ─── Colors ─────────────────────────────────────────────────────
 const COL = {
@@ -168,12 +171,31 @@ export default function Scaffold2DView({ result }: Props) {
         </text>
       );
 
-      // Posts
+      // Posts (kusabi: single line; wakugumi: portal frame with curved legs and top bar)
       postXPositions.forEach((px, pi) => {
-        elements.push(
-          <line key={`post-${lvl}-${pi}`} x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
-            stroke={COL.post} strokeWidth={POST_STROKE} />
-        );
+        if (isWakugumi) {
+          const half = FRAME_WIDTH_PX / 2;
+          const curveH = LEVEL_H * FRAME_BOTTOM_RATIO;
+          const straightBaseY = baseY + curveH;
+          const xL = x(px) - half;
+          const xR = x(px) + half;
+          const yBase = y(baseY);
+          const yStraight = y(straightBaseY);
+          const yTop = y(topY);
+          const xFootL = x(px) - half - FRAME_SPLAY_PX;
+          const xFootR = x(px) + half + FRAME_SPLAY_PX;
+          elements.push(
+            <g key={`frame-${lvl}-${pi}`} stroke={COL.frame} strokeWidth={POST_STROKE} fill="none">
+              <path d={`M ${xL} ${yStraight} L ${xL} ${yTop} L ${xR} ${yTop} L ${xR} ${yStraight}`} />
+              <path d={`M ${xL} ${yStraight} L ${xFootL} ${yBase} L ${xFootR} ${yBase} L ${xR} ${yStraight}`} />
+            </g>
+          );
+        } else {
+          elements.push(
+            <line key={`post-${lvl}-${pi}`} x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
+              stroke={COL.post} strokeWidth={POST_STROKE} />
+          );
+        }
       });
 
       // Per span
