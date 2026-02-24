@@ -21,7 +21,7 @@ import {
   CheckCircle,
   Building2,
   Layers,
-  Map,
+  Map as MapIcon,
   Ruler,
   ShieldCheck,
   RefreshCw,
@@ -260,7 +260,7 @@ function ScaffoldResultPage() {
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Map className="h-4 w-4" />
+            <MapIcon className="h-4 w-4" />
             {t('result', 'tabPlan')}
           </button>
           <button
