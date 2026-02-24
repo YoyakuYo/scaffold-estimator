@@ -67,45 +67,103 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
+// ─── Manual building geometry: single closed footprint, walls derived from it ───
+
+type FootprintPoint = { xFrac: number; yFrac: number };
+
+/** Distance between two points (mm). */
+function distMm(a: FootprintPoint, b: FootprintPoint): number {
+  const dx = b.xFrac - a.xFrac;
+  const dy = b.yFrac - a.yFrac;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 /**
- * Generate closed polygon vertices (in mm) from QuickShapeConfig.
- * Rectangle → 4 known corners.
- * L-shape → 6-corner rectilinear shape with 90° turns.
- * Custom → regular polygon approximation with equal turning angles.
- * Returns {xFrac, yFrac} in mm — the 3D view divides by 1000.
+ * Build a single closed polygon footprint from manual dimensions.
+ * Vertices are ordered so edge i is vertex[i] → vertex[(i+1) % n]; the last edge explicitly closes to the first.
+ * Used only for manual quick-shape input; does not affect upload/CAD geometry.
  */
-function generatePolygonVertices(
+function buildClosedFootprintFromQuickShape(
   config: QuickShapeConfig,
-): Array<{ xFrac: number; yFrac: number }> {
+): { vertices: FootprintPoint[] } {
   const sides = config.sides;
-  if (sides.length < 3) return [];
+  if (sides.length < 3) return { vertices: [] };
 
   if (config.shapeType === 'rectangle' && sides.length === 4) {
     const w = sides[0].lengthMm;
     const d = sides[1].lengthMm;
-    return [
+    const vertices: FootprintPoint[] = [
       { xFrac: 0, yFrac: 0 },
       { xFrac: w, yFrac: 0 },
       { xFrac: w, yFrac: d },
       { xFrac: 0, yFrac: d },
     ];
+    return { vertices };
   }
 
-  // L-shape and custom: equal exterior angles to approximate a closed polygon
+  if (config.shapeType === 'l-shape' && sides.length === 6) {
+    // Rectilinear L: A→B (E), B→C (N), C→D (E), D→E (S), E→F (W), F→A (N). All in mm.
+    const [ab, bc, cd, de, ef] = sides.map((s) => s.lengthMm);
+    const vertices: FootprintPoint[] = [
+      { xFrac: 0, yFrac: 0 },
+      { xFrac: ab, yFrac: 0 },
+      { xFrac: ab, yFrac: bc },
+      { xFrac: ab + cd, yFrac: bc },
+      { xFrac: ab + cd, yFrac: bc - de },
+      { xFrac: ab + cd - ef, yFrac: bc - de },
+    ];
+    // Closure: last edge is vertex[5] → vertex[0]. Length is derived when building walls.
+    return { vertices };
+  }
+
+  // Custom (or any other) polygon: build chain with equal exterior angles for first n-1 segments,
+  // then close with last edge (n-1)→0 so the footprint is guaranteed closed.
   const n = sides.length;
   const extAngle = (2 * Math.PI) / n;
   let angle = 0;
   let cx = 0;
   let cy = 0;
-  const verts: Array<{ xFrac: number; yFrac: number }> = [];
-  for (let i = 0; i < n; i++) {
-    verts.push({ xFrac: cx, yFrac: cy });
+  const vertices: FootprintPoint[] = [{ xFrac: 0, yFrac: 0 }];
+  for (let i = 0; i < n - 1; i++) {
     const len = sides[i].lengthMm;
     cx += len * Math.cos(angle);
     cy += len * Math.sin(angle);
     angle += extAngle;
+    vertices.push({ xFrac: cx, yFrac: cy });
   }
-  return verts;
+  // Last edge is (n-1) → 0; we do not add a duplicate first point. Closure is explicit when deriving walls.
+  return { vertices };
+}
+
+/**
+ * Derive wall inputs from a closed footprint loop.
+ * Each wall = one edge: vertex[i] → vertex[(i+1) % n]. Length is taken from the polygon, not from user input.
+ */
+function deriveWallsFromClosedFootprint(
+  vertices: FootprintPoint[],
+  config: QuickShapeConfig,
+): WallInput[] {
+  const n = vertices.length;
+  if (n < 3) return [];
+
+  const sides = config.sides;
+  const buildingHeightMm = config.buildingHeightMm;
+  const kaidanPerSide = config.kaidanPerSide ?? {};
+
+  return Array.from({ length: n }, (_, i) => {
+    const next = (i + 1) % n;
+    const lengthMm = Math.round(distMm(vertices[i], vertices[next]));
+    const label = sides[i]?.label ?? `edge-${i}`;
+    const stairAccessCount = kaidanPerSide[label]?.enabled ? kaidanPerSide[label].count : 0;
+    return {
+      side: label,
+      wallLengthMm: lengthMm,
+      wallHeightMm: buildingHeightMm,
+      stairAccessCount,
+      kaidanCount: 0,
+      kaidanOffsets: [],
+    };
+  });
 }
 
 // ─── Page Component ─────────────────────────────────────────
@@ -375,16 +433,14 @@ function ScaffoldPageContent() {
   }
 
   const handleQuickShapeSubmit = (qConfig: QuickShapeConfig) => {
-    const wallInputs: WallInput[] = qConfig.sides.map((s) => ({
-      side: s.label,
-      wallLengthMm: s.lengthMm,
-      wallHeightMm: qConfig.buildingHeightMm,
-      stairAccessCount: qConfig.kaidanPerSide[s.label]?.enabled ? qConfig.kaidanPerSide[s.label].count : 0,
-      kaidanCount: 0,
-      kaidanOffsets: [],
-    }));
+    // 1) Build a single closed footprint from manual dimensions (manual path only; upload/CAD unchanged).
+    const { vertices } = buildClosedFootprintFromQuickShape(qConfig);
+    if (vertices.length < 3) return;
+    // 2) Walls derived from footprint edges (each edge i → (i+1)%n); last edge explicitly closes to first.
+    const wallInputs = deriveWallsFromClosedFootprint(vertices, qConfig);
+    if (wallInputs.length === 0 || wallInputs.length !== vertices.length) return; // ensure closed loop
 
-    const buildingOutline = generatePolygonVertices(qConfig);
+    const buildingOutline = vertices;
 
     const dto: CreateScaffoldConfigDto = {
       projectId: 'default-project',
