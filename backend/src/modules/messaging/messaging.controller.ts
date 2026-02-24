@@ -86,6 +86,21 @@ export class MessagingController {
     return msg;
   }
 
+  /** Admin initiates a new conversation with any user. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('admin/new')
+  async adminCreateConversation(
+    @CurrentUser() admin: any,
+    @Body() body: { userId: string; body: string },
+  ) {
+    return this.messagingService.createConversationAndSend(
+      admin.id,
+      body.userId,
+      body.body || '',
+    );
+  }
+
   /** Admin marks conversation as read. */
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin')

@@ -80,7 +80,7 @@ export default function ScaffoldPage() {
 function ScaffoldPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
 
   const wallLabel = (side: string) => {
     if (side === 'north' || side === 'south' || side === 'east' || side === 'west') {
@@ -88,7 +88,7 @@ function ScaffoldPageContent() {
     }
     if (side.startsWith('edge-')) {
       const edgeNum = parseInt(side.replace('edge-', ''), 10) + 1;
-      return `辺${edgeNum} / Edge ${edgeNum}`;
+      return locale === 'ja' ? `辺${edgeNum}` : `Edge ${edgeNum}`;
     }
     return side;
   };
@@ -385,7 +385,7 @@ function ScaffoldPageContent() {
                 }`}
               >
                 <PenTool className="h-4 w-4" />
-                図面アップロード / Drawing Upload
+                {t('scaffoldExtra', 'drawingUpload')}
               </button>
               <button
                 onClick={() => setInputMode('quick')}
@@ -396,7 +396,7 @@ function ScaffoldPageContent() {
                 }`}
               >
                 <Zap className="h-4 w-4" />
-                クイックビルダー / Quick Shape Builder
+                {t('scaffoldExtra', 'quickBuilder')}
               </button>
             </div>
           )}
@@ -451,7 +451,7 @@ function ScaffoldPageContent() {
             {/* Scaffold Type Selector */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                足場タイプ / Scaffold Type
+                {t('scaffoldExtra', 'scaffoldType')}
               </label>
               <div className="flex gap-3">
                 <button
@@ -463,8 +463,7 @@ function ScaffoldPageContent() {
                       : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                   }`}
                 >
-                  <div className="text-base">くさび式足場</div>
-                  <div className="text-xs font-normal mt-0.5 opacity-70">Kusabi (Wedge)</div>
+                  <div>{t('scaffold', 'kusabiType')}</div>
                 </button>
                 <button
                   type="button"
@@ -475,8 +474,7 @@ function ScaffoldPageContent() {
                       : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                   }`}
                 >
-                  <div className="text-base">枠組足場</div>
-                  <div className="text-xs font-normal mt-0.5 opacity-70">Wakugumi (Frame)</div>
+                  <div>{t('scaffold', 'wakugumiType')}</div>
                 </button>
               </div>
             </div>
@@ -576,7 +574,7 @@ function ScaffoldPageContent() {
                 {/* Frame Size (建枠サイズ) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    建枠サイズ / Frame Size
+                    {t('scaffoldExtra', 'frameSize')}
                   </label>
                   <select
                     value={frameSizeMm}
@@ -593,13 +591,13 @@ function ScaffoldPageContent() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">レベル高さ = 建枠サイズ</p>
+                  <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'frameSizeHint')}</p>
                 </div>
 
                 {/* Habaki Count (巾木枚数) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    巾木枚数 / Habaki Count
+                    {t('scaffoldExtra', 'habakiCount')}
                   </label>
                   <select
                     value={habakiCountPerSpan}
@@ -620,7 +618,7 @@ function ScaffoldPageContent() {
                 {/* End Stopper Type (端部タイプ) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    端部タイプ / End Stopper
+                    {t('scaffoldExtra', 'endStopper')}
                   </label>
                   <select
                     value={endStopperType}
@@ -796,7 +794,7 @@ function ScaffoldPageContent() {
                         />
                         <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
                           <LayoutList className="h-3.5 w-3.5" />
-                          Multi-Segment Wall / 多段壁
+                          {t('scaffoldExtra', 'multiSegmentWall')}
                         </span>
                       </label>
                       {wall.isMultiSegment && (
@@ -944,7 +942,7 @@ function ScaffoldPageContent() {
                           className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-800 font-medium px-3 py-1.5 rounded-lg border border-dashed border-orange-300 hover:bg-orange-50 transition-colors"
                         >
                           <Plus className="h-3.5 w-3.5" />
-                          Add Segment / セグメント追加
+                          {t('scaffoldExtra', 'addSegment')}
                         </button>
                       </div>
                     )}

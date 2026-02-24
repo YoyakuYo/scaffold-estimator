@@ -138,6 +138,19 @@ export class MessagingService {
       .execute();
   }
 
+  /** Admin creates a new conversation with a user and sends the first message. */
+  async createConversationAndSend(
+    adminId: string,
+    targetUserId: string,
+    body: string,
+  ): Promise<{ conversation: Conversation; message: Message }> {
+    const user = await this.userRepository.findOne({ where: { id: targetUserId } });
+    if (!user) throw new NotFoundException('User not found');
+    const conversation = await this.getOrCreateConversationForUser(targetUserId);
+    const message = await this.sendMessage(conversation.id, adminId, body);
+    return { conversation, message };
+  }
+
   /** Unread count for a user: messages in their conversation that they didn't send and aren't read. */
   async getUnreadCountForUser(userId: string): Promise<number> {
     const conv = await this.conversationRepository.findOne({ where: { userId } });

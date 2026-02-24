@@ -386,7 +386,7 @@ export class ImageDimensionExtractorService {
   // ══════════════════════════════════════════════════════════════
 
   private async runOcr(filePath: string): Promise<{ text: string; confidence: number }> {
-    const ocrResult = await Tesseract.recognize(filePath, 'eng', {
+    const ocrResult = await Tesseract.recognize(filePath, 'eng+jpn', {
       logger: (m: any) => {
         if (m.status === 'recognizing text' && m.progress % 0.25 < 0.01) {
           this.logger.debug(`OCR: ${(m.progress * 100).toFixed(0)}%`);

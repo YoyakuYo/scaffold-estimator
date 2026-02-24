@@ -34,7 +34,6 @@ import {
   UserX,
   AlertTriangle,
   Settings,
-  BarChart3,
   Send,
   CheckCircle,
   XCircle,
@@ -290,59 +289,6 @@ function AdminDashboard() {
               </div>
             </div>
 
-            {/* Recent Calculations */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-indigo-600" />
-                  <h2 className="font-semibold text-slate-900">
-                    {t('Recent Calculations', '最近の計算')}
-                  </h2>
-                </div>
-                <Link href="/scaffold" className="text-sm text-blue-600 hover:underline">
-                  {t('New Calculation', '新規計算')} →
-                </Link>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {!configs ? (
-                  <div className="p-6 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
-                ) : configs.length === 0 ? (
-                  <p className="p-6 text-sm text-gray-400 text-center">{t('No calculations yet', 'まだ計算はありません')}</p>
-                ) : (
-                  configs.slice(0, 5).map((cfg) => {
-                    const enabledWalls = cfg.walls?.filter((w) => w.enabled) || [];
-                    return (
-                      <button
-                        key={cfg.id}
-                        onClick={() => router.push(`/scaffold/${cfg.id}`)}
-                        className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-left"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                              cfg.scaffoldType === 'kusabi' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                            }`}>
-                              {cfg.scaffoldType}
-                            </span>
-                            <span className="text-sm font-medium text-slate-900">
-                              {cfg.buildingHeightMm.toLocaleString()}mm / {cfg.scaffoldWidthMm}mm
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {enabledWalls.length} {t('walls', '面')} · {new Date(cfg.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US')}
-                          </p>
-                        </div>
-                        <div className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          cfg.status === 'reviewed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {cfg.status}
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
           </div>
 
           {/* ── Right Column (1/3) ── */}

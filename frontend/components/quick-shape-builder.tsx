@@ -14,6 +14,7 @@ import {
   Ruler,
   ArrowRight,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ interface Props {
 // ─── Component ───────────────────────────────────────────────
 
 export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
+  const { t } = useI18n();
   const [step, setStep] = useState(1);
   const [shapeType, setShapeType] = useState<ShapeType>('rectangle');
 
@@ -181,9 +183,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
       <div className="bg-slate-50 border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-4">
           {[
-            { n: 1, label: '形状選択', icon: Square },
-            { n: 2, label: '建物高さ', icon: Building2 },
-            { n: 3, label: '足場設定', icon: Ruler },
+            { n: 1, label: t('quickBuilder', 'stepShape'), icon: Square },
+            { n: 2, label: t('quickBuilder', 'stepHeight'), icon: Building2 },
+            { n: 3, label: t('quickBuilder', 'stepConfig'), icon: Ruler },
           ].map((s, i) => (
             <button
               key={s.n}
@@ -207,14 +209,14 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
         {/* ═══ STEP 1: Shape Selection ═══ */}
         {step === 1 && (
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">形状を選択 / Select Shape</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'selectShape')}</h3>
 
             {/* Shape Type Selector */}
             <div className="grid grid-cols-3 gap-3 mb-6">
               {[
-                { type: 'rectangle' as ShapeType, label: '矩形 / Rectangle', icon: Square },
-                { type: 'l-shape' as ShapeType, label: 'L字型 / L-Shape', icon: CornerDownRight },
-                { type: 'custom' as ShapeType, label: 'カスタム / Custom', icon: Pentagon },
+                { type: 'rectangle' as ShapeType, label: t('quickBuilder', 'rectangle'), icon: Square },
+                { type: 'l-shape' as ShapeType, label: t('quickBuilder', 'lShape'), icon: CornerDownRight },
+                { type: 'custom' as ShapeType, label: t('quickBuilder', 'custom'), icon: Pentagon },
               ].map((s) => (
                 <button
                   key={s.type}
@@ -235,10 +237,10 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
             {shapeType === 'rectangle' && (
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: '北面 / North', value: rectNorth, setter: setRectNorth },
-                  { label: '東面 / East', value: rectEast, setter: setRectEast },
-                  { label: '南面 / South', value: rectSouth, setter: setRectSouth },
-                  { label: '西面 / West', value: rectWest, setter: setRectWest },
+                  { label: t('quickBuilder', 'north'), value: rectNorth, setter: setRectNorth },
+                  { label: t('quickBuilder', 'east'), value: rectEast, setter: setRectEast },
+                  { label: t('quickBuilder', 'south'), value: rectSouth, setter: setRectSouth },
+                  { label: t('quickBuilder', 'west'), value: rectWest, setter: setRectWest },
                 ].map((input) => (
                   <div key={input.label}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{input.label}</label>
@@ -260,7 +262,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
             {shapeType === 'l-shape' && (
               <div className="space-y-3">
-                <p className="text-sm text-gray-500 mb-2">L字型建物の各辺の長さを入力してください</p>
+                <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'lShapeHint')}</p>
                 {lSegments.map((seg, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
@@ -280,7 +282,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
             {shapeType === 'custom' && (
               <div className="space-y-3">
-                <p className="text-sm text-gray-500 mb-2">ポリゴンの各辺を定義してください（自動閉合）</p>
+                <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'customHint')}</p>
                 {customSegments.map((seg, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
@@ -308,7 +310,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                   className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg border border-dashed border-blue-300 hover:bg-blue-50"
                 >
                   <Plus className="h-4 w-4" />
-                  セグメント追加 / Add Segment
+                  {t('quickBuilder', 'addSegment')}
                 </button>
               </div>
             )}
@@ -318,7 +320,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 onClick={() => setStep(2)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
               >
-                次へ / Next
+                {t('common', 'next')}
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -328,11 +330,11 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
         {/* ═══ STEP 2: Building Height ═══ */}
         {step === 2 && (
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">建物高さ / Building Height</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'stepHeight')}</h3>
 
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">建物の高さ (mm)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
                 <input
                   type="number"
                   value={buildingHeightMm || ''}
@@ -345,7 +347,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 <p className="text-xs text-gray-500 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">レベル高さ (mm)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'levelHeight')}</label>
                 <input
                   type="number"
                   value={levelHeightMm || ''}
@@ -360,7 +362,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
             {/* Quick height presets */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-xs font-medium text-blue-800 mb-2">階数から高さを設定</p>
+              <p className="text-xs font-medium text-blue-800 mb-2">{t('quickBuilder', 'floorPresets')}</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: '1F (3,900mm)', value: 3900 },
@@ -388,8 +390,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
             {/* Calculated levels */}
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">計算段数:</span>
-                <span className="text-lg font-bold text-gray-900">{calculatedLevels} 段</span>
+                <span className="text-sm text-gray-600">{t('quickBuilder', 'calculatedLevels')}:</span>
+                <span className="text-lg font-bold text-gray-900">{calculatedLevels} {t('quickBuilder', 'levelsUnit')}</span>
               </div>
             </div>
 
@@ -399,13 +401,13 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 className="flex items-center gap-2 px-6 py-2.5 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
-                戻る / Back
+                {t('common', 'back')}
               </button>
               <button
                 onClick={() => setStep(3)}
                 className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
               >
-                次へ / Next
+                {t('common', 'next')}
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -415,11 +417,11 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
         {/* ═══ STEP 3: Scaffold Configuration ═══ */}
         {step === 3 && (
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">足場設定 / Scaffold Configuration</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'stepConfig')}</h3>
 
             {/* Scaffold Type */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">足場タイプ</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('quickBuilder', 'scaffoldType')}</label>
               <div className="flex gap-3">
                 <button
                   onClick={() => setScaffoldType('kusabi')}
@@ -429,8 +431,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                       : 'border-gray-200 text-gray-500 hover:border-gray-300'
                   }`}
                 >
-                  <div>くさび式足場</div>
-                  <div className="text-xs font-normal mt-0.5 opacity-70">Kusabi (Wedge)</div>
+                  <div>{t('quickBuilder', 'kusabiLabel')}</div>
                 </button>
                 <button
                   onClick={() => setScaffoldType('wakugumi')}
@@ -440,8 +441,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                       : 'border-gray-200 text-gray-500 hover:border-gray-300'
                   }`}
                 >
-                  <div>枠組足場</div>
-                  <div className="text-xs font-normal mt-0.5 opacity-70">Wakugumi (Frame)</div>
+                  <div>{t('quickBuilder', 'wakugumiLabel')}</div>
                 </button>
               </div>
             </div>
@@ -449,7 +449,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
               {/* Scaffold Width */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">足場幅</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'scaffoldWidth')}</label>
                 <select
                   value={scaffoldWidthMm}
                   onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
@@ -463,7 +463,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
               {/* Structure Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">構造パターン</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'structurePattern')}</label>
                 <select
                   value={structureType}
                   onChange={(e) => setStructureType(e.target.value as typeof structureType)}
@@ -479,7 +479,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
               {scaffoldType === 'kusabi' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">支柱サイズ</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'postSize')}</label>
                     <select
                       value={preferredMainTatejiMm}
                       onChange={(e) => setPreferredMainTatejiMm(Number(e.target.value))}
@@ -491,7 +491,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">上部支柱</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'topGuard')}</label>
                     <select
                       value={topGuardHeightMm}
                       onChange={(e) => setTopGuardHeightMm(Number(e.target.value))}
@@ -509,7 +509,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
               {scaffoldType === 'wakugumi' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">建枠サイズ</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'frameSize')}</label>
                     <select
                       value={frameSizeMm}
                       onChange={(e) => setFrameSizeMm(Number(e.target.value))}
@@ -521,25 +521,25 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">巾木枚数</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'habakiCount')}</label>
                     <select
                       value={habakiCountPerSpan}
                       onChange={(e) => setHabakiCountPerSpan(Number(e.target.value))}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value={1}>1枚 (片面)</option>
-                      <option value={2}>2枚 (両面)</option>
+                      <option value={1}>{t('quickBuilder', 'habaki1')}</option>
+                      <option value={2}>{t('quickBuilder', 'habaki2')}</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">端部タイプ</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'endStopperType')}</label>
                     <select
                       value={endStopperType}
                       onChange={(e) => setEndStopperType(e.target.value as 'nuno' | 'frame')}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="nuno">布材タイプ</option>
-                      <option value="frame">枠タイプ</option>
+                      <option value="nuno">{t('quickBuilder', 'endStopperNuno')}</option>
+                      <option value="frame">{t('quickBuilder', 'endStopperFrame')}</option>
                     </select>
                   </div>
                 </>
@@ -548,7 +548,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
             {/* Kaidan Per Side */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">階段配置 / Stair Access</h4>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('quickBuilder', 'stairAccess')}</h4>
               <div className="space-y-2">
                 {getSides().map((side) => (
                   <div key={side.label} className="flex items-center gap-4 bg-white rounded-lg px-4 py-2.5 border border-gray-200">
@@ -564,7 +564,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                     <span className="text-xs text-gray-500">{side.lengthMm.toLocaleString()}mm</span>
                     {kaidanPerSide[side.label]?.enabled && (
                       <div className="flex items-center gap-2 ml-auto">
-                        <label className="text-xs text-gray-500">台数:</label>
+                        <label className="text-xs text-gray-500">{t('quickBuilder', 'stairUnits')}:</label>
                         <select
                           value={kaidanPerSide[side.label]?.count || 1}
                           onChange={(e) => updateKaidanCount(side.label, Number(e.target.value))}
@@ -583,25 +583,25 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
             {/* Summary */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h4 className="text-sm font-semibold text-blue-800 mb-2">設定概要</h4>
+              <h4 className="text-sm font-semibold text-blue-800 mb-2">{t('quickBuilder', 'summaryTitle')}</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div>
-                  <span className="text-blue-600">形状:</span>
+                  <span className="text-blue-600">{t('quickBuilder', 'shapeLabel')}:</span>
                   <span className="ml-1 font-medium text-blue-900">
-                    {shapeType === 'rectangle' ? '矩形' : shapeType === 'l-shape' ? 'L字型' : 'カスタム'}
+                    {shapeType === 'rectangle' ? t('quickBuilder', 'rectangle') : shapeType === 'l-shape' ? t('quickBuilder', 'lShape') : t('quickBuilder', 'custom')}
                   </span>
                 </div>
                 <div>
-                  <span className="text-blue-600">高さ:</span>
+                  <span className="text-blue-600">{t('quickBuilder', 'heightLabel')}:</span>
                   <span className="ml-1 font-medium text-blue-900">{buildingHeightMm.toLocaleString()}mm</span>
                 </div>
                 <div>
-                  <span className="text-blue-600">段数:</span>
-                  <span className="ml-1 font-medium text-blue-900">{calculatedLevels}段</span>
+                  <span className="text-blue-600">{t('quickBuilder', 'levelsLabel')}:</span>
+                  <span className="ml-1 font-medium text-blue-900">{calculatedLevels}{t('quickBuilder', 'levelsUnit')}</span>
                 </div>
                 <div>
-                  <span className="text-blue-600">面数:</span>
-                  <span className="ml-1 font-medium text-blue-900">{getSides().length}面</span>
+                  <span className="text-blue-600">{t('quickBuilder', 'sidesLabel')}:</span>
+                  <span className="ml-1 font-medium text-blue-900">{getSides().length}{t('quickBuilder', 'sidesUnit')}</span>
                 </div>
               </div>
             </div>
@@ -612,7 +612,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 className="flex items-center gap-2 px-6 py-2.5 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
-                戻る / Back
+                {t('common', 'back')}
               </button>
               <button
                 onClick={handleSubmit}
@@ -620,7 +620,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-base shadow-lg disabled:opacity-50"
               >
                 <Calculator className="h-5 w-5" />
-                積算実行
+                {t('quickBuilder', 'execute')}
                 <ArrowRight className="h-5 w-5" />
               </button>
             </div>

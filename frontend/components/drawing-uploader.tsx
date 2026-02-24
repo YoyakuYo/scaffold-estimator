@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, File, X, Loader2 } from 'lucide-react';
 import { drawingsApi, ExtractedDimensions, ExtractionWarning, CadExtractionData } from '@/lib/api/drawings';
+import { useI18n } from '@/lib/i18n';
 
 interface DrawingUploaderProps {
   projectId: string;
@@ -19,6 +20,7 @@ export function DrawingUploader({
   onUploadError,
   onRawFile,
 }: DrawingUploaderProps) {
+  const { t } = useI18n();
   const [uploading, setUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadComplete, setUploadComplete] = useState(false);
@@ -38,7 +40,7 @@ export function DrawingUploader({
       const ext = file.name.split('.').pop()?.toLowerCase();
       const allowedFormats = ['pdf', 'dxf', 'dwg', 'jww', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'];
       if (!allowedFormats.includes(ext || '')) {
-        const errorMsg = 'Unsupported file format. Accepted formats: PDF, DXF, DWG, JWW, JPG, PNG, GIF, WEBP, BMP, SVG, TIFF.';
+        const errorMsg = t('uploader', 'unsupportedFormat');
         setError(errorMsg);
         onUploadError?.(errorMsg);
         return;
@@ -46,7 +48,7 @@ export function DrawingUploader({
 
       // Validate file size (100MB max)
       if (file.size > 100 * 1024 * 1024) {
-        const errorMsg = 'File size too large. Maximum 100MB is supported.';
+        const errorMsg = t('uploader', 'fileTooLarge');
         setError(errorMsg);
         onUploadError?.(errorMsg);
         return;
@@ -76,22 +78,22 @@ export function DrawingUploader({
         });
         
         // Extract detailed error message (in English)
-        let errorMessage = 'Upload failed.';
+        let errorMessage = t('uploader', 'uploadFailed');
         
         if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-          errorMessage = 'Cannot connect to server. Please check if the backend is running on port 3000.';
+          errorMessage = t('uploader', 'networkError');
         } else if (error.response?.data?.message) {
           errorMessage = error.response.data.message;
         } else if (error.message) {
           errorMessage = error.message;
         } else if (error.response?.status === 400) {
-          errorMessage = 'Invalid request. Please check file format or size (max 100MB).';
+          errorMessage = t('uploader', 'invalidRequest');
         } else if (error.response?.status === 401) {
-          errorMessage = 'Authentication failed. Please log in again.';
+          errorMessage = t('uploader', 'authFailed');
         } else if (error.response?.status === 500) {
-          errorMessage = 'Server error. Please check database configuration.';
+          errorMessage = t('uploader', 'serverError');
         } else if (!error.response) {
-          errorMessage = 'Cannot connect to server. Please check if the backend is running on port 3000.';
+          errorMessage = t('uploader', 'networkError');
         }
         
         setError(errorMessage);
@@ -101,7 +103,7 @@ export function DrawingUploader({
         setUploading(false);
       }
     },
-    [projectId, onUploadSuccess, onUploadError, onRawFile]
+    [projectId, onUploadSuccess, onUploadError, onRawFile, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -171,8 +173,8 @@ export function DrawingUploader({
                     : 'text-green-900'
                 }`}>
                   {extractedDims?.warnings?.some(w => w.level === 'error')
-                    ? 'アップロード完了（低品質画像） / Upload Complete (Low Quality Image)'
-                    : 'アップロード完了 / Upload Complete'}
+                    ? t('uploader', 'uploadCompleteLowQuality')
+                    : t('uploader', 'uploadComplete')}
                 </p>
                 <p className={`text-sm ${
                   extractedDims?.warnings?.some(w => w.level === 'error')
@@ -185,7 +187,7 @@ export function DrawingUploader({
               onClick={removeFile}
               className="text-green-500 hover:text-green-700 text-sm underline"
             >
-              別のファイル / Change
+              {t('uploader', 'changeFile')}
             </button>
           </div>
           {/* ── Quality Warnings ────────────────────────────── */}
@@ -224,16 +226,15 @@ export function DrawingUploader({
                     <div className={`mt-2 pt-2 border-t text-xs ${
                       warning.level === 'error' ? 'border-red-200 text-red-700' : 'border-amber-200 text-amber-700'
                     }`}>
-                      <p className="font-medium mb-1">📷 推奨アップロード条件 / Recommended Upload:</p>
+                      <p className="font-medium mb-1">📷 {t('uploader', 'recommendedUpload')}:</p>
                       <ul className="list-disc list-inside space-y-0.5 ml-1">
-                        <li>画像の長辺: 2000px以上 / Long side: 2000px+</li>
-                        <li>鮮明なスキャンまたは写真 / Clear scan or photo</li>
-                        <li>寸法注記が読み取り可能 / Dimension annotations readable</li>
+                        <li>{t('uploader', 'longSide')}</li>
+                        <li>{t('uploader', 'clearScan')}</li>
+                        <li>{t('uploader', 'readableAnnotations')}</li>
                       </ul>
                       {extractedDims.imageResolution && (
                         <p className="mt-1 font-medium">
-                          現在の画像: {extractedDims.imageResolution.width}×{extractedDims.imageResolution.height}px
-                          / Current: {extractedDims.imageResolution.width}×{extractedDims.imageResolution.height}px
+                          {t('uploader', 'currentImage')}: {extractedDims.imageResolution.width}×{extractedDims.imageResolution.height}px
                         </p>
                       )}
                     </div>
@@ -243,11 +244,11 @@ export function DrawingUploader({
                     <div className={`mt-2 pt-2 border-t text-xs ${
                       warning.level === 'error' ? 'border-red-200 text-red-700' : 'border-amber-200 text-amber-700'
                     }`}>
-                      <p className="font-medium mb-1">💡 改善方法 / How to improve:</p>
+                      <p className="font-medium mb-1">💡 {t('uploader', 'howToImprove')}:</p>
                       <ul className="list-disc list-inside space-y-0.5 ml-1">
-                        <li>高解像度の元ファイルをアップロード / Upload original high-res file</li>
-                        <li>スキャン時にコントラストを上げる / Increase contrast when scanning</li>
-                        <li>A3/A1図面は2000px以上で撮影 / Photograph A3/A1 drawings at 2000px+</li>
+                        <li>{t('uploader', 'uploadHighRes')}</li>
+                        <li>{t('uploader', 'increaseContrast')}</li>
+                        <li>{t('uploader', 'photographLarge')}</li>
                       </ul>
                     </div>
                   )}
@@ -262,15 +263,15 @@ export function DrawingUploader({
               {/* Detection summary badges */}
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 border border-blue-300 rounded text-xs font-medium text-blue-800">
-                  📄 {extractedDims.drawingType === 'section' ? '断面図 / Section' :
-                       extractedDims.drawingType === 'elevation' ? '立面図 / Elevation' :
-                       '平面図 / Floor Plan'}
+                  📄 {extractedDims.drawingType === 'section' ? t('uploader', 'sectionView') :
+                       extractedDims.drawingType === 'elevation' ? t('uploader', 'elevationView') :
+                       t('uploader', 'floorPlan')}
                 </span>
                 <span className="inline-flex items-center px-2 py-0.5 bg-purple-100 border border-purple-300 rounded text-xs font-medium text-purple-800">
-                  📏 {extractedDims.detectedUnit === 'ft_in' ? 'フィート / Feet-Inches' :
-                       extractedDims.detectedUnit === 'cm' ? 'センチ / Centimeters' :
-                       extractedDims.detectedUnit === 'm' ? 'メートル / Meters' :
-                       'ミリ / Millimeters'}
+                  📏 {extractedDims.detectedUnit === 'ft_in' ? t('uploader', 'unitFeetInches') :
+                       extractedDims.detectedUnit === 'cm' ? t('uploader', 'unitCentimeters') :
+                       extractedDims.detectedUnit === 'm' ? t('uploader', 'unitMeters') :
+                       t('uploader', 'unitMillimeters')}
                 </span>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
                   extractedDims.confidence >= 0.6
@@ -288,7 +289,7 @@ export function DrawingUploader({
                 )}
                 {(extractedDims.viewCount ?? 1) > 1 && (
                   <span className="inline-flex items-center px-2 py-0.5 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800">
-                    📋 {extractedDims.viewCount} views detected
+                    📋 {extractedDims.viewCount} {t('uploader', 'viewsDetected')}
                   </span>
                 )}
               </div>
@@ -296,7 +297,7 @@ export function DrawingUploader({
               {/* Detected dimensions list */}
               <div>
                 <p className="text-xs font-medium text-green-800 mb-1">
-                  📐 検出された寸法 / Detected Dimensions ({extractedDims.parsedDimensionsMm.length}):
+                  📐 {t('uploader', 'detectedDimensions')} ({extractedDims.parsedDimensionsMm.length}):
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {extractedDims.rawDimensionTexts.slice(0, 12).map((dim, i) => (
@@ -306,7 +307,7 @@ export function DrawingUploader({
                   ))}
                   {extractedDims.rawDimensionTexts.length > 12 && (
                     <span className="inline-flex items-center px-2 py-0.5 bg-green-200 rounded text-xs text-green-800">
-                      +{extractedDims.rawDimensionTexts.length - 12} more
+                      +{extractedDims.rawDimensionTexts.length - 12} {t('uploader', 'moreItems')}
                     </span>
                   )}
                 </div>
@@ -315,13 +316,13 @@ export function DrawingUploader({
               {/* Wall assignment summary */}
               {extractedDims.walls.north && (
                 <div className="p-2 bg-white rounded border border-green-200">
-                  <p className="text-xs font-medium text-green-800 mb-1">✅ 自動入力 / Auto-populated:</p>
+                  <p className="text-xs font-medium text-green-800 mb-1">✅ {t('uploader', 'autoPopulated')}:</p>
                   <div className="grid grid-cols-2 gap-1 text-xs text-green-700">
                     {extractedDims.walls.north && (
                       <span>
                         北/南 N/S: {extractedDims.walls.north.lengthMm.toLocaleString()}mm
                         {extractedDims.parsedDimensionsMm.length > 2 && (
-                          <span className="text-green-600 ml-1">(複数セグメント検出 / multi-segment)</span>
+                          <span className="text-green-600 ml-1">({t('uploader', 'multiSegment')})</span>
                         )}
                       </span>
                     )}
@@ -329,14 +330,14 @@ export function DrawingUploader({
                       <span>
                         東/西 E/W: {extractedDims.walls.east.lengthMm.toLocaleString()}mm
                         {extractedDims.parsedDimensionsMm.length > 2 && (
-                          <span className="text-green-600 ml-1">(複数セグメント検出 / multi-segment)</span>
+                          <span className="text-green-600 ml-1">({t('uploader', 'multiSegment')})</span>
                         )}
                       </span>
                     )}
                   </div>
                   {extractedDims.parsedDimensionsMm.length > 4 && (
                     <p className="text-xs text-green-600 mt-1">
-                      💡 複数の壁セグメントを検出し、合計長を計算しました / Multiple wall segments detected and summed
+                      💡 {t('uploader', 'multiSegmentSum')}
                     </p>
                   )}
                 </div>
@@ -346,13 +347,13 @@ export function DrawingUploader({
               {extractedDims.buildingHeightMm ? (
                 <div className="p-2 bg-green-50 border border-green-300 rounded">
                   <p className="text-xs font-medium text-green-800">
-                    🏗️ 建物高さ検出（実測値） / Building height (measured): {extractedDims.buildingHeightMm.toLocaleString()}mm
+                    🏗️ {t('uploader', 'heightMeasured')}: {extractedDims.buildingHeightMm.toLocaleString()}mm
                   </p>
                   <p className="text-xs text-green-700 mt-0.5">
-                    ✓ 断面図/立面図から実際の寸法を検出しました / Actual dimension extracted from section/elevation view
+                    ✓ {t('uploader', 'heightFromSection')}
                   </p>
                   <p className="text-xs text-green-600 mt-0.5">
-                    壁高に自動入力済み / Auto-filled to wall heights
+                    {t('uploader', 'autoFilledHeight')}
                   </p>
                 </div>
               ) : extractedDims.estimatedBuildingHeightMm ? (
@@ -361,22 +362,19 @@ export function DrawingUploader({
                     🏢 推定 {extractedDims.estimatedFloorCount || 1}階建て → 推定高さ: {extractedDims.estimatedBuildingHeightMm.toLocaleString()}mm
                   </p>
                   <p className="text-xs text-amber-600 mt-0.5">
-                    ⚠️ 平面図から階数を推定しました（実測値ではありません）/ Estimated from floor count (not actual measurement)
+                    ⚠️ {t('uploader', 'estimatedFromFloorCount')}
                   </p>
                   <p className="text-xs text-amber-500 mt-0.5">
-                    Est. {extractedDims.estimatedFloorCount || 1}F → {extractedDims.estimatedBuildingHeightMm.toLocaleString()}mm — 壁高に自動入力済み（下の設定で調整可能）
+                    {t('uploader', 'estimatedFloors')} {extractedDims.estimatedFloorCount || 1}F → {extractedDims.estimatedBuildingHeightMm.toLocaleString()}mm — {t('uploader', 'autoFilledHeight')}
                   </p>
                 </div>
               ) : (
                 <div className="p-2 bg-amber-50 border border-amber-200 rounded">
                   <p className="text-xs font-medium text-amber-800">
-                    ⚠️ 高さは平面図から取得できません / Height not available in floor plan
+                    ⚠️ {t('uploader', 'heightNotAvailable')}
                   </p>
                   <p className="text-xs text-amber-600 mt-0.5">
-                    下の壁面設定で各壁の高さを入力してください。目安: 1階=3,900mm, 2階=6,900mm, 3階=9,900mm
-                  </p>
-                  <p className="text-xs text-amber-500 mt-0.5">
-                    Enter wall height below. Guide: 1F=3,900mm, 2F=6,900mm, 3F=9,900mm
+                    {t('uploader', 'enterHeightBelow')}
                   </p>
                 </div>
               )}
@@ -385,24 +383,20 @@ export function DrawingUploader({
             /* Error state: critical warnings present — show manual input prompt */
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-xs font-medium text-red-800">
-                🚫 自動検出に失敗しました / Automatic detection failed
+                🚫 {t('uploader', 'autoDetectionFailed')}
               </p>
               <p className="text-xs text-red-600 mt-1">
-                寸法を検出できませんでした。下記の方法をお試しください:
+                {t('uploader', 'detectionFailedHint')}
               </p>
               <ul className="text-xs text-red-600 mt-1 list-disc list-inside ml-1 space-y-0.5">
-                <li>正しいCADファイル（DXF/DWG/JWW）を再アップロード</li>
-                <li>外周線が含まれるレイヤーを確認</li>
-                <li>下記のフォームに手動で壁の寸法を入力</li>
+                <li>{t('uploader', 'reuploadCad')}</li>
+                <li>{t('uploader', 'verifyLayer')}</li>
+                <li>{t('uploader', 'enterManually')}</li>
               </ul>
-              <p className="text-xs text-red-500 mt-1.5">
-                Could not detect dimensions. Try: re-upload a valid CAD file (DXF/DWG/JWW), verify the outer perimeter layer is present, or enter wall dimensions manually below.
-              </p>
             </div>
           ) : (
             <p className="mt-2 text-xs text-green-600">
-              ※ 寸法が検出されませんでした。下記のフォームに手動で値を入力してください。
-              <br />Dimensions not detected. Please enter values manually below.
+              {t('uploader', 'noDimsDetected')}
             </p>
           )}
         </div>
@@ -425,24 +419,21 @@ export function DrawingUploader({
           <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           <p className="text-lg font-medium text-gray-700 mb-2">
             {isDragActive
-              ? 'ファイルをここにドロップ'
-              : '図面ファイルをアップロード'}
+              ? t('uploader', 'dropHere')
+              : t('uploader', 'uploadDrawing')}
           </p>
           <p className="text-sm text-gray-500">
-            対応形式：PDF、DXF、DWG、JWW、JPG、PNG、GIF、WEBP、BMP、SVG、TIFF（最大100MB）
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            Accepted formats: PDF, DXF, DWG, JWW, JPG, PNG, GIF, WEBP, BMP, SVG, TIFF (max 100MB)
+            {t('uploader', 'acceptedFormats')}
           </p>
           <p className="text-xs text-gray-400 mt-2">
-            クリックまたはドラッグ＆ドロップでファイルを選択
+            {t('uploader', 'clickOrDrag')}
           </p>
           <div className="mt-3 pt-3 border-t border-gray-200">
             <p className="text-xs text-gray-400 font-medium">
-              📐 ファイルのヒント / File Tips:
+              📐 {t('uploader', 'fileTips')}:
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              DWG・JWWはDXFに自動変換。PDFは寸法テキストを解析します / DWG & JWW auto-convert to DXF. PDF dimensions are parsed from text.
+              {t('uploader', 'dwgJwwTip')}
             </p>
           </div>
         </div>
@@ -476,10 +467,10 @@ export function DrawingUploader({
                 <div className="h-full bg-blue-500 rounded-full animate-[progress_90s_ease-in-out_forwards]" style={{ width: '0%' }}></div>
               </div>
               <p className="text-sm text-gray-600 mt-2 text-center">
-                処理中... CADファイルを解析しています
+                {t('uploader', 'processing')}
               </p>
               <p className="text-xs text-gray-400 mt-1 text-center">
-                Processing... Parsing CAD geometry and extracting wall segments (may take 1-2 minutes)
+                {t('uploader', 'processingHint')}
               </p>
             </div>
           )}

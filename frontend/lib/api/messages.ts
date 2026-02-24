@@ -54,4 +54,8 @@ export const messagesApi = {
     const res = await apiClient.post<{ ok: boolean }>(`/messages/admin/conversations/${conversationId}/mark-read`, {});
     return res.data;
   },
+  adminCreateConversation: async (userId: string, body: string): Promise<{ conversation: ConversationWithUser; message: Message }> => {
+    const res = await apiClient.post<{ conversation: ConversationWithUser; message: Message }>('/messages/admin/new', { userId, body });
+    return res.data;
+  },
 };

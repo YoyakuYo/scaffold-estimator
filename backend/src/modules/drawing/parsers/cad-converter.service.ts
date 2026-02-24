@@ -72,9 +72,8 @@ export class CadConverterService {
     // Strategy 3: Try the dxf-parser npm package to read DWG directly
     // (dxf-parser only handles DXF, so this won't work for DWG)
     throw new BadRequestException(
-      'DWG conversion requires ODA File Converter or libredwg to be installed on the server. ' +
-      'Please install one of these tools, or convert the file to DXF format before uploading. ' +
-      'See: https://www.opendesign.com/guestfiles/oda_file_converter',
+      'DWG形式はサーバーで変換できません。DXF形式でエクスポートしてからアップロードしてください。 / ' +
+      'DWG format cannot be converted on this server. Please export as DXF before uploading.',
     );
   }
 
