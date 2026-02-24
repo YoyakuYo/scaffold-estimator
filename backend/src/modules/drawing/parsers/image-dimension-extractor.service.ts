@@ -163,7 +163,7 @@ export class ImageDimensionExtractorService {
       }
 
       // ── Step 6: Infer unit system ─────────────────────────
-      result.detectedUnit = this.inferUnitSystem(rawDims, ocrResult.text);
+      result.detectedUnit = this.inferUnitSystem(rawDims, this.normalizeTextForDimensions(ocrResult.text));
       this.logger.log(`Inferred unit system: ${result.detectedUnit}`);
 
       // ── Step 7: Re-convert dimensions with correct unit ───
@@ -277,7 +277,7 @@ export class ImageDimensionExtractorService {
       }
 
       // ── Step 6: Infer unit system ─────────────────────
-      result.detectedUnit = this.inferUnitSystem(rawDims, text);
+      result.detectedUnit = this.inferUnitSystem(rawDims, this.normalizeTextForDimensions(text));
       this.logger.log(`Inferred unit system: ${result.detectedUnit}`);
 
       // ── Step 7: Re-convert dimensions with correct unit ─
@@ -512,12 +512,37 @@ export class ImageDimensionExtractorService {
   }
 
   // ══════════════════════════════════════════════════════════════
+  /**
+   * Normalize text for dimension parsing so Japanese/Unicode characters are recognized.
+   * - Full-width digits ０-９ → 0-9
+   * - Unicode unit symbols ㎜ ㎝ ㎞ ㎠ ㎡ → mm, cm, km, etc.
+   * - Japanese unit text ミリ メートル → mm, m (for regex matching)
+   */
+  private normalizeTextForDimensions(text: string): string {
+    if (!text || text.length === 0) return text;
+    let t = text;
+    const fullWidthDigits = '０１２３４５６７８９';
+    const halfWidthDigits = '0123456789';
+    for (let i = 0; i < fullWidthDigits.length; i++) {
+      t = t.split(fullWidthDigits[i]).join(halfWidthDigits[i]);
+    }
+    t = t.replace(/\u339C/g, 'mm');  // ㎜
+    t = t.replace(/\u339D/g, 'cm');  // ㎝
+    t = t.replace(/\u339E/g, 'km');  // ㎞
+    t = t.replace(/\u33A1/g, 'm2');  // ㎡
+    t = t.replace(/\bミリ\b/g, 'mm');
+    t = t.replace(/\bメートル\b/g, 'm ');
+    return t;
+  }
+
   // STEP 5: PARSE ALL DIMENSION FORMATS
   // ══════════════════════════════════════════════════════════════
 
   private parseAllDimensions(text: string): RawDimension[] {
     const dims: RawDimension[] = [];
     const seen = new Set<string>(); // deduplicate
+
+    const textNorm = this.normalizeTextForDimensions(text);
 
     // Log first 500 chars of raw OCR text for debugging
     this.logger.debug(`Raw OCR text (first 500 chars): ${text.substring(0, 500).replace(/\n/g, '\\n')}`);
@@ -533,7 +558,7 @@ export class ImageDimensionExtractorService {
     //   - Spaces may appear between digits and symbols
     const feetInchRegex = /(\d{1,4})\s*[''′`ʼ\|]\s*[-–—~]?\s*(\d{1,2})\s*(?:[""″''`]{0,2})\s*([½¼¾⅛⅜⅝⅞])?/g;
     let match: RegExpExecArray | null;
-    while ((match = feetInchRegex.exec(text)) !== null) {
+    while ((match = feetInchRegex.exec(textNorm)) !== null) {
       const feet = parseInt(match[1], 10);
       const inches = parseInt(match[2], 10);
       if (feet < 1 || feet > 1000 || inches > 11) continue;
@@ -568,16 +593,16 @@ export class ImageDimensionExtractorService {
     // Some OCR outputs strip the apostrophe/quote entirely
     // Match patterns like "53-9" or "22-1" that look like feet-inches
     // Only match if we already found some ft_in or if the text has imperial hints
-    const hasImperialHints = /[''′`]/.test(text) || dims.some(d => d.unit === 'ft_in');
+    const hasImperialHints = /[''′`]/.test(textNorm) || dims.some(d => d.unit === 'ft_in');
     if (hasImperialHints) {
       const dashFtInRegex = /(?<![.\d])(\d{1,3})\s*[-–—]\s*(\d{1,2})(?:\s*([½¼¾⅛⅜⅝⅞]))?(?![.\d])/g;
-      while ((match = dashFtInRegex.exec(text)) !== null) {
+      while ((match = dashFtInRegex.exec(textNorm)) !== null) {
         const feet = parseInt(match[1], 10);
         const inches = parseInt(match[2], 10);
         if (feet < 1 || feet > 200 || inches > 11) continue;
         // Avoid matching things like "23 X 14" room dimensions
-        const beforeChar = match.index > 0 ? text[match.index - 1] : '';
-        const afterChar = match.index + match[0].length < text.length ? text[match.index + match[0].length] : '';
+        const beforeChar = match.index > 0 ? textNorm[match.index - 1] : '';
+        const afterChar = match.index + match[0].length < textNorm.length ? textNorm[match.index + match[0].length] : '';
         if (/[xX×]/.test(beforeChar) || /[xX×]/.test(afterChar)) continue;
         
         let fracInches = 0;
@@ -606,7 +631,7 @@ export class ImageDimensionExtractorService {
     // ── Format 1c: Room dimensions like "23 X 14.5'" or "12 X 12" (ft) ──
     // Common in US floor plans — room labels with "X" or "x"
     const roomDimRegex = /(\d{1,3}(?:\.\d)?)\s*[xX×]\s*(\d{1,3}(?:\.\d)?)\s*[''′]?/g;
-    while ((match = roomDimRegex.exec(text)) !== null) {
+    while ((match = roomDimRegex.exec(textNorm)) !== null) {
       const dim1 = parseFloat(match[1]);
       const dim2 = parseFloat(match[2]);
       // Only consider if both values are reasonable room sizes in feet (4-60 ft)
@@ -619,19 +644,19 @@ export class ImageDimensionExtractorService {
     // OCR often garbles 53'-9" → 53.9, 22'-1" → 22.1, 15'-5" → 15.5
     // Detect patterns like XX.Y where Y is 0-11 and X is a reasonable footage
     // Only apply if text already has imperial hints (room dims with X, apostrophes, etc.)
-    const imperialHints = /[xX×]\s*\d{1,2}[.\s]?\d?[''′]?|[''′`]|\b(bedroom|kitchen|bath|porch|office|lanai|room)\b/i.test(text);
+    const imperialHints = /[xX×]\s*\d{1,2}[.\s]?\d?[''′]?|[''′`]|\b(bedroom|kitchen|bath|porch|office|lanai|room)\b/i.test(textNorm);
     if (imperialHints || dims.some(d => d.unit === 'ft_in')) {
       this.logger.log(`Imperial hints detected — trying decimal-as-feet.inches recovery`);
       const decFtRegex = /(?<![.\d])(\d{1,3})\.(\d{1,2})(?!\d)(?!\s*(?:mm|cm|m\b|%|px))/g;
-      while ((match = decFtRegex.exec(text)) !== null) {
+      while ((match = decFtRegex.exec(textNorm)) !== null) {
         const feet = parseInt(match[1], 10);
         const inches = parseInt(match[2], 10);
         // Only match if inches part is 0-11 (valid inches) and feet is reasonable (4-200)
         if (feet < 4 || feet > 200 || inches > 11) continue;
         
         // Skip if this appears near room labels or room dimension patterns
-        const beforeText = text.substring(Math.max(0, match.index - 50), match.index);
-        const afterText = text.substring(match.index + match[0].length, Math.min(text.length, match.index + match[0].length + 50));
+        const beforeText = textNorm.substring(Math.max(0, match.index - 50), match.index);
+        const afterText = textNorm.substring(match.index + match[0].length, Math.min(textNorm.length, match.index + match[0].length + 50));
         const context = (beforeText + ' ' + afterText).toLowerCase();
         
         // Skip if near room labels
@@ -677,7 +702,7 @@ export class ImageDimensionExtractorService {
 
     // ── Format 2: Explicit mm  15000mm, 8000 mm ────────────
     const mmRegex = /(\d{3,6})\s*mm\b/gi;
-    while ((match = mmRegex.exec(text)) !== null) {
+    while ((match = mmRegex.exec(textNorm)) !== null) {
       const val = parseInt(match[1], 10);
       if (val < 50 || val > 500000) continue;
       const key = `mm_${val}`;
@@ -696,7 +721,7 @@ export class ImageDimensionExtractorService {
 
     // ── Format 3: Explicit cm  250cm, 150 cm ───────────────
     const cmRegex = /(\d{2,5})\s*cm\b/gi;
-    while ((match = cmRegex.exec(text)) !== null) {
+    while ((match = cmRegex.exec(textNorm)) !== null) {
       const val = parseInt(match[1], 10);
       const mm = val * 10;
       if (mm < 100 || mm > 500000) continue;
@@ -716,7 +741,7 @@ export class ImageDimensionExtractorService {
 
     // ── Format 4: Explicit meters  65.5m, 37.2m ────────────
     const mRegex = /(\d{1,3}(?:[.,]\d{1,2})?)\s*m\b(?!m|²|2)/gi;
-    while ((match = mRegex.exec(text)) !== null) {
+    while ((match = mRegex.exec(textNorm)) !== null) {
       const val = parseFloat(match[1].replace(',', '.'));
       const mm = Math.round(val * 1000);
       if (mm < 500 || mm > 500000) continue;
@@ -739,7 +764,7 @@ export class ImageDimensionExtractorService {
     //    in metric drawings without a unit suffix
     //    BUT exclude floor level annotations like "FL: 10.20" or "10.20m" when near "FL"
     const decimalRegex = /(?<![.\d])(\d{1,3})[.,](\d{2})(?!\d)(?!\s*m[m²])/g;
-    while ((match = decimalRegex.exec(text)) !== null) {
+    while ((match = decimalRegex.exec(textNorm)) !== null) {
       const whole = parseInt(match[1], 10);
       const frac = parseInt(match[2], 10);
       const val = whole + frac / 100;
@@ -750,8 +775,8 @@ export class ImageDimensionExtractorService {
       if (whole >= 19 && whole <= 20 && frac >= 0 && frac <= 99) continue; // e.g. 19.95, 20.26
       
       // Check if this is a floor level annotation (FL: 10.20, FL 10.00, etc.)
-      const beforeMatch = text.substring(Math.max(0, match.index - 20), match.index);
-      const afterMatch = text.substring(match.index + match[0].length, Math.min(text.length, match.index + match[0].length + 20));
+      const beforeMatch = textNorm.substring(Math.max(0, match.index - 20), match.index);
+      const afterMatch = textNorm.substring(match.index + match[0].length, Math.min(textNorm.length, match.index + match[0].length + 20));
       const context = (beforeMatch + ' ' + afterMatch).toLowerCase();
       
       // Skip if it's clearly a floor level (FL, FFL, RL, etc.)
@@ -780,7 +805,7 @@ export class ImageDimensionExtractorService {
     // ── Format 6: Plain integers (3-5 digits)  9900, 4150, 1072 ─
     //    Only match numbers not already caught by explicit unit patterns
     const plainIntRegex = /(?<![.\d,])(\d{3,6})(?![.\d,]|\s*(?:mm|cm|m\b|M2|m2|kg|N))/g;
-    while ((match = plainIntRegex.exec(text)) !== null) {
+    while ((match = plainIntRegex.exec(textNorm)) !== null) {
       const val = parseInt(match[1], 10);
       // Skip small numbers (<50), timestamps, years, etc.
       if (val < 50 || val > 500000) continue;
