@@ -12,14 +12,12 @@ import {
   Target,
   TrendingUp,
   Users,
-  Eye,
-  Bot,
-  ShieldCheck,
   Receipt,
   Box,
   Globe,
   LogIn,
   UserPlus,
+  Ruler,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePwaInstall } from '@/lib/pwa-install-context';
@@ -148,9 +146,9 @@ export default function LandingPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { icon: Eye, title: t('features', 'aiVisionTitle'), desc: t('features', 'aiVisionDesc'), bg: 'bg-purple-100', iconColor: 'text-purple-600' },
-                { icon: Bot, title: t('features', 'aiChatTitle'), desc: t('features', 'aiChatDesc'), bg: 'bg-blue-100', iconColor: 'text-blue-600' },
-                { icon: ShieldCheck, title: t('features', 'aiAnomalyTitle'), desc: t('features', 'aiAnomalyDesc'), bg: 'bg-green-100', iconColor: 'text-green-600' },
+                { icon: Ruler, title: locale === 'ja' ? 'クイックシェイプビルダー' : 'Quick Shape Builder', desc: locale === 'ja' ? '矩形・L字・カスタムポリゴンで建物形状を素早く定義。' : 'Quickly define building shapes as rectangles, L-shapes, or custom polygons.', bg: 'bg-purple-100', iconColor: 'text-purple-600' },
+                { icon: Building2, title: locale === 'ja' ? '面別積算' : 'Per-Side Breakdown', desc: locale === 'ja' ? '各面ごとの材料数量を個別計算。運搬計画に最適。' : 'Calculate material quantities per side individually. Ideal for transport planning.', bg: 'bg-blue-100', iconColor: 'text-blue-600' },
+                { icon: CheckCircle, title: locale === 'ja' ? '確定的エンジン' : 'Deterministic Engine', desc: locale === 'ja' ? '標準的な積算ルールに基づく確定的計算。毎回同じ入力で同じ結果。' : 'Deterministic calculations based on standard estimation rules. Same input always gives same output.', bg: 'bg-green-100', iconColor: 'text-green-600' },
               ].map((f, i) => (
                 <div key={i} className="rounded-xl border border-gray-200 p-6">
                   <div className={`w-11 h-11 rounded-lg ${f.bg} flex items-center justify-center mb-4`}>

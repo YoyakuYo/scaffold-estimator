@@ -21,8 +21,11 @@ import {
   Plus,
   Trash2,
   LayoutList,
+  Zap,
+  PenTool,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
 
 // Dynamic import for PerimeterTracer (uses browser APIs)
 const PerimeterTracer = dynamic(
@@ -52,25 +55,6 @@ interface WallState {
   kaidanOffsets: number[];
   isMultiSegment: boolean;
   segments: WallSegment[];
-}
-
-interface AiVisionPrefillPayload {
-  buildingHeightMm?: number | null;
-  scaffoldType?: 'kusabi' | 'wakugumi' | null;
-  scaffoldWidthMm?: number | null;
-  structureType?: '改修工事' | 'S造' | 'RC造' | null;
-  preferredMainTatejiMm?: number | null;
-  topGuardHeightMm?: number | null;
-  frameSizeMm?: number | null;
-  walls?: Array<{
-    side: string;
-    lengthMm: number | null;
-    heightMm: number | null;
-    wallLengthMm?: number | null;
-    wallHeightMm?: number | null;
-    enabled?: boolean;
-    stairAccessCount?: number;
-  }>;
 }
 
 function calcTotalFromSegments(segments: WallSegment[]): number {
@@ -109,6 +93,9 @@ function ScaffoldPageContent() {
     return side;
   };
 
+  // ─── Input Mode ────────────────────────────────────────
+  const [inputMode, setInputMode] = useState<'drawing' | 'quick'>('drawing');
+
   // ─── Perimeter Model ────────────────────────────────────
   const [perimeterModel] = useState(() => new PerimeterModel());
 
@@ -126,75 +113,7 @@ function ScaffoldPageContent() {
   const [walls, setWalls] = useState<WallState[]>([]);
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(null);
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
-  const [aiPrefilled, setAiPrefilled] = useState(false);
-
-  useEffect(() => {
-    const fromAi = searchParams.get('fromAi');
-    if (fromAi !== '1') return;
-
-    try {
-      const raw = sessionStorage.getItem('aiScaffoldPrefill') || sessionStorage.getItem('aiVisionResult');
-      if (!raw) return;
-      const data = JSON.parse(raw) as AiVisionPrefillPayload;
-
-      if (data.scaffoldType && ['kusabi', 'wakugumi'].includes(data.scaffoldType)) {
-        setScaffoldType(data.scaffoldType);
-      }
-      if (typeof data.scaffoldWidthMm === 'number' && [600, 900, 1200].includes(data.scaffoldWidthMm)) {
-        setScaffoldWidthMm(data.scaffoldWidthMm);
-      }
-      if (data.structureType && ['改修工事', 'S造', 'RC造'].includes(data.structureType)) {
-        setStructureType(data.structureType);
-      }
-      if (typeof data.preferredMainTatejiMm === 'number' && [1800, 2700, 3600].includes(data.preferredMainTatejiMm)) {
-        setPreferredMainTatejiMm(data.preferredMainTatejiMm);
-      }
-      if (typeof data.topGuardHeightMm === 'number' && [900, 1350, 1800].includes(data.topGuardHeightMm)) {
-        setTopGuardHeightMm(data.topGuardHeightMm);
-      }
-      if (typeof data.frameSizeMm === 'number' && [1700, 1800, 1900].includes(data.frameSizeMm)) {
-        setFrameSizeMm(data.frameSizeMm);
-      }
-
-      const prefillHeight =
-        typeof data.buildingHeightMm === 'number' && data.buildingHeightMm > 0
-          ? data.buildingHeightMm
-          : null;
-      if (prefillHeight) {
-        setBuildingHeightMm(prefillHeight);
-      }
-
-      if (Array.isArray(data.walls) && data.walls.length > 0) {
-        const mappedWalls: WallState[] = data.walls
-          .filter((w) => typeof w?.side === 'string' && ((w.lengthMm ?? w.wallLengthMm ?? 0) > 0))
-          .map((w) => {
-            const inputLength = w.lengthMm ?? w.wallLengthMm ?? 0;
-            const inputHeight = w.heightMm ?? w.wallHeightMm ?? null;
-            const inferredHeight =
-              typeof inputHeight === 'number' && inputHeight > 0
-                ? inputHeight
-                : prefillHeight || 3000;
-            return {
-              side: w.side,
-              enabled: w.enabled ?? true,
-              lengthMm: Number(inputLength) || 0,
-              heightMm: inferredHeight,
-              stairAccessCount: Number(w.stairAccessCount) || 0,
-              kaidanCount: 0,
-              kaidanOffsets: [],
-              isMultiSegment: false,
-              segments: [],
-            };
-          });
-        if (mappedWalls.length > 0) {
-          setWalls(mappedWalls);
-          setAiPrefilled(true);
-        }
-      }
-    } catch {
-      // Ignore malformed prefill payload.
-    }
-  }, [searchParams]);
+  const [prefilled, setPrefilled] = useState(false);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -236,7 +155,7 @@ function ScaffoldPageContent() {
         };
       });
       setWalls(mapped);
-      setAiPrefilled(true);
+      setPrefilled(true);
     }
     const poly = editConfig.calculationResult?.polygonVertices;
     if (Array.isArray(poly) && poly.length >= 3) {
@@ -332,7 +251,7 @@ function ScaffoldPageContent() {
 
   // ─── Calculate handler ──────────────────────────────────
   const handleCalculate = () => {
-    if (!perimeterModel.isClosed && !aiPrefilled) {
+    if (!perimeterModel.isClosed && !prefilled) {
       alert('Please close the polygon first.\nポリゴンを閉じてください。');
       return;
     }
@@ -414,6 +333,36 @@ function ScaffoldPageContent() {
     );
   }
 
+  const handleQuickShapeSubmit = (qConfig: QuickShapeConfig) => {
+    const wallInputs: WallInput[] = qConfig.sides.map((s) => ({
+      side: s.label,
+      wallLengthMm: s.lengthMm,
+      wallHeightMm: qConfig.buildingHeightMm,
+      stairAccessCount: qConfig.kaidanPerSide[s.label]?.enabled ? qConfig.kaidanPerSide[s.label].count : 0,
+      kaidanCount: 0,
+      kaidanOffsets: [],
+    }));
+
+    const dto: CreateScaffoldConfigDto = {
+      projectId: 'default-project',
+      mode: 'manual',
+      scaffoldType: qConfig.scaffoldType,
+      structureType: qConfig.structureType,
+      walls: wallInputs,
+      scaffoldWidthMm: qConfig.scaffoldWidthMm,
+      ...(qConfig.scaffoldType === 'kusabi' && {
+        preferredMainTatejiMm: qConfig.preferredMainTatejiMm,
+        topGuardHeightMm: qConfig.topGuardHeightMm,
+      }),
+      ...(qConfig.scaffoldType === 'wakugumi' && {
+        frameSizeMm: qConfig.frameSizeMm,
+        habakiCountPerSpan: qConfig.habakiCountPerSpan,
+        endStopperType: qConfig.endStopperType,
+      }),
+    };
+    calculateMutation.mutate({ dto, configId: null });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
         {/* Header */}
@@ -423,11 +372,58 @@ function ScaffoldPageContent() {
             {t('scaffold', 'title')}
           </h1>
           <p className="mt-1 text-sm text-gray-600">{t('scaffold', 'subtitle')}</p>
+
+          {/* ─── Mode Selector ─── */}
+          {!editConfigId && (
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => setInputMode('drawing')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                  inputMode === 'drawing'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <PenTool className="h-4 w-4" />
+                図面アップロード / Drawing Upload
+              </button>
+              <button
+                onClick={() => setInputMode('quick')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                  inputMode === 'quick'
+                    ? 'border-green-500 bg-green-50 text-green-700 shadow-sm'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <Zap className="h-4 w-4" />
+                クイックビルダー / Quick Shape Builder
+              </button>
+            </div>
+          )}
         </div>
 
       {/* ═══════════════════════════════════════════════════════
-          PERIMETER TRACER — Full-Width Split Screen
+          QUICK SHAPE BUILDER MODE
          ═══════════════════════════════════════════════════════ */}
+      {inputMode === 'quick' && !editConfigId && (
+        <div className="max-w-[1200px] mx-auto px-4 pb-8">
+          <QuickShapeBuilder
+            onSubmit={handleQuickShapeSubmit}
+            isCalculating={calculateMutation.isPending}
+          />
+          {calculateMutation.isError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mt-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+              <div className="text-red-700 text-sm">{t('scaffold', 'calcError')}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
+          PERIMETER TRACER — Full-Width Split Screen (Drawing Mode)
+         ═══════════════════════════════════════════════════════ */}
+      {(inputMode === 'drawing' || editConfigId) && (<>
       <div className="max-w-[1600px] mx-auto px-4 mb-6">
         <PerimeterTracer
           perimeterModel={perimeterModel}
@@ -1109,6 +1105,7 @@ function ScaffoldPageContent() {
         </button>
       </div>
       )}
+      </>)}
     </div>
   );
 }

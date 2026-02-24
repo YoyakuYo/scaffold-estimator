@@ -10,7 +10,6 @@ import { RentalModule } from './modules/rental/rental.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ScaffoldConfigModule } from './modules/scaffold-config/scaffold-config.module';
 import { QuotationModule } from './modules/quotation/quotation.module';
-import { AiModule } from './modules/ai/ai.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MailerModule } from './modules/mailer/mailer.module';
@@ -155,7 +154,6 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
     RentalModule,
     ScaffoldConfigModule,
     QuotationModule,
-    AiModule,
     MessagingModule,
     NotificationsModule,
     MailerModule,

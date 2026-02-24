@@ -38,7 +38,7 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
   ),
 });
 
-type TabView = 'table' | '2d' | '3d';
+type TabView = 'table' | 'perside' | '2d' | '3d';
 
 export default function ScaffoldResultPageWrapper() {
   return (
@@ -59,7 +59,7 @@ function ScaffoldResultPage() {
   // Support ?tab=3d, ?tab=2d from external links
   const initialTab = (searchParams.get('tab') as TabView) || 'table';
   const [activeTab, setActiveTab] = useState<TabView>(
-    ['table', '2d', '3d'].includes(initialTab) ? initialTab : 'table'
+    ['table', 'perside', '2d', '3d'].includes(initialTab) ? initialTab : 'table'
   );
 
   // Fetch config (includes calculationResult)
@@ -226,7 +226,18 @@ function ScaffoldResultPage() {
             }`}
           >
             <Table className="h-4 w-4" />
-            {t('result', 'tabTable')}
+            全体数量
+          </button>
+          <button
+            onClick={() => setActiveTab('perside')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'perside'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Building2 className="h-4 w-4" />
+            面別数量
           </button>
           <button
             onClick={() => setActiveTab('2d')}
@@ -254,6 +265,7 @@ function ScaffoldResultPage() {
 
         {/* Tab Content */}
         {activeTab === 'table' && <QuotationTable result={result} />}
+        {activeTab === 'perside' && <PerSideBreakdown result={result} />}
         {activeTab === '2d' && <Scaffold2DView result={result} />}
         {activeTab === '3d' && <Scaffold3DView result={result} />}
 
@@ -524,6 +536,79 @@ function QuotationTable({ result }: { result: any }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─── Per-Side Breakdown ──────────────────────────────────────
+
+function PerSideBreakdown({ result }: { result: any }) {
+  const { locale } = useI18n();
+  const walls: WallCalculationResult[] = result.walls;
+
+  return (
+    <div className="space-y-6">
+      {walls.map((wall, idx) => {
+        const wallLabel = locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1));
+        const componentsByCategory: Record<string, CalculatedComponent[]> = {};
+        for (const comp of wall.components) {
+          const cat = locale === 'ja' ? (comp.category || '他') : (comp.categoryEn || comp.category || 'Other');
+          if (!componentsByCategory[cat]) componentsByCategory[cat] = [];
+          componentsByCategory[cat].push(comp);
+        }
+
+        return (
+          <div key={`perside-${idx}-${wall.side}`} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 bg-gradient-to-r from-blue-50 to-white border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">{wallLabel}</h3>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <span>壁長: {wall.wallLengthMm.toLocaleString()}mm</span>
+                  <span>スパン: {wall.totalSpans}</span>
+                  <span>階段: {wall.stairAccessCount}箇所</span>
+                </div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-2 text-left font-medium text-gray-600 w-10">#</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">分類</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">部材名</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">規格</th>
+                    <th className="px-4 py-2 text-center font-medium text-gray-600">単位</th>
+                    <th className="px-4 py-2 text-center font-medium text-gray-600">数量</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(componentsByCategory).map(([category, comps]) => (
+                    <>
+                      <tr key={`cat-${category}`} className="bg-gray-100">
+                        <td colSpan={6} className="px-4 py-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          {category}
+                        </td>
+                      </tr>
+                      {comps.map((comp, ci) => (
+                        <tr key={`${comp.materialCode || comp.type}-${ci}`} className={`border-b border-gray-50 ${ci % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                          <td className="px-4 py-2 text-gray-400 text-center">{ci + 1}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{category}</td>
+                          <td className="px-4 py-2 font-medium text-gray-800">
+                            {locale === 'ja' ? comp.nameJp : (comp.name || comp.nameJp)}
+                          </td>
+                          <td className="px-4 py-2 text-gray-600">{comp.sizeSpec}</td>
+                          <td className="px-4 py-2 text-center text-gray-500">{comp.unit}</td>
+                          <td className="px-4 py-2 text-center font-bold text-blue-700">{comp.quantity}</td>
+                        </tr>
+                      ))}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

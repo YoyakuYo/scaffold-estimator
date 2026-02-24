@@ -11,3 +11,11 @@ export {
   POST_CATALOG,
   SCAFFOLD_WIDTH_OPTIONS_MM,
 } from './constants';
+
+export { calculateScaffoldProject } from './scaffoldEngine';
+export type {
+  SideInput,
+  ScaffoldProjectConfig,
+  SideMaterials,
+  ScaffoldProjectResult,
+} from './scaffoldEngine';

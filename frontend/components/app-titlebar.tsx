@@ -27,7 +27,7 @@ export function AppTitlebar() {
         style={{ imageRendering: 'auto' }}
       />
       <span className="text-sm font-medium tracking-wide opacity-90">
-        仮設工事見積システム
+        仮設材積算システム
       </span>
     </div>
   );

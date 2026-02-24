@@ -1,7 +1,7 @@
 {
   "name": "scaffolding-estimation-frontend",
   "version": "1.0.0",
-  "description": "Scaffolding estimation platform frontend",
+  "description": "Scaffold material quantity estimation system frontend",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack --port 3001",

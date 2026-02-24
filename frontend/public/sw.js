@@ -1,10 +1,9 @@
-/// Service Worker for PWA — Scaffold Estimator
-const CACHE_NAME = 'scaffold-estimator-v2';
+/// Service Worker for PWA — 仮設材積算システム
+const CACHE_NAME = 'scaffold-estimator-v3';
 const STATIC_ASSETS = [
   '/',
   '/dashboard',
   '/scaffold',
-  '/ai',
   '/manifest.json',
   '/icons/icon-32x32.png',
   '/icons/icon-192x192.png',

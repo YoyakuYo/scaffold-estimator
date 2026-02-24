@@ -11,13 +11,13 @@ const notoSansJP = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: '仮設工事見積システム',
-  description: 'Production-grade scaffolding estimation platform for Japanese construction companies',
+  title: '仮設材積算システム',
+  description: 'Deterministic scaffold material quantity estimation system for Japanese construction companies',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: '足場見積',
+    title: '仮設材積算',
   },
   formatDetection: {
     telephone: false,
@@ -49,8 +49,8 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="application-name" content="足場見積" />
-        <meta name="apple-mobile-web-app-title" content="足場見積" />
+        <meta name="application-name" content="仮設材積算" />
+        <meta name="apple-mobile-web-app-title" content="仮設材積算" />
         <meta name="msapplication-TileColor" content="#0f172a" />
         <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
       </head>

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
-import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Brain, Users, User, MessageSquare, CreditCard, Menu, X } from 'lucide-react';
+import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Users, User, MessageSquare, CreditCard, Menu, X } from 'lucide-react';
 import { NotificationBell } from '@/components/notification-bell';
 import { useI18n, type Locale } from '@/lib/i18n';
 
@@ -49,7 +49,6 @@ export function Navigation() {
     { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
     { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
     { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
-    { path: '/ai', label: locale === 'ja' ? 'AI' : 'AI', icon: Brain },
     { path: '/billing', label: locale === 'ja' ? '請求' : 'Billing', icon: CreditCard },
     { path: '/support', label: locale === 'ja' ? 'サポート' : 'Support', icon: MessageSquare },
     ...(isAdmin ? [{ path: '/users', label: locale === 'ja' ? 'ユーザー' : 'Users', icon: Users }] : []),

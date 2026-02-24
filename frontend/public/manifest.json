@@ -1,7 +1,7 @@
 {
-  "name": "仮設工事見積システム - Scaffold Estimator",
-  "short_name": "足場見積",
-  "description": "Production-grade scaffolding estimation platform for Japanese construction companies",
+  "name": "仮設材積算システム",
+  "short_name": "仮設材積算",
+  "description": "Deterministic scaffold material quantity estimation system for Japanese construction companies",
   "start_url": "/dashboard",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone"],
@@ -106,13 +106,6 @@
       "short_name": "見積書",
       "description": "View quotations",
       "url": "/quotations",
-      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "AIアシスタント",
-      "short_name": "AI",
-      "description": "AI-powered estimation assistant",
-      "url": "/ai",
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
     }
   ],
