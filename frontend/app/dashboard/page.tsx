@@ -31,7 +31,6 @@ import {
   ShieldCheck,
   MessageSquare,
   Activity,
-  UserCheck,
   UserX,
   AlertTriangle,
   Settings,
@@ -39,7 +38,6 @@ import {
   Send,
   CheckCircle,
   XCircle,
-  Zap,
   CreditCard,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
@@ -108,10 +106,6 @@ function AdminDashboard() {
   });
 
   const pendingUsers = allUsers?.filter((u) => u.approvalStatus === 'pending') ?? [];
-  const recentUsers = allUsers
-    ?.filter((u) => u.approvalStatus === 'approved')
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5) ?? [];
   const unreadConvs = conversations?.filter((c) => (c.unreadCount ?? 0) > 0) ?? [];
   const totalUnread = unreadConvs.reduce((s, c) => s + (c.unreadCount ?? 0), 0);
 
@@ -352,45 +346,7 @@ function AdminDashboard() {
           </div>
 
           {/* ── Right Column (1/3) ── */}
-          <div className="space-y-6">
-            {/* Quick Actions */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-amber-500" />
-                  {t('Quick Actions', 'クイックアクション')}
-                </h2>
-              </div>
-              <div className="p-3 space-y-1">
-                {[
-                  { href: '/scaffold', icon: Calculator, label: t('New Calculation', '新規計算'), color: 'text-blue-600' },
-                  { href: '/users', icon: Users, label: t('Manage Users', 'ユーザー管理'), color: 'text-purple-600' },
-                  { href: '/admin/messages', icon: MessageSquare, label: t('Messages', 'メッセージ'), color: 'text-green-600', badge: totalUnread },
-                  { href: '/company', icon: Building2, label: t('Company Settings', '会社設定'), color: 'text-indigo-600' },
-                  { href: '/quotations', icon: Receipt, label: t('Quotations', '見積書'), color: 'text-amber-600' },
-                  { href: '/ai', icon: ShieldCheck, label: t('AI Assistant', 'AIアシスタント'), color: 'text-rose-600' },
-                  { href: '/settings', icon: Settings, label: t('Price Settings', '単価設定'), color: 'text-slate-600' },
-                  { href: '/profile', icon: User, label: t('My Profile', 'プロフィール'), color: 'text-cyan-600' },
-                ].map((item) => (
-                  <button
-                    key={item.href}
-                    onClick={() => router.push(item.href)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left group"
-                  >
-                    <item.icon className={`h-4 w-4 ${item.color}`} />
-                    <span className="text-sm text-slate-700 group-hover:text-slate-900 flex-1">{item.label}</span>
-                    {item.badge ? (
-                      <span className="h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                        {item.badge}
-                      </span>
-                    ) : (
-                      <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-slate-500" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+            <div className="space-y-6">
             {/* Online Users */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -431,36 +387,6 @@ function AdminDashboard() {
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Recent Users */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-                  <UserCheck className="h-5 w-5 text-blue-500" />
-                  {t('Recent Users', '最近のユーザー')}
-                </h2>
-                <Link href="/users" className="text-sm text-blue-600 hover:underline">
-                  {t('All', 'すべて')} →
-                </Link>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {recentUsers.map((u) => (
-                  <div key={u.id} className="px-5 py-2.5 flex items-center gap-2.5">
-                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-slate-100 text-xs font-bold text-slate-600 flex-shrink-0">
-                      {(u.firstName?.[0] || u.email[0]).toUpperCase()}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-slate-800 truncate">
-                        {[u.lastName, u.firstName].filter(Boolean).join(' ') || u.email}
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        {new Date(u.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US')}
-                      </p>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
