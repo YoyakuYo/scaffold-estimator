@@ -22,6 +22,8 @@ export default function SupportPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['messages-me'],
     queryFn: messagesApi.getMyConversation,
+    refetchInterval: 3000,
+    staleTime: 2000,
   });
   const messages = data?.messages ?? [];
 

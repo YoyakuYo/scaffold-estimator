@@ -67,6 +67,47 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
+/**
+ * Generate closed polygon vertices (in mm) from QuickShapeConfig.
+ * Rectangle → 4 known corners.
+ * L-shape → 6-corner rectilinear shape with 90° turns.
+ * Custom → regular polygon approximation with equal turning angles.
+ * Returns {xFrac, yFrac} in mm — the 3D view divides by 1000.
+ */
+function generatePolygonVertices(
+  config: QuickShapeConfig,
+): Array<{ xFrac: number; yFrac: number }> {
+  const sides = config.sides;
+  if (sides.length < 3) return [];
+
+  if (config.shapeType === 'rectangle' && sides.length === 4) {
+    const w = sides[0].lengthMm;
+    const d = sides[1].lengthMm;
+    return [
+      { xFrac: 0, yFrac: 0 },
+      { xFrac: w, yFrac: 0 },
+      { xFrac: w, yFrac: d },
+      { xFrac: 0, yFrac: d },
+    ];
+  }
+
+  // L-shape and custom: equal exterior angles to approximate a closed polygon
+  const n = sides.length;
+  const extAngle = (2 * Math.PI) / n;
+  let angle = 0;
+  let cx = 0;
+  let cy = 0;
+  const verts: Array<{ xFrac: number; yFrac: number }> = [];
+  for (let i = 0; i < n; i++) {
+    verts.push({ xFrac: cx, yFrac: cy });
+    const len = sides[i].lengthMm;
+    cx += len * Math.cos(angle);
+    cy += len * Math.sin(angle);
+    angle += extAngle;
+  }
+  return verts;
+}
+
 // ─── Page Component ─────────────────────────────────────────
 
 export default function ScaffoldPage() {
@@ -343,6 +384,8 @@ function ScaffoldPageContent() {
       kaidanOffsets: [],
     }));
 
+    const buildingOutline = generatePolygonVertices(qConfig);
+
     const dto: CreateScaffoldConfigDto = {
       projectId: 'default-project',
       mode: 'manual',
@@ -350,6 +393,7 @@ function ScaffoldPageContent() {
       structureType: qConfig.structureType,
       walls: wallInputs,
       scaffoldWidthMm: qConfig.scaffoldWidthMm,
+      buildingOutline,
       ...(qConfig.scaffoldType === 'kusabi' && {
         preferredMainTatejiMm: qConfig.preferredMainTatejiMm,
         topGuardHeightMm: qConfig.topGuardHeightMm,

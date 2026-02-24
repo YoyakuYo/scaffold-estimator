@@ -30,12 +30,16 @@ export default function AdminMessagesPage() {
     queryKey: ['admin-conversations'],
     queryFn: messagesApi.listConversations,
     enabled: isAdmin,
+    refetchInterval: 5000,
+    staleTime: 3000,
   });
 
   const { data: messages, isLoading: msgLoading } = useQuery({
     queryKey: ['admin-conversation-messages', selectedConversationId],
     queryFn: () => messagesApi.getConversationMessages(selectedConversationId!),
     enabled: !!selectedConversationId && isAdmin,
+    refetchInterval: 3000,
+    staleTime: 2000,
   });
 
   const { data: allUsers } = useQuery<UserProfile[]>({
