@@ -572,6 +572,7 @@ export const translations = {
     floorPresets: { ja: '階数から高さを設定', en: 'Set height from floors' },
     calculatedLevels: { ja: '計算段数', en: 'Calculated Levels' },
     levelsUnit: { ja: '段', en: 'levels' },
+    levelHeightNote: { ja: '※ くさび式は 1800mm/段。枠組は Step 3 の建枠サイズで段高が決まります。', en: 'Kusabi: 1800mm per level. Wakugumi: level height = frame size in Step 3.' },
     scaffoldType: { ja: '足場タイプ', en: 'Scaffold Type' },
     kusabiLabel: { ja: 'くさび式足場', en: 'Kusabi (Wedge)' },
     kusabiSub: { ja: 'くさび式', en: 'Wedge type' },

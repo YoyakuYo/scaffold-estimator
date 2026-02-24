@@ -34,7 +34,7 @@ export interface QuickShapeConfig {
   shapeType: ShapeType;
   sides: SideDefinition[];
   buildingHeightMm: number;
-  levelHeightMm: number;
+  /** Level height is fixed 1800mm (kusabi) or = frame size (wakugumi, set in Step 3). Not duplicated here. */
   scaffoldType: 'kusabi' | 'wakugumi';
   scaffoldWidthMm: number;
   preferredMainTatejiMm: number;
@@ -82,9 +82,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
     { label: 'DA', lengthMm: 8000 },
   ]);
 
-  // Step 2
+  // Step 2 — building height only; level height is 1800 (kusabi) or frame size (wakugumi, Step 3)
   const [buildingHeightMm, setBuildingHeightMm] = useState(9900);
-  const [levelHeightMm, setLevelHeightMm] = useState(1800);
 
   // Step 3
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
@@ -112,7 +111,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
     return customSegments;
   }, [shapeType, rectNorth, rectEast, rectSouth, rectWest, lSegments, customSegments]);
 
-  const calculatedLevels = Math.floor(buildingHeightMm / levelHeightMm);
+  // Kusabi: 1800mm per level (fixed). Wakugumi: level = frame size (set in Step 3); use 1800 for preview.
+  const levelHeightPreviewMm = 1800;
+  const calculatedLevels = Math.max(1, Math.floor(buildingHeightMm / levelHeightPreviewMm));
 
   const addCustomSegment = () => {
     const nextLetter = String.fromCharCode(65 + customSegments.length);
@@ -147,7 +148,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
       shapeType,
       sides,
       buildingHeightMm,
-      levelHeightMm,
       scaffoldType,
       scaffoldWidthMm,
       preferredMainTatejiMm,
@@ -332,32 +332,18 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'stepHeight')}</h3>
 
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
-                <input
-                  type="number"
-                  value={buildingHeightMm || ''}
-                  onChange={(e) => setBuildingHeightMm(Number(e.target.value) || 0)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  min={1000}
-                  step={100}
-                  placeholder="9900"
-                />
-                <p className="text-xs text-gray-500 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'levelHeight')}</label>
-                <input
-                  type="number"
-                  value={levelHeightMm || ''}
-                  onChange={(e) => setLevelHeightMm(Number(e.target.value) || 0)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  min={1000}
-                  step={100}
-                  placeholder="1800"
-                />
-              </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
+              <input
+                type="number"
+                value={buildingHeightMm || ''}
+                onChange={(e) => setBuildingHeightMm(Number(e.target.value) || 0)}
+                className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                min={1000}
+                step={100}
+                placeholder="9900"
+              />
+              <p className="text-xs text-gray-500 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
             </div>
 
             {/* Quick height presets */}
@@ -387,12 +373,13 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
               </div>
             </div>
 
-            {/* Calculated levels */}
+            {/* Calculated levels (preview: 1800mm per level for くさび; 枠組 uses frame size in Step 3) */}
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">{t('quickBuilder', 'calculatedLevels')}:</span>
                 <span className="text-lg font-bold text-gray-900">{calculatedLevels} {t('quickBuilder', 'levelsUnit')}</span>
               </div>
+              <p className="text-xs text-gray-500 mt-1">{t('quickBuilder', 'levelHeightNote')}</p>
             </div>
 
             <div className="mt-6 flex justify-between">
