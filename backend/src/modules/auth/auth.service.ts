@@ -256,7 +256,8 @@ export class AuthService {
   }
 
   /**
-   * List all users. If companyId is provided, filter by it; otherwise (admin) return all.
+   * List all users. If companyId is provided, filter by it; otherwise return all.
+   * Excludes superadmin (platform owner) so they do not appear in User Management.
    */
   async listUsers(companyId?: string): Promise<any[]> {
     const where: any = {};
@@ -267,7 +268,9 @@ export class AuthService {
       where,
       order: { createdAt: 'DESC' },
     });
-    return users.map(({ passwordHash, ...rest }) => rest);
+    return users
+      .filter((u) => u.role !== 'superadmin')
+      .map(({ passwordHash, ...rest }) => rest);
   }
 
   /**
