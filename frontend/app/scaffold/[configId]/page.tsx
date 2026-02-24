@@ -413,9 +413,10 @@ function QuotationTable({ result }: { result: any }) {
 
   // Build per-wall quantity maps
   // IMPORTANT: Use the same key generation logic as backend aggregation
+  // Use globalThis.Map so the built-in constructor is always used (avoids shadowing by lucide-react Map icon)
   const wallMaps = useMemo(() => {
     return walls.map((wall) => {
-      const m = new Map<string, number>();
+      const m = new globalThis.Map<string, number>();
       for (const comp of wall.components) {
         // For Nuno Bars, group by category + sizeSpec (same as backend aggregation)
         // For other components, use materialCode or type-sizeSpec
