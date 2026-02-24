@@ -28,6 +28,7 @@ import {
   Upload, Loader2, AlertCircle, Ruler, RotateCcw,
   Trash2, CheckCircle2, Maximize2, FileUp,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -256,6 +257,7 @@ export function PerimeterTracer({
   buildingHeightMm,
   onBuildingHeightChange,
 }: PerimeterTracerProps) {
+  const { t, locale } = useI18n();
   /* ───── File state ──────────────────────────────────────── */
   const [phase, setPhase] = useState<'upload' | 'loaded'>('upload');
   const [fileName, setFileName] = useState('');
@@ -518,13 +520,18 @@ export function PerimeterTracer({
 
     if (ext === 'dwg') {
       setErrorMsg(
-        'DWG auto-detection not supported. Please export as DXF from your CAD software.\n' +
-        'DWG自動検出はサポートされていません。CADからDXF形式でエクスポートしてください。',
+        locale === 'ja'
+          ? 'DWG形式は直接読み込めません。CADソフトからDXF形式でエクスポートしてください。'
+          : 'DWG format cannot be read directly. Please export as DXF from your CAD software.',
       );
       return;
     }
     if (ext === 'jww') {
-      setErrorMsg('JWW format not supported. Please export as DXF.');
+      setErrorMsg(
+        locale === 'ja'
+          ? 'JWW形式は直接読み込めません。Jw_cadからDXF形式でエクスポートしてください。'
+          : 'JWW format cannot be read directly. Please export as DXF from Jw_cad.',
+      );
       return;
     }
 
@@ -1597,7 +1604,7 @@ export function PerimeterTracer({
 
                 {/* Total */}
                 <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Total Perimeter / 総周長</span>
+                  <span className="text-xs text-gray-500">{t('viewer', 'totalPerimeter')}</span>
                   <div className="text-right">
                     <span className="text-sm font-bold text-blue-600">
                       {totalPerimeter > 0 ? `${totalPerimeter.toLocaleString()} mm` : '—'}

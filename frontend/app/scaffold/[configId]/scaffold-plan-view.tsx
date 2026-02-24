@@ -312,7 +312,7 @@ export default function ScaffoldPlanView({ result }: Props) {
       {/* Toolbar */}
       <div className="p-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
         <div className="text-sm font-medium text-gray-600">
-          平面図 / Plan View — {walls.map(w => w.sideJp).join('・')} ({walls.length} walls)
+          {t('viewer', 'planView')} — {walls.map(w => w.sideJp).join('・')} ({walls.length} {t('viewer', 'walls')})
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setScale(s => Math.min(s * 1.25, 3))} className="p-1.5 rounded hover:bg-gray-200" title="Zoom In">
@@ -341,7 +341,7 @@ export default function ScaffoldPlanView({ result }: Props) {
         >
           {/* Title */}
           <text x={svgW / 2} y={22} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
-            平面図 / Plan View — {walls.length} walls
+            {t('viewer', 'planView')} — {walls.length} {t('viewer', 'walls')}
           </text>
 
           {/* Building outline fill */}
@@ -361,7 +361,7 @@ export default function ScaffoldPlanView({ result }: Props) {
             return (
               <g>
                 <text x={cx} y={cy - 4} textAnchor="middle" fontSize={11} fill="#94a3b8" fontWeight="500">
-                  建物 / Building
+                  {t('viewer', 'building')}
                 </text>
                 <text x={cx} y={cy + 12} textAnchor="middle" fontSize={9} fill="#cbd5e1">
                   {walls.length} edges · scaffold {scaffoldWidthMm}mm

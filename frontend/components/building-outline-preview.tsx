@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -56,6 +57,7 @@ export function BuildingOutlinePreview({
   scaffoldWidthMm,
   onWallUpdate,
 }: BuildingOutlinePreviewProps) {
+  const { t } = useI18n();
   const [editingCell, setEditingCell] = useState<string | null>(null);
 
   const enabledWalls = walls.filter((w) => w.enabled);
@@ -75,7 +77,7 @@ export function BuildingOutlinePreview({
       {/* ── Title bar ──────────────────────────────────── */}
       <div className="px-4 py-2.5 border-b border-gray-200 bg-slate-50">
         <h3 className="text-sm font-semibold text-slate-700 tracking-tight">
-          抽出寸法 / Extracted Dimensions
+          {t('viewer', 'extractedDimensions')}
         </h3>
       </div>
 
@@ -85,9 +87,7 @@ export function BuildingOutlinePreview({
         {!hasData && (
           <div className="px-4 py-3 bg-amber-50/70 border-b border-amber-100">
             <p className="text-xs text-amber-700 leading-relaxed">
-              ⚠ 寸法が検出されませんでした。下記で直接入力してください。
-              <br />
-              <span className="text-amber-600">No dimensions detected — enter values below.</span>
+              ⚠ {t('viewer', 'noDimsWarning')}
             </p>
           </div>
         )}
@@ -251,7 +251,7 @@ export function BuildingOutlinePreview({
 
         {/* Hint */}
         <p className="px-4 pb-3 text-[10px] text-slate-400 leading-relaxed">
-          セルをクリックして数値を編集 / Click any cell to edit
+          {t('viewer', 'clickCellToEdit')}
         </p>
       </div>
     </div>

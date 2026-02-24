@@ -226,7 +226,7 @@ function ScaffoldResultPage() {
             }`}
           >
             <Table className="h-4 w-4" />
-            全体数量
+            {t('resultExtra', 'tabOverall')}
           </button>
           <button
             onClick={() => setActiveTab('perside')}
@@ -237,7 +237,7 @@ function ScaffoldResultPage() {
             }`}
           >
             <Building2 className="h-4 w-4" />
-            面別数量
+            {t('resultExtra', 'tabPerSide')}
           </button>
           <button
             onClick={() => setActiveTab('2d')}
@@ -543,7 +543,7 @@ function QuotationTable({ result }: { result: any }) {
 // ─── Per-Side Breakdown ──────────────────────────────────────
 
 function PerSideBreakdown({ result }: { result: any }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
 
   return (
@@ -563,9 +563,9 @@ function PerSideBreakdown({ result }: { result: any }) {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-gray-900">{wallLabel}</h3>
                 <div className="flex items-center gap-4 text-sm text-gray-600">
-                  <span>壁長: {wall.wallLengthMm.toLocaleString()}mm</span>
-                  <span>スパン: {wall.totalSpans}</span>
-                  <span>階段: {wall.stairAccessCount}箇所</span>
+                  <span>{t('resultExtra', 'wallLength')}: {wall.wallLengthMm.toLocaleString()}mm</span>
+                  <span>{t('resultExtra', 'spans')}: {wall.totalSpans}</span>
+                  <span>{t('resultExtra', 'stairs')}: {wall.stairAccessCount}{t('resultExtra', 'stairsUnit')}</span>
                 </div>
               </div>
             </div>
@@ -574,11 +574,11 @@ function PerSideBreakdown({ result }: { result: any }) {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="px-4 py-2 text-left font-medium text-gray-600 w-10">#</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">分類</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">部材名</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">規格</th>
-                    <th className="px-4 py-2 text-center font-medium text-gray-600">単位</th>
-                    <th className="px-4 py-2 text-center font-medium text-gray-600">数量</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('resultExtra', 'colCategory')}</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('resultExtra', 'colName')}</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('resultExtra', 'colSpec')}</th>
+                    <th className="px-4 py-2 text-center font-medium text-gray-600">{t('resultExtra', 'colUnit')}</th>
+                    <th className="px-4 py-2 text-center font-medium text-gray-600">{t('resultExtra', 'colQty')}</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -761,7 +761,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('建物 / Building', canvas.width / 2, canvas.height / 2);
+          ctx.fillText(t('viewer', 'building'), canvas.width / 2, canvas.height / 2);
 
           const tex = new THREE.CanvasTexture(canvas);
           tex.minFilter = THREE.LinearFilter;
@@ -949,7 +949,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices]);
+  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, t]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);

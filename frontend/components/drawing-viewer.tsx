@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Image as ImageIcon, PenTool, Undo2, Trash2, Check } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 export interface TracedPoint {
   /** Fraction of image width (0-1) */
@@ -21,6 +22,7 @@ interface DrawingViewerProps {
 }
 
 export function DrawingViewer({ imageUrl, fileName, resolution, onOutlineTraced, tracedOutline }: DrawingViewerProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [scale, setScale] = useState(1);
@@ -187,7 +189,7 @@ export function DrawingViewer({ imageUrl, fileName, resolution, onOutlineTraced,
             <>
               <button onClick={startTraceMode}
                 className={`p-1 rounded transition-colors ${displayPoints.length > 0 ? 'bg-orange-100 hover:bg-orange-200' : 'hover:bg-gray-200'}`}
-                title="Trace Building Outline / 建物外形をなぞる">
+                title={t('viewer', 'traceOutline')}>
                 <PenTool className={`h-3.5 w-3.5 ${displayPoints.length > 0 ? 'text-orange-600' : 'text-gray-600'}`} />
               </button>
               <button onClick={() => setScale((s) => Math.min(s * 1.25, 10))}
@@ -211,7 +213,7 @@ export function DrawingViewer({ imageUrl, fileName, resolution, onOutlineTraced,
       {/* Trace mode instruction banner */}
       {traceMode && (
         <div className="px-3 py-1.5 bg-orange-50 border-b border-orange-200 text-xs text-orange-700">
-          🖱️ 建物の外壁コーナーを順番にクリック（時計回り） / Click building corners clockwise. Min 3 points.
+          🖱️ {t('viewer', 'traceHint')}
         </div>
       )}
 
