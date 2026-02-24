@@ -29,6 +29,7 @@ import {
   Trash2, CheckCircle2, Maximize2, FileUp,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { drawingsApi, ExtractedDimensions } from '@/lib/api/drawings';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -307,6 +308,10 @@ export function PerimeterTracer({
   const [calibPts, setCalibPts] = useState<{ x: number; y: number }[]>([]);
   const [calibInput, setCalibInput] = useState('');
 
+  /* ───── Server extraction state ─────────────────────────── */
+  const [extracting, setExtracting] = useState(false);
+  const [extractedDims, setExtractedDims] = useState<ExtractedDimensions | null>(null);
+
   /* ───── Canvas view ─────────────────────────────────────── */
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -542,7 +547,7 @@ export function PerimeterTracer({
         const dxf = await parseDxfFile(file);
         const extr = extractSegments(dxf);
         if (extr.segments.length === 0) {
-          setErrorMsg('No line geometry found in DXF file.');
+          setErrorMsg(t('viewer', 'noLineGeometry'));
           return;
         }
 
@@ -596,7 +601,7 @@ export function PerimeterTracer({
       } else if (ext === 'pdf') {
         /* ── PDF ─────────────────────────────────────────── */
         const url = await renderPdfToImage(file);
-        if (!url) { setErrorMsg('Failed to render PDF.'); return; }
+        if (!url) { setErrorMsg(t('viewer', 'pdfRenderFailed')); return; }
         if (blobRef.current) URL.revokeObjectURL(blobRef.current);
         blobRef.current = url;
         const img = new Image();
@@ -607,6 +612,7 @@ export function PerimeterTracer({
         setCanvasH(img.naturalHeight);
         setFileMode('image');
         setPhase('loaded');
+        attemptServerExtraction(file);
 
       } else {
         /* ── Image ────────────────────────────────────────── */
@@ -621,13 +627,46 @@ export function PerimeterTracer({
         setCanvasH(img.naturalHeight);
         setFileMode('image');
         setPhase('loaded');
+        attemptServerExtraction(file);
       }
     } catch (err) {
-      setErrorMsg(`Processing error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      setErrorMsg(`${t('viewer', 'processingError')}: ${err instanceof Error ? err.message : 'Unknown'}`);
     } finally {
       setIsLoading(false);
     }
-  }, [resetTracer]);
+  }, [resetTracer, t]);
+
+  const attemptServerExtraction = useCallback(async (file: File) => {
+    setExtracting(true);
+    try {
+      const result = await drawingsApi.upload(file, 'perimeter-trace');
+      if (result.extractedDimensions) {
+        setExtractedDims(result.extractedDimensions);
+        const dims = result.extractedDimensions;
+        const wallOrder = [dims.walls.north, dims.walls.east, dims.walls.south, dims.walls.west];
+        const validWalls = wallOrder.filter(w => w && w.lengthMm > 0);
+        if (validWalls.length >= 2) {
+          const newDims: Record<number, number> = {};
+          validWalls.forEach((w, i) => {
+            if (w) {
+              newDims[i] = w.lengthMm;
+              onSegmentEdit?.(i, w.lengthMm);
+            }
+          });
+          setManualDims(prev => ({ ...prev, ...newDims }));
+        }
+        if (dims.buildingHeightMm && dims.buildingHeightMm > 0) {
+          onBuildingHeightChange?.(dims.buildingHeightMm);
+        } else if (dims.estimatedBuildingHeightMm && dims.estimatedBuildingHeightMm > 0) {
+          onBuildingHeightChange?.(dims.estimatedBuildingHeightMm);
+        }
+      }
+    } catch {
+      // Server extraction is best-effort; user can still trace manually
+    } finally {
+      setExtracting(false);
+    }
+  }, [onSegmentEdit, onBuildingHeightChange]);
 
   /* ═══════════════════════════════════════════════════════════
      CANVAS INTERACTION
@@ -899,7 +938,7 @@ export function PerimeterTracer({
           {isLoading ? (
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="h-14 w-14 animate-spin text-blue-500" />
-              <span className="text-sm text-gray-500">Processing file…</span>
+              <span className="text-sm text-gray-500">{t('viewer', 'processingFile')}</span>
             </div>
           ) : (
             <div
@@ -911,15 +950,12 @@ export function PerimeterTracer({
             >
               <Upload className={`h-16 w-16 mx-auto mb-5 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`} />
               <p className="text-xl font-semibold text-gray-700 mb-2">
-                Drop your drawing here
+                {t('viewer', 'dropDrawing')}
               </p>
-              <p className="text-sm text-gray-400 mb-1">
-                図面ファイルをドロップ、またはクリックして選択
-              </p>
-              <p className="text-sm text-gray-500 mb-6">or click to browse files</p>
+              <p className="text-sm text-gray-500 mb-6">{t('viewer', 'dropOrClick')}</p>
               <div className="flex flex-wrap justify-center gap-2 text-xs">
                 <span className="px-3 py-1.5 bg-green-50 text-green-700 rounded-full border border-green-200 font-medium">
-                  ✅ DXF — auto-detect
+                  ✅ {t('viewer', 'dxfAutoDetect')}
                 </span>
                 <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
                   📄 PDF
@@ -928,7 +964,7 @@ export function PerimeterTracer({
                   🖼 JPG / PNG
                 </span>
                 <span className="px-3 py-1.5 bg-red-50 text-red-600 rounded-full border border-red-200">
-                  ❌ DWG — export as DXF
+                  ❌ {t('viewer', 'dwgExportDxf')}
                 </span>
               </div>
             </div>
@@ -960,7 +996,7 @@ export function PerimeterTracer({
           onClick={handleReset}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
         >
-          <FileUp className="h-3.5 w-3.5" /> New File
+          <FileUp className="h-3.5 w-3.5" /> {t('viewer', 'newFile')}
         </button>
 
         {fileMode === 'image' && !calib && calibPhase === 'off' && (
@@ -968,12 +1004,12 @@ export function PerimeterTracer({
             onClick={() => { setCalibPhase('point1'); setCalibPts([]); }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 text-amber-800"
           >
-            <Ruler className="h-3.5 w-3.5" /> Calibrate Scale
+            <Ruler className="h-3.5 w-3.5" /> {t('viewer', 'calibrateScale')}
           </button>
         )}
         {calib && (
           <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
-            <CheckCircle2 className="h-3 w-3" /> Scale: {calib.mmPerPixel.toFixed(2)} mm/px
+            <CheckCircle2 className="h-3 w-3" /> {t('viewer', 'scale')}: {calib.mmPerPixel.toFixed(2)} mm/px
           </span>
         )}
 
@@ -982,21 +1018,21 @@ export function PerimeterTracer({
           disabled={points.length === 0 && !closed}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-30"
         >
-          <RotateCcw className="h-3.5 w-3.5" /> Undo
+          <RotateCcw className="h-3.5 w-3.5" /> {t('viewer', 'undo')}
         </button>
         <button
           onClick={handleClear}
           disabled={points.length === 0}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-red-50 text-red-600 disabled:opacity-30"
         >
-          <Trash2 className="h-3.5 w-3.5" /> Clear
+          <Trash2 className="h-3.5 w-3.5" /> {t('viewer', 'clear')}
         </button>
         {!closed && points.length >= 3 && (
           <button
             onClick={() => setClosed(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            <CheckCircle2 className="h-3.5 w-3.5" /> Close Polygon
+            <CheckCircle2 className="h-3.5 w-3.5" /> {t('viewer', 'closePolygon')}
           </button>
         )}
 
@@ -1007,9 +1043,9 @@ export function PerimeterTracer({
               ? 'bg-amber-100 border-amber-400 text-amber-700 font-bold'
               : 'bg-gray-50 border-gray-200 text-gray-400'
             }`}
-            title="Hold Shift for ortho snap (H/V/45°)"
+            title={t('viewer', 'orthoTooltip')}
           >
-            ⊞ ORTHO {shiftHeld ? 'ON' : 'off'}
+            ⊞ {shiftHeld ? t('viewer', 'orthoOn') : t('viewer', 'orthoOff')}
           </span>
         )}
 
@@ -1017,7 +1053,7 @@ export function PerimeterTracer({
           onClick={fitCanvas}
           className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
         >
-          <Maximize2 className="h-3.5 w-3.5" /> Fit
+          <Maximize2 className="h-3.5 w-3.5" /> {t('viewer', 'fit')}
         </button>
         <span className="text-xs text-gray-400 truncate max-w-[200px]">{fileName}</span>
       </div>
@@ -1026,7 +1062,7 @@ export function PerimeterTracer({
       {calibPhase === 'input' && (
         <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 flex-shrink-0">
           <Ruler className="h-4 w-4 text-amber-600 flex-shrink-0" />
-          <span className="text-sm text-amber-800">Real distance between marked points:</span>
+          <span className="text-sm text-amber-800">{t('viewer', 'realDistance')}</span>
           <input
             type="number"
             value={calibInput}
@@ -1040,13 +1076,13 @@ export function PerimeterTracer({
             onClick={handleCalibConfirm}
             className="px-3 py-1 text-xs font-medium bg-amber-600 text-white rounded hover:bg-amber-700"
           >
-            Apply
+            {t('viewer', 'apply')}
           </button>
           <button
             onClick={handleCalibCancel}
             className="px-3 py-1 text-xs bg-white border border-amber-300 rounded hover:bg-amber-50"
           >
-            Cancel
+            {t('viewer', 'cancel')}
           </button>
         </div>
       )}
@@ -1055,11 +1091,11 @@ export function PerimeterTracer({
           <Ruler className="h-3.5 w-3.5 text-amber-600" />
           <span className="text-xs text-amber-700">
             {calibPhase === 'point1'
-              ? 'Click the START of a known dimension line on the drawing'
-              : 'Click the END of the dimension line'}
+              ? t('viewer', 'calibClickStart')
+              : t('viewer', 'calibClickEnd')}
           </span>
           <button onClick={handleCalibCancel} className="ml-auto text-xs text-amber-600 hover:underline">
-            Cancel
+            {t('viewer', 'cancel')}
           </button>
         </div>
       )}
@@ -1069,7 +1105,26 @@ export function PerimeterTracer({
         <div className="flex items-center gap-2 px-4 py-1.5 bg-green-50 border-b border-green-200 flex-shrink-0">
           <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
           <span className="text-xs text-green-700 font-medium">
-            Outer boundary auto-detected — {segments.length} segments, {(totalPerimeter / 1000).toFixed(2)}m perimeter
+            {t('viewer', 'dxfAutoDetected')} — {segments.length} {t('viewer', 'segmentsCount')}, {(totalPerimeter / 1000).toFixed(2)}m {t('viewer', 'perimeterSuffix')}
+          </span>
+        </div>
+      )}
+
+      {/* Server extraction status */}
+      {extracting && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-50 border-b border-blue-200 flex-shrink-0">
+          <Loader2 className="h-3.5 w-3.5 text-blue-600 animate-spin" />
+          <span className="text-xs text-blue-700 font-medium">
+            {t('viewer', 'extractingDims')}
+          </span>
+        </div>
+      )}
+      {!extracting && extractedDims && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-green-50 border-b border-green-200 flex-shrink-0">
+          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+          <span className="text-xs text-green-700 font-medium">
+            {t('viewer', 'extractionComplete')}
+            {extractedDims.parsedDimensionsMm.length > 0 && ` — ${extractedDims.parsedDimensionsMm.length} ${t('viewer', 'segmentsCount')}`}
           </span>
         </div>
       )}
@@ -1381,7 +1436,7 @@ export function PerimeterTracer({
                     onMouseUp={e => e.stopPropagation()}
                   >
                     <div className="text-[11px] font-bold text-blue-600">
-                      {seg.fromLabel}→{seg.toLabel} Length
+                      {seg.fromLabel}→{seg.toLabel}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -1432,7 +1487,7 @@ export function PerimeterTracer({
                         onClick={() => setEditingSegIdx(null)}
                         className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 border border-gray-300"
                       >
-                        Cancel
+                        {t('viewer', 'cancel')}
                       </button>
                     </div>
                   </div>
@@ -1466,20 +1521,17 @@ export function PerimeterTracer({
           {points.length === 0 && !closed && calibPhase === 'off' && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="bg-white/90 backdrop-blur-sm rounded-xl px-8 py-5 shadow-lg text-center max-w-sm">
-                <p className="text-sm font-medium text-gray-700 mb-1">
-                  Click on building corners to trace the perimeter
-                </p>
-                <p className="text-xs text-gray-500 mb-2">
-                  建物のコーナーをクリックして外周をトレースします
+                <p className="text-sm font-medium text-gray-700 mb-3">
+                  {t('viewer', 'clickCorners')}
                 </p>
                 <div className="mt-3 space-y-1 text-xs text-gray-500">
-                  <p>🧲 <b>Auto-snap</b> — cursor aligns to existing corners</p>
-                  <p>⇧ <b>Hold Shift</b> — lock to straight lines (0° / 45° / 90°)</p>
-                  <p>🖱 <b>Right-click</b> — close polygon</p>
+                  <p>🧲 {t('viewer', 'autoSnap')}</p>
+                  <p>⇧ {t('viewer', 'holdShift')}</p>
+                  <p>🖱 {t('viewer', 'rightClick')}</p>
                 </div>
                 {fileMode === 'image' && !calib && (
                   <p className="text-xs text-amber-600 mt-3">
-                    💡 Tip: Use &quot;Calibrate Scale&quot; to auto-calculate dimensions
+                    💡 {t('viewer', 'calibrateTip')}
                   </p>
                 )}
               </div>
@@ -1493,18 +1545,18 @@ export function PerimeterTracer({
           {/* ── Header with stats + Fit ────────────────────── */}
           <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
             <span className="text-xs text-gray-500">
-              Points: <b className="text-gray-700">{points.length}</b>
+              {t('viewer', 'points')}: <b className="text-gray-700">{points.length}</b>
             </span>
             <span className="text-xs text-gray-500">
-              Segments: <b className="text-gray-700">{segments.length}</b>
+              {t('viewer', 'segments')}: <b className="text-gray-700">{segments.length}</b>
             </span>
-            {closed && <span className="text-xs text-green-600 font-semibold">● Closed</span>}
-            {!closed && points.length > 0 && <span className="text-xs text-amber-500">○ Open</span>}
+            {closed && <span className="text-xs text-green-600 font-semibold">● {t('viewer', 'closed')}</span>}
+            {!closed && points.length > 0 && <span className="text-xs text-amber-500">○ {t('viewer', 'open')}</span>}
             <button
               onClick={fitCanvas}
               className="ml-auto flex items-center gap-1 px-2 py-1 text-[10px] bg-white border border-gray-300 rounded hover:bg-gray-50"
             >
-              <Maximize2 className="h-3 w-3" /> Fit
+              <Maximize2 className="h-3 w-3" /> {t('viewer', 'fit')}
             </button>
           </div>
 
@@ -1553,7 +1605,7 @@ export function PerimeterTracer({
                   </svg>
                 ) : (
                   <div className="h-full flex items-center justify-center text-xs text-gray-400">
-                    Click at least 2 corners to start
+                    {t('viewer', 'clickAtLeast2')}
                   </div>
                 )}
               </div>
@@ -1563,7 +1615,7 @@ export function PerimeterTracer({
             {segments.length > 0 && (
               <div className="px-3 py-3 border-b border-gray-100">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  SEGMENTS / セグメント
+                  {t('viewer', 'segmentsHeader')}
                 </h3>
                 <div className="space-y-1">
                   {segments.map((seg, i) => (
@@ -1623,7 +1675,7 @@ export function PerimeterTracer({
             {closed && (
               <div className="px-3 py-3 border-b border-gray-100">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Building Height / 建物の高さ
+                  {t('viewer', 'buildingHeight')}
                 </h3>
                 <div className="flex items-center gap-2">
                   <input
@@ -1669,11 +1721,11 @@ export function PerimeterTracer({
               <div className="px-3 py-3 bg-green-50 border-b border-gray-100">
                 <div className="flex items-center gap-2 mb-1">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span className="text-sm font-semibold text-green-800">Ready to Calculate</span>
+                  <span className="text-sm font-semibold text-green-800">{t('viewer', 'readyToCalc')}</span>
                 </div>
                 <div className="text-xs text-green-700 space-y-0.5">
-                  <p>Perimeter: {(totalPerimeter / 1000).toFixed(2)} m ({segments.length} walls)</p>
-                  <p>Height: {(buildingHeightMm / 1000).toFixed(1)} m</p>
+                  <p>{t('viewer', 'perimeterLabel')}: {(totalPerimeter / 1000).toFixed(2)} m ({segments.length} {t('viewer', 'walls')})</p>
+                  <p>{t('viewer', 'heightLabel')}: {(buildingHeightMm / 1000).toFixed(1)} m</p>
                 </div>
               </div>
             )}
@@ -1682,12 +1734,12 @@ export function PerimeterTracer({
           {/* ── Bottom guidance ─────────────────────────────── */}
           <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-400 flex-shrink-0">
             {closed
-              ? 'Polygon closed. Edit dimensions above. Drag points on drawing to adjust shape.'
+              ? t('viewer', 'guideClosed')
               : points.length === 0
-                ? 'Click on drawing corners to begin. Hold Shift for straight lines (H/V/45°).'
+                ? t('viewer', 'guideStart')
                 : points.length < 3
-                  ? `Click corner ${ptLabel(points.length)}. Hold Shift = ortho lock. Need ${3 - points.length} more to close.`
-                  : `Click ${ptLabel(points.length)} or near A to close. Shift = straight lines. Right-click = close.`}
+                  ? `${ptLabel(points.length)}${t('viewer', 'guideNeedMore')}${3 - points.length}${t('viewer', 'guideNeedMoreSuffix')}`
+                  : `${ptLabel(points.length)}${t('viewer', 'guideCloseHint')}`}
           </div>
         </div>
       </div>
