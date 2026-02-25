@@ -21,7 +21,13 @@ export default function LoginPage() {
       router.push('/dashboard');
     },
     onError: (err: any) => {
-      setError(err.response?.data?.message || t('login', 'failed'));
+      // No response = network error (wrong URL, CORS, or backend unreachable)
+      const msg = err.response?.data?.message;
+      if (!err.response) {
+        setError(t('login', 'networkError'));
+        return;
+      }
+      setError(msg || t('login', 'failed'));
     },
   });
 

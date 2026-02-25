@@ -112,8 +112,8 @@ npm run build
 
 ## Production Deployment
 
-1. Set `NEXT_PUBLIC_API_URL` to production API URL
+1. Set `NEXT_PUBLIC_BACKEND_URL` (or `NEXT_PUBLIC_API_URL`) to your backend API base URL, e.g. `https://YOUR-APP.onrender.com/api/v1` if the backend runs on Render. **If this is wrong or unset, login will fail with "Cannot reach the server".**
 2. Build the application: `npm run build`
 3. Start production server: `npm start`
 
-Or deploy to Vercel/Netlify for automatic deployments.
+Or deploy to Vercel/Netlify; set the env var in the dashboard and redeploy so the frontend calls your Render backend.

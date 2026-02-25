@@ -38,6 +38,7 @@ export const translations = {
     loginButton: { ja: 'ログイン', en: 'Sign In' },
     loggingIn: { ja: 'ログイン中...', en: 'Signing in...' },
     failed: { ja: 'ログインに失敗しました。バックエンドが起動していない可能性があります。', en: 'Login failed. The backend server may not be running.' },
+    networkError: { ja: 'サーバーに接続できません。バックエンドが Render 等で動いている場合は、フロントの環境変数 NEXT_PUBLIC_BACKEND_URL をバックエンドのURL（例: https://xxx.onrender.com/api/v1）に設定して再ビルドしてください。', en: 'Cannot reach the server. If the backend is running on Render etc., set the frontend env NEXT_PUBLIC_BACKEND_URL to the backend URL (e.g. https://xxx.onrender.com/api/v1) and rebuild.' },
     devMode: { ja: '🔧 開発モードで入る（バックエンド不要）', en: '🔧 Enter Dev Mode (no backend needed)' },
     devModeHint: { ja: 'バックエンド未接続時に画面を確認できます', en: 'Preview the UI without a backend connection' },
   },

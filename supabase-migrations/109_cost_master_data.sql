@@ -76,14 +76,4 @@ FROM (VALUES
 CROSS JOIN (SELECT id FROM users LIMIT 1) AS u
 WHERE EXISTS (SELECT 1 FROM users LIMIT 1)
   AND NOT EXISTS (SELECT 1 FROM cost_master_data LIMIT 1)
-ON CONFLICT DO NOTHING;
-
--- (idx_cost_master_category_region_year is unique on category, region, fiscal_year;
---  we didn't add a unique constraint name for ON CONFLICT, so we rely on the unique index.
---  PostgreSQL uses the unique index for ON CONFLICT when no constraint name is given only
---  if the conflict target is specified. So we need to add ON CONFLICT (category, region, fiscal_year) DO NOTHING.)
--- Fix: add explicit conflict target
-</think>
-Fixing the seed: use ON CONFLICT (category, region, fiscal_year) for the unique index.
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-StrReplace
+ON CONFLICT (category, region, fiscal_year) DO NOTHING;
