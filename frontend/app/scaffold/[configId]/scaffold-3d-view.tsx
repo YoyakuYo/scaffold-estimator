@@ -48,6 +48,16 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
+// Span size (mm) → plank/anchi color (distinct so 600/900/1200/1500/1800 are identifiable)
+const SPAN_COLORS: Record<number, number> = {
+  600: 0xfbbf24,   // amber (default)
+  900: 0x22c55e,   // green
+  1200: 0x3b82f6,  // blue
+  1500: 0xa855f7,  // purple
+  1800: 0xef4444,  // red
+};
+const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
+
 /**
  * Build polygon vertices from stored vertices or regular polygon fallback.
  * Returns 3D positions on XZ plane (in meters). Always NaN-safe.
@@ -309,6 +319,20 @@ export default function Scaffold3DView({ result }: { result: any }) {
       const pipeMat = new THREE.MeshStandardMaterial({ color: C.pipe, metalness: 0.6, roughness: 0.35 });
       const pipeDarkMat = new THREE.MeshStandardMaterial({ color: C.pipeDark, metalness: 0.5, roughness: 0.4 });
       const plankMat = new THREE.MeshStandardMaterial({ color: C.plank, metalness: 0.3, roughness: 0.6 });
+      const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
+      for (const span of STANDARD_SPANS) {
+        spanPlankMats[span] = new THREE.MeshStandardMaterial({
+          color: SPAN_COLORS[span] ?? C.plank,
+          metalness: 0.3,
+          roughness: 0.6,
+        });
+      }
+      const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
+        const closest = STANDARD_SPANS.reduce((a, b) =>
+          Math.abs(a - spanMm) <= Math.abs(b - spanMm) ? a : b
+        );
+        return spanPlankMats[closest] ?? plankMat;
+      };
       const jackMat = new THREE.MeshStandardMaterial({ color: C.jackBase, metalness: 0.7, roughness: 0.3 });
       const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.4, roughness: 0.5 });
       const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.3, roughness: 0.5 });
@@ -477,6 +501,41 @@ export default function Scaffold3DView({ result }: { result: any }) {
         return spr;
       }
 
+      /** Small indicative label (span size, level, or corner distance). */
+      function addTextLabel(
+        parent: THREE.Object3D,
+        text: string,
+        x: number, y: number, z: number,
+        scale = 0.4,
+        bgColor = 'rgba(0,0,0,0.7)',
+      ): THREE.Sprite | null {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        canvas.width = 256;
+        canvas.height = 128;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        ctx.roundRect(8, 8, canvas.width - 16, canvas.height - 16, 12);
+        ctx.fill();
+        ctx.font = 'bold 72px Arial';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.needsUpdate = true;
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const spr = new THREE.Sprite(mat);
+        spr.position.set(x, y, z);
+        spr.scale.set(scale, scale * 0.5, 1);
+        parent.add(spr);
+        return spr;
+      }
+
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // ══════════════════════════════════════════════════════
@@ -542,6 +601,12 @@ export default function Scaffold3DView({ result }: { result: any }) {
           addPipe(group, px, baseY, 0, px, baseY, widthM, pipeDarkMat);
         }
 
+        // ── Floor/level indicators (L1, L2, L3…) so first floor / second level is visible ──
+        for (let lv = 1; lv <= levels; lv++) {
+          const levelY = JACK_H + (lv - 0.5) * LEVEL_H;
+          addTextLabel(group, `L${lv}`, postX[0] - 0.28, levelY, widthM / 2, 0.32, 'rgba(0,60,120,0.85)');
+        }
+
         // ── Stair positions ────────────────────────────
         const stairCount = wall.stairAccessCount || 0;
         let uniqueStairPos: number[] = [];
@@ -603,11 +668,14 @@ export default function Scaffold3DView({ result }: { result: any }) {
               addPipe(group, x1, tesuriY2, widthM, x2, tesuriY2, widthM, pipeMat);
             }
 
-            // Plank / Anchi (skip stair spans)
+            // Plank / Anchi — color by span size (600/900/1200/1500/1800)
+            const spanMm = spans[i];
+            const plankColorMat = getPlankMat(spanMm);
             if (!isStairSpan) {
-              addBox(group, midX, y + 0.015, widthM / 2, spanM - 0.04, 0.03, widthM * 0.9, plankMat);
+              addBox(group, midX, y + 0.015, widthM / 2, spanM - 0.04, 0.03, widthM * 0.9, plankColorMat);
               addBox(group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, 0.035, 0.02, habakiMat);
               addBox(group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, 0.035, 0.02, habakiMat);
+              addTextLabel(group, String(spanMm), midX, y + 0.22, widthM / 2, 0.35);
             }
 
             // Habaki / Toe boards
@@ -914,7 +982,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
           const spanLen = Math.max(CORNER_SPAN_M - 0.04, 0.2);
           const plankW = Math.min(widthM * 0.9, 0.55);
           const geo = new THREE.BoxGeometry(spanLen, 0.03, plankW);
-          const mesh = new THREE.Mesh(geo, plankMat);
+          const mesh = new THREE.Mesh(geo, getPlankMat(600));
           mesh.position.set(midX, plankY, midZ);
           mesh.rotation.y = angle;
           mesh.castShadow = true;
@@ -939,6 +1007,13 @@ export default function Scaffold3DView({ result }: { result: any }) {
             scene.add(habakiMesh);
           }
         }
+
+        // Corner joint distance: length between last 2 posts of one wall and first 2 of the other (indicative)
+        const gapMm = Math.round(((gapR0 + gapR1) / 2) * 1000);
+        const cornerMidX = (prevR0.x + prevR1.x + currR0.x + currR1.x) / 4;
+        const cornerMidZ = (prevR0.z + prevR1.z + currR0.z + currR1.z) / 4;
+        const cornerLabelY = JACK_H + (cornerLevels * LEVEL_H) / 2 + 0.35;
+        addTextLabel(scene, `${gapMm}`, cornerMidX, cornerLabelY, cornerMidZ, 0.4, 'rgba(120,0,80,0.85)');
       }
 
       // ── Building outline at ground level ─────────────
@@ -1284,6 +1359,22 @@ export default function Scaffold3DView({ result }: { result: any }) {
             </span>
           </div>
           <div className="text-xs text-gray-500">{t('result', 'dragHint')} / Click wall segment to focus</div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap mb-2 text-xs text-gray-600">
+          <span className="font-medium">Span (plank color):</span>
+          {[600, 900, 1200, 1500, 1800].map((mm) => (
+            <span key={mm} className="inline-flex items-center gap-1">
+              <span
+                className="w-3 h-3 rounded-full border border-gray-400"
+                style={{ backgroundColor: '#' + (SPAN_COLORS[mm] ?? 0xfbbf24).toString(16).padStart(6, '0') }}
+              />
+              {mm}
+            </span>
+          ))}
+          <span className="text-gray-400">|</span>
+          <span>L1,L2… = floor level</span>
+          <span className="text-gray-400">|</span>
+          <span>Corner = joint distance (mm)</span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <button
