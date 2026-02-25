@@ -32,7 +32,6 @@ const C = {
   stair:      0x60a5fa,
   stairRail:  0x3b82f6,
   habaki:     0xf59e0b,
-  pattanko:   0xd97706,  // パッタンコ — small filler plank at corners
   frame:      0xb0c4de,
   frameDark:  0x7a93af,
   ground:     0xf8fafc,
@@ -312,7 +311,6 @@ export default function Scaffold3DView({ result }: { result: any }) {
       const plankMat = new THREE.MeshStandardMaterial({ color: C.plank, metalness: 0.3, roughness: 0.6 });
       const jackMat = new THREE.MeshStandardMaterial({ color: C.jackBase, metalness: 0.7, roughness: 0.3 });
       const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.4, roughness: 0.5 });
-      const pattankoMat = new THREE.MeshStandardMaterial({ color: C.pattanko, metalness: 0.25, roughness: 0.65 });
       const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.3, roughness: 0.5 });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
       const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.55, roughness: 0.3 });
@@ -365,29 +363,6 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const geo = new THREE.CylinderGeometry(PIPE_R * 2.5, PIPE_R * 2.5, 0.02, 12);
         const mesh = new THREE.Mesh(geo, pipeDarkMat);
         mesh.position.set(x, y, z);
-        parent.add(mesh);
-      }
-
-      /** パッタンコ (PATTANKO): small filler plank bridging a gap in the XZ plane at height y. */
-      function addPattanko(
-        parent: THREE.Object3D,
-        ax: number, az: number,
-        bx: number, bz: number,
-        y: number,
-        mat: THREE.MeshStandardMaterial,
-      ) {
-        const gap = Math.hypot(bx - ax, bz - az);
-        if (gap < 0.02) return;
-        const midX = (ax + bx) / 2;
-        const midZ = (az + bz) / 2;
-        const thickness = 0.03;
-        const width = Math.min(0.25, gap * 0.8);
-        const geo = new THREE.BoxGeometry(gap, thickness, width);
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(midX, y, midZ);
-        mesh.rotation.y = Math.atan2(bz - az, bx - ax);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
         parent.add(mesh);
       }
 
@@ -873,7 +848,9 @@ export default function Scaffold3DView({ result }: { result: any }) {
         clickTargetsRef.current.push(clickMesh);
       }
 
-      // ── Corner connectors — bridge the gap between adjacent wall scaffolds ──
+      // ── Corner connectors: full corner span (joined scaffold, walkable) ──
+      // Use last 2 posts of prev wall + first 2 of curr; one standard span (600mm) with full anchi, brace, tesuri.
+      const CORNER_SPAN_M = 0.6; // 600mm standard span so corner is a proper walkable bay
       for (let j = 0; j < walls.length; j++) {
         const prevIdx = (j - 1 + walls.length) % walls.length;
         const nPrev = wallNormals[prevIdx];
@@ -883,7 +860,6 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const vx = verts[j].x - cx;
         const vz = verts[j].z - cz;
 
-        // Two scaffold post rows at this corner for the previous wall (end) and current wall (start)
         const prevR0 = { x: vx + nPrev.nx * widthM, z: vz + nPrev.nz * widthM };
         const prevR1 = { x: vx + nPrev.nx * 2 * widthM, z: vz + nPrev.nz * 2 * widthM };
         const currR0 = { x: vx + nCurr.nx * widthM, z: vz + nCurr.nz * widthM };
@@ -898,12 +874,12 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const cornerLevels = Math.max(prevLevels, currLevels);
         const cornerH = JACK_H + cornerLevels * LEVEL_H + topGuardM;
 
-        // Vertical corner posts (full height) at each of the 4 positions
+        // Vertical corner posts (4 posts: last 2 of prev, first 2 of curr)
         for (const p of [prevR0, prevR1, currR0, currR1]) {
           addPipe(scene, p.x, JACK_H, p.z, p.x, cornerH, p.z, pipeMat, PIPE_R * 0.9);
         }
 
-        // Horizontal connecting pipes at each level + base + guard
+        // Horizontal pipes: along the gap (tesuri) + width yokoji so corner is fully connected
         const heights = [JACK_H + NEGR_H];
         for (let lv = 1; lv <= cornerLevels; lv++) heights.push(JACK_H + lv * LEVEL_H);
         heights.push(cornerH);
@@ -912,13 +888,56 @@ export default function Scaffold3DView({ result }: { result: any }) {
         for (const y of heights) {
           if (gapR0 >= 0.01) addPipe(scene, prevR0.x, y, prevR0.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.8);
           if (gapR1 >= 0.01) addPipe(scene, prevR1.x, y, prevR1.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.8);
+          addPipe(scene, prevR0.x, y, prevR0.z, prevR1.x, y, prevR1.z, pipeDarkMat, PIPE_R * 0.9);
+          addPipe(scene, currR0.x, y, currR0.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.9);
         }
 
-        // パッタンコ (PATTANKO): small filler planks at each level so the corner is not empty
+        // Full corner span at each level: X-brace, tesuri (above), full anchi, habaki
         for (let lv = 1; lv <= cornerLevels; lv++) {
-          const plankY = JACK_H + lv * LEVEL_H + 0.015;
-          if (gapR0 >= 0.02) addPattanko(scene, prevR0.x, prevR0.z, currR0.x, currR0.z, plankY, pattankoMat);
-          if (gapR1 >= 0.02) addPattanko(scene, prevR1.x, prevR1.z, currR1.x, currR1.z, plankY, pattankoMat);
+          const baseYLv = JACK_H + (lv - 1) * LEVEL_H;
+          const y = JACK_H + lv * LEVEL_H;
+          const plankY = y + 0.015;
+
+          // X-brace in corner bay (same as wall span: two diagonals)
+          addPipe(scene, prevR0.x, baseYLv, prevR0.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, prevR0.x, y, prevR0.z, currR1.x, baseYLv, currR1.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, prevR1.x, baseYLv, prevR1.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, prevR1.x, y, prevR1.z, currR0.x, baseYLv, currR0.z, pipeDarkMat, PIPE_R * 0.7);
+
+          // Full anchi (踏板): one plank spanning the corner bay, walkable
+          const midX = (prevR0.x + prevR1.x + currR0.x + currR1.x) / 4;
+          const midZ = (prevR0.z + prevR1.z + currR0.z + currR1.z) / 4;
+          const angle = Math.atan2(
+            (currR0.z + currR1.z) / 2 - (prevR0.z + prevR1.z) / 2,
+            (currR0.x + currR1.x) / 2 - (prevR0.x + prevR1.x) / 2,
+          );
+          const spanLen = Math.max(CORNER_SPAN_M - 0.04, 0.2);
+          const plankW = Math.min(widthM * 0.9, 0.55);
+          const geo = new THREE.BoxGeometry(spanLen, 0.03, plankW);
+          const mesh = new THREE.Mesh(geo, plankMat);
+          mesh.position.set(midX, plankY, midZ);
+          mesh.rotation.y = angle;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          scene.add(mesh);
+          // Habaki (巾木) at outer and inner edges of corner — length = actual edge
+          const hY = y + 0.06;
+          for (const [ax, az, bx, bz] of [
+            [prevR0.x, prevR0.z, currR0.x, currR0.z],
+            [prevR1.x, prevR1.z, currR1.x, currR1.z],
+          ]) {
+            const edgeLen = Math.hypot(bx - ax, bz - az);
+            if (edgeLen < 0.02) continue;
+            const hx = (ax + bx) / 2;
+            const hz = (az + bz) / 2;
+            const habakiGeo = new THREE.BoxGeometry(edgeLen - 0.02, 0.1, 0.015);
+            const habakiMesh = new THREE.Mesh(habakiGeo, habakiMat);
+            habakiMesh.position.set(hx, hY, hz);
+            habakiMesh.rotation.y = Math.atan2(bz - az, bx - ax);
+            habakiMesh.castShadow = true;
+            habakiMesh.receiveShadow = true;
+            scene.add(habakiMesh);
+          }
         }
       }
 
