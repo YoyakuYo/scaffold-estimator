@@ -59,7 +59,20 @@ function buildPolygonVertices(
   storedVertices?: Array<{ xFrac: number; yFrac: number }>,
 ): { x: number; z: number }[] {
   const n = walls.length;
-  if (n < 3) return [];
+  if (n < 1) return [];
+
+  // ── 1 wall: single edge (2 vertices) ──
+  if (n === 1) {
+    const lenM = Math.max(walls[0].wallLengthMm, 600) / 1000;
+    return [{ x: 0, z: 0 }, { x: lenM, z: 0 }];
+  }
+
+  // ── 2 walls: L-shape (3 vertices) ──
+  if (n === 2) {
+    const len0 = Math.max(walls[0].wallLengthMm, 600) / 1000;
+    const len1 = Math.max(walls[1].wallLengthMm, 600) / 1000;
+    return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
+  }
 
   // ── Use actual polygon vertices if available & valid ──
   if (storedVertices && storedVertices.length >= n) {
@@ -694,8 +707,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices;
       const verts = buildPolygonVertices(walls, storedVerts);
-      if (verts.length < 3) {
-        setError('Need at least 3 walls to build 3D view');
+      if (verts.length < 2) {
+        setError('Need at least 1 wall to build 3D view');
         return;
       }
 
