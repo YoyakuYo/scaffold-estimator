@@ -51,6 +51,7 @@ const WALL_COLORS_HEX = [
 /**
  * Build polygon vertices from stored vertices or regular polygon fallback.
  * Returns 3D positions on XZ plane (in meters). Always NaN-safe.
+ * Stored vertices may be: (a) mm — divide by 1000; (b) 0–1 fraction (e.g. image outline) — scale to meters from wall lengths; (c) already meters.
  */
 function buildPolygonVertices(
   walls: WallCalculationResult[],
@@ -61,19 +62,40 @@ function buildPolygonVertices(
 
   // ── Use actual polygon vertices if available & valid ──
   if (storedVertices && storedVertices.length >= n) {
-    const verts = storedVertices.slice(0, n).map(v => ({
-      x: (Number.isFinite(v.xFrac) ? v.xFrac : 0) / 1000,
-      z: (Number.isFinite(v.yFrac) ? v.yFrac : 0) / 1000,
+    const raw = storedVertices.slice(0, n).map(v => ({
+      x: Number.isFinite(v.xFrac) ? v.xFrac : 0,
+      z: Number.isFinite(v.yFrac) ? v.yFrac : 0,
     }));
-    // Verify we have actual spread (not all zeros)
-    const xs = verts.map(v => v.x);
-    const zs = verts.map(v => v.z);
+    const xs = raw.map(v => v.x);
+    const zs = raw.map(v => v.z);
     const spread = Math.max(
       Math.max(...xs) - Math.min(...xs),
       Math.max(...zs) - Math.min(...zs),
     );
-    if (spread > 0.01) return verts; // valid — use them
-    // else fall through to fallback
+    if (spread < 1e-6) return []; // degenerate
+
+    // Detect units: fraction 0–1 (e.g. from image outline), mm, or meters
+    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
+    let verts: { x: number; z: number }[];
+
+    if (maxCoord <= 1.1 && spread <= 1.1) {
+      // Likely 0–1 fraction: scale to meters using max wall length as reference
+      const refM = Math.max(...walls.map(w => Math.max(w.wallLengthMm, 600))) / 1000;
+      const scale = refM / Math.max(spread, 0.001);
+      verts = raw.map(v => ({ x: v.x * scale, z: v.z * scale }));
+    } else if (spread > 1000 || maxCoord > 1000) {
+      // Likely mm
+      verts = raw.map(v => ({ x: v.x / 1000, z: v.z / 1000 }));
+    } else {
+      // Assume already in meters (e.g. fallback from another path)
+      verts = raw.map(v => ({ x: v.x, z: v.z }));
+    }
+
+    const spreadM = Math.max(
+      Math.max(...verts.map(v => v.x)) - Math.min(...verts.map(v => v.x)),
+      Math.max(...verts.map(v => v.z)) - Math.min(...verts.map(v => v.z)),
+    );
+    if (spreadM > 0.01) return verts;
   }
 
   // ── Fallback: place walls as a rectangle (4 walls) or regular polygon ──
@@ -700,7 +722,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
         buildWallScaffold(wall, group, spanCaps[i]);
 
         // Scale scaffold to fit exactly on polygon edge so corners join (closed perimeter).
-        // Otherwise wall length (sum of spans) can differ from edge length → gaps/overshoot.
+        // Manual and DXF: edge length from polygon; wall length from spans — scale so end meets next vertex.
         const spansUsed = spanCaps[i] != null && spanCaps[i] < wall.spans.length
           ? wall.spans.slice(0, spanCaps[i])
           : wall.spans;
@@ -1247,7 +1269,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
           </button>
           <button onClick={handleExportObj} disabled={!!exporting || !ready}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
-            title="Wavefront OBJ — CAD Software">
+            title="3D CAD export (OBJ). For 2D DXF use the 2D tab.">
             <FileCode className="h-3.5 w-3.5" /> {exporting === 'obj' ? '...' : 'OBJ'}
           </button>
         </div>
