@@ -453,7 +453,7 @@ function QuotationTable({ result }: { result: any }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Span Info per wall */}
+      {/* Span Info per wall + wall dimensions + floor labels */}
       <div className="p-4 bg-gray-50 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-600 mb-2">{t('result', 'spanConfig')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -465,13 +465,17 @@ function QuotationTable({ result }: { result: any }) {
             const spanStr = Object.entries(spanGroups)
               .map(([sz, ct]) => `${sz}mm×${ct}`)
               .join(' + ');
+            const scaffoldH = wall.levelCalc.topPlankHeightMm + wall.levelCalc.topGuardHeightMm;
             return (
               <div key={`wall-${idx}-${wall.side}`} className="bg-white rounded-lg p-2 border border-gray-100">
                 <div className="font-semibold text-gray-700">
                   {locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1))}
                 </div>
                 <div className="text-gray-500">
-                  {t('result', 'wallLengthLabel')} {wall.wallLengthMm.toLocaleString()}mm | {wall.totalSpans}{t('result', 'spansLabel')}
+                  {t('result', 'wallLengthLabel')} {wall.wallLengthMm.toLocaleString()}mm | 高さ {scaffoldH.toLocaleString()}mm
+                </div>
+                <div className="text-gray-500">
+                  {wall.totalSpans}{t('result', 'spansLabel')} | {wall.levelCalc.fullLevels}{t('result', 'levelsUnit')}
                 </div>
                 <div className="text-gray-400">{spanStr}</div>
                 <div className="text-gray-400">
@@ -481,6 +485,31 @@ function QuotationTable({ result }: { result: any }) {
             );
           })}
         </div>
+        {/* Floor labels (1階, 2階, ... with height range) */}
+        {result.totalLevels > 0 && (
+          <div className="mt-4 pt-3 border-t border-gray-200">
+            <h4 className="text-xs font-semibold text-gray-500 mb-2">
+              {locale === 'ja' ? '階（フロア）' : 'Floors'}
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: result.totalLevels }, (_, i) => i + 1).map((f) => {
+                const levelHeightMm = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm || 1800) : 1800;
+                const from = (f - 1) * levelHeightMm;
+                const to = f * levelHeightMm;
+                const label = f === 1 ? (locale === 'ja' ? '1階' : '1st') : f === 2 ? (locale === 'ja' ? '2階' : '2nd') : locale === 'ja' ? `${f}階` : `${f}th`;
+                return (
+                  <span
+                    key={f}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 text-xs text-gray-700"
+                  >
+                    <span className="font-medium">{label}</span>
+                    <span className="text-gray-400">{from.toLocaleString()}～{to.toLocaleString()}mm</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Material Table */}
@@ -522,7 +551,7 @@ function QuotationTable({ result }: { result: any }) {
                 key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
               }
               const perWall = wallMaps.map((m) => m.get(key) || 0);
-              const total = perWall.reduce((a, b) => a + b, 0);
+              const total = comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
               const catLabel = locale === 'ja' ? (comp.category || '') : (comp.categoryEn || comp.category || '');
 
               return (

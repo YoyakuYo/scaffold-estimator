@@ -59,6 +59,30 @@ export class ScaffoldExcelService {
     }
 
     sheet.addRow(['段数', `${result.totalLevels}段`]);
+    const levelHeightMm = isWakugumi ? (result.frameSizeMm || 1800) : 1800;
+    sheet.addRow(['階高', `${levelHeightMm}mm`]);
+    sheet.addRow([]);
+
+    // ─── Wall dimensions (length & height per side) ───────
+    sheet.addRow(['壁面寸法']);
+    const dimHeader = sheet.addRow(['面', '壁長 (mm)', '足場高さ (mm)', '段数']);
+    dimHeader.font = { bold: true };
+    for (const w of result.walls) {
+      const scaffoldH = w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm;
+      sheet.addRow([w.sideJp, w.wallLengthMm, scaffoldH, w.levelCalc.fullLevels]);
+    }
+    sheet.addRow([]);
+
+    // ─── Floor labels (1階, 2階, ... with height range) ───
+    sheet.addRow(['階（フロア）']);
+    const floorHeader = sheet.addRow(['階', '高さ範囲 (mm)', '備考']);
+    floorHeader.font = { bold: true };
+    for (let f = 1; f <= result.totalLevels; f++) {
+      const from = (f - 1) * levelHeightMm;
+      const to = f * levelHeightMm;
+      const label = f === 1 ? '1階' : f === 2 ? '2階' : f === 3 ? '3階' : `${f}階`;
+      sheet.addRow([label, `${from} ～ ${to}`, f === 1 ? '1st floor' : f === 2 ? '2nd floor' : `${f}th floor`]);
+    }
     sheet.addRow([]);
 
     // ─── Material Table Header ───────────────────────────
@@ -139,7 +163,7 @@ export class ScaffoldExcelService {
       }
 
       const perWallQty = wallMaps.map(m => m.get(key) || 0);
-      const total = perWallQty.reduce((a, b) => a + b, 0);
+      const total = comp.materialCode === 'PATTANKO' ? comp.quantity : perWallQty.reduce((a, b) => a + b, 0);
 
       const dataRow = sheet.addRow([
         rowNum,
@@ -207,6 +231,55 @@ export class ScaffoldExcelService {
         `構成: ${spanSummary}`,
       ]);
     }
+
+    // ─── Sheet 2: Per-floor, per-side breakdown (for transport) ──
+    const sheet2 = workbook.addWorksheet('階・面別内訳', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const wallNames2 = result.walls.map(w => w.sideJp);
+    const numCorners = result.walls.length;
+    const levelH = levelHeightMm;
+
+    for (let floor = 1; floor <= result.totalLevels; floor++) {
+      const floorLabel = floor === 1 ? '1階' : floor === 2 ? '2階' : `${floor}階`;
+      const rangeLabel = `${(floor - 1) * levelH}～${floor * levelH}mm`;
+      sheet2.addRow([]);
+      const titleRow = sheet2.addRow([`${floorLabel} (${rangeLabel}) — 積算内訳（運搬用）`]);
+      titleRow.font = { bold: true, size: 12 };
+      sheet2.mergeCells(titleRow.number, 1, titleRow.number, wallNames2.length + 3);
+      const subHeader = sheet2.addRow(['部材名', '規格', ...wallNames2, '角部', '合計']);
+      subHeader.font = { bold: true };
+      subHeader.eachCell((c) => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+        c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      });
+
+      for (const comp of sortedSummary) {
+        const key = comp.materialCode || (comp.category === '布材' ? `${comp.category}-${comp.sizeSpec}` : `${comp.type}-${comp.sizeSpec}`);
+        const perWallQty = wallMaps.map(m => m.get(key) || 0);
+        const isPattanko = comp.materialCode === 'PATTANKO';
+        const perWallPerLevel = result.walls.map((w, i) => {
+          const L = w.levelCalc.fullLevels;
+          if (L <= 0) return 0;
+          if (isPattanko) return 0;
+          return Math.round((perWallQty[i] || 0) / L);
+        });
+        const cornerPerLevel = isPattanko ? numCorners * 2 : 0;
+        const rowTotal = perWallPerLevel.reduce((a, b) => a + b, 0) + cornerPerLevel;
+        if (rowTotal <= 0) continue;
+        sheet2.addRow([
+          comp.nameJp,
+          comp.sizeSpec,
+          ...perWallPerLevel,
+          isPattanko ? cornerPerLevel : '',
+          rowTotal,
+        ]);
+      }
+    }
+
+    sheet2.getColumn(1).width = 22;
+    sheet2.getColumn(2).width = 14;
+    for (let i = 0; i < wallNames2.length + 2; i++) sheet2.getColumn(3 + i).width = 10;
 
     // ─── Column Widths ───────────────────────────────────
     sheet.getColumn(1).width = 5;    // No

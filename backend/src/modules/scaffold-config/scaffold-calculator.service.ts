@@ -154,6 +154,24 @@ export class ScaffoldCalculatorService {
     // Get max levels across all walls for summary
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
+    // PATTANKO (パッタンコ): small filler plank at each corner, 2 per corner per level (not per-wall; total only)
+    const numCorners = wallResults.length;
+    const pattankoQty = numCorners * 2 * maxLevels;
+    if (pattankoQty > 0) {
+      summary.push({
+        type: 'pattanko',
+        category: '踏板',
+        categoryEn: 'Plank',
+        name: 'PATTANKO (corner filler)',
+        nameJp: 'パッタンコ (PATTANKO)',
+        sizeSpec: '角部用',
+        unit: '枚',
+        quantity: pattankoQty,
+        sortOrder: 500,
+        materialCode: 'PATTANKO',
+      });
+    }
+
     this.logger.log(`Calculation complete: ${wallResults.length} walls, ${summary.length} material types`);
 
     return {
