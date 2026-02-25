@@ -26,7 +26,7 @@ Single table for all scaffold types. Columns include: `code`, `name_jp`, `name_e
 
 | Role | Constant / catalog | Sizes (mm) | Role in calculation |
 |------|-------------------|------------|----------------------|
-| **Scaffold width** | `SCAFFOLD_WIDTH_OPTIONS` | 600, 900, 1200 | Distance front↔back (yokoji span). |
+| **Scaffold width** | `SCAFFOLD_WIDTH_OPTIONS` | 600, 900, 1200 | Distance front↔back. |
 | **Posts (支柱)** | `POST_CATALOG` / `POST_HEIGHTS` | 225, 450, 600, 900, 1350, 1800, 2700, 3600 | MA series φ48.6mm. |
 | **Main tateji** | `MAIN_TATEJI_OPTIONS` | 1800, 2700, 3600 | User choice; stacking post per level. |
 | **Top guard** | `TOP_GUARD_OPTIONS` | 900, 1350, 1800 | Post above top plank. |
@@ -80,7 +80,6 @@ Single table for all scaffold types. Columns include: `code`, `name_jp`, `name_e
 | **Brace** | `WAKUGUMI_BRACE_SIZES` | 610, 914, 1219, 1524, 1829 | 2 per span per level (both faces). |
 | **Shitasan (下桟)** | `WAKUGUMI_SHITASAN_SIZES` | 610, 914, 1219, 1524, 1829 | Bottom horizontal, both faces. |
 | **Habaki** | `WAKUGUMI_HABAKI_SIZES` | 610, 914, 1219, 1524, 1829 | 1 or 2 per span. |
-| **Negarami (根がらみ)** | `WAKUGUMI_NEGARAMI_SIZES` | 610, 914, 1219, 1524, 1829 | Base level only. |
 | **Jack base** | `WAKUGUMI_JACK_BASE` | 0–300 | Same as kusabi. |
 | **Stair** | `WAKUGUMI_STAIR_SET`, `WAKUGUMI_STAIR_ACCESS_OPTIONS` | 1–4 箇所 | Same idea as kusabi. |
 
@@ -92,8 +91,6 @@ Single table for all scaffold types. Columns include: `code`, `name_jp`, `name_e
 | `WAKU-FRAME-{frameSizeMm}` | 建枠 | post | 1700, 1800, 1900 | 本 |
 | `WAKU-BRACE-{spanSizeMm}` | ブレス | brace | 610, 914, 1219, 1524, 1829 | 本 |
 | `WAKU-SHITASAN-{spanSizeMm}` | 下桟 | horizontal | 610, 914, 1219, 1524, 1829 | 本 |
-| `WAKU-NEGARAMI-{spanSizeMm}` | 根がらみ (span dir.) | horizontal | 610, 914, 1219, 1524, 1829 | 本 |
-| `WAKU-NEGARAMI-{widthMm}` | 根がらみ (width dir.) | horizontal | 600, 900, 1200 | 本 |
 | `WAKU-STOPPER-{widthMm}` | 端部布材 | handrail | 600, 900, 1200 | 本 |
 | `WAKU-END-FRAME` | 妻側枠 (end frame) | — | count only | 本 or セット |
 | `WAKU-ANCHI-500x{spanSizeMm}` | 踏板 | plank | 500×610, …, 500×1829 | 枚 |
