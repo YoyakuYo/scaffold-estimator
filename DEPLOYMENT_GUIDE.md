@@ -173,9 +173,15 @@ The backend is a **NestJS** application that requires:
 5. **Configure Environment Variables**:
    - Go to your web service → "Environment"
    - Add variables (Render provides connection strings):
+   - **If using Render’s PostgreSQL**: In the PostgreSQL service, copy the **Internal Database URL** and set it as **INTERNAL_DATABASE_URL** in the web service. This avoids connection timeouts by using the internal network.
 
 ```bash
 # Database (from Render PostgreSQL OR Supabase)
+# Prefer INTERNAL_DATABASE_URL when using Render's PostgreSQL (Internal Database URL from the DB service)
+INTERNAL_DATABASE_URL=postgresql://...   # from Render PostgreSQL → Internal Database URL
+# OR use DATABASE_URL for Supabase pooler / external DB
+DATABASE_URL=postgresql://...
+
 DB_HOST=your-postgres-host.onrender.com
 DB_PORT=5432
 DB_USERNAME=your-username
@@ -553,6 +559,7 @@ If you own a domain name, you can use it for free on all platforms.
 - **Network**: Ensure database allows connections from deployment platform
 - **SSL**: Some platforms require SSL connections (add `?sslmode=require` to connection string)
 - **"Connection terminated due to connection timeout" (Render + Supabase)**: Use Supabase’s **connection pooler** (port **6543**), not the direct connection (5432). Set **DATABASE_URL** to the pooler URI from Supabase → Project Settings → Database → Connection string → **Transaction** (pooler). See the Render environment variables section above.
+- **"timeout exceeded when trying to connect" on Render**: (1) If using **Render’s own PostgreSQL**, set **INTERNAL_DATABASE_URL** (from the PostgreSQL service’s “Internal Database URL”) so the web service talks to the DB over the internal network and avoids public timeouts. The app prefers `INTERNAL_DATABASE_URL` over `DATABASE_URL`. (2) After idle, free Postgres can take 60–90s to wake; the backend is configured to wait up to 90s. If it still fails, retry the request or use a paid DB / Supabase for more stable connections.
 
 #### Redis Connection Fails
 - **Check URL**: Verify Redis connection string format

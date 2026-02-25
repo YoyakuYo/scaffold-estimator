@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 import * as express from 'express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { DbConnectionRetryInterceptor } from './common/interceptors/db-retry.interceptor';
 
 async function bootstrap() {
   // Prevent Redis connection errors from crashing the app
@@ -66,6 +67,8 @@ async function bootstrap() {
 
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
+  // Retry requests on DB connection errors (e.g. Render Postgres waking from sleep)
+  app.useGlobalInterceptors(new DbConnectionRetryInterceptor());
 
   // CORS — allow all origins.
   // Auth is handled by JWT Bearer tokens, not cookies, so CORS origin

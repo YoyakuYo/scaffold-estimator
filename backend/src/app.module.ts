@@ -47,21 +47,22 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
               synchronize: false,
               logging: configService.get('NODE_ENV') === 'development',
               ssl: { rejectUnauthorized: false },
-              connectTimeoutMS: 60000,
+              // Long connect timeout for Render: free Postgres can take 60–90s to wake from sleep
+              connectTimeoutMS: 90000,
               extra: {
-                // Acquire: wait up to 60s for a connection (e.g. after cold start or pool exhausted)
-                connectionTimeoutMillis: 60000,
-                // Recycle idle connections every 30s so they're never stale (avoids "Connection terminated due to connection timeout")
-                idleTimeoutMillis: 30000,
+                // Timeout when establishing a new connection (cold start / wake from sleep)
+                connectionTimeoutMillis: 90000,
+                // Recycle idle connections so they don't go stale (avoids "Connection terminated due to connection timeout")
+                idleTimeoutMillis: 25000,
                 max: 5,
                 min: 0,
                 keepAlive: true,
-                keepAliveInitialDelayMillis: 10000,
+                keepAliveInitialDelayMillis: 5000,
                 allowExitOnIdle: true,
                 statement_timeout: 30000,
               },
-              retryAttempts: 10,
-              retryDelay: 3000,
+              retryAttempts: 15,
+              retryDelay: 5000,
             };
           } catch (e) {
             logger.warn(`Could not parse DATABASE_URL, falling back to individual params: ${(e as Error).message}`);
@@ -113,19 +114,19 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
           synchronize: false,
           logging: configService.get('NODE_ENV') === 'development',
           ssl: { rejectUnauthorized: false },
-          connectTimeoutMS: 60000,
+          connectTimeoutMS: 90000,
           extra: {
-            connectionTimeoutMillis: 60000,
-            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 90000,
+            idleTimeoutMillis: 25000,
             max: 5,
             min: 0,
             keepAlive: true,
-            keepAliveInitialDelayMillis: 10000,
+            keepAliveInitialDelayMillis: 5000,
             allowExitOnIdle: true,
             statement_timeout: 30000,
           },
-          retryAttempts: 10,
-          retryDelay: 3000,
+          retryAttempts: 15,
+          retryDelay: 5000,
         };
       },
     }),
