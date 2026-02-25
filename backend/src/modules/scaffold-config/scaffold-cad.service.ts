@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import DxfWriter from 'dxf-writer';
+import type Drawing from 'dxf-writer';
+// dxf-writer is CommonJS: module.exports = Drawing (no .default); use require so constructor is used directly
+const DxfWriter = require('dxf-writer') as new () => Drawing;
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { ScaffoldCalculationResult, WallCalculationResult } from './scaffold-calculator.service';
 
@@ -44,7 +46,7 @@ export class ScaffoldCadService {
    * Add a single wall's scaffold components to DXF
    */
   private addWallToDxf(
-    dxf: DxfWriter,
+    dxf: Drawing,
     wall: WallCalculationResult,
     scaffoldWidthMm: number,
   ): void {
