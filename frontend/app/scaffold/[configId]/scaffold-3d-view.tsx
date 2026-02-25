@@ -663,6 +663,9 @@ export default function Scaffold3DView({ result }: { result: any }) {
       let maxH = 0;
       let maxExtent = 0;
 
+      // Store per-wall outward normals so we can build corner connectors afterwards
+      const wallNormals: Array<{ nx: number; nz: number }> = [];
+
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
         const v1 = verts[i];
@@ -672,7 +675,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const dx = v2.x - v1.x;
         const dz = v2.z - v1.z;
         const edgeLen = Math.hypot(dx, dz);
-        if (edgeLen < 0.001) continue;
+        if (edgeLen < 0.001) { wallNormals.push({ nx: 0, nz: 0 }); continue; }
 
         // Normal pointing outward (away from polygon center)
         let nx = -dz / edgeLen;
@@ -688,6 +691,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
           nx = -nx;
           nz = -nz;
         }
+        wallNormals.push({ nx, nz });
 
         // Build scaffold in local space (along X, depth along Z)
         const wallRoot = new THREE.Group();
@@ -803,6 +807,48 @@ export default function Scaffold3DView({ result }: { result: any }) {
           z: (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.6),
         });
         clickTargetsRef.current.push(clickMesh);
+      }
+
+      // ── Corner connectors — bridge the gap between adjacent wall scaffolds ──
+      for (let j = 0; j < walls.length; j++) {
+        const prevIdx = (j - 1 + walls.length) % walls.length;
+        const nPrev = wallNormals[prevIdx];
+        const nCurr = wallNormals[j];
+        if ((nPrev.nx === 0 && nPrev.nz === 0) || (nCurr.nx === 0 && nCurr.nz === 0)) continue;
+
+        const vx = verts[j].x - cx;
+        const vz = verts[j].z - cz;
+
+        // Two scaffold post rows at this corner for the previous wall (end) and current wall (start)
+        const prevR0 = { x: vx + nPrev.nx * widthM, z: vz + nPrev.nz * widthM };
+        const prevR1 = { x: vx + nPrev.nx * 2 * widthM, z: vz + nPrev.nz * 2 * widthM };
+        const currR0 = { x: vx + nCurr.nx * widthM, z: vz + nCurr.nz * widthM };
+        const currR1 = { x: vx + nCurr.nx * 2 * widthM, z: vz + nCurr.nz * 2 * widthM };
+
+        const gapR0 = Math.hypot(prevR0.x - currR0.x, prevR0.z - currR0.z);
+        const gapR1 = Math.hypot(prevR1.x - currR1.x, prevR1.z - currR1.z);
+        if (gapR0 < 0.01 && gapR1 < 0.01) continue;
+
+        const prevLevels = walls[prevIdx].levelCalc.fullLevels;
+        const currLevels = walls[j].levelCalc.fullLevels;
+        const cornerLevels = Math.max(prevLevels, currLevels);
+        const cornerH = JACK_H + cornerLevels * LEVEL_H + topGuardM;
+
+        // Vertical corner posts (full height) at each of the 4 positions
+        for (const p of [prevR0, prevR1, currR0, currR1]) {
+          addPipe(scene, p.x, JACK_H, p.z, p.x, cornerH, p.z, pipeMat, PIPE_R * 0.9);
+        }
+
+        // Horizontal connecting pipes at each level + base + guard
+        const heights = [JACK_H + NEGR_H];
+        for (let lv = 1; lv <= cornerLevels; lv++) heights.push(JACK_H + lv * LEVEL_H);
+        heights.push(cornerH);
+        heights.push(JACK_H + cornerLevels * LEVEL_H + topGuardM * 0.5);
+
+        for (const y of heights) {
+          if (gapR0 >= 0.01) addPipe(scene, prevR0.x, y, prevR0.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.8);
+          if (gapR1 >= 0.01) addPipe(scene, prevR1.x, y, prevR1.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.8);
+        }
       }
 
       // ── Building outline at ground level ─────────────

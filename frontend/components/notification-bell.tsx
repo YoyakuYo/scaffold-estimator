@@ -17,14 +17,16 @@ export function NotificationBell() {
   const { data: notifications, isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn: notificationsApi.list,
-    refetchInterval: 5000,
-    staleTime: 3000,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    refetchIntervalInBackground: false,
   });
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread'],
     queryFn: notificationsApi.getUnreadCount,
-    refetchInterval: 5000,
-    staleTime: 3000,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    refetchIntervalInBackground: false,
   });
   const unreadCount = unreadData?.count ?? 0;
 
