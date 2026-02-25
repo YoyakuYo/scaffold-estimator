@@ -127,6 +127,11 @@ Adjacent spans share the post/frame at the boundary:
 - Range: 0~300mm adjustable
 - Count only, no size spec in quotation
 
+### PATTANKO (パッタンコ)
+- Small filler plank used at corners where walls meet, to close the gap when spans do not align.
+- 3D view: rendered at each corner, per level, bridging inner and outer rows (2 per corner per level).
+- BOM: can be counted as corner fill (e.g. 2 × corners × levels) if quoted separately.
+
 ## Output
 1. **足場材料見積書 (Excel)** — Per-wall columns + total, Japanese names
 2. **2D足場図 (SVG)** — Per-wall 2D assembly view with print/PDF/DXF export

@@ -32,6 +32,7 @@ const C = {
   stair:      0x60a5fa,
   stairRail:  0x3b82f6,
   habaki:     0xf59e0b,
+  pattanko:   0xd97706,  // パッタンコ — small filler plank at corners
   frame:      0xb0c4de,
   frameDark:  0x7a93af,
   ground:     0xf8fafc,
@@ -294,6 +295,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
       const plankMat = new THREE.MeshStandardMaterial({ color: C.plank, metalness: 0.3, roughness: 0.6 });
       const jackMat = new THREE.MeshStandardMaterial({ color: C.jackBase, metalness: 0.7, roughness: 0.3 });
       const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.4, roughness: 0.5 });
+      const pattankoMat = new THREE.MeshStandardMaterial({ color: C.pattanko, metalness: 0.25, roughness: 0.65 });
       const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.3, roughness: 0.5 });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
       const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.55, roughness: 0.3 });
@@ -346,6 +348,29 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const geo = new THREE.CylinderGeometry(PIPE_R * 2.5, PIPE_R * 2.5, 0.02, 12);
         const mesh = new THREE.Mesh(geo, pipeDarkMat);
         mesh.position.set(x, y, z);
+        parent.add(mesh);
+      }
+
+      /** パッタンコ (PATTANKO): small filler plank bridging a gap in the XZ plane at height y. */
+      function addPattanko(
+        parent: THREE.Object3D,
+        ax: number, az: number,
+        bx: number, bz: number,
+        y: number,
+        mat: THREE.MeshStandardMaterial,
+      ) {
+        const gap = Math.hypot(bx - ax, bz - az);
+        if (gap < 0.02) return;
+        const midX = (ax + bx) / 2;
+        const midZ = (az + bz) / 2;
+        const thickness = 0.03;
+        const width = Math.min(0.25, gap * 0.8);
+        const geo = new THREE.BoxGeometry(gap, thickness, width);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(midX, y, midZ);
+        mesh.rotation.y = Math.atan2(bz - az, bx - ax);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         parent.add(mesh);
       }
 
@@ -870,6 +895,13 @@ export default function Scaffold3DView({ result }: { result: any }) {
         for (const y of heights) {
           if (gapR0 >= 0.01) addPipe(scene, prevR0.x, y, prevR0.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.8);
           if (gapR1 >= 0.01) addPipe(scene, prevR1.x, y, prevR1.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.8);
+        }
+
+        // パッタンコ (PATTANKO): small filler planks at each level so the corner is not empty
+        for (let lv = 1; lv <= cornerLevels; lv++) {
+          const plankY = JACK_H + lv * LEVEL_H + 0.015;
+          if (gapR0 >= 0.02) addPattanko(scene, prevR0.x, prevR0.z, currR0.x, currR0.z, plankY, pattankoMat);
+          if (gapR1 >= 0.02) addPattanko(scene, prevR1.x, prevR1.z, currR1.x, currR1.z, plankY, pattankoMat);
         }
       }
 
