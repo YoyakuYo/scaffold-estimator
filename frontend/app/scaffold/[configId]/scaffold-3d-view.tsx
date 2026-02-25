@@ -695,6 +695,19 @@ export default function Scaffold3DView({ result }: { result: any }) {
         wallRoot.add(group);
         buildWallScaffold(wall, group, spanCaps[i]);
 
+        // Scale scaffold to fit exactly on polygon edge so corners join (closed perimeter).
+        // Otherwise wall length (sum of spans) can differ from edge length → gaps/overshoot.
+        const spansUsed = spanCaps[i] != null && spanCaps[i] < wall.spans.length
+          ? wall.spans.slice(0, spanCaps[i])
+          : wall.spans;
+        const totalLen = spansUsed.length > 0
+          ? spansUsed.reduce((s, sp) => s + sp, 0) / 1000
+          : edgeLen;
+        if (totalLen > 0.001) {
+          const scaleX = edgeLen / totalLen;
+          group.scale.set(scaleX, 1, 1);
+        }
+
         // The wall scaffold is built in local space:
         //   local X = along wall length (0 to totalLen)
         //   local Z = scaffold depth (0 = outer face, widthM = inner face)
