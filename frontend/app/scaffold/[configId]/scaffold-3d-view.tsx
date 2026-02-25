@@ -86,7 +86,8 @@ function buildPolygonVertices(
       Math.max(...xs) - Math.min(...xs),
       Math.max(...zs) - Math.min(...zs),
     );
-    if (spread < 1e-6) return []; // degenerate
+    // Don't return [] for degenerate outline — fall through to length-based fallback so 3D still renders
+    if (spread >= 1e-6) {
 
     // Detect units: fraction 0–1 (e.g. from image outline), mm, or meters
     const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
@@ -110,6 +111,7 @@ function buildPolygonVertices(
       Math.max(...verts.map(v => v.z)) - Math.min(...verts.map(v => v.z)),
     );
     if (spreadM > 0.01) return verts;
+    }
   }
 
   // ── Fallback: place walls as a rectangle (4 walls) or regular polygon ──
@@ -192,7 +194,9 @@ export default function Scaffold3DView({ result }: { result: any }) {
   const clickTargetsRef = useRef<any[]>([]);
   const controlsRef = useRef<any>(null);
 
-  const walls: WallCalculationResult[] = result?.walls ?? [];
+  // Support both flat (result.walls) and nested (result.result.walls) API shapes
+  const walls: WallCalculationResult[] =
+    (result?.walls ?? (result as any)?.result?.walls) ?? [];
 
   function setOpacityRecursive(obj: any, opacity: number) {
     obj.traverse((child: any) => {
