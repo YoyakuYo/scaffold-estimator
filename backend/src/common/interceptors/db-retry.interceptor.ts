@@ -8,8 +8,8 @@ import {
 import { Observable, throwError, timer } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
-const MAX_RETRIES = 2; // 2 retries = 3 total attempts
-const DELAY_MS = 3500; // Wait for DB to wake (e.g. Render free tier)
+const MAX_RETRIES = 4; // 4 retries = 5 total attempts (helps when pool has only stale connections)
+const DELAY_MS = 2500; // Wait before next attempt so pool can hand out or create a fresh connection
 
 function isDbConnectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;

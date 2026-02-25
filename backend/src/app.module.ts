@@ -52,14 +52,15 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
               extra: {
                 // Timeout when establishing a new connection (cold start / wake from sleep)
                 connectionTimeoutMillis: 90000,
-                // Recycle idle connections so they don't go stale (avoids "Connection terminated due to connection timeout")
-                idleTimeoutMillis: 25000,
+                // Recycle idle connections before server closes them (Supabase/cloud often close after 5–10 min idle)
+                idleTimeoutMillis: 20000,
                 max: 5,
                 min: 0,
                 keepAlive: true,
                 keepAliveInitialDelayMillis: 5000,
                 allowExitOnIdle: true,
                 statement_timeout: 30000,
+                // If using Supabase: prefer pooler URL (port 6543) to avoid "Connection terminated due to connection timeout"
               },
               retryAttempts: 15,
               retryDelay: 5000,
@@ -117,7 +118,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
           connectTimeoutMS: 90000,
           extra: {
             connectionTimeoutMillis: 90000,
-            idleTimeoutMillis: 25000,
+            idleTimeoutMillis: 20000,
             max: 5,
             min: 0,
             keepAlive: true,

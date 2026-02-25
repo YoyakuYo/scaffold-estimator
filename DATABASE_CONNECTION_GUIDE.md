@@ -150,6 +150,24 @@ Your NestJS backend uses **TypeORM**, which needs a **direct PostgreSQL connecti
 
 ---
 
+## Avoiding "Connection terminated due to connection timeout"
+
+If you see errors like **Connection terminated due to connection timeout** (e.g. on `/api/v1/auth/heartbeat`), the database server is closing idle connections and the app is reusing a dead connection.
+
+**Recommended: use Supabase Connection Pooler (port 6543)**
+
+1. In **Supabase Dashboard** → **Settings** → **Database**, find **Connection pooling**.
+2. Use the **Connection string** that uses **port 6543** (Session or Transaction mode).
+3. Set that as `DATABASE_URL` (or `INTERNAL_DATABASE_URL`) in Render/environment, e.g.:
+   ```text
+   postgresql://postgres.[project-ref]:[PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres
+   ```
+4. The pooler keeps server connections alive and hands your app a stable connection, which reduces timeouts.
+
+The backend also recycles idle connections every 20 seconds and retries failed requests up to 5 times, which helps when the pool occasionally hands out a stale connection.
+
+---
+
 ## Security Note
 
 ⚠️ **Never commit `.env` to Git!** It contains sensitive credentials.
