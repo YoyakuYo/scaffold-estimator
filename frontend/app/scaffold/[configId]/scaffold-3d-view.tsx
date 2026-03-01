@@ -10,7 +10,7 @@ import html2canvas from 'html2canvas';
 
 /**
  * 3D Scaffold View — Arbitrary Polygon Layout
- * Walls are arranged around a building perimeter computed from wall lengths.
+ * Building is one closed polygon; scaffold is one continuous closed perimeter (shared corner posts).
  * Supports any number of walls (not just N/S/E/W).
  */
 
@@ -918,9 +918,10 @@ export default function Scaffold3DView({ result }: { result: any }) {
         clickTargetsRef.current.push(clickMesh);
       }
 
-      // ── Corner connectors: full corner span (joined scaffold, walkable) ──
-      // Use last 2 posts of prev wall + first 2 of curr; one standard span (600mm) with full anchi, brace, tesuri.
-      const CORNER_SPAN_M = 0.6; // 600mm standard span so corner is a proper walkable bay
+      // ── Corner connectors: one closed polygon perimeter ──
+      // Treat the building as a single closed loop. At each vertex use 2 shared posts (angle bisector)
+      // so the scaffold is one continuous band: wall → shared corner post → next wall.
+      const CORNER_SPAN_M = 0.6; // 600mm for corner bay anchi
       for (let j = 0; j < walls.length; j++) {
         const prevIdx = (j - 1 + walls.length) % walls.length;
         const nPrev = wallNormals[prevIdx];
@@ -930,58 +931,71 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const vx = verts[j].x - cx;
         const vz = verts[j].z - cz;
 
+        // Wall-end positions (where prev wall ends and curr wall starts)
         const prevR0 = { x: vx + nPrev.nx * widthM, z: vz + nPrev.nz * widthM };
         const prevR1 = { x: vx + nPrev.nx * 2 * widthM, z: vz + nPrev.nz * 2 * widthM };
         const currR0 = { x: vx + nCurr.nx * widthM, z: vz + nCurr.nz * widthM };
         const currR1 = { x: vx + nCurr.nx * 2 * widthM, z: vz + nCurr.nz * 2 * widthM };
 
-        const gapR0 = Math.hypot(prevR0.x - currR0.x, prevR0.z - currR0.z);
-        const gapR1 = Math.hypot(prevR1.x - currR1.x, prevR1.z - currR1.z);
-        if (gapR0 < 0.01 && gapR1 < 0.01) continue;
+        // Outward angle bisector at this vertex (so one post position is shared by both walls)
+        let bx = nPrev.nx + nCurr.nx;
+        let bz = nPrev.nz + nCurr.nz;
+        const blen = Math.hypot(bx, bz) || 1;
+        bx /= blen;
+        bz /= blen;
+        // Ensure bisector points outward (away from polygon center). Center in local coords is (0,0).
+        if (bx * vx + bz * vz < 0) {
+          bx = -bx;
+          bz = -bz;
+        }
+        // Shared corner posts: one outer, one inner (closed loop = 2 posts per vertex)
+        const midOuter = { x: vx + bx * widthM, z: vz + bz * widthM };
+        const midInner = { x: vx + bx * 2 * widthM, z: vz + bz * 2 * widthM };
 
         const prevLevels = walls[prevIdx].levelCalc.fullLevels;
         const currLevels = walls[j].levelCalc.fullLevels;
         const cornerLevels = Math.max(prevLevels, currLevels);
         const cornerH = JACK_H + cornerLevels * LEVEL_H + topGuardM;
 
-        // Vertical corner posts (4 pipes: last 2 of prev wall, first 2 of curr). These are scaffold
-        // posts that join the two walls at the vertex — not planks; the only horizontal plank here is the anchi below.
-        for (const p of [prevR0, prevR1, currR0, currR1]) {
+        // Two vertical posts at this vertex (shared by both walls — closed polygon)
+        for (const p of [midOuter, midInner]) {
           addPipe(scene, p.x, JACK_H, p.z, p.x, cornerH, p.z, pipeMat, PIPE_R * 0.9);
         }
 
-        // Horizontal pipes: along the gap (tesuri) + width yokoji so corner is fully connected
+        // Horizontal pipes: close the loop (prev wall → shared corner → curr wall) + width
         const heights = [JACK_H + NEGR_H];
         for (let lv = 1; lv <= cornerLevels; lv++) heights.push(JACK_H + lv * LEVEL_H);
         heights.push(cornerH);
         heights.push(JACK_H + cornerLevels * LEVEL_H + topGuardM * 0.5);
 
         for (const y of heights) {
-          if (gapR0 >= 0.01) addPipe(scene, prevR0.x, y, prevR0.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.8);
-          if (gapR1 >= 0.01) addPipe(scene, prevR1.x, y, prevR1.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.8);
-          addPipe(scene, prevR0.x, y, prevR0.z, prevR1.x, y, prevR1.z, pipeDarkMat, PIPE_R * 0.9);
-          addPipe(scene, currR0.x, y, currR0.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.9);
+          addPipe(scene, prevR0.x, y, prevR0.z, midOuter.x, y, midOuter.z, pipeDarkMat, PIPE_R * 0.8);
+          addPipe(scene, midOuter.x, y, midOuter.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.8);
+          addPipe(scene, prevR1.x, y, prevR1.z, midInner.x, y, midInner.z, pipeDarkMat, PIPE_R * 0.8);
+          addPipe(scene, midInner.x, y, midInner.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.8);
+          addPipe(scene, midOuter.x, y, midOuter.z, midInner.x, y, midInner.z, pipeDarkMat, PIPE_R * 0.9);
         }
 
-        // Full corner span at each level: X-brace, tesuri (above), full anchi, habaki
+        // Corner bay at each level: X-brace, anchi (踏板), habaki (巾木)
         for (let lv = 1; lv <= cornerLevels; lv++) {
           const baseYLv = JACK_H + (lv - 1) * LEVEL_H;
           const y = JACK_H + lv * LEVEL_H;
           const plankY = y + 0.015;
 
-          // X-brace in corner bay (same as wall span: two diagonals)
-          addPipe(scene, prevR0.x, baseYLv, prevR0.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, prevR0.x, y, prevR0.z, currR1.x, baseYLv, currR1.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, prevR1.x, baseYLv, prevR1.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, prevR1.x, y, prevR1.z, currR0.x, baseYLv, currR0.z, pipeDarkMat, PIPE_R * 0.7);
+          // X-brace in corner (diagonals between shared posts and wall ends)
+          addPipe(scene, prevR0.x, baseYLv, prevR0.z, midOuter.x, y, midOuter.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, prevR0.x, y, prevR0.z, midOuter.x, baseYLv, midOuter.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, midOuter.x, baseYLv, midOuter.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, midOuter.x, y, midOuter.z, currR0.x, baseYLv, currR0.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, prevR1.x, baseYLv, prevR1.z, midInner.x, y, midInner.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, prevR1.x, y, prevR1.z, midInner.x, baseYLv, midInner.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, midInner.x, baseYLv, midInner.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.7);
+          addPipe(scene, midInner.x, y, midInner.z, currR1.x, baseYLv, currR1.z, pipeDarkMat, PIPE_R * 0.7);
 
-          // Full anchi (踏板): one plank spanning the corner bay, walkable
-          const midX = (prevR0.x + prevR1.x + currR0.x + currR1.x) / 4;
-          const midZ = (prevR0.z + prevR1.z + currR0.z + currR1.z) / 4;
-          const angle = Math.atan2(
-            (currR0.z + currR1.z) / 2 - (prevR0.z + prevR1.z) / 2,
-            (currR0.x + currR1.x) / 2 - (prevR0.x + prevR1.x) / 2,
-          );
+          // Full anchi (踏板): one plank in the corner bay
+          const midX = (midOuter.x + midInner.x + prevR0.x + currR0.x) / 4;
+          const midZ = (midOuter.z + midInner.z + prevR0.z + currR0.z) / 4;
+          const angle = Math.atan2(bz, bx);
           const spanLen = Math.max(CORNER_SPAN_M - 0.04, 0.2);
           const plankW = Math.min(widthM * 0.9, 0.55);
           const geo = new THREE.BoxGeometry(spanLen, 0.03, plankW);
@@ -991,32 +1005,27 @@ export default function Scaffold3DView({ result }: { result: any }) {
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           scene.add(mesh);
-          // Habaki (巾木) at outer and inner edges of corner — length = actual edge
+          // Habaki along outer and inner edges of corner (prev→mid→curr)
           const hY = y + 0.06;
-          for (const [ax, az, bx, bz] of [
-            [prevR0.x, prevR0.z, currR0.x, currR0.z],
-            [prevR1.x, prevR1.z, currR1.x, currR1.z],
+          for (const [ax, az, bx2, bz2] of [
+            [prevR0.x, prevR0.z, midOuter.x, midOuter.z],
+            [midOuter.x, midOuter.z, currR0.x, currR0.z],
+            [prevR1.x, prevR1.z, midInner.x, midInner.z],
+            [midInner.x, midInner.z, currR1.x, currR1.z],
           ]) {
-            const edgeLen = Math.hypot(bx - ax, bz - az);
+            const edgeLen = Math.hypot(bx2 - ax, bz2 - az);
             if (edgeLen < 0.02) continue;
-            const hx = (ax + bx) / 2;
-            const hz = (az + bz) / 2;
+            const hx = (ax + bx2) / 2;
+            const hz = (az + bz2) / 2;
             const habakiGeo = new THREE.BoxGeometry(edgeLen - 0.02, 0.1, 0.015);
             const habakiMesh = new THREE.Mesh(habakiGeo, habakiMat);
             habakiMesh.position.set(hx, hY, hz);
-            habakiMesh.rotation.y = Math.atan2(bz - az, bx - ax);
+            habakiMesh.rotation.y = Math.atan2(bz2 - az, bx2 - ax);
             habakiMesh.castShadow = true;
             habakiMesh.receiveShadow = true;
             scene.add(habakiMesh);
           }
         }
-
-        // Corner joint distance: length between last 2 posts of one wall and first 2 of the other (indicative)
-        const gapMm = Math.round(((gapR0 + gapR1) / 2) * 1000);
-        const cornerMidX = (prevR0.x + prevR1.x + currR0.x + currR1.x) / 4;
-        const cornerMidZ = (prevR0.z + prevR1.z + currR0.z + currR1.z) / 4;
-        const cornerLabelY = JACK_H + (cornerLevels * LEVEL_H) / 2 + 0.35;
-        addTextLabel(scene, `${gapMm}`, cornerMidX, cornerLabelY, cornerMidZ, 0.4, 'rgba(120,0,80,0.85)');
       }
 
       // ── Building outline at ground level ─────────────
@@ -1377,7 +1386,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
           <span className="text-gray-400">|</span>
           <span>L1,L2… = floor level</span>
           <span className="text-gray-400">|</span>
-          <span>Corner = joint distance (mm)</span>
+          <span>Closed perimeter (one loop)</span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <button
