@@ -890,8 +890,10 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const edgeLine = new THREE.Line(edgeGeo, edgeMat);
         scene.add(edgeLine);
 
-        // Invisible hit area to allow clicking each wall segment
-        const clickGeo = new THREE.BoxGeometry(edgeLen, Math.max(totalH, 2), Math.max(widthM * 0.35, 0.35));
+        // Invisible hit area to allow clicking each wall segment. Use ~85% of edge length
+        // so two adjacent walls' boxes do not overlap at corners (avoids a visible "vertical plank" artifact).
+        const clickBoxLen = Math.max(edgeLen * 0.85, 0.3);
+        const clickGeo = new THREE.BoxGeometry(clickBoxLen, Math.max(totalH, 2), Math.max(widthM * 0.35, 0.35));
         const clickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
         const clickMesh = new THREE.Mesh(clickGeo, clickMat);
         clickMesh.position.set(
@@ -942,7 +944,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const cornerLevels = Math.max(prevLevels, currLevels);
         const cornerH = JACK_H + cornerLevels * LEVEL_H + topGuardM;
 
-        // Vertical corner posts (4 posts: last 2 of prev, first 2 of curr)
+        // Vertical corner posts (4 pipes: last 2 of prev wall, first 2 of curr). These are scaffold
+        // posts that join the two walls at the vertex — not planks; the only horizontal plank here is the anchi below.
         for (const p of [prevR0, prevR1, currR0, currR1]) {
           addPipe(scene, p.x, JACK_H, p.z, p.x, cornerH, p.z, pipeMat, PIPE_R * 0.9);
         }
