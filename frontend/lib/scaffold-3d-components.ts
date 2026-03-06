@@ -23,11 +23,11 @@ const PIPE_R = 0.024;
 const PIPE_SEG = 10;
 
 const FALLBACK_COLORS = {
-  pipe: 0xdbe5f0,
-  pipeDark: 0x9fb3c8,
-  plank: 0xfbbf24,
-  jackBase: 0x7c8ea3,
-  habaki: 0xf59e0b,
+  pipe: 0xc8d0d8,
+  pipeDark: 0xa8b4c0,
+  plank: 0xd0d8e0,
+  jackBase: 0xb0b8c0,
+  habaki: 0xc0c8d0,
 };
 
 /**
@@ -41,8 +41,8 @@ export function loadScaffoldTextures(
   const fallback = (color: number, metalness = 0.5, roughness = 0.4) =>
     new THREE.MeshStandardMaterial({ color, metalness, roughness });
 
-  const pipeMat = fallback(FALLBACK_COLORS.pipe, 0.6, 0.35);
-  const pipeDarkMat = fallback(FALLBACK_COLORS.pipeDark, 0.5, 0.4);
+  const pipeMat = fallback(FALLBACK_COLORS.pipe, 0.88, 0.22);
+  const pipeDarkMat = fallback(FALLBACK_COLORS.pipeDark, 0.85, 0.25);
 
   const extensions = ['.png', '.jpg', '.jpeg'];
   const load = (name: string): Promise<MeshStandardMaterial | null> =>
@@ -62,8 +62,8 @@ export function loadScaffoldTextures(
             resolve(
               new THREE.MeshStandardMaterial({
                 map: tex,
-                metalness: 0.5,
-                roughness: 0.45,
+                metalness: 0.88,
+                roughness: 0.22,
                 side: THREE.DoubleSide,
               }),
             );

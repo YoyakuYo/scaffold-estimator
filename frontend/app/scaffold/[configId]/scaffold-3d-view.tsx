@@ -30,24 +30,25 @@ const JACK_H = 0.3;
 const NEGR_H = 0.2;
 type ViewMode = 'all' | 'wall';
 
-// High-visibility scaffold palette
+// Galvanized steel palette (realistic scaffold look)
 const C = {
-  pipe:       0xdbe5f0,
-  pipeDark:   0x9fb3c8,
-  plank:      0xfbbf24,
-  plankEdge:  0xd97706,
-  jackBase:   0x7c8ea3,
-  basePlate:  0x8fa3b9,
-  stair:      0x60a5fa,
-  stairRail:  0x3b82f6,
-  habaki:     0xf59e0b,
-  frame:      0xb0c4de,
-  frameDark:  0x7a93af,
-  ground:     0xf8fafc,
-  bg:         0xeef3f8,
-  grid:       0xd9e3ef,
+  pipe:       0xc8d0d8,
+  pipeDark:   0xa8b4c0,
+  plank:      0xd0d8e0,
+  plankEdge:  0xb8c0c8,
+  jackBase:   0xb0b8c0,
+  basePlate:  0xa8b0b8,
+  stair:      0xc0c8d0,
+  stairRail:  0xb8c0c8,
+  habaki:     0xc0c8d0,
+  frame:      0xc0c8d0,
+  frameDark:  0xa0a8b0,
+  ground:     0xe8eef4,
+  bg:         0x7eb8d4,
+  grid:       0xd0d8e0,
   ambient:    0xffffff,
   dirLight:   0xffffff,
+  wood:       0xc4a574,
 };
 
 // Per-wall accent colors
@@ -57,13 +58,13 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank/anchi color (distinct so 600/900/1200/1500/1800 are identifiable)
+// Span size (mm) → plank color (silver tones for realistic galvanized look)
 const SPAN_COLORS: Record<number, number> = {
-  600: 0xfbbf24,   // amber (default)
-  900: 0x22c55e,   // green
-  1200: 0x3b82f6,  // blue
-  1500: 0xa855f7,  // purple
-  1800: 0xef4444,  // red
+  600: 0xd0d8e0,
+  900: 0xc8d0d8,
+  1200: 0xd8e0e8,
+  1500: 0xc0c8d0,
+  1800: 0xd0d8e0,
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -319,8 +320,20 @@ export default function Scaffold3DView({
 
       // ── Scene ──────────────────────────────────────────
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(C.bg);
-      scene.fog = new THREE.Fog(C.bg, 140, 320);
+      // Blue-green gradient background (realistic scaffold photo style)
+      const bgCanvas = document.createElement('canvas');
+      bgCanvas.width = 2;
+      bgCanvas.height = 512;
+      const bgCtx = bgCanvas.getContext('2d')!;
+      const bgGrad = bgCtx.createLinearGradient(0, 0, 0, 512);
+      bgGrad.addColorStop(0, '#5a9fb8');
+      bgGrad.addColorStop(0.5, '#6bb5c4');
+      bgGrad.addColorStop(1, '#7eb8d4');
+      bgCtx.fillStyle = bgGrad;
+      bgCtx.fillRect(0, 0, 2, 512);
+      const bgTex = new THREE.CanvasTexture(bgCanvas);
+      scene.background = bgTex;
+      scene.fog = new THREE.Fog(0x7eb8d4, 80, 280);
       sceneRef.current = scene;
       wallObjectsRef.current = [];
       wallFocusRef.current = [];
@@ -340,41 +353,46 @@ export default function Scaffold3DView({
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.2;
+      renderer.toneMappingExposure = 1.35;
       if ('outputColorSpace' in renderer) {
         (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
       }
       canvasElement = renderer.domElement;
       canvasContainer.appendChild(canvasElement as unknown as Node);
 
-      // ── Lights ─────────────────────────────────────────
-      const ambientLight = new THREE.AmbientLight(C.ambient, 1.15);
+      // ── Lights (realistic metallic highlights) ─────────
+      const ambientLight = new THREE.AmbientLight(C.ambient, 0.9);
       scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xdbeafe, 0.65);
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8ecae6, 0.6);
       scene.add(hemiLight);
 
-      const dirLight = new THREE.DirectionalLight(C.dirLight, 1.25);
-      dirLight.position.set(15, 20, 10);
+      const dirLight = new THREE.DirectionalLight(C.dirLight, 1.4);
+      dirLight.position.set(18, 22, 12);
       dirLight.castShadow = true;
       dirLight.shadow.mapSize.width = 2048;
       dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.bias = -0.0001;
       scene.add(dirLight);
 
-      const fillLight = new THREE.DirectionalLight(0xffffff, 0.75);
-      fillLight.position.set(-12, 10, -8);
+      const fillLight = new THREE.DirectionalLight(0xe8f4fc, 0.6);
+      fillLight.position.set(-14, 8, -10);
       scene.add(fillLight);
 
-      // ── Shared materials ───────────────────────────────
-      const pipeMat = new THREE.MeshStandardMaterial({ color: C.pipe, metalness: 0.6, roughness: 0.35 });
-      const pipeDarkMat = new THREE.MeshStandardMaterial({ color: C.pipeDark, metalness: 0.5, roughness: 0.4 });
-      const plankMat = new THREE.MeshStandardMaterial({ color: C.plank, metalness: 0.3, roughness: 0.6 });
+      const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      rimLight.position.set(-8, 15, 15);
+      scene.add(rimLight);
+
+      // ── Shared materials (galvanized metallic sheen) ───
+      const pipeMat = new THREE.MeshStandardMaterial({ color: C.pipe, metalness: 0.88, roughness: 0.22 });
+      const pipeDarkMat = new THREE.MeshStandardMaterial({ color: C.pipeDark, metalness: 0.85, roughness: 0.25 });
+      const plankMat = new THREE.MeshStandardMaterial({ color: C.plank, metalness: 0.82, roughness: 0.28 });
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
         spanPlankMats[span] = new THREE.MeshStandardMaterial({
           color: SPAN_COLORS[span] ?? C.plank,
-          metalness: 0.3,
-          roughness: 0.6,
+          metalness: 0.82,
+          roughness: 0.28,
         });
       }
       const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
@@ -383,12 +401,13 @@ export default function Scaffold3DView({
         );
         return spanPlankMats[closest] ?? plankMat;
       };
-      const jackMat = new THREE.MeshStandardMaterial({ color: C.jackBase, metalness: 0.7, roughness: 0.3 });
-      const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.4, roughness: 0.5 });
-      const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.3, roughness: 0.5 });
+      const jackMat = new THREE.MeshStandardMaterial({ color: C.jackBase, metalness: 0.9, roughness: 0.2 });
+      const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.85, roughness: 0.25 });
+      const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.88, roughness: 0.22 });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
-      const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.55, roughness: 0.3 });
-      const frameDarkMat = new THREE.MeshStandardMaterial({ color: C.frameDark, metalness: 0.5, roughness: 0.35 });
+      const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.88, roughness: 0.22 });
+      const frameDarkMat = new THREE.MeshStandardMaterial({ color: C.frameDark, metalness: 0.85, roughness: 0.25 });
+      const woodMat = new THREE.MeshStandardMaterial({ color: C.wood, metalness: 0.05, roughness: 0.9 });
 
       // Effective materials: use loaded textures when available, else fallback
       const postMat = textures.post ?? pipeMat;
@@ -612,6 +631,14 @@ export default function Scaffold3DView({
         const totalPostH = levelsToBuild * LEVEL_H + (levelsToBuild >= levels ? topGuardM : 0);
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
+
+        // ── Wooden base sleepers (foundation timbers) ─────
+        const sleeperH = 0.08;
+        const sleeperW = 0.2;
+        const sleeperLen = totalLen + 0.4;
+        for (const pz of [0, widthM / 2, widthM]) {
+          addBox(group, totalLen / 2, sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
+        }
 
         // ── Jack bases + base plates ───────────────────
         for (const px of postX) {
