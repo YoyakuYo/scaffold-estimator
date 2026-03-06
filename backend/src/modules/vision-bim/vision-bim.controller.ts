@@ -34,7 +34,7 @@ export class VisionBimController {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
-    const filename = file.originalname || file.name;
+    const filename = file.originalname;
     try {
       return await this.visionBim.processFile(buffer, filename);
     } catch (err: any) {
