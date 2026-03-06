@@ -7,6 +7,15 @@ import { useI18n } from '@/lib/i18n';
 import type { WallCalculationResult, CalculatedComponent } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
 import html2canvas from 'html2canvas';
+import {
+  loadScaffoldTextures,
+  addRealisticPost,
+  addRealisticJack,
+  addRealisticPlank,
+  addRealisticNunoBar,
+  addRealisticBrace,
+  addRealisticHabaki,
+} from '@/lib/scaffold-3d-components';
 
 /**
  * 3D Scaffold View — Arbitrary Polygon Layout
@@ -295,7 +304,10 @@ export default function Scaffold3DView({
     let animId: number;
     let canvasElement: HTMLElement | null = null;
 
-    import('three').then((THREE) => {
+    import('three').then(async (THREE) => {
+      if (disposed || !canvasContainerRef.current) return;
+
+      const textures = await loadScaffoldTextures(THREE);
       if (disposed || !canvasContainerRef.current) return;
 
       while (canvasContainer.firstChild) {
@@ -377,6 +389,14 @@ export default function Scaffold3DView({
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
       const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.55, roughness: 0.3 });
       const frameDarkMat = new THREE.MeshStandardMaterial({ color: C.frameDark, metalness: 0.5, roughness: 0.35 });
+
+      // Effective materials: use loaded textures when available, else fallback
+      const postMat = textures.post ?? pipeMat;
+      const jackMatEff = textures.jack ?? jackMat;
+      const plankMatEff = textures.plank ?? plankMat;
+      const nunoMat = textures.nuno ?? pipeMat;
+      const braceMat = textures.brace ?? pipeDarkMat;
+      const habakiMatEff = textures.habaki ?? habakiMat;
 
       const widthM = result.scaffoldWidthMm / 1000;
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -596,10 +616,9 @@ export default function Scaffold3DView({
         // ── Jack bases + base plates ───────────────────
         for (const px of postX) {
           for (const pz of [0, widthM]) {
-            addBox(group, px, 0.005, pz, 0.15, 0.01, 0.15, jackMat);
-            addPipe(group, px, 0.01, pz, px, JACK_H, pz, jackMat, PIPE_R * 0.7);
+            addRealisticJack(THREE, group, px, 0.005, pz, jackMatEff, PIPE_R * 0.7, JACK_H);
             const colGeo = new THREE.CylinderGeometry(PIPE_R * 1.8, PIPE_R * 1.8, 0.04, 12);
-            const colMesh = new THREE.Mesh(colGeo, jackMat);
+            const colMesh = new THREE.Mesh(colGeo, jackMatEff);
             colMesh.position.set(px, JACK_H, pz);
             group.add(colMesh);
           }
@@ -616,7 +635,7 @@ export default function Scaffold3DView({
         } else {
           for (const px of postX) {
             for (const pz of [0, widthM]) {
-              addPipe(group, px, JACK_H, pz, px, JACK_H + totalPostH, pz, pipeMat);
+              addRealisticPost(THREE, group, px, JACK_H, pz, totalPostH, postMat);
               for (let lv = 0; lv <= levelsToBuild; lv++) {
                 addJoint(group, px, JACK_H + lv * LEVEL_H, pz);
               }
@@ -631,11 +650,11 @@ export default function Scaffold3DView({
           const x1 = postX[i];
           const x2 = postX[i + 1];
           for (const pz of [0, widthM]) {
-            addPipe(group, x1, baseY, pz, x2, baseY, pz, pipeDarkMat);
+            addRealisticNunoBar(THREE, group, x1, baseY, pz, x2, pz, nunoMat);
           }
         }
         for (const px of postX) {
-          addPipe(group, px, baseY, 0, px, baseY, widthM, pipeDarkMat);
+          addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, nunoMat);
         }
 
         // ── Floor/level indicators (L1, L2, L3…) ──
@@ -668,7 +687,7 @@ export default function Scaffold3DView({
 
           // Width yokoji
           for (const px of postX) {
-            addPipe(group, px, y, 0, px, y, widthM, pipeDarkMat, PIPE_R * 0.9);
+            addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, nunoMat);
           }
 
           for (let i = 0; i < spans.length; i++) {
@@ -681,55 +700,47 @@ export default function Scaffold3DView({
 
             if (isWakugumi) {
               // ── Wakugumi: Brace on BOTH faces ──
-              // OUTER face — X-Brace (z = 0)
-              addPipe(group, x1, baseYLv, 0, x2, y, 0, pipeDarkMat, PIPE_R * 0.7);
-              addPipe(group, x1, y, 0, x2, baseYLv, 0, pipeDarkMat, PIPE_R * 0.7);
-              // INNER face — X-Brace (z = widthM)
-              addPipe(group, x1, baseYLv, widthM, x2, y, widthM, pipeDarkMat, PIPE_R * 0.7);
-              addPipe(group, x1, y, widthM, x2, baseYLv, widthM, pipeDarkMat, PIPE_R * 0.7);
+              addRealisticBrace(THREE, group, x1, baseYLv, 0, x2, y, braceMat);
+              addRealisticBrace(THREE, group, x1, baseYLv, widthM, x2, y, braceMat);
 
               // 下桟 (Shitasan) — bottom horizontal, both faces
               const shitasanY = baseYLv + 0.05;
-              addPipe(group, x1, shitasanY, 0, x2, shitasanY, 0, pipeMat, PIPE_R * 0.8);
-              addPipe(group, x1, shitasanY, widthM, x2, shitasanY, widthM, pipeMat, PIPE_R * 0.8);
+              addRealisticNunoBar(THREE, group, x1, shitasanY, 0, x2, 0, nunoMat);
+              addRealisticNunoBar(THREE, group, x1, shitasanY, widthM, x2, widthM, nunoMat);
             } else {
               // ── Kusabi: Brace on OUTER face only ──
-              // OUTER face — X-Brace (z = 0)
-              addPipe(group, x1, baseYLv, 0, x2, y, 0, pipeDarkMat, PIPE_R * 0.7);
-              addPipe(group, x1, y, 0, x2, baseYLv, 0, pipeDarkMat, PIPE_R * 0.7);
+              addRealisticBrace(THREE, group, x1, baseYLv, 0, x2, y, braceMat);
 
               // INNER face — Tesuri/Nuno (z = widthM)
               if (isAiBim) {
-                // Japanese compliance (AI BIM): middle rail 450mm, handrail >=850mm
                 const midRailY = baseYLv + 0.45;
                 const handrailY = baseYLv + 0.85;
-                addPipe(group, x1, midRailY, widthM, x2, midRailY, widthM, pipeMat, PIPE_R * 0.95);
-                addPipe(group, x1, handrailY, widthM, x2, handrailY, widthM, pipeMat, PIPE_R * 0.95);
-                // Additional ledger at 1200mm (within 1800mm level)
+                addRealisticNunoBar(THREE, group, x1, midRailY, widthM, x2, widthM, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, handrailY, widthM, x2, widthM, nunoMat);
                 const ledger1200Y = baseYLv + 1.2;
                 addPipe(group, x1, ledger1200Y, 0, x2, ledger1200Y, 0, pipeDarkMat, PIPE_R * 0.75);
                 addPipe(group, x1, ledger1200Y, widthM, x2, ledger1200Y, widthM, pipeDarkMat, PIPE_R * 0.75);
               } else {
                 const tesuriY1 = baseYLv + LEVEL_H * 0.5;
                 const tesuriY2 = y;
-                addPipe(group, x1, tesuriY1, widthM, x2, tesuriY1, widthM, pipeMat);
-                addPipe(group, x1, tesuriY2, widthM, x2, tesuriY2, widthM, pipeMat);
+                addRealisticNunoBar(THREE, group, x1, tesuriY1, widthM, x2, widthM, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, tesuriY2, widthM, x2, widthM, nunoMat);
               }
             }
 
-            // Plank / Anchi — color by span size (600/900/1200/1500/1800)
+            // Plank / Anchi — color by span size or texture
             const spanMm = spans[i];
-            const plankColorMat = getPlankMat(spanMm);
+            const plankColorMat = textures.plank ? plankMatEff : getPlankMat(spanMm);
             if (!isStairSpan) {
-              addBox(group, midX, y + 0.015, widthM / 2, spanM - 0.04, 0.03, widthM * 0.9, plankColorMat);
-              addBox(group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, 0.035, 0.02, habakiMat);
-              addBox(group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, 0.035, 0.02, habakiMat);
+              addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanM - 0.04, widthM * 0.9, plankColorMat);
+              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, habakiMatEff);
+              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, habakiMatEff);
               addTextLabel(group, String(spanMm), midX, y + 0.22, widthM / 2, 0.35);
             }
 
             // Habaki / Toe boards
-            addBox(group, midX, y + 0.06, 0, spanM - 0.04, 0.1, 0.015, habakiMat);
-            addBox(group, midX, y + 0.06, widthM, spanM - 0.04, 0.1, 0.015, habakiMat);
+            addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanM - 0.04, habakiMatEff);
+            addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
           }
         }
 
@@ -740,8 +751,8 @@ export default function Scaffold3DView({
           const x1 = postX[i];
           const x2 = postX[i + 1];
           for (const pz of [0, widthM]) {
-            addPipe(group, x1, guardH, pz, x2, guardH, pz, pipeMat);
-            addPipe(group, x1, topH + topGuardM * 0.5, pz, x2, topH + topGuardM * 0.5, pz, pipeMat);
+            addRealisticNunoBar(THREE, group, x1, guardH, pz, x2, pz, nunoMat);
+            addRealisticNunoBar(THREE, group, x1, topH + topGuardM * 0.5, pz, x2, pz, nunoMat);
           }
         }
 
@@ -1010,7 +1021,7 @@ export default function Scaffold3DView({
 
         // Two vertical posts at this vertex (shared by both walls — closed polygon)
         for (const p of [midOuter, midInner]) {
-          addPipe(scene, p.x, JACK_H, p.z, p.x, cornerH, p.z, pipeMat, PIPE_R * 0.9);
+          addRealisticPost(THREE, scene, p.x, JACK_H, p.z, cornerH - JACK_H, postMat);
         }
 
         // Horizontal pipes: close the loop (prev wall → shared corner → curr wall) + width
@@ -1050,7 +1061,7 @@ export default function Scaffold3DView({
           const spanLen = Math.max(CORNER_SPAN_M - 0.04, 0.2);
           const plankW = Math.min(widthM * 0.9, 0.55);
           const geo = new THREE.BoxGeometry(spanLen, 0.03, plankW);
-          const mesh = new THREE.Mesh(geo, getPlankMat(600));
+          const mesh = new THREE.Mesh(geo, plankMatEff);
           mesh.position.set(midX, plankY, midZ);
           mesh.rotation.y = angle;
           mesh.castShadow = true;
@@ -1069,7 +1080,7 @@ export default function Scaffold3DView({
             const hx = (ax + bx2) / 2;
             const hz = (az + bz2) / 2;
             const habakiGeo = new THREE.BoxGeometry(edgeLen - 0.02, 0.1, 0.015);
-            const habakiMesh = new THREE.Mesh(habakiGeo, habakiMat);
+            const habakiMesh = new THREE.Mesh(habakiGeo, habakiMatEff);
             habakiMesh.position.set(hx, hY, hz);
             habakiMesh.rotation.y = Math.atan2(bz2 - az, bx2 - ax);
             habakiMesh.castShadow = true;
