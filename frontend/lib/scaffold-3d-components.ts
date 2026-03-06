@@ -44,25 +44,35 @@ export function loadScaffoldTextures(
   const pipeMat = fallback(FALLBACK_COLORS.pipe, 0.6, 0.35);
   const pipeDarkMat = fallback(FALLBACK_COLORS.pipeDark, 0.5, 0.4);
 
+  const extensions = ['.png', '.jpg', '.jpeg'];
   const load = (name: string): Promise<MeshStandardMaterial | null> =>
     new Promise((resolve) => {
-      loader.load(
-        `${baseUrl}/${name}.png`,
-        (tex) => {
-          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-          tex.colorSpace = (THREE as any).SRGBColorSpace ?? 'srgb';
-          resolve(
-            new THREE.MeshStandardMaterial({
-              map: tex,
-              metalness: 0.5,
-              roughness: 0.45,
-              side: THREE.DoubleSide,
-            }),
-          );
-        },
-        undefined,
-        () => resolve(null),
-      );
+      let tried = 0;
+      const tryNext = () => {
+        if (tried >= extensions.length) {
+          resolve(null);
+          return;
+        }
+        const ext = extensions[tried++];
+        loader.load(
+          `${baseUrl}/${name}${ext}`,
+          (tex) => {
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+            tex.colorSpace = (THREE as any).SRGBColorSpace ?? 'srgb';
+            resolve(
+              new THREE.MeshStandardMaterial({
+                map: tex,
+                metalness: 0.5,
+                roughness: 0.45,
+                side: THREE.DoubleSide,
+              }),
+            );
+          },
+          undefined,
+          tryNext,
+        );
+      };
+      tryNext();
     });
 
   return Promise.all([
