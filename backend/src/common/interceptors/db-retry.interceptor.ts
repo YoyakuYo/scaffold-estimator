@@ -8,8 +8,8 @@ import {
 import { Observable, throwError, timer } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
-const MAX_RETRIES = 4; // 4 retries = 5 total attempts (helps when pool has only stale connections)
-const DELAY_MS = 2500; // Wait before next attempt so pool can hand out or create a fresh connection
+const MAX_RETRIES = 6; // 6 retries = 7 total attempts (Render free Postgres can take 60s+ to wake)
+const DELAY_MS = 5000; // 5s between attempts so DB has time to wake from sleep
 
 function isDbConnectionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;

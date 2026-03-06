@@ -30,11 +30,13 @@ import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
       useFactory: (configService: ConfigService) => {
         const logger = new Logger('DatabaseConfig');
 
-        // Try connection URL first (Render: DATABASE_URL or INTERNAL_DATABASE_URL; Supabase/Railway: DATABASE_URL)
+        // Prefer INTERNAL_DATABASE_URL on Render so backend talks to Postgres over private network (avoids timeouts).
+        // External DATABASE_URL can timeout when Postgres is waking from sleep.
         const databaseUrl =
           configService.get('INTERNAL_DATABASE_URL') || configService.get('DATABASE_URL');
         if (databaseUrl && typeof databaseUrl === 'string' && databaseUrl.includes('://')) {
-          logger.log('Using DATABASE_URL / INTERNAL_DATABASE_URL connection string');
+          const isInternal = !!configService.get('INTERNAL_DATABASE_URL');
+          logger.log(`Using ${isInternal ? 'INTERNAL_DATABASE_URL' : 'DATABASE_URL'} connection string`);
           try {
             const urlObj = new URL(databaseUrl);
             const safeUrl =
@@ -49,10 +51,10 @@ import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
               logging: configService.get('NODE_ENV') === 'development',
               ssl: { rejectUnauthorized: false },
               // Long connect timeout for Render: free Postgres can take 60–90s to wake from sleep
-              connectTimeoutMS: 90000,
+              connectTimeoutMS: 120000,
               extra: {
                 // Timeout when establishing a new connection (cold start / wake from sleep)
-                connectionTimeoutMillis: 90000,
+                connectionTimeoutMillis: 120000,
                 // Recycle idle connections before server closes them (Supabase/cloud often close after 5–10 min idle)
                 idleTimeoutMillis: 20000,
                 max: 5,
@@ -116,9 +118,9 @@ import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
           synchronize: false,
           logging: configService.get('NODE_ENV') === 'development',
           ssl: { rejectUnauthorized: false },
-          connectTimeoutMS: 90000,
+          connectTimeoutMS: 120000,
           extra: {
-            connectionTimeoutMillis: 90000,
+            connectionTimeoutMillis: 120000,
             idleTimeoutMillis: 20000,
             max: 5,
             min: 0,

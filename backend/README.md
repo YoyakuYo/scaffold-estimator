@@ -42,6 +42,22 @@ npm run migration:run
 npm run start:dev
 ```
 
+## Deploying on Render (Postgres + Web Service)
+
+If you see **"Connection terminated due to connection timeout"** on login or API calls:
+
+1. **Use the internal database URL**  
+   In the Render dashboard, open your **Postgres** service → **Info** tab. Copy the **Internal Database URL** (not the external one).
+
+2. **Set it on the Web Service**  
+   Open your **Web Service** (the Nest backend) → **Environment** tab. Add:
+   - **Key:** `INTERNAL_DATABASE_URL`  
+   - **Value:** the internal URL you copied (e.g. `postgresql://user:pass@dpg-xxx-a.oregon-postgres.render.com/dbname`)
+
+3. **Redeploy** the Web Service so it uses the new env var.
+
+The backend prefers `INTERNAL_DATABASE_URL` over `DATABASE_URL`. Using the internal URL avoids timeouts when the database wakes from sleep on the free tier.
+
 ## API Endpoints
 
 ### Authentication
