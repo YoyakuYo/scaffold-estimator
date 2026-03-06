@@ -30,6 +30,12 @@ const JACK_H = 0.3;
 const NEGR_H = 0.2;
 type ViewMode = 'all' | 'wall';
 
+// Technical palette (distinct per component for estimation/quotation)
+const C_TECH = {
+  post: 0x0f172a, brace: 0xb91c1c, tesuri: 0x1d4ed8, shitasan: 0x0e7490,
+  plank: 0xb45309, habaki: 0x44403c, jack: 0x334155, yokoji: 0x15803d,
+  topGuard: 0x6d28d9, frame: 0x4f46e5, endStopper: 0x7c3aed, stair: 0x047857,
+};
 // Galvanized steel palette (realistic scaffold look)
 const C = {
   pipe:       0xc8d0d8,
@@ -200,6 +206,8 @@ export interface Scaffold3DViewProps {
   onVisibleLevelsChange?: (levels: number) => void;
   levelSummary?: { totalLevels: number; visibleLevels: number; summary: CalculatedComponent[] };
   complianceMode?: 'default' | 'ai_bim';
+  /** When true, use distinct colors per component (支柱/ブレス/手摺/踏板 etc.) for estimation clarity */
+  technicalQuotationMode?: boolean;
 }
 
 const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = {
@@ -224,6 +232,7 @@ export default function Scaffold3DView({
   onVisibleLevelsChange,
   levelSummary,
   complianceMode = 'default',
+  technicalQuotationMode = false,
 }: Scaffold3DViewProps) {
   const { t } = useI18n();
   const params = useParams();
@@ -240,6 +249,7 @@ export default function Scaffold3DView({
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [activeWallIdx, setActiveWallIdx] = useState<number>(0);
   const [selectedComponent, setSelectedComponent] = useState<{ nameJp: string; description: string } | null>(null);
+  const [technicalMode, setTechnicalMode] = useState(technicalQuotationMode ?? false);
   const wallObjectsRef = useRef<Array<{ root: any; label: any; edge: any }>>([]);
   const wallFocusRef = useRef<Array<{ x: number; y: number; z: number }>>([]);
   const clickTargetsRef = useRef<any[]>([]);
@@ -383,16 +393,32 @@ export default function Scaffold3DView({
       rimLight.position.set(-8, 15, 15);
       scene.add(rimLight);
 
-      // ── Shared materials (galvanized metallic sheen) ───
-      const pipeMat = new THREE.MeshStandardMaterial({ color: C.pipe, metalness: 0.88, roughness: 0.22 });
-      const pipeDarkMat = new THREE.MeshStandardMaterial({ color: C.pipeDark, metalness: 0.85, roughness: 0.25 });
-      const plankMat = new THREE.MeshStandardMaterial({ color: C.plank, metalness: 0.82, roughness: 0.28 });
+      const isTech = technicalQuotationMode;
+      const metal = isTech ? 0.45 : 0.88;
+      const rough = isTech ? 0.5 : 0.22;
+
+      // ── Shared materials ───
+      const pipeMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.post : C.pipe,
+        metalness: metal,
+        roughness: rough,
+      });
+      const pipeDarkMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.brace : C.pipeDark,
+        metalness: metal,
+        roughness: rough,
+      });
+      const plankMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.plank : C.plank,
+        metalness: metal,
+        roughness: rough,
+      });
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
         spanPlankMats[span] = new THREE.MeshStandardMaterial({
-          color: SPAN_COLORS[span] ?? C.plank,
-          metalness: 0.82,
-          roughness: 0.28,
+          color: isTech ? C_TECH.plank : (SPAN_COLORS[span] ?? C.plank),
+          metalness: metal,
+          roughness: rough,
         });
       }
       const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
@@ -401,21 +427,44 @@ export default function Scaffold3DView({
         );
         return spanPlankMats[closest] ?? plankMat;
       };
-      const jackMat = new THREE.MeshStandardMaterial({ color: C.jackBase, metalness: 0.9, roughness: 0.2 });
-      const habakiMat = new THREE.MeshStandardMaterial({ color: C.habaki, metalness: 0.85, roughness: 0.25 });
-      const stairMat = new THREE.MeshStandardMaterial({ color: C.stair, metalness: 0.88, roughness: 0.22 });
+      const jackMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.jack : C.jackBase,
+        metalness: metal,
+        roughness: rough,
+      });
+      const habakiMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.habaki : C.habaki,
+        metalness: metal,
+        roughness: rough,
+      });
+      const stairMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.stair : C.stair,
+        metalness: metal,
+        roughness: rough,
+      });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
-      const frameMat = new THREE.MeshStandardMaterial({ color: C.frame, metalness: 0.88, roughness: 0.22 });
-      const frameDarkMat = new THREE.MeshStandardMaterial({ color: C.frameDark, metalness: 0.85, roughness: 0.25 });
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.frame : C.frame,
+        metalness: metal,
+        roughness: rough,
+      });
+      const frameDarkMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.brace : C.frameDark,
+        metalness: metal,
+        roughness: rough,
+      });
       const woodMat = new THREE.MeshStandardMaterial({ color: C.wood, metalness: 0.05, roughness: 0.9 });
 
-      // Effective materials: use loaded textures when available, else fallback
-      const postMat = textures.post ?? pipeMat;
-      const jackMatEff = textures.jack ?? jackMat;
-      const plankMatEff = textures.plank ?? plankMat;
-      const nunoMat = textures.nuno ?? pipeMat;
-      const braceMat = textures.brace ?? pipeDarkMat;
-      const habakiMatEff = textures.habaki ?? habakiMat;
+      // Effective materials: technical mode = distinct flat colors; else use textures when available
+      const postMat = isTech ? pipeMat : (textures.post ?? pipeMat);
+      const jackMatEff = isTech ? jackMat : (textures.jack ?? jackMat);
+      const plankMatEff = isTech ? plankMat : (textures.plank ?? plankMat);
+      const nunoMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough }) : (textures.nuno ?? pipeMat);
+      const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : nunoMat;
+      const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : nunoMat;
+      const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : nunoMat;
+      const braceMat = isTech ? pipeDarkMat : (textures.brace ?? pipeDarkMat);
+      const habakiMatEff = isTech ? habakiMat : (textures.habaki ?? habakiMat);
 
       const widthM = result.scaffoldWidthMm / 1000;
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -677,11 +726,11 @@ export default function Scaffold3DView({
           const x1 = postX[i];
           const x2 = postX[i + 1];
           for (const pz of [0, widthM]) {
-            addRealisticNunoBar(THREE, group, x1, baseY, pz, x2, pz, nunoMat);
+            addRealisticNunoBar(THREE, group, x1, baseY, pz, x2, pz, yokojiMat);
           }
         }
         for (const px of postX) {
-          addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, nunoMat);
+          addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, yokojiMat);
         }
 
         // ── Floor/level indicators (L1, L2, L3…) ──
@@ -714,7 +763,7 @@ export default function Scaffold3DView({
 
           // Width yokoji
           for (const px of postX) {
-            addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, nunoMat);
+            addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, yokojiMat);
           }
 
           for (let i = 0; i < spans.length; i++) {
@@ -732,8 +781,8 @@ export default function Scaffold3DView({
 
               // 下桟 (Shitasan) — bottom horizontal, both faces
               const shitasanY = baseYLv + 0.05;
-              addRealisticNunoBar(THREE, group, x1, shitasanY, 0, x2, 0, nunoMat);
-              addRealisticNunoBar(THREE, group, x1, shitasanY, widthM, x2, widthM, nunoMat);
+              addRealisticNunoBar(THREE, group, x1, shitasanY, 0, x2, 0, shitasanMat);
+              addRealisticNunoBar(THREE, group, x1, shitasanY, widthM, x2, widthM, shitasanMat);
             } else {
               // ── Kusabi: Brace on OUTER face only ──
               addRealisticBrace(THREE, group, x1, baseYLv, 0, x2, y, braceMat);
@@ -778,8 +827,8 @@ export default function Scaffold3DView({
           const x1 = postX[i];
           const x2 = postX[i + 1];
           for (const pz of [0, widthM]) {
-            addRealisticNunoBar(THREE, group, x1, guardH, pz, x2, pz, nunoMat);
-            addRealisticNunoBar(THREE, group, x1, topH + topGuardM * 0.5, pz, x2, pz, nunoMat);
+            addRealisticNunoBar(THREE, group, x1, guardH, pz, x2, pz, topGuardMat);
+            addRealisticNunoBar(THREE, group, x1, topH + topGuardM * 0.5, pz, x2, pz, topGuardMat);
           }
         }
 
@@ -1345,7 +1394,7 @@ export default function Scaffold3DView({
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, effectiveMaxLevel, isAiBim, t]);
+  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, effectiveMaxLevel, isAiBim, technicalMode, t]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);
@@ -1466,6 +1515,15 @@ export default function Scaffold3DView({
           <div className="text-xs text-gray-500">{t('result', 'dragHint')} / Click wall segment to focus</div>
         </div>
         <div className="flex items-center gap-3 flex-wrap mb-2 text-xs text-gray-600">
+          <button
+            onClick={() => setTechnicalMode((m) => !m)}
+            className={`px-2.5 py-1 rounded border font-medium transition-colors ${
+              technicalMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+            title={technicalMode ? '見積表示（部材色分け）' : '部材を色分けして表示'}
+          >
+            {technicalMode ? '見積表示 ON' : '見積表示'}
+          </button>
           <span className="font-medium">Span (plank color):</span>
           {[600, 900, 1200, 1500, 1800].map((mm) => (
             <span key={mm} className="inline-flex items-center gap-1">

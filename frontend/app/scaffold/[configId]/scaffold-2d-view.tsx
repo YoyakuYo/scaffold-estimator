@@ -10,33 +10,34 @@ import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight
 const LEVEL_H_KUSABI = 1800; // mm between levels (kusabi fixed)
 const JACK_BASE_H = 300; // mm visual height for jack base
 const SCALE_DEFAULT = 0.065; // px per mm — fits most screens
-const POST_STROKE = 3.5;
-const BRACE_STROKE = 2.2;
-const TESURI_STROKE = 2;
-const PLANK_H_PX = 7;
-const HABAKI_H_PX = 5;
+const POST_STROKE = 4;
+const BRACE_STROKE = 2.8;
+const TESURI_STROKE = 2.5;
+const PLANK_H_PX = 8;
+const HABAKI_H_PX = 6;
 const DIMENSION_OFFSET = 28;
 const FRAME_WIDTH_PX = 14;
 const FRAME_SPLAY_PX = 5;
 const FRAME_BOTTOM_RATIO = 0.194;
 
-// ─── Colors ─────────────────────────────────────────────────────
+// ─── Colors (clean technical drawing for estimation/quotation) ────
 const COL = {
-  post: '#1f2937',
-  brace: '#dc2626',
-  tesuri: '#1e40af',
-  shitasan: '#0891b2',  // wakugumi bottom horizontal
-  plank: '#d97706',
-  habaki: '#57534e',
-  jackBase: '#4b5563',
-  yokoji: '#15803d',
-  stair: '#047857',
-  dim: '#6b7280',
-  dimText: '#374151',
+  post: '#0f172a',      // 支柱 — dark, primary structure
+  brace: '#b91c1c',     // ブレス — distinct red
+  tesuri: '#1d4ed8',    // 手摺 — blue
+  shitasan: '#0e7490',  // 下桟 — cyan (wakugumi)
+  plank: '#b45309',     // 踏板 — amber
+  habaki: '#44403c',    // 巾木 — dark brown
+  jackBase: '#334155',  // ジャッキ — slate
+  yokoji: '#15803d',    // 根がらみ — green
+  stair: '#047857',     // 階段 — teal
+  endStopper: '#7c3aed', // 端部 — purple (wakugumi)
+  dim: '#64748b',
+  dimText: '#1e293b',
   bg: '#ffffff',
-  grid: '#f3f4f6',
-  topGuard: '#6d28d9',
-  frame: '#7c3aed',  // wakugumi frame color
+  grid: '#f1f5f9',
+  topGuard: '#6d28d9',  // 上部手摺 — violet
+  frame: '#4f46e5',     // 建枠 — indigo
 };
 
 // Per-wall accent colors (cycle for many walls)
@@ -129,10 +130,25 @@ export default function Scaffold2DView({ result }: Props) {
     const { spans, levels, totalLengthMm, postXPositions, stairPositions } = wallData;
     const elements: JSX.Element[] = [];
 
+    // Grid (subtle, for technical clarity)
+    const gridStep = 1000;
+    for (let gx = 0; gx <= totalLengthMm; gx += gridStep) {
+      elements.push(
+        <line key={`gv-${gx}`} x1={x(gx)} y1={y(0)} x2={x(gx)} y2={y(wallData.totalHeightMm)}
+          stroke={COL.grid} strokeWidth={0.5} />
+      );
+    }
+    for (let gy = 0; gy <= wallData.totalHeightMm; gy += gridStep) {
+      elements.push(
+        <line key={`gh-${gy}`} x1={x(0)} y1={y(gy)} x2={x(totalLengthMm)} y2={y(gy)}
+          stroke={COL.grid} strokeWidth={0.5} />
+      );
+    }
+
     // Ground line
     elements.push(
       <line key="ground" x1={x(0) - 10} y1={y(0)} x2={x(totalLengthMm) + 10} y2={y(0)}
-        stroke="#9ca3af" strokeWidth={2} strokeDasharray="6,3" />
+        stroke="#94a3b8" strokeWidth={2} strokeDasharray="6,3" />
     );
 
     // Jack Bases
@@ -327,6 +343,21 @@ export default function Scaffold2DView({ result }: Props) {
           stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />
       );
     });
+
+    // End stopper (端部) — wakugumi only, at wall ends
+    if (isWakugumi) {
+      Array.from({ length: levels }).forEach((_, lvl) => {
+        const baseY = JACK_BASE_H + lvl * LEVEL_H;
+        const topY = baseY + LEVEL_H;
+        [0, totalLengthMm].forEach((px, ei) => {
+          elements.push(
+            <line key={`endstopper-${lvl}-${ei}`}
+              x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
+              stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />
+          );
+        });
+      });
+    }
 
     // Span dimension lines
     spans.forEach((span, si) => {
@@ -540,13 +571,14 @@ export default function Scaffold2DView({ result }: Props) {
           {renderWall()}
 
           {/* Legend */}
-          <g transform={`translate(${PAD_LEFT}, ${svgH - 22})`}>
+          <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
             {(isWakugumi ? [
               { color: COL.post, label: '建枠' },
               { color: COL.brace, label: 'ブレス' },
               { color: COL.shitasan, label: '下桟' },
               { color: COL.plank, label: '踏板' },
               { color: COL.habaki, label: '巾木' },
+              { color: COL.endStopper, label: '端部' },
               { color: COL.yokoji, label: '根がらみ' },
               { color: COL.topGuard, label: '上部手摺' },
               { color: COL.jackBase, label: 'ジャッキ' },
@@ -561,10 +593,10 @@ export default function Scaffold2DView({ result }: Props) {
               { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
               { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },
               { color: COL.stair, label: t('result', 'legendStair') || '階段' },
-            ]).map((item, i) => (
-              <g key={i} transform={`translate(${i * 90}, 0)`}>
-                <rect x={0} y={-8} width={14} height={4} fill={item.color} rx={1} />
-                <text x={18} y={-4} fontSize={9} fill={COL.dimText}>{item.label}</text>
+            ]            ).map((item, i) => (
+              <g key={i} transform={`translate(${i * 78}, 0)`}>
+                <rect x={0} y={-10} width={16} height={5} fill={item.color} rx={1} stroke="#e2e8f0" strokeWidth={0.5} />
+                <text x={20} y={-5} fontSize={10} fill={COL.dimText} fontWeight={500}>{item.label}</text>
               </g>
             ))}
           </g>
