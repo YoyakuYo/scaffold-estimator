@@ -570,7 +570,7 @@ function ScaffoldPageContent() {
                       buildingOutline,
                     };
                     const data = await scaffoldConfigsApi.createAndCalculate(dto);
-                    router.push(`/scaffold/${data.config.id}`);
+                    router.push(`/scaffold/${data.config.id}?aiBim=1`);
                   } catch (err: any) {
                     setAiBimError(err?.message || 'Analysis failed. Try another image or use Drawing/Quick mode.');
                   } finally {

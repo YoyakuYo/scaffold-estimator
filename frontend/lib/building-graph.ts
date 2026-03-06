@@ -37,6 +37,43 @@ export interface BuildingGraphData {
   polygonVertices?: FootprintVertex[];
 }
 
+function dist2dMm(a: { x: number; z: number }, b: { x: number; z: number }): number {
+  return Math.hypot(b.x - a.x, b.z - a.z);
+}
+
+function isLikelyFractionCoords(points: Array<{ x: number; z: number }>): boolean {
+  if (points.length < 3) return false;
+  const xs = points.map((p) => p.x);
+  const zs = points.map((p) => p.z);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
+  const spread = Math.max(maxX - minX, maxZ - minZ);
+  const maxCoord = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minZ), Math.abs(maxZ));
+  return maxCoord <= 1.1 && spread <= 1.1;
+}
+
+function normalizeFootprintToMm(
+  vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
+  refLengthMm?: number,
+): Array<{ x: number; z: number }> {
+  const raw = vertices.map((v) => ({
+    x: 'xFrac' in v ? v.xFrac : v.x,
+    z: 'yFrac' in v ? v.yFrac : v.y,
+  }));
+  if (!isLikelyFractionCoords(raw)) {
+    return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
+  }
+
+  const xs = raw.map((p) => p.x);
+  const zs = raw.map((p) => p.z);
+  const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+  const target = Math.max(6000, refLengthMm ?? 10000);
+  const scale = target / Math.max(spread, 0.001);
+  return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
+}
+
 /**
  * Build a BuildingGraph from a 2D footprint (closed polygon).
  * Vertices become nodes; each edge (i → i+1) becomes an edge with length.
@@ -49,38 +86,62 @@ export function buildGraphFromFootprint(
   const n = vertices.length;
   if (n < 3) return { nodes: [], edges: [] };
 
-  const isFraction = vertices.some(
-    (v) => Math.abs((v as { xFrac?: number }).xFrac ?? (v as { x: number }).x) <= 1.1,
-  );
-  const scale = isFraction && refLengthMm ? refLengthMm / 1000 : 1;
+  const mm = normalizeFootprintToMm(vertices, refLengthMm);
 
-  const nodes: BuildingNode[] = vertices.map((v, i) => {
-    const x = ('xFrac' in v ? v.xFrac : v.x) * (isFraction ? scale : 1);
-    const z = ('yFrac' in v ? v.yFrac : v.y) * (isFraction ? scale : 1);
-    return {
-      id: `node-${i}`,
-      position: { x, y: 0, z },
+  // Snap / dedupe: merge vertices that are effectively identical (vision output often repeats endpoints).
+  const tolMm = 1; // 1mm tolerance for node snapping
+  const snapped: Array<{ x: number; z: number }> = [];
+  for (const p of mm) {
+    const last = snapped[snapped.length - 1];
+    if (!last || dist2dMm(last, p) > tolMm) snapped.push(p);
+  }
+  // If last is same as first, remove last.
+  if (snapped.length >= 3) {
+    const first = snapped[0];
+    const last = snapped[snapped.length - 1];
+    if (dist2dMm(first, last) <= tolMm) snapped.pop();
+  }
+
+  // Map by rounded mm coordinate to ensure shared nodes at intersections.
+  const nodeByKey = new Map<string, BuildingNode>();
+  const order: BuildingNode[] = [];
+  const getNode = (x: number, z: number) => {
+    const rx = Math.round(x);
+    const rz = Math.round(z);
+    const key = `${rx},${rz}`;
+    const existing = nodeByKey.get(key);
+    if (existing) return existing;
+    const node: BuildingNode = {
+      id: `node-${nodeByKey.size}`,
+      position: { x: rx, y: 0, z: rz },
     };
-  });
+    nodeByKey.set(key, node);
+    order.push(node);
+    return node;
+  };
+
+  const loopNodes = snapped.map((p) => getNode(p.x, p.z));
+  const nodes: BuildingNode[] = order;
 
   const edges: BuildingEdge[] = [];
-  for (let i = 0; i < n; i++) {
-    const next = (i + 1) % n;
-    const a = nodes[i].position;
-    const b = nodes[next].position;
+  for (let i = 0; i < loopNodes.length; i++) {
+    const next = (i + 1) % loopNodes.length;
+    const a = loopNodes[i].position;
+    const b = loopNodes[next].position;
     const lengthMm = Math.sqrt((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
     edges.push({
       id: `edge-${i}`,
-      fromNodeId: nodes[i].id,
-      toNodeId: nodes[next].id,
+      fromNodeId: loopNodes[i].id,
+      toNodeId: loopNodes[next].id,
       lengthMm: Math.round(lengthMm),
       wallIndex: i,
     });
   }
 
-  const polygonVertices: FootprintVertex[] = vertices.map((v) => ({
-    xFrac: 'xFrac' in v ? v.xFrac : (v as { x: number }).x,
-    yFrac: 'yFrac' in v ? v.yFrac : (v as { y: number }).y,
+  // For the existing 3D renderer: pass mm coords via the existing field names.
+  const polygonVertices: FootprintVertex[] = loopNodes.map((node) => ({
+    xFrac: node.position.x,
+    yFrac: node.position.z,
   }));
 
   return { nodes, edges, polygonVertices };

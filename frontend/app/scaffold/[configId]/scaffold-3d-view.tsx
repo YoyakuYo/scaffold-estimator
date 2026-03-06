@@ -189,6 +189,7 @@ export interface Scaffold3DViewProps {
   totalLevels?: number;
   onVisibleLevelsChange?: (levels: number) => void;
   levelSummary?: { totalLevels: number; visibleLevels: number; summary: CalculatedComponent[] };
+  complianceMode?: 'default' | 'ai_bim';
 }
 
 const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = {
@@ -206,7 +207,14 @@ const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = 
   frame: { nameJp: '建枠', description: '枠組足場の基本ユニット。門型フレームで一層の高さを構成します。' },
 };
 
-export default function Scaffold3DView({ result, maxVisibleLevel, totalLevels = 1, onVisibleLevelsChange, levelSummary }: Scaffold3DViewProps) {
+export default function Scaffold3DView({
+  result,
+  maxVisibleLevel,
+  totalLevels = 1,
+  onVisibleLevelsChange,
+  levelSummary,
+  complianceMode = 'default',
+}: Scaffold3DViewProps) {
   const { t } = useI18n();
   const params = useParams();
   const configId = params.configId as string;
@@ -229,6 +237,7 @@ export default function Scaffold3DView({ result, maxVisibleLevel, totalLevels = 
   const controlsRef = useRef<any>(null);
 
   const effectiveMaxLevel = maxVisibleLevel != null ? Math.max(1, Math.min(maxVisibleLevel, totalLevels || 1)) : undefined;
+  const isAiBim = complianceMode === 'ai_bim';
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
   const walls: WallCalculationResult[] =
@@ -690,10 +699,22 @@ export default function Scaffold3DView({ result, maxVisibleLevel, totalLevels = 
               addPipe(group, x1, y, 0, x2, baseYLv, 0, pipeDarkMat, PIPE_R * 0.7);
 
               // INNER face — Tesuri/Nuno (z = widthM)
-              const tesuriY1 = baseYLv + LEVEL_H * 0.5;
-              const tesuriY2 = y;
-              addPipe(group, x1, tesuriY1, widthM, x2, tesuriY1, widthM, pipeMat);
-              addPipe(group, x1, tesuriY2, widthM, x2, tesuriY2, widthM, pipeMat);
+              if (isAiBim) {
+                // Japanese compliance (AI BIM): middle rail 450mm, handrail >=850mm
+                const midRailY = baseYLv + 0.45;
+                const handrailY = baseYLv + 0.85;
+                addPipe(group, x1, midRailY, widthM, x2, midRailY, widthM, pipeMat, PIPE_R * 0.95);
+                addPipe(group, x1, handrailY, widthM, x2, handrailY, widthM, pipeMat, PIPE_R * 0.95);
+                // Additional ledger at 1200mm (within 1800mm level)
+                const ledger1200Y = baseYLv + 1.2;
+                addPipe(group, x1, ledger1200Y, 0, x2, ledger1200Y, 0, pipeDarkMat, PIPE_R * 0.75);
+                addPipe(group, x1, ledger1200Y, widthM, x2, ledger1200Y, widthM, pipeDarkMat, PIPE_R * 0.75);
+              } else {
+                const tesuriY1 = baseYLv + LEVEL_H * 0.5;
+                const tesuriY2 = y;
+                addPipe(group, x1, tesuriY1, widthM, x2, tesuriY1, widthM, pipeMat);
+                addPipe(group, x1, tesuriY2, widthM, x2, tesuriY2, widthM, pipeMat);
+              }
             }
 
             // Plank / Anchi — color by span size (600/900/1200/1500/1800)
@@ -1286,7 +1307,7 @@ export default function Scaffold3DView({ result, maxVisibleLevel, totalLevels = 
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, effectiveMaxLevel, t]);
+  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, effectiveMaxLevel, isAiBim, t]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);

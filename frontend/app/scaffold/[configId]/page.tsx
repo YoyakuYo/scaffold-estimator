@@ -9,6 +9,7 @@ import {
   ScaffoldConfiguration,
   WallCalculationResult,
   CalculatedComponent,
+  ScaffoldMaterial,
 } from '@/lib/api/scaffold-configs';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -73,6 +74,7 @@ function ScaffoldResultPage() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const configId = params.configId as string;
+  const isAiBim = searchParams.get('aiBim') === '1';
 
   // Support ?tab=3d, ?tab=2d from external links
   const initialTab = (searchParams.get('tab') as TabView) || 'table';
@@ -113,14 +115,27 @@ function ScaffoldResultPage() {
   };
 
   // ─── Download BOM CSV (Japanese: 部品名, 数量, 重量) ─────────────────────────────────────
-  const handleBomCsvDownload = useCallback(() => {
+  const handleBomCsvDownload = useCallback(async () => {
     if (!result?.summary?.length) return;
+    let weightByCode = new Map<string, number>();
+    try {
+      const materials: ScaffoldMaterial[] = await scaffoldConfigsApi.listMaterials();
+      weightByCode = new Map(
+        materials
+          .filter((m) => !!m.code && typeof m.weightKg === 'number' && isFinite(m.weightKg as number))
+          .map((m) => [m.code, Number(m.weightKg)]),
+      );
+    } catch {
+      // Weight column will show "—" if materials lookup fails.
+    }
     const header = '部品名,数量,重量\n';
     const rows = result.summary.map((c: CalculatedComponent) => {
       const name = (c.nameJp || c.name || c.type).replace(/,/g, ' ');
       const qty = String(c.quantity);
-      const weight = ''; // Optional: lookup from materials by materialCode
-      return `${name},${qty},${weight || '—'}`;
+      const unitW = c.materialCode ? weightByCode.get(c.materialCode) : undefined;
+      const totalW = typeof unitW === 'number' ? unitW * c.quantity : undefined;
+      const weight = typeof totalW === 'number' ? `${totalW.toFixed(2)}kg` : '—';
+      return `${name},${qty},${weight}`;
     });
     const csv = '\uFEFF' + header + rows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -337,6 +352,7 @@ function ScaffoldResultPage() {
             totalLevels={maxLevels}
             onVisibleLevelsChange={setVisibleLevels}
             levelSummary={result ? getLevelSummary(result, visibleLevels) : undefined}
+            complianceMode={isAiBim ? 'ai_bim' : 'default'}
           />
         )}
 

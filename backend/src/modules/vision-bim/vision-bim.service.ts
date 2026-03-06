@@ -186,8 +186,7 @@ export class VisionBimService {
   async processImage(buffer: Buffer): Promise<VisionFootprintResult> {
     const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
     if (!apiKey) {
-      this.logger.warn('ANTHROPIC_API_KEY not set; returning fallback footprint');
-      return this.getFallbackFootprint();
+      throw new Error('ANTHROPIC_API_KEY is not set (AI BIM vision analysis is unavailable)');
     }
 
     try {
@@ -224,21 +223,32 @@ export class VisionBimService {
       });
 
       const textBlock = message.content.find((b: any) => b.type === 'text');
-      const text = textBlock && typeof (textBlock as any).text === 'string' ? (textBlock as any).text : '';
-      const jsonStr = text.replace(/```json?\s*/i, '').replace(/```\s*$/, '').trim();
+      const text =
+        textBlock && typeof (textBlock as any).text === 'string'
+          ? (textBlock as any).text
+          : '';
+
+      // Robust JSON extraction: models sometimes wrap in prose or code fences.
+      const cleaned = text.replace(/```json?\s*/gi, '').replace(/```/g, '').trim();
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start < 0 || end < 0 || end <= start) {
+        throw new Error('Vision model did not return JSON');
+      }
+      const jsonStr = cleaned.slice(start, end + 1);
       const parsed = JSON.parse(jsonStr) as VisionFootprintResult;
 
       if (!parsed.vertices || !Array.isArray(parsed.vertices) || parsed.vertices.length < 3) {
-        this.logger.warn('Vision returned invalid vertices; using fallback');
-        return this.getFallbackFootprint();
+        throw new Error('Vision returned invalid footprint vertices');
       }
       if (!parsed.buildingHeightMm || parsed.buildingHeightMm < 1000) {
         parsed.buildingHeightMm = 3000;
       }
       return parsed;
     } catch (err) {
-      this.logger.error('Vision BIM processing failed', (err as Error)?.message);
-      return this.getFallbackFootprint();
+      const msg = (err as Error)?.message || String(err);
+      this.logger.error('Vision BIM processing failed', msg);
+      throw new Error(`Vision BIM processing failed: ${msg}`);
     }
   }
 
