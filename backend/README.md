@@ -42,21 +42,27 @@ npm run migration:run
 npm run start:dev
 ```
 
-## Deploying on Render (Postgres + Web Service)
+## Database: Supabase vs Render
 
-If you see **"Connection terminated due to connection timeout"** on login or API calls:
+### Supabase (your case)
 
-1. **Use the internal database URL**  
-   In the Render dashboard, open your **Postgres** service → **Info** tab. Copy the **Internal Database URL** (not the external one).
+You **don’t** need to change to Render Postgres. Keep using Supabase.
 
-2. **Set it on the Web Service**  
-   Open your **Web Service** (the Nest backend) → **Environment** tab. Add:
-   - **Key:** `INTERNAL_DATABASE_URL`  
-   - **Value:** the internal URL you copied (e.g. `postgresql://user:pass@dpg-xxx-a.oregon-postgres.render.com/dbname`)
+To fix **"Connection terminated due to connection timeout"** with Supabase:
 
-3. **Redeploy** the Web Service so it uses the new env var.
+1. In **Supabase Dashboard** → your project → **Project Settings** (gear) → **Database**.
+2. Under **Connection string**, choose **URI** and **Transaction** (or **Session**) mode.
+3. Copy the URL. It should use **port 6543** (pooler), not 5432 (direct).
+   - Example: `postgresql://postgres.[ref]:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres`
+4. Set that as **`DATABASE_URL`** in your backend env (e.g. on Render: Web Service → Environment).  
+   Use your real DB password (not the placeholder in the dashboard).
+5. Redeploy the backend.
 
-The backend prefers `INTERNAL_DATABASE_URL` over `DATABASE_URL`. Using the internal URL avoids timeouts when the database wakes from sleep on the free tier.
+Using the **pooler** (port 6543) avoids timeouts; the direct connection (5432) is more likely to drop or timeout.
+
+### Render Postgres (if you used Render’s Postgres instead)
+
+If the backend runs on Render and the DB is **Render Postgres** (not Supabase), set **`INTERNAL_DATABASE_URL`** on the Web Service to the internal URL from the Postgres service’s **Info** tab, then redeploy.
 
 ## API Endpoints
 
