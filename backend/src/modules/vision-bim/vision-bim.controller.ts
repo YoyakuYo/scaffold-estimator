@@ -19,7 +19,7 @@ export class VisionBimController {
 
   /**
    * POST /vision-bim/analyze
-   * Accepts image file (photo or blueprint). Returns structured footprint JSON.
+   * Accepts image (PNG, JPEG, etc.), DXF, DWG, JWW, or PDF. Returns structured footprint JSON.
    */
   @Post('analyze')
   @UseInterceptors(
@@ -34,6 +34,11 @@ export class VisionBimController {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
-    return this.visionBim.processImage(buffer);
+    const filename = file.originalname || file.name;
+    try {
+      return await this.visionBim.processFile(buffer, filename);
+    } catch (err: any) {
+      throw new BadRequestException(err?.message || 'File processing failed');
+    }
   }
 }
