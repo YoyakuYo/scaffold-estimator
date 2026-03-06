@@ -15,6 +15,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { MailerModule } from './modules/mailer/mailer.module';
 import { CompanyModule } from './modules/company/company.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
+import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
 
 @Module({
   imports: [
@@ -171,6 +172,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
     MailerModule,
     CompanyModule,
     SubscriptionModule,
+    VisionBimModule,
   ],
 })
 export class AppModule {}

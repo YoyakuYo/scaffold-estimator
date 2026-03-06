@@ -26,6 +26,8 @@ import {
   ShieldCheck,
   RefreshCw,
   ClipboardCheck,
+  Download,
+  Plus,
 } from 'lucide-react';
 import Scaffold2DView from './scaffold-2d-view';
 import ScaffoldPlanView from './scaffold-plan-view';
@@ -41,6 +43,20 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
 });
 
 type TabView = 'table' | 'perside' | '2d' | 'plan' | '3d';
+
+/** Cumulative per-level summary: approximate quantities up to visibleLevels (scale by visibleLevels/totalLevels). */
+function getLevelSummary(
+  result: { summary: CalculatedComponent[]; totalLevels?: number; walls?: WallCalculationResult[] },
+  visibleLevels: number,
+): { totalLevels: number; visibleLevels: number; summary: CalculatedComponent[] } {
+  const totalLevels = result.totalLevels ?? Math.max(1, ...(result.walls?.map((w) => w.levelCalc?.fullLevels ?? 1) ?? [1]));
+  const ratio = totalLevels > 0 ? Math.min(1, visibleLevels / totalLevels) : 1;
+  const summary: CalculatedComponent[] = (result.summary ?? []).map((c) => ({
+    ...c,
+    quantity: Math.round(c.quantity * ratio),
+  }));
+  return { totalLevels, visibleLevels, summary };
+}
 
 export default function ScaffoldResultPageWrapper() {
   return (
@@ -63,12 +79,20 @@ function ScaffoldResultPage() {
   const [activeTab, setActiveTab] = useState<TabView>(
     ['table', 'perside', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
   );
+  const [visibleLevels, setVisibleLevels] = useState<number>(1);
 
   // Fetch config (includes calculationResult)
   const { data: config, isLoading } = useQuery<ScaffoldConfiguration>({
     queryKey: ['scaffold-config', configId],
     queryFn: () => scaffoldConfigsApi.get(configId),
   });
+
+  const result = config?.calculationResult;
+  const maxLevels = result ? (result.totalLevels ?? Math.max(...(result.walls?.map((w: WallCalculationResult) => w.levelCalc?.fullLevels ?? 1) ?? [1]))) : 1;
+
+  useEffect(() => {
+    if (result && maxLevels >= 1) setVisibleLevels((prev) => Math.min(prev, maxLevels));
+  }, [result, maxLevels]);
 
   // Review/approve mutation
   const reviewMutation = useMutation({
@@ -88,7 +112,25 @@ function ScaffoldResultPage() {
     }
   };
 
-  const result = config?.calculationResult;
+  // ─── Download BOM CSV (Japanese: 部品名, 数量, 重量) ─────────────────────────────────────
+  const handleBomCsvDownload = useCallback(() => {
+    if (!result?.summary?.length) return;
+    const header = '部品名,数量,重量\n';
+    const rows = result.summary.map((c: CalculatedComponent) => {
+      const name = (c.nameJp || c.name || c.type).replace(/,/g, ' ');
+      const qty = String(c.quantity);
+      const weight = ''; // Optional: lookup from materials by materialCode
+      return `${name},${qty},${weight || '—'}`;
+    });
+    const csv = '\uFEFF' + header + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `足場BOM_${configId.slice(0, 8)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [result, configId]);
 
   // ─── Excel Download ─────────────────────────────────────
   const handleExcelDownload = useCallback(async () => {
@@ -152,6 +194,13 @@ function ScaffoldResultPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleBomCsvDownload}
+              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg transition-colors shadow"
+            >
+              <Download className="h-4 w-4" />
+              Download BOM (CSV)
+            </button>
             <button
               onClick={handleExcelDownload}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors shadow"
@@ -281,7 +330,15 @@ function ScaffoldResultPage() {
         {activeTab === 'perside' && <PerSideBreakdown result={result} />}
         {activeTab === '2d' && <Scaffold2DView result={result} />}
         {activeTab === 'plan' && <ScaffoldPlanView result={result} />}
-        {activeTab === '3d' && <Scaffold3DView result={result} />}
+        {activeTab === '3d' && (
+          <Scaffold3DView
+            result={result}
+            maxVisibleLevel={visibleLevels}
+            totalLevels={maxLevels}
+            onVisibleLevelsChange={setVisibleLevels}
+            levelSummary={result ? getLevelSummary(result, visibleLevels) : undefined}
+          />
+        )}
 
         {/* ─── Review & Approve Section ──────────────────────── */}
         <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">

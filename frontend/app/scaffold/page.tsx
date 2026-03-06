@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -23,9 +23,14 @@ import {
   LayoutList,
   Zap,
   PenTool,
+  ScanLine,
+  Upload,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
+import { visionBimApi } from '@/lib/api/vision-bim';
+import { ScaffoldManager } from '@/lib/scaffold-manager';
+import { getAiBimDefaults } from '@/lib/ai-bim-rules';
 
 // Dynamic import for PerimeterTracer (uses browser APIs)
 const PerimeterTracer = dynamic(
@@ -193,7 +198,11 @@ function ScaffoldPageContent() {
   };
 
   // ─── Input Mode ────────────────────────────────────────
-  const [inputMode, setInputMode] = useState<'drawing' | 'quick'>('drawing');
+  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_bim'>('drawing');
+  const [aiBimUploading, setAiBimUploading] = useState(false);
+  const [aiBimError, setAiBimError] = useState<string | null>(null);
+  const scaffoldManagerRef = useRef<ScaffoldManager | null>(null);
+  if (!scaffoldManagerRef.current) scaffoldManagerRef.current = new ScaffoldManager();
 
   // ─── Perimeter Model ────────────────────────────────────
   const [perimeterModel] = useState(() => new PerimeterModel());
@@ -498,9 +507,95 @@ function ScaffoldPageContent() {
                 <Zap className="h-4 w-4" />
                 {t('scaffoldExtra', 'quickBuilder')}
               </button>
+              <button
+                onClick={() => setInputMode('ai_bim')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                  inputMode === 'ai_bim'
+                    ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <ScanLine className="h-4 w-4" />
+                AI BIM Mode
+              </button>
             </div>
           )}
         </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          AI BIM MODE — Vision-to-BIM upload
+         ═══════════════════════════════════════════════════════ */}
+      {inputMode === 'ai_bim' && !editConfigId && (
+        <div className="max-w-[800px] mx-auto px-4 pb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <ScanLine className="h-5 w-5 text-violet-600" />
+              AI BIM Mode — 写真・図面から足場モデル
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+              写真または青写真をアップロードすると、建物の外形と高さを検出し、くさび式足場（締め式・MHLW準拠）で3DモデルとBOMを生成します。
+            </p>
+            <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
+              <Upload className="h-10 w-10 text-violet-500 mb-2" />
+              <span className="text-sm font-medium text-violet-700 mb-1">クリックまたはドラッグで画像をアップロード</span>
+              <span className="text-xs text-gray-500">PNG, JPEG (max 10MB)</span>
+              <input
+                type="file"
+                className="hidden"
+                accept="image/png,image/jpeg,image/jpg"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setAiBimError(null);
+                  setAiBimUploading(true);
+                  try {
+                    const footprint = await visionBimApi.analyze(file);
+                    const manager = scaffoldManagerRef.current!;
+                    const refMm = footprint.vertices.some((v) => 'xFrac' in v) ? 10000 : undefined;
+                    const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
+                      footprint.vertices,
+                      footprint.buildingHeightMm,
+                      refMm,
+                    );
+                    const defaults = getAiBimDefaults();
+                    const dto: CreateScaffoldConfigDto = {
+                      projectId: 'default-project',
+                      mode: 'manual',
+                      scaffoldType: 'kusabi',
+                      structureType: '改修工事',
+                      walls,
+                      scaffoldWidthMm: defaults.scaffoldWidthMm,
+                      preferredMainTatejiMm: defaults.preferredMainTatejiMm,
+                      topGuardHeightMm: defaults.topGuardHeightMm,
+                      buildingOutline,
+                    };
+                    const data = await scaffoldConfigsApi.createAndCalculate(dto);
+                    router.push(`/scaffold/${data.config.id}`);
+                  } catch (err: any) {
+                    setAiBimError(err?.message || 'Analysis failed. Try another image or use Drawing/Quick mode.');
+                  } finally {
+                    setAiBimUploading(false);
+                    e.target.value = '';
+                  }
+                }}
+                disabled={aiBimUploading}
+              />
+            </label>
+            {aiBimUploading && (
+              <div className="mt-4 flex items-center gap-2 text-violet-600">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Analyzing image and generating scaffold model…</span>
+              </div>
+            )}
+            {aiBimError && (
+              <div className="mt-4 flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                {aiBimError}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════
           QUICK SHAPE BUILDER MODE

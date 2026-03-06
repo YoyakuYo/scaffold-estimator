@@ -26,6 +26,7 @@
     "seed": "ts-node -r tsconfig-paths/register src/database/seeds/run-seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@aws-sdk/client-s3": "^3.490.0",
     "@nestjs/bull": "^10.0.1",
     "@nestjs/common": "^10.3.0",

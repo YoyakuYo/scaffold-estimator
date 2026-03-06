@@ -2,9 +2,9 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Loader2, FileText, FileCode, Box, Download } from 'lucide-react';
+import { Loader2, FileText, FileCode, Box, Download, Plus, Info } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import type { WallCalculationResult } from '@/lib/api/scaffold-configs';
+import type { WallCalculationResult, CalculatedComponent } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
 import html2canvas from 'html2canvas';
 
@@ -183,7 +183,30 @@ function computeSpanCaps(walls: WallCalculationResult[], levelH: number) {
   return { caps, simplified: true, totalSpanLevels };
 }
 
-export default function Scaffold3DView({ result }: { result: any }) {
+export interface Scaffold3DViewProps {
+  result: any;
+  maxVisibleLevel?: number;
+  totalLevels?: number;
+  onVisibleLevelsChange?: (levels: number) => void;
+  levelSummary?: { totalLevels: number; visibleLevels: number; summary: CalculatedComponent[] };
+}
+
+const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = {
+  post: { nameJp: '支柱（タテジ）', description: 'くさび式足場の垂直材。建物面に沿って一定間隔で立て、レベルごとに継ぎ足します。' },
+  tateji: { nameJp: '支柱（タテジ）', description: '垂直方向の荷重を支える主要な部材です。' },
+  pipe: { nameJp: 'パイプ', description: '足場の骨組みを構成する鋼管です。' },
+  brace: { nameJp: 'ブレス', description: 'X状の筋交い。水平方向の剛性を高め、足場の変形を防ぎます。' },
+  tesuri: { nameJp: '手摺', description: '作業床の内側に設ける水平材。転落防止と作業性のため、高さ850mm以上が推奨されます。' },
+  nuno: { nameJp: '布材（ヌノ）', description: '水平支持材。端部のストッパーや構造補強として使います。' },
+  plank: { nameJp: '踏板（アンチ）', description: '作業員が乗る床板。500mm×スパン長が標準です。' },
+  anchi: { nameJp: '踏板（アンチ）', description: '足場の作業床。幅500mmまたは240mmの半幅があります。' },
+  habaki: { nameJp: '巾木（ハバキ）', description: '足場の先端に設ける幅木。転落防止のための toe board です。' },
+  jack: { nameJp: 'ジャッキベース', description: '支柱の根元に設置し、高さを微調整する部材です。' },
+  stair: { nameJp: '階段', description: 'レベル間の昇降用。手摺付きで安全に通行できます。' },
+  frame: { nameJp: '建枠', description: '枠組足場の基本ユニット。門型フレームで一層の高さを構成します。' },
+};
+
+export default function Scaffold3DView({ result, maxVisibleLevel, totalLevels = 1, onVisibleLevelsChange, levelSummary }: Scaffold3DViewProps) {
   const { t } = useI18n();
   const params = useParams();
   const configId = params.configId as string;
@@ -198,10 +221,14 @@ export default function Scaffold3DView({ result }: { result: any }) {
   const [simplified, setSimplified] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [activeWallIdx, setActiveWallIdx] = useState<number>(0);
+  const [selectedComponent, setSelectedComponent] = useState<{ nameJp: string; description: string } | null>(null);
   const wallObjectsRef = useRef<Array<{ root: any; label: any; edge: any }>>([]);
   const wallFocusRef = useRef<Array<{ x: number; y: number; z: number }>>([]);
   const clickTargetsRef = useRef<any[]>([]);
+  const componentMeshesRef = useRef<any[]>([]);
   const controlsRef = useRef<any>(null);
+
+  const effectiveMaxLevel = maxVisibleLevel != null ? Math.max(1, Math.min(maxVisibleLevel, totalLevels || 1)) : undefined;
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
   const walls: WallCalculationResult[] =
@@ -277,6 +304,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
       wallObjectsRef.current = [];
       wallFocusRef.current = [];
       clickTargetsRef.current = [];
+      componentMeshesRef.current = [];
+      const maxLevelCap = effectiveMaxLevel;
 
       // ── Camera ─────────────────────────────────────────
       const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 300);
@@ -538,10 +567,10 @@ export default function Scaffold3DView({ result }: { result: any }) {
 
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
+      // maxLevelCap: when set, only build up to that level (level-by-level visualization)
       // ══════════════════════════════════════════════════════
-      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number) {
+      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number, maxLevelCap?: number) {
         const allSpans: number[] = wall.spans;
-        // If capped, take only the first N spans (representative section)
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
           : allSpans;
@@ -550,7 +579,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
         const totalLen = postX[postX.length - 1] || 0;
         const levels = wall.levelCalc.fullLevels;
-        const totalPostH = levels * LEVEL_H + topGuardM;
+        const levelsToBuild = maxLevelCap != null ? Math.min(levels, maxLevelCap) : levels;
+        const totalPostH = levelsToBuild * LEVEL_H + (levelsToBuild >= levels ? topGuardM : 0);
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
 
@@ -568,22 +598,20 @@ export default function Scaffold3DView({ result }: { result: any }) {
 
         // ── Vertical posts / frames ──────────────────
         if (isWakugumi) {
-          // Wakugumi: render portal frames (建枠) at each post position per level
           for (const px of postX) {
-            for (let lv = 0; lv < levels; lv++) {
+            for (let lv = 0; lv < levelsToBuild; lv++) {
               const frameBaseY = JACK_H + lv * LEVEL_H;
               addWakugumiFrame(group, px, frameBaseY, LEVEL_H, widthM);
             }
           }
         } else {
-          // Kusabi: individual vertical pipes
           for (const px of postX) {
             for (const pz of [0, widthM]) {
               addPipe(group, px, JACK_H, pz, px, JACK_H + totalPostH, pz, pipeMat);
-              for (let lv = 0; lv <= levels; lv++) {
+              for (let lv = 0; lv <= levelsToBuild; lv++) {
                 addJoint(group, px, JACK_H + lv * LEVEL_H, pz);
               }
-              addJoint(group, px, JACK_H + totalPostH, pz);
+              if (levelsToBuild >= levels) addJoint(group, px, JACK_H + totalPostH, pz);
             }
           }
         }
@@ -601,8 +629,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
           addPipe(group, px, baseY, 0, px, baseY, widthM, pipeDarkMat);
         }
 
-        // ── Floor/level indicators (L1, L2, L3…) so first floor / second level is visible ──
-        for (let lv = 1; lv <= levels; lv++) {
+        // ── Floor/level indicators (L1, L2, L3…) ──
+        for (let lv = 1; lv <= levelsToBuild; lv++) {
           const levelY = JACK_H + (lv - 0.5) * LEVEL_H;
           addTextLabel(group, `L${lv}`, postX[0] - 0.28, levelY, widthM / 2, 0.32, 'rgba(0,60,120,0.85)');
         }
@@ -626,7 +654,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
         }
 
         // ── Per-level components ───────────────────────
-        for (let lv = 1; lv <= levels; lv++) {
+        for (let lv = 1; lv <= levelsToBuild; lv++) {
           const y = JACK_H + lv * LEVEL_H;
 
           // Width yokoji
@@ -684,9 +712,9 @@ export default function Scaffold3DView({ result }: { result: any }) {
           }
         }
 
-        // ── Top guard rails ────────────────────────────
-        const topH = JACK_H + levels * LEVEL_H;
-        const guardH = topH + topGuardM;
+        // ── Top guard rails (only when showing all levels) ────────────────────────────
+        const topH = JACK_H + levelsToBuild * LEVEL_H;
+        const guardH = topH + (levelsToBuild >= levels ? topGuardM : 0);
         for (let i = 0; i < spans.length; i++) {
           const x1 = postX[i];
           const x2 = postX[i + 1];
@@ -700,7 +728,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const RAIL_H_ABOVE = 0.9;
         const NUM_STEPS = 8;
 
-        for (let lv = 1; lv <= levels; lv++) {
+        for (let lv = 1; lv <= levelsToBuild; lv++) {
           if (uniqueStairPos.length === 0) continue;
           for (const stairSpanIdx of uniqueStairPos) {
           if (stairSpanIdx >= spans.length) continue;
@@ -804,7 +832,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        buildWallScaffold(wall, group, spanCaps[i]);
+        buildWallScaffold(wall, group, spanCaps[i], maxLevelCap);
 
         // Scale scaffold to fit exactly on polygon edge so corners join (closed perimeter).
         // Manual and DXF: edge length from polygon; wall length from spans — scale so end meets next vertex.
@@ -856,7 +884,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
 
         // Track extents
         const levels = wall.levelCalc.fullLevels;
-        const totalH = JACK_H + levels * LEVEL_H + topGuardM;
+        const levelsShown = maxLevelCap != null ? Math.min(levels, maxLevelCap) : levels;
+        const totalH = JACK_H + levelsShown * LEVEL_H + (levelsShown >= levels ? topGuardM : 0);
         if (totalH > maxH) maxH = totalH;
 
         const dist = Math.hypot(v1.x - cx, v1.z - cz);
@@ -871,7 +900,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
           wall.sideJp,
           wall.wallLengthMm,
           wall.levelCalc.totalScaffoldHeightMm,
-          levels,
+          levelsShown,
           labelMidX, totalH * 0.5, labelMidZ,
           colorHex,
         );
@@ -954,7 +983,8 @@ export default function Scaffold3DView({ result }: { result: any }) {
 
         const prevLevels = walls[prevIdx].levelCalc.fullLevels;
         const currLevels = walls[j].levelCalc.fullLevels;
-        const cornerLevels = Math.max(prevLevels, currLevels);
+        let cornerLevels = Math.max(prevLevels, currLevels);
+        if (maxLevelCap != null) cornerLevels = Math.min(cornerLevels, maxLevelCap);
         const cornerH = JACK_H + cornerLevels * LEVEL_H + topGuardM;
 
         // Two vertical posts at this vertex (shared by both walls — closed polygon)
@@ -1144,13 +1174,17 @@ export default function Scaffold3DView({ result }: { result: any }) {
         pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObjects(clickTargetsRef.current, false);
-        if (!hits.length) return;
+        if (!hits.length) {
+          setSelectedComponent(null);
+          return;
+        }
         const wallIndex = hits[0].object?.userData?.wallIndex;
         if (!Number.isInteger(wallIndex)) return;
         setViewMode('wall');
         setActiveWallIdx(wallIndex);
         applyWallVisibility('wall', wallIndex);
         focusCameraOnWall(wallIndex);
+        setSelectedComponent(COMPONENT_INFO['pipe'] ?? { nameJp: '足場構造', description: 'この壁面の足場です。支柱・ブレス・踏板・手摺などで構成されています。' });
       };
 
       canvas.addEventListener('mousedown', onDown);
@@ -1252,7 +1286,7 @@ export default function Scaffold3DView({ result }: { result: any }) {
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, t]);
+  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, effectiveMaxLevel, t]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);
@@ -1388,6 +1422,42 @@ export default function Scaffold3DView({ result }: { result: any }) {
           <span className="text-gray-400">|</span>
           <span>Closed perimeter (one loop)</span>
         </div>
+        {totalLevels != null && totalLevels > 0 && onVisibleLevelsChange && (
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="text-xs font-medium text-gray-600">表示レベル:</span>
+            {Array.from({ length: totalLevels }, (_, i) => i + 1).map((lv) => (
+              <button
+                key={lv}
+                onClick={() => onVisibleLevelsChange(lv)}
+                className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                  effectiveMaxLevel === lv
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Level {lv}
+              </button>
+            ))}
+            {effectiveMaxLevel != null && effectiveMaxLevel < totalLevels && (
+              <button
+                onClick={() => onVisibleLevelsChange(Math.min(totalLevels, (effectiveMaxLevel ?? 0) + 1))}
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-dashed border-indigo-400 text-indigo-600 hover:bg-indigo-50"
+              >
+                <Plus className="h-3 w-3" /> Level
+              </button>
+            )}
+          </div>
+        )}
+        {levelSummary && (
+          <div className="text-xs text-gray-600 mb-2 p-2 bg-white rounded border border-gray-200">
+            <span className="font-medium">レベル 1～{levelSummary.visibleLevels} の累計: </span>
+            {levelSummary.summary.slice(0, 8).map((c) => (
+              <span key={c.type} className="mr-3">
+                {c.nameJp || c.name}: {c.quantity}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <button
             onClick={() => setViewMode('all')}
@@ -1456,6 +1526,21 @@ export default function Scaffold3DView({ result }: { result: any }) {
         </div>
       )}
       <div ref={wrapperRef} style={{ height: '650px', position: 'relative' }}>
+        {selectedComponent && (
+          <div className="absolute top-2 left-2 z-20 max-w-xs bg-white/95 border border-gray-200 rounded-lg shadow-lg p-3">
+            <div className="flex items-center gap-2 text-indigo-700 font-medium mb-1">
+              <Info className="h-4 w-4" />
+              {selectedComponent.nameJp}
+            </div>
+            <p className="text-sm text-gray-600">{selectedComponent.description}</p>
+            <button
+              onClick={() => setSelectedComponent(null)}
+              className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+            >
+              閉じる
+            </button>
+          </div>
+        )}
         <div ref={canvasContainerRef} style={{ position: 'absolute', inset: 0 }} />
         {!ready && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ background: '#eef3f8', zIndex: 10 }}>
