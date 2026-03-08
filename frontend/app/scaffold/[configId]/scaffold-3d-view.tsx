@@ -18,9 +18,10 @@ import {
 } from '@/lib/scaffold-3d-components';
 
 /**
- * 3D Scaffold View — Arbitrary Polygon Layout
- * Building is one closed polygon; scaffold is one continuous closed perimeter (shared corner posts).
- * Supports any number of walls (not just N/S/E/W).
+ * 3D Scaffold View — Independent Walls (No Closed Polygon)
+ * Each wall is treated as an independent scaffold segment. Walls do not connect at corners.
+ * Span generation uses correct post reuse: N spans → N+1 post positions (shared between spans).
+ * Corner closing logic is disabled; will be rebuilt later.
  */
 
 const PIPE_R = 0.024;
@@ -560,14 +561,16 @@ export default function Scaffold3DView({
 
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
+      // Each span = 4 posts (Front A-B, Back A-B); last 2 posts of span N are first 2 of span N+1.
+      // postX has N+1 positions for N spans (shared post reuse). No corner joint (independent walls).
       // maxLevelCap: when set, only build up to that level (level-by-level visualization)
-      // hasNextWall: when true, add corner inner post and split last-span tesuri for clean joint
       // ══════════════════════════════════════════════════════
-      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number, maxLevelCap?: number, hasNextWall?: boolean) {
+      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number, maxLevelCap?: number) {
         const allSpans: number[] = wall.spans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
           : allSpans;
+        // Post positions: 0, s0, s0+s1, ... (N+1 positions for N spans — shared between spans)
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
@@ -578,10 +581,8 @@ export default function Scaffold3DView({
         const postCapAbovePlank = levelsToBuild >= levels ? Math.min(topGuardM, 0.2) : 0;
         const totalPostH = levelsToBuild * LEVEL_H + postCapAbovePlank;
 
-        // Corner joint: extra inner post at (totalLen - widthM); last-span tesuri shortened to (lastSpan - width)
-        const lastSpanM = spans.length > 0 ? spans[spans.length - 1] / 1000 : 0;
-        const useCornerJoint = !!hasNextWall && spans.length > 0 && totalLen > widthM && lastSpanM > widthM;
-        const cornerInnerPostX = useCornerJoint ? totalLen - widthM : null as number | null;
+        // Corner joint disabled: each wall is independent (no extra inner post, no tesuri split)
+        const cornerInnerPostX = null as number | null;
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
 
@@ -863,25 +864,13 @@ export default function Scaffold3DView({
         }
         wallNormals.push({ nx, nz });
 
-        // Build scaffold in local space (along X, depth along Z)
+        // Build scaffold in local space (along X, depth along Z). Each wall independent — no corner joint.
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        const hasNextWall = walls.length > 1;
-        buildWallScaffold(wall, group, spanCaps[i], maxLevelCap, hasNextWall);
+        buildWallScaffold(wall, group, spanCaps[i], maxLevelCap);
 
-        // Scale scaffold to fit exactly on polygon edge so corners join (closed perimeter).
-        // Manual and DXF: edge length from polygon; wall length from spans — scale so end meets next vertex.
-        const spansUsed = spanCaps[i] != null && spanCaps[i] < wall.spans.length
-          ? wall.spans.slice(0, spanCaps[i])
-          : wall.spans;
-        const totalLen = spansUsed.length > 0
-          ? spansUsed.reduce((s, sp) => s + sp, 0) / 1000
-          : edgeLen;
-        if (totalLen > 0.001) {
-          const scaleX = edgeLen / totalLen;
-          group.scale.set(scaleX, 1, 1);
-        }
+        // Do NOT scale to polygon edge: each wall uses its natural span-derived length (wall-by-wall, open at corners).
 
         // The wall scaffold is built in local space:
         //   local X = along wall length (0 to totalLen)
@@ -969,117 +958,7 @@ export default function Scaffold3DView({
         clickTargetsRef.current.push(clickMesh);
       }
 
-      // ── Corner connectors: one closed polygon perimeter ──
-      // Treat the building as a single closed loop. At each vertex use 2 shared posts (angle bisector)
-      // so the scaffold is one continuous band: wall → shared corner post → next wall.
-      const CORNER_SPAN_M = 0.6; // 600mm for corner bay anchi
-      for (let j = 0; j < walls.length; j++) {
-        const prevIdx = (j - 1 + walls.length) % walls.length;
-        const nPrev = wallNormals[prevIdx];
-        const nCurr = wallNormals[j];
-        if ((nPrev.nx === 0 && nPrev.nz === 0) || (nCurr.nx === 0 && nCurr.nz === 0)) continue;
-
-        const vx = verts[j].x - cx;
-        const vz = verts[j].z - cz;
-
-        // Wall-end positions (where prev wall ends and curr wall starts)
-        const prevR0 = { x: vx + nPrev.nx * widthM, z: vz + nPrev.nz * widthM };
-        const prevR1 = { x: vx + nPrev.nx * 2 * widthM, z: vz + nPrev.nz * 2 * widthM };
-        const currR0 = { x: vx + nCurr.nx * widthM, z: vz + nCurr.nz * widthM };
-        const currR1 = { x: vx + nCurr.nx * 2 * widthM, z: vz + nCurr.nz * 2 * widthM };
-
-        // Outward angle bisector at this vertex (so one post position is shared by both walls)
-        let bx = nPrev.nx + nCurr.nx;
-        let bz = nPrev.nz + nCurr.nz;
-        const blen = Math.hypot(bx, bz) || 1;
-        bx /= blen;
-        bz /= blen;
-        // Ensure bisector points outward (away from polygon center). Center in local coords is (0,0).
-        if (bx * vx + bz * vz < 0) {
-          bx = -bx;
-          bz = -bz;
-        }
-        // Shared corner posts: one outer, one inner (closed loop = 2 posts per vertex)
-        const midOuter = { x: vx + bx * widthM, z: vz + bz * widthM };
-        const midInner = { x: vx + bx * 2 * widthM, z: vz + bz * 2 * widthM };
-
-        const prevLevels = walls[prevIdx].levelCalc.fullLevels;
-        const currLevels = walls[j].levelCalc.fullLevels;
-        let cornerLevels = Math.max(prevLevels, currLevels);
-        if (maxLevelCap != null) cornerLevels = Math.min(cornerLevels, maxLevelCap);
-        const cornerCap = Math.min(topGuardM, 0.2);
-        const cornerH = JACK_H + cornerLevels * LEVEL_H + cornerCap;
-
-        // Two vertical posts at this vertex (shared by both walls — closed polygon)
-        for (const p of [midOuter, midInner]) {
-          addRealisticPost(THREE, scene, p.x, JACK_H, p.z, cornerH - JACK_H, postMat);
-        }
-
-        // Horizontal pipes: close the loop (prev wall → shared corner → curr wall) + width
-        const heights = [JACK_H + NEGR_H];
-        for (let lv = 1; lv <= cornerLevels; lv++) heights.push(JACK_H + lv * LEVEL_H);
-        heights.push(cornerH);
-        heights.push(JACK_H + cornerLevels * LEVEL_H + cornerCap * 0.5);
-
-        for (const y of heights) {
-          addPipe(scene, prevR0.x, y, prevR0.z, midOuter.x, y, midOuter.z, pipeDarkMat, PIPE_R * 0.8);
-          addPipe(scene, midOuter.x, y, midOuter.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.8);
-          addPipe(scene, prevR1.x, y, prevR1.z, midInner.x, y, midInner.z, pipeDarkMat, PIPE_R * 0.8);
-          addPipe(scene, midInner.x, y, midInner.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.8);
-          addPipe(scene, midOuter.x, y, midOuter.z, midInner.x, y, midInner.z, pipeDarkMat, PIPE_R * 0.9);
-        }
-
-        // Corner bay at each level: X-brace, anchi (踏板), habaki (巾木)
-        for (let lv = 1; lv <= cornerLevels; lv++) {
-          const baseYLv = JACK_H + (lv - 1) * LEVEL_H;
-          const y = JACK_H + lv * LEVEL_H;
-          const plankY = y + 0.015;
-
-          // X-brace in corner (diagonals between shared posts and wall ends)
-          addPipe(scene, prevR0.x, baseYLv, prevR0.z, midOuter.x, y, midOuter.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, prevR0.x, y, prevR0.z, midOuter.x, baseYLv, midOuter.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, midOuter.x, baseYLv, midOuter.z, currR0.x, y, currR0.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, midOuter.x, y, midOuter.z, currR0.x, baseYLv, currR0.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, prevR1.x, baseYLv, prevR1.z, midInner.x, y, midInner.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, prevR1.x, y, prevR1.z, midInner.x, baseYLv, midInner.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, midInner.x, baseYLv, midInner.z, currR1.x, y, currR1.z, pipeDarkMat, PIPE_R * 0.7);
-          addPipe(scene, midInner.x, y, midInner.z, currR1.x, baseYLv, currR1.z, pipeDarkMat, PIPE_R * 0.7);
-
-          // Full anchi (踏板): one plank in the corner bay
-          const midX = (midOuter.x + midInner.x + prevR0.x + currR0.x) / 4;
-          const midZ = (midOuter.z + midInner.z + prevR0.z + currR0.z) / 4;
-          const angle = Math.atan2(bz, bx);
-          const spanLen = Math.max(CORNER_SPAN_M - 0.04, 0.2);
-          const plankW = Math.min(widthM * 0.9, 0.55);
-          const geo = new THREE.BoxGeometry(spanLen, 0.03, plankW);
-          const mesh = new THREE.Mesh(geo, plankMatEff);
-          mesh.position.set(midX, plankY, midZ);
-          mesh.rotation.y = angle;
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          scene.add(mesh);
-          // Habaki along outer and inner edges of corner (prev→mid→curr)
-          const hY = y + 0.06;
-          for (const [ax, az, bx2, bz2] of [
-            [prevR0.x, prevR0.z, midOuter.x, midOuter.z],
-            [midOuter.x, midOuter.z, currR0.x, currR0.z],
-            [prevR1.x, prevR1.z, midInner.x, midInner.z],
-            [midInner.x, midInner.z, currR1.x, currR1.z],
-          ]) {
-            const edgeLen = Math.hypot(bx2 - ax, bz2 - az);
-            if (edgeLen < 0.02) continue;
-            const hx = (ax + bx2) / 2;
-            const hz = (az + bz2) / 2;
-            const habakiGeo = new THREE.BoxGeometry(edgeLen - 0.02, 0.1, 0.015);
-            const habakiMesh = new THREE.Mesh(habakiGeo, habakiMatEff);
-            habakiMesh.position.set(hx, hY, hz);
-            habakiMesh.rotation.y = Math.atan2(bz2 - az, bx2 - ax);
-            habakiMesh.castShadow = true;
-            habakiMesh.receiveShadow = true;
-            scene.add(habakiMesh);
-          }
-        }
-      }
+      // Corner connectors disabled: each wall is independent (no shared corner posts; corners remain open).
 
       // ── Building outline at ground level (subtle gray) ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
