@@ -64,6 +64,15 @@ Using the **pooler** (port 6543) avoids timeouts; the direct connection (5432) i
 
 If the backend runs on Render and the DB is **Render Postgres** (not Supabase), set **`INTERNAL_DATABASE_URL`** on the Web Service to the internal URL from the Postgres service’s **Info** tab, then redeploy.
 
+**"timeout exceeded when trying to connect" / DB connection errors**
+
+- **Cause:** Render free Postgres **spins down** when idle. When a request hits the app, the DB is still waking (often 30–90 seconds), so the first connection attempt can timeout.
+- **What to do:**
+  1. **Use `INTERNAL_DATABASE_URL`** (not just `DATABASE_URL`) on the Web Service so the app connects over Render’s private network; this is faster and more reliable when the DB is waking.
+  2. **Keep the DB warm:** Add a cron job or external pinger (e.g. [cron-job.org](https://cron-job.org)) that calls your app’s health or any DB-using endpoint every 10–15 minutes so the DB doesn’t sleep.
+  3. The app already retries DB connection errors (up to 7 attempts, 5s apart) and uses a 120s connect timeout; if timeouts persist, the DB may be taking longer to wake—use internal URL and/or keep it warm.
+  4. **Upgrade** to a paid Render Postgres plan if you need the DB to stay up without spin-down.
+
 ## API Endpoints
 
 ### Authentication

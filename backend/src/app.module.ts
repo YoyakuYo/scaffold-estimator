@@ -39,12 +39,15 @@ import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
           logger.log(`Using ${isInternal ? 'INTERNAL_DATABASE_URL' : 'DATABASE_URL'} connection string`);
           try {
             const urlObj = new URL(databaseUrl);
+            // Force long connect timeout (seconds) so pg driver waits for Render Postgres wake-from-sleep
+            urlObj.searchParams.set('connect_timeout', '120');
+            const urlWithTimeout = urlObj.toString();
             const safeUrl =
               `${urlObj.protocol}//${urlObj.username}@${urlObj.hostname}:${urlObj.port}${urlObj.pathname}`;
             logger.log(`Connecting to: ${safeUrl}`);
             return {
               type: 'postgres',
-              url: databaseUrl,
+              url: urlWithTimeout,
               entities: [__dirname + '/**/*.entity{.ts,.js}'],
               migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
               synchronize: false,
