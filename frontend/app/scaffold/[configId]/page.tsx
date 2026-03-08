@@ -348,10 +348,7 @@ function ScaffoldResultPage() {
         {activeTab === '3d' && (
           <Scaffold3DView
             result={result}
-            maxVisibleLevel={visibleLevels}
             totalLevels={maxLevels}
-            onVisibleLevelsChange={setVisibleLevels}
-            levelSummary={result ? getLevelSummary(result, visibleLevels) : undefined}
             complianceMode={isAiBim ? 'ai_bim' : 'default'}
           />
         )}

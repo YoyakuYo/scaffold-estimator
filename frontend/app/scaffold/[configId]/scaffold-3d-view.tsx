@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Loader2, FileText, FileCode, Box, Download, Plus, Info } from 'lucide-react';
+import { Loader2, FileText, FileCode, Box, Download, Info } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { WallCalculationResult, CalculatedComponent } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
@@ -202,10 +202,7 @@ function computeSpanCaps(walls: WallCalculationResult[], levelH: number) {
 
 export interface Scaffold3DViewProps {
   result: any;
-  maxVisibleLevel?: number;
   totalLevels?: number;
-  onVisibleLevelsChange?: (levels: number) => void;
-  levelSummary?: { totalLevels: number; visibleLevels: number; summary: CalculatedComponent[] };
   complianceMode?: 'default' | 'ai_bim';
   /** When true, use distinct colors per component (支柱/ブレス/手摺/踏板 etc.) for estimation clarity */
   technicalQuotationMode?: boolean;
@@ -228,10 +225,7 @@ const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = 
 
 export default function Scaffold3DView({
   result,
-  maxVisibleLevel,
   totalLevels = 1,
-  onVisibleLevelsChange,
-  levelSummary,
   complianceMode = 'default',
   technicalQuotationMode = false,
 }: Scaffold3DViewProps) {
@@ -257,7 +251,6 @@ export default function Scaffold3DView({
   const componentMeshesRef = useRef<any[]>([]);
   const controlsRef = useRef<any>(null);
 
-  const effectiveMaxLevel = maxVisibleLevel != null ? Math.max(1, Math.min(maxVisibleLevel, totalLevels || 1)) : undefined;
   const isAiBim = complianceMode === 'ai_bim';
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
@@ -339,7 +332,6 @@ export default function Scaffold3DView({
       wallFocusRef.current = [];
       clickTargetsRef.current = [];
       componentMeshesRef.current = [];
-      const maxLevelCap = effectiveMaxLevel;
 
       // ── Camera ─────────────────────────────────────────
       const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 300);
@@ -446,16 +438,16 @@ export default function Scaffold3DView({
       });
       const woodMat = new THREE.MeshStandardMaterial({ color: C.wood, metalness: 0.05, roughness: 0.9 });
 
-      // Effective materials: generic post/plank (no texture overlays); technical mode = distinct flat colors
+      // Simple materials only (no textures)
       const postMat = pipeMat;
-      const jackMatEff = isTech ? jackMat : (textures.jack ?? jackMat);
+      const jackMatEff = jackMat;
       const plankMatEff = plankMat;
-      const nunoMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough }) : (textures.nuno ?? pipeMat);
-      const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : nunoMat;
-      const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : nunoMat;
-      const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : nunoMat;
-      const braceMat = isTech ? pipeDarkMat : (textures.brace ?? pipeDarkMat);
-      const habakiMatEff = isTech ? habakiMat : (textures.habaki ?? habakiMat);
+      const nunoMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough }) : pipeMat;
+      const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : pipeMat;
+      const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : pipeMat;
+      const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
+      const braceMat = pipeDarkMat;
+      const habakiMatEff = habakiMat;
 
       const widthM = result.scaffoldWidthMm / 1000;
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -500,13 +492,6 @@ export default function Scaffold3DView({
         parent.add(mesh);
       }
 
-      function addJoint(parent: THREE.Object3D, x: number, y: number, z: number) {
-        const geo = new THREE.CylinderGeometry(PIPE_R * 2.5, PIPE_R * 2.5, 0.02, 12);
-        const mesh = new THREE.Mesh(geo, pipeDarkMat);
-        mesh.position.set(x, y, z);
-        parent.add(mesh);
-      }
-
       /**
        * Renders a wakugumi portal frame (建枠) at position (px, baseY) spanning from z=0 to z=widthM.
        * Shape: two vertical legs + horizontal top bar + curved outward bottom legs.
@@ -541,15 +526,6 @@ export default function Scaffold3DView({
           addPipe(parent, px, legStraightY, pz, px, legTopY, pz, frameMat, fr);
           // Top short vertical into crossbar
           addPipe(parent, px, legTopY, pz, px, frameTopY, pz, frameMat, fr);
-
-          // Joint rings at transitions
-          const jGeo = new THREE.CylinderGeometry(fr * 2, fr * 2, 0.012, 10);
-          const jBot = new THREE.Mesh(jGeo, frameDarkMat);
-          jBot.position.set(px, legStraightY, pz);
-          parent.add(jBot);
-          const jTop = new THREE.Mesh(jGeo.clone(), frameDarkMat);
-          jTop.position.set(px, legTopY, pz);
-          parent.add(jTop);
         }
 
         // Top horizontal crossbar connecting front and back legs
@@ -562,10 +538,10 @@ export default function Scaffold3DView({
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // Each span = 4 posts (Front A-B, Back A-B); last 2 posts of span N are first 2 of span N+1.
-      // postX has N+1 positions for N spans (shared post reuse). No corner joint (independent walls).
-      // maxLevelCap: when set, only build up to that level (level-by-level visualization)
+      // postX has N+1 positions for N spans (shared post reuse). One post type only; height = total scaffold height.
+      // All floors rendered together (no level toggle).
       // ══════════════════════════════════════════════════════
-      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number, maxLevelCap?: number) {
+      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number) {
         const allSpans: number[] = wall.spans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
@@ -576,9 +552,9 @@ export default function Scaffold3DView({
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
         const totalLen = postX[postX.length - 1] || 0;
         const levels = wall.levelCalc.fullLevels;
-        const levelsToBuild = maxLevelCap != null ? Math.min(levels, maxLevelCap) : levels;
-        // Post height ends at top plank level; small cap above so posts don't extend far beyond last span
-        const postCapAbovePlank = levelsToBuild >= levels ? Math.min(topGuardM, 0.2) : 0;
+        const levelsToBuild = levels;
+        // Post height = total scaffold height (stops at top of top level, no random extension)
+        const postCapAbovePlank = Math.min(topGuardM, 0.2);
         const totalPostH = levelsToBuild * LEVEL_H + postCapAbovePlank;
 
         // Corner joint disabled: each wall is independent (no extra inner post, no tesuri split)
@@ -594,18 +570,14 @@ export default function Scaffold3DView({
           addBox(group, totalLen / 2, sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
         }
 
-        // ── Jack bases + base plates ───────────────────
+        // ── Jack bases (simple) ───────────────────────
         for (const px of postX) {
           for (const pz of [0, widthM]) {
             addRealisticJack(THREE, group, px, 0.005, pz, jackMatEff, PIPE_R * 0.7, JACK_H);
-            const colGeo = new THREE.CylinderGeometry(PIPE_R * 1.8, PIPE_R * 1.8, 0.04, 12);
-            const colMesh = new THREE.Mesh(colGeo, jackMatEff);
-            colMesh.position.set(px, JACK_H, pz);
-            group.add(colMesh);
           }
         }
 
-        // ── Vertical posts / frames ──────────────────
+        // ── Vertical posts: one type only, height = total scaffold height ──────────────────
         if (isWakugumi) {
           for (const px of postX) {
             for (let lv = 0; lv < levelsToBuild; lv++) {
@@ -617,24 +589,7 @@ export default function Scaffold3DView({
           for (const px of postX) {
             for (const pz of [0, widthM]) {
               addRealisticPost(THREE, group, px, JACK_H, pz, totalPostH, postMat);
-              for (let lv = 0; lv <= levelsToBuild; lv++) {
-                addJoint(group, px, JACK_H + lv * LEVEL_H, pz);
-              }
-              if (levelsToBuild >= levels) addJoint(group, px, JACK_H + totalPostH, pz);
             }
-          }
-          // Corner joint: one extra post on inner row only (between last span, for next wall connection)
-          if (cornerInnerPostX != null) {
-            addRealisticJack(THREE, group, cornerInnerPostX, 0.005, 0, jackMatEff, PIPE_R * 0.7, JACK_H);
-            const colGeo = new THREE.CylinderGeometry(PIPE_R * 1.8, PIPE_R * 1.8, 0.04, 12);
-            const colMesh = new THREE.Mesh(colGeo, jackMatEff);
-            colMesh.position.set(cornerInnerPostX, JACK_H, 0);
-            group.add(colMesh);
-            addRealisticPost(THREE, group, cornerInnerPostX, JACK_H, 0, totalPostH, postMat);
-            for (let lv = 0; lv <= levelsToBuild; lv++) {
-              addJoint(group, cornerInnerPostX, JACK_H + lv * LEVEL_H, 0);
-            }
-            if (levelsToBuild >= levels) addJoint(group, cornerInnerPostX, JACK_H + totalPostH, 0);
           }
         }
 
@@ -868,7 +823,7 @@ export default function Scaffold3DView({
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        buildWallScaffold(wall, group, spanCaps[i], maxLevelCap);
+        buildWallScaffold(wall, group, spanCaps[i]);
 
         // Do NOT scale to polygon edge: each wall uses its natural span-derived length (wall-by-wall, open at corners).
 
@@ -909,7 +864,7 @@ export default function Scaffold3DView({
 
         // Track extents
         const levels = wall.levelCalc.fullLevels;
-        const levelsShown = maxLevelCap != null ? Math.min(levels, maxLevelCap) : levels;
+        const levelsShown = levels;
         const totalH = JACK_H + levelsShown * LEVEL_H + (levelsShown >= levels ? topGuardM : 0);
         if (totalH > maxH) maxH = totalH;
 
@@ -1171,7 +1126,7 @@ export default function Scaffold3DView({
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, effectiveMaxLevel, isAiBim, technicalMode, t]);
+  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, isAiBim, technicalMode, t]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);
@@ -1312,46 +1267,8 @@ export default function Scaffold3DView({
             </span>
           ))}
           <span className="text-gray-400">|</span>
-          <span>1F, 2F… = floor per floor</span>
-          <span className="text-gray-400">|</span>
-          <span>Closed perimeter (one loop)</span>
+          <span>All floors shown</span>
         </div>
-        {totalLevels != null && totalLevels > 0 && onVisibleLevelsChange && (
-          <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className="text-xs font-medium text-gray-600">表示階:</span>
-            {Array.from({ length: totalLevels }, (_, i) => i + 1).map((lv) => (
-              <button
-                key={lv}
-                onClick={() => onVisibleLevelsChange(lv)}
-                className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                  effectiveMaxLevel === lv
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {lv}F
-              </button>
-            ))}
-            {effectiveMaxLevel != null && effectiveMaxLevel < totalLevels && (
-              <button
-                onClick={() => onVisibleLevelsChange(Math.min(totalLevels, (effectiveMaxLevel ?? 0) + 1))}
-                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-dashed border-indigo-400 text-indigo-600 hover:bg-indigo-50"
-              >
-                <Plus className="h-3 w-3" /> +1F
-              </button>
-            )}
-          </div>
-        )}
-        {levelSummary && (
-          <div className="text-xs text-gray-600 mb-2 p-2 bg-white rounded border border-gray-200">
-            <span className="font-medium">1F～{levelSummary.visibleLevels}F の累計: </span>
-            {levelSummary.summary.slice(0, 8).map((c) => (
-              <span key={c.type} className="mr-3">
-                {c.nameJp || c.name}: {c.quantity}
-              </span>
-            ))}
-          </div>
-        )}
         <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <button
             onClick={() => setViewMode('all')}
