@@ -1,10 +1,12 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
+// Set NEXT_PUBLIC_BACKEND_URL to your backend URL when deployed separately (e.g. https://your-api.onrender.com/api/v1).
+// If unset in production, we use relative /api/v1 (same-origin; use a reverse proxy to your backend).
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3000/api/v1';
+  (process.env.NODE_ENV === 'production' ? '/api/v1' : 'http://localhost:3000/api/v1');
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

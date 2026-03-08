@@ -138,7 +138,7 @@ export const drawingsApi = {
     const baseUrl =
       process.env.NEXT_PUBLIC_BACKEND_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      'http://localhost:3000/api/v1';
+      (process.env.NODE_ENV === 'production' ? '/api/v1' : 'http://localhost:3000/api/v1');
     return `${baseUrl}/drawings/${drawingId}/file`;
   },
 

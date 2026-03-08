@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="720" height="380">
+  <title>Scaffold span layout: A B C D, post reuse</title>
+  <defs>
+    <style>
+      .post { fill: #94a3b8; stroke: #475569; stroke-width: 2; }
+      .plank { fill: #facc15; stroke: #ca8a04; stroke-width: 1; }
+      .t { font: 14px sans-serif; font-weight: bold; fill: #1e293b; }
+      .label { font: 11px sans-serif; fill: #475569; }
+      .title { font: bold 13px sans-serif; fill: #0f172a; }
+    </style>
+  </defs>
+  <!-- Title -->
+  <text class="title" x="12" y="22">3 spans × 1800mm ? Post reuse (first span 4 posts; each next span adds 2)</text>
+
+  <!-- Back row (outer): A  B  C  D  (we use A,B,C,D for positions 1?4, then E,F,G,H for clarity in span 2?3) -->
+  <!-- Actually: Position 1 = A (back), C (front). Position 2 = B (back), D (front). So Span 1 = A,B back + C,D front. -->
+  <!-- Convention: Front row = A,B,E,G  Back row = C,D,F,H -->
+  <text class="label" x="12" y="48">Back row (outer):</text>
+  <rect class="post" x="80" y="52" width="28" height="28" rx="4"/>
+  <text class="t" x="88" y="72">A</text>
+  <rect class="post" x="268" y="52" width="28" height="28" rx="4"/>
+  <text class="t" x="276" y="72">B</text>
+  <rect class="post" x="456" y="52" width="28" height="28" rx="4"/>
+  <text class="t" x="464" y="72">F</text>
+  <rect class="post" x="644" y="52" width="28" height="28" rx="4"/>
+  <text class="t" x="652" y="72">H</text>
+
+  <text class="label" x="12" y="118">Front row (inner):</text>
+  <rect class="post" x="80" y="122" width="28" height="28" rx="4"/>
+  <text class="t" x="88" y="142">C</text>
+  <rect class="post" x="268" y="122" width="28" height="28" rx="4"/>
+  <text class="t" x="276" y="142">D</text>
+  <rect class="post" x="456" y="122" width="28" height="28" rx="4"/>
+  <text class="t" x="464" y="142">E</text>
+  <rect class="post" x="644" y="122" width="28" height="28" rx="4"/>
+  <text class="t" x="652" y="142">G</text>
+
+  <!-- Planks -->
+  <rect class="plank" x="108" y="88" width="168" height="18" rx="2"/>
+  <rect class="plank" x="296" y="88" width="168" height="18" rx="2"/>
+  <rect class="plank" x="484" y="88" width="168" height="18" rx="2"/>
+
+  <!-- Span boxes -->
+  <rect x="78" y="165" width="198" height="52" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+  <rect x="266" y="165" width="198" height="52" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+  <rect x="454" y="165" width="198" height="52" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="4 2"/>
+
+  <text class="label" x="88" y="185">Span 1</text>
+  <text class="label" x="88" y="200">A ? B</text>
+  <text class="label" x="88" y="212">C ? D</text>
+
+  <text class="label" x="276" y="185">Span 2</text>
+  <text class="label" x="276" y="200">B ? F  (reuse B)</text>
+  <text class="label" x="276" y="212">D ? E  (reuse D)</text>
+
+  <text class="label" x="464" y="185">Span 3</text>
+  <text class="label" x="464" y="200">F ? H  (reuse F)</text>
+  <text class="label" x="464" y="212">E ? G  (reuse E)</text>
+
+  <!-- Legend -->
+  <text class="title" x="12" y="250">Legend</text>
+  <text class="label" x="12" y="268">? First span: 4 posts (A, B back + C, D front). Plank sits between them.</text>
+  <text class="label" x="12" y="284">? Span 2: reuse B and D; add 2 new (E front, F back). Plank between B?F and D?E.</text>
+  <text class="label" x="12" y="300">? Span 3: reuse F and E; add 2 new (G front, H back). Plank between F?H and E?G.</text>
+  <text class="label" x="12" y="320">? Total: 4 positions × 2 rows = 8 posts for 3 spans (not 12).</text>
+</svg>

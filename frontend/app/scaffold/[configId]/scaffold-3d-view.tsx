@@ -13,7 +13,6 @@ import {
   addRealisticJack,
   addRealisticPlank,
   addRealisticNunoBar,
-  addRealisticBrace,
   addRealisticHabaki,
 } from '@/lib/scaffold-3d-components';
 
@@ -426,16 +425,6 @@ export default function Scaffold3DView({
         roughness: rough,
       });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
-      const frameMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.frame : C.frame,
-        metalness: metal,
-        roughness: rough,
-      });
-      const frameDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : C.frameDark,
-        metalness: metal,
-        roughness: rough,
-      });
       const woodMat = new THREE.MeshStandardMaterial({ color: C.wood, metalness: 0.05, roughness: 0.9 });
 
       // Simple materials only (no textures)
@@ -492,69 +481,24 @@ export default function Scaffold3DView({
         parent.add(mesh);
       }
 
-      /**
-       * Renders a wakugumi portal frame (建枠) at position (px, baseY) spanning from z=0 to z=widthM.
-       * Shape: two vertical legs + horizontal top bar + curved outward bottom legs.
-       * Based on FT-917/FT-1217C specs: 329mm bottom curve, 1219mm straight, 152mm top bar.
-       */
-      function addWakugumiFrame(
-        parent: THREE.Object3D,
-        px: number,
-        baseY: number,
-        frameH: number,
-        wid: number,
-        fr = PIPE_R * 1.15,
-      ) {
-        const bottomRatio = 0.194;
-        const topBarRatio = 0.089;
-        const bottomH = frameH * bottomRatio;
-        const topBarH = frameH * topBarRatio;
-        const straightH = frameH - bottomH - topBarH;
-        const splayOut = 0.04;
-
-        // Bottom curved legs (splay outward then go vertical)
-        const legBotY = baseY;
-        const legStraightY = baseY + bottomH;
-        const legTopY = legStraightY + straightH;
-        const frameTopY = legTopY + topBarH;
-
-        for (const pz of [0, wid]) {
-          const outerZ = pz === 0 ? pz - splayOut : pz + splayOut;
-          // Bottom curved/angled section (foot splays outward)
-          addPipe(parent, px, legBotY, outerZ, px, legStraightY, pz, frameMat, fr);
-          // Straight vertical section
-          addPipe(parent, px, legStraightY, pz, px, legTopY, pz, frameMat, fr);
-          // Top short vertical into crossbar
-          addPipe(parent, px, legTopY, pz, px, frameTopY, pz, frameMat, fr);
-        }
-
-        // Top horizontal crossbar connecting front and back legs
-        addPipe(parent, px, frameTopY, 0, px, frameTopY, wid, frameDarkMat, fr * 1.1);
-        // Mid-crossbar for structural look
-        const midCrossY = legStraightY + straightH * 0.5;
-        addPipe(parent, px, midCrossY, 0, px, midCrossY, wid, frameDarkMat, fr * 0.6);
-      }
-
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
-      // Each span = 4 posts (Front A-B, Back A-B); last 2 posts of span N are first 2 of span N+1.
-      // postX has N+1 positions for N spans (shared post reuse). One post type only; height = total scaffold height.
-      // All floors rendered together (no level toggle).
+      // First span: 4 posts. Each next span: reuse 2 closest, add 2 new → N+1 positions, 2 posts per position.
       // ══════════════════════════════════════════════════════
       function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number) {
         const allSpans: number[] = wall.spans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
           : allSpans;
-        // Post positions: 0, s0, s0+s1, ... (N+1 positions for N spans — shared between spans)
+        // N+1 post positions: first span uses positions 0,1 (4 posts); each next span adds 1 position (2 new posts, reuse 2)
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
         const totalLen = postX[postX.length - 1] || 0;
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = levels;
-        // Post height = total scaffold height (stops at top of top level, no random extension)
-        const postCapAbovePlank = Math.min(topGuardM, 0.2);
+        // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
+        const postCapAbovePlank = 0;
         const totalPostH = levelsToBuild * LEVEL_H + postCapAbovePlank;
 
         // Corner joint disabled: each wall is independent (no extra inner post, no tesuri split)
@@ -577,19 +521,10 @@ export default function Scaffold3DView({
           }
         }
 
-        // ── Vertical posts: one type only, height = total scaffold height ──────────────────
-        if (isWakugumi) {
-          for (const px of postX) {
-            for (let lv = 0; lv < levelsToBuild; lv++) {
-              const frameBaseY = JACK_H + lv * LEVEL_H;
-              addWakugumiFrame(group, px, frameBaseY, LEVEL_H, widthM);
-            }
-          }
-        } else {
-          for (const px of postX) {
-            for (const pz of [0, widthM]) {
-              addRealisticPost(THREE, group, px, JACK_H, pz, totalPostH, postMat);
-            }
+        // ── Vertical posts: 2 per position, N+1 positions for N spans ─────
+        for (const px of postX) {
+          for (const pz of [0, widthM]) {
+            addRealisticPost(THREE, group, px, JACK_H, pz, totalPostH, postMat);
           }
         }
 
@@ -645,46 +580,9 @@ export default function Scaffold3DView({
             const x2 = postX[i + 1];
             const spanM = spans[i] / 1000;
             const midX = (x1 + x2) / 2;
-            const baseYLv = JACK_H + (lv - 1) * LEVEL_H;
             const isStairSpan = uniqueStairPos.includes(i);
-            const isLastSpanWithCorner = cornerInnerPostX != null && i === spans.length - 1;
-            const tesuriEndX = isLastSpanWithCorner ? cornerInnerPostX : x2;
 
-            if (isWakugumi) {
-              // ── Wakugumi: Brace on BOTH faces ──
-              addRealisticBrace(THREE, group, x1, baseYLv, 0, x2, y, braceMat);
-              addRealisticBrace(THREE, group, x1, baseYLv, widthM, x2, y, braceMat);
-
-              // 下桟 (Shitasan) — bottom horizontal, both faces
-              const shitasanY = baseYLv + 0.05;
-              addRealisticNunoBar(THREE, group, x1, shitasanY, 0, x2, 0, shitasanMat);
-              addRealisticNunoBar(THREE, group, x1, shitasanY, widthM, x2, widthM, shitasanMat);
-            } else {
-              // ── Kusabi: Brace on OUTER face (z=widthM), handrails/tesuri on INNER face (z=0) ──
-              addRealisticBrace(THREE, group, x1, baseYLv, widthM, x2, y, braceMat);
-
-              // INNER face — Tesuri/Nuno (z = 0). Last span with corner: only up to corner post (e.g. 1200mm)
-              if (isAiBim) {
-                const midRailY = baseYLv + 0.45;
-                const handrailY = baseYLv + 0.85;
-                addRealisticNunoBar(THREE, group, x1, midRailY, 0, tesuriEndX, 0, nunoMat);
-                addRealisticNunoBar(THREE, group, x1, handrailY, 0, tesuriEndX, 0, nunoMat);
-                const ledger1200Y = baseYLv + 1.2;
-                addPipe(group, x1, ledger1200Y, 0, x2, ledger1200Y, 0, pipeDarkMat, PIPE_R * 0.75);
-                addPipe(group, x1, ledger1200Y, widthM, x2, ledger1200Y, widthM, pipeDarkMat, PIPE_R * 0.75);
-              } else {
-                const tesuriY1 = baseYLv + LEVEL_H * 0.5;
-                const tesuriY2 = y;
-                addRealisticNunoBar(THREE, group, x1, tesuriY1, 0, tesuriEndX, 0, nunoMat);
-                addRealisticNunoBar(THREE, group, x1, tesuriY2, 0, tesuriEndX, 0, nunoMat);
-              }
-              // Corner: 600mm (widthM) bar at plank level from last inner post to added post
-              if (isLastSpanWithCorner) {
-                addRealisticNunoBar(THREE, group, cornerInnerPostX!, y + 0.015, 0, totalLen, 0, nunoMat);
-              }
-            }
-
-            // Plank / Anchi — always yellow (reference look); generic, no texture
+            // Plank / Anchi
             const spanMm = spans[i];
             const plankColorMat = getPlankMat(spanMm);
             if (!isStairSpan) {
@@ -697,22 +595,6 @@ export default function Scaffold3DView({
             addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanM - 0.04, habakiMatEff);
             addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
           }
-        }
-
-        // ── Top guard rails (at capped post height so posts don't extend beyond last span) ────────────────────────────
-        const topH = JACK_H + levelsToBuild * LEVEL_H;
-        const guardH = topH + postCapAbovePlank;
-        for (let i = 0; i < spans.length; i++) {
-          const x1 = postX[i];
-          const x2 = postX[i + 1];
-          for (const pz of [0, widthM]) {
-            addRealisticNunoBar(THREE, group, x1, guardH, pz, x2, pz, topGuardMat);
-            addRealisticNunoBar(THREE, group, x1, topH + postCapAbovePlank * 0.5, pz, x2, pz, topGuardMat);
-          }
-        }
-        if (cornerInnerPostX != null) {
-          addRealisticNunoBar(THREE, group, cornerInnerPostX, guardH, 0, totalLen, 0, topGuardMat);
-          addRealisticNunoBar(THREE, group, cornerInnerPostX, topH + postCapAbovePlank * 0.5, 0, totalLen, 0, topGuardMat);
         }
 
         // ── Stairs ─────────────────────────────────────
@@ -747,21 +629,10 @@ export default function Scaffold3DView({
             addBox(group, stepX, stepY, stairZcenter, 0.04, 0.018, stairZback - stairZfront, stairMat);
           }
 
-          // Handrails
+          // Handrails (horizontal only; no extra vertical posts — only rule posts 2×(N+1) per wall)
           for (const hz of [stairZfront - 0.03, stairZback + 0.03]) {
             addPipe(group, sStartX, btmY + RAIL_H_ABOVE, hz, sEndX, topYStair + RAIL_H_ABOVE, hz, pipeMat, PIPE_R * 0.7);
             addPipe(group, sStartX, btmY + RAIL_H_ABOVE * 0.5, hz, sEndX, topYStair + RAIL_H_ABOVE * 0.5, hz, pipeMat, PIPE_R * 0.6);
-          }
-
-          // Vertical supports
-          const NUM_VERTICALS = 4;
-          for (let v = 0; v <= NUM_VERTICALS; v++) {
-            const vt = v / NUM_VERTICALS;
-            const vx = sStartX + (sEndX - sStartX) * vt;
-            const vy = btmY + (topYStair - btmY) * vt;
-            for (const vz of [stairZfront - 0.03, stairZback + 0.03]) {
-              addPipe(group, vx, vy, vz, vx, vy + RAIL_H_ABOVE, vz, pipeMat, PIPE_R * 0.5);
-            }
           }
           } // end for stairSpanIdx
         }
