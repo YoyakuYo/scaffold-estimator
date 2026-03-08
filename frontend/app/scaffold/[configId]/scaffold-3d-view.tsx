@@ -36,12 +36,12 @@ const C_TECH = {
   plank: 0xb45309, habaki: 0x44403c, jack: 0x334155, yokoji: 0x15803d,
   topGuard: 0x6d28d9, frame: 0x4f46e5, endStopper: 0x7c3aed, stair: 0x047857,
 };
-// Galvanized steel palette (realistic scaffold look)
+// Generic scaffold palette: silver/grey metal, yellow-orange planks (reference look)
 const C = {
   pipe:       0xc8d0d8,
   pipeDark:   0xa8b4c0,
-  plank:      0xd0d8e0,
-  plankEdge:  0xb8c0c8,
+  plank:      0xe8a030,
+  plankEdge:  0xd49428,
   jackBase:   0xb0b8c0,
   basePlate:  0xa8b0b8,
   stair:      0xc0c8d0,
@@ -57,20 +57,20 @@ const C = {
   wood:       0xc4a574,
 };
 
-// Per-wall accent colors
+// Per-wall accent colors (for edge/click hint only)
 const WALL_COLORS_HEX = [
   0x3b82f6, 0xf59e0b, 0x10b981, 0xec4899,
   0x8b5cf6, 0xef4444, 0x06b6d4, 0x84cc16,
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank color (silver tones for realistic galvanized look)
+// Span size (mm) → plank color (generic yellow-orange; single tone)
 const SPAN_COLORS: Record<number, number> = {
-  600: 0xd0d8e0,
-  900: 0xc8d0d8,
-  1200: 0xd8e0e8,
-  1500: 0xc0c8d0,
-  1800: 0xd0d8e0,
+  600: 0xe8a030,
+  900: 0xe8a030,
+  1200: 0xe8a030,
+  1500: 0xe8a030,
+  1800: 0xe8a030,
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -455,10 +455,10 @@ export default function Scaffold3DView({
       });
       const woodMat = new THREE.MeshStandardMaterial({ color: C.wood, metalness: 0.05, roughness: 0.9 });
 
-      // Effective materials: technical mode = distinct flat colors; else use textures when available
-      const postMat = isTech ? pipeMat : (textures.post ?? pipeMat);
+      // Effective materials: generic post/plank (no texture overlays); technical mode = distinct flat colors
+      const postMat = pipeMat;
       const jackMatEff = isTech ? jackMat : (textures.jack ?? jackMat);
-      const plankMatEff = isTech ? plankMat : (textures.plank ?? plankMat);
+      const plankMatEff = plankMat;
       const nunoMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough }) : (textures.nuno ?? pipeMat);
       const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : nunoMat;
       const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : nunoMat;
@@ -568,66 +568,7 @@ export default function Scaffold3DView({
         addPipe(parent, px, midCrossY, 0, px, midCrossY, wid, frameDarkMat, fr * 0.6);
       }
 
-      /**
-       * Adds a multi-line label sprite showing wall name, length, and height.
-       */
-      function addWallLabel(
-        parent: THREE.Object3D,
-        name: string,
-        lengthMm: number,
-        heightMm: number,
-        levels: number,
-        x: number, y: number, z: number,
-        color: string,
-      ): THREE.Sprite | null {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-        canvas.width = 1024;
-        canvas.height = 512;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Background pill
-        const bgW = 900, bgH = 380;
-        const bgX = (canvas.width - bgW) / 2, bgY = (canvas.height - bgH) / 2;
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.beginPath();
-        ctx.roundRect(bgX, bgY, bgW, bgH, 30);
-        ctx.fill();
-
-        // Wall name
-        ctx.font = 'bold 72px Arial';
-        ctx.fillStyle = color;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(name, canvas.width / 2, canvas.height / 2 - 110);
-
-        // Length line
-        ctx.font = '52px Arial';
-        ctx.fillStyle = '#ffffff';
-        const lenM = (lengthMm / 1000).toFixed(1);
-        ctx.fillText(`L: ${lenM}m (${lengthMm.toLocaleString()}mm)`, canvas.width / 2, canvas.height / 2 - 20);
-
-        // Height line
-        ctx.font = '48px Arial';
-        ctx.fillStyle = '#d1d5db';
-        const htM = (heightMm / 1000).toFixed(1);
-        ctx.fillText(`H: ${htM}m  ×${levels}lvl`, canvas.width / 2, canvas.height / 2 + 70);
-
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.needsUpdate = true;
-
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-        const spr = new THREE.Sprite(mat);
-        spr.position.set(x, y, z);
-        spr.scale.set(5, 2.5, 1);
-        parent.add(spr);
-        return spr;
-      }
-
-      /** Small indicative label (span size, level, or corner distance). */
+      /** Small indicative label (floor 1F, 2F, etc.). */
       function addTextLabel(
         parent: THREE.Object3D,
         text: string,
@@ -733,10 +674,10 @@ export default function Scaffold3DView({
           addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, yokojiMat);
         }
 
-        // ── Floor/level indicators (L1, L2, L3…) ──
+        // ── Floor-per-floor indicators (1F, 2F, 3F…) ──
         for (let lv = 1; lv <= levelsToBuild; lv++) {
           const levelY = JACK_H + (lv - 0.5) * LEVEL_H;
-          addTextLabel(group, `L${lv}`, postX[0] - 0.28, levelY, widthM / 2, 0.32, 'rgba(0,60,120,0.85)');
+          addTextLabel(group, `${lv}F`, postX[0] - 0.28, levelY, widthM / 2, 0.32, 'rgba(0,60,120,0.85)');
         }
 
         // ── Stair positions ────────────────────────────
@@ -811,7 +752,6 @@ export default function Scaffold3DView({
               addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanM - 0.04, widthM * 0.9, plankColorMat);
               addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, habakiMatEff);
               addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, habakiMatEff);
-              addTextLabel(group, String(spanMm), midX, y + 0.22, widthM / 2, 0.35);
             }
 
             // Habaki / Toe boards
@@ -999,20 +939,6 @@ export default function Scaffold3DView({
         const dist = Math.hypot(v1.x - cx, v1.z - cz);
         if (dist + widthM > maxExtent) maxExtent = dist + widthM;
 
-        // Wall label — shows name, length (m + mm), height (m), levels
-        const labelMidX = (v1.x + v2.x) / 2 - cx + nx * (widthM + 2.0);
-        const labelMidZ = (v1.z + v2.z) / 2 - cz + nz * (widthM + 2.0);
-        const colorHex = '#' + WALL_COLORS_HEX[i % WALL_COLORS_HEX.length].toString(16).padStart(6, '0');
-        const labelSprite = addWallLabel(
-          scene,
-          wall.sideJp,
-          wall.wallLengthMm,
-          wall.levelCalc.totalScaffoldHeightMm,
-          levelsShown,
-          labelMidX, totalH * 0.5, labelMidZ,
-          colorHex,
-        );
-
         // Visible edge segment for click target hint
         const edgePts = [
           new THREE.Vector3(v1.x - cx, 0.14, v1.z - cz),
@@ -1044,7 +970,7 @@ export default function Scaffold3DView({
 
         wallObjectsRef.current.push({
           root: wallRoot,
-          label: labelSprite,
+          label: null,
           edge: edgeLine,
         });
         wallFocusRef.current.push({
@@ -1188,30 +1114,6 @@ export default function Scaffold3DView({
         shapeMesh.rotation.x = -Math.PI / 2;
         shapeMesh.position.y = 0.02;
         scene.add(shapeMesh);
-      }
-
-      // Building label
-      {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          canvas.width = 512;
-          canvas.height = 256;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.font = 'bold 64px Arial';
-          ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(t('viewer', 'building'), canvas.width / 2, canvas.height / 2);
-
-          const tex = new THREE.CanvasTexture(canvas);
-          tex.minFilter = THREE.LinearFilter;
-          const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-          const spr = new THREE.Sprite(mat);
-          spr.position.set(0, 0.5, 0);
-          spr.scale.set(3.5, 1.75, 1);
-          scene.add(spr);
-        }
       }
 
       // ── Ground plane ─────────────────────────────────
@@ -1535,13 +1437,13 @@ export default function Scaffold3DView({
             </span>
           ))}
           <span className="text-gray-400">|</span>
-          <span>L1,L2… = floor level</span>
+          <span>1F, 2F… = floor per floor</span>
           <span className="text-gray-400">|</span>
           <span>Closed perimeter (one loop)</span>
         </div>
         {totalLevels != null && totalLevels > 0 && onVisibleLevelsChange && (
           <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className="text-xs font-medium text-gray-600">表示レベル:</span>
+            <span className="text-xs font-medium text-gray-600">表示階:</span>
             {Array.from({ length: totalLevels }, (_, i) => i + 1).map((lv) => (
               <button
                 key={lv}
@@ -1552,7 +1454,7 @@ export default function Scaffold3DView({
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                Level {lv}
+                {lv}F
               </button>
             ))}
             {effectiveMaxLevel != null && effectiveMaxLevel < totalLevels && (
@@ -1560,14 +1462,14 @@ export default function Scaffold3DView({
                 onClick={() => onVisibleLevelsChange(Math.min(totalLevels, (effectiveMaxLevel ?? 0) + 1))}
                 className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-dashed border-indigo-400 text-indigo-600 hover:bg-indigo-50"
               >
-                <Plus className="h-3 w-3" /> Level
+                <Plus className="h-3 w-3" /> +1F
               </button>
             )}
           </div>
         )}
         {levelSummary && (
           <div className="text-xs text-gray-600 mb-2 p-2 bg-white rounded border border-gray-200">
-            <span className="font-medium">レベル 1～{levelSummary.visibleLevels} の累計: </span>
+            <span className="font-medium">1F～{levelSummary.visibleLevels}F の累計: </span>
             {levelSummary.summary.slice(0, 8).map((c) => (
               <span key={c.type} className="mr-3">
                 {c.nameJp || c.name}: {c.quantity}
