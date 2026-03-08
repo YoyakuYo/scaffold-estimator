@@ -568,41 +568,6 @@ export default function Scaffold3DView({
         addPipe(parent, px, midCrossY, 0, px, midCrossY, wid, frameDarkMat, fr * 0.6);
       }
 
-      /** Small indicative label (floor 1F, 2F, etc.). */
-      function addTextLabel(
-        parent: THREE.Object3D,
-        text: string,
-        x: number, y: number, z: number,
-        scale = 0.4,
-        bgColor = 'rgba(0,0,0,0.7)',
-      ): THREE.Sprite | null {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-        canvas.width = 256;
-        canvas.height = 128;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = bgColor;
-        ctx.beginPath();
-        ctx.roundRect(8, 8, canvas.width - 16, canvas.height - 16, 12);
-        ctx.fill();
-        ctx.font = 'bold 72px Arial';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.needsUpdate = true;
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-        const spr = new THREE.Sprite(mat);
-        spr.position.set(x, y, z);
-        spr.scale.set(scale, scale * 0.5, 1);
-        parent.add(spr);
-        return spr;
-      }
-
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // maxLevelCap: when set, only build up to that level (level-by-level visualization)
@@ -674,12 +639,6 @@ export default function Scaffold3DView({
           addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, yokojiMat);
         }
 
-        // ── Floor-per-floor indicators (1F, 2F, 3F…) ──
-        for (let lv = 1; lv <= levelsToBuild; lv++) {
-          const levelY = JACK_H + (lv - 0.5) * LEVEL_H;
-          addTextLabel(group, `${lv}F`, postX[0] - 0.28, levelY, widthM / 2, 0.32, 'rgba(0,60,120,0.85)');
-        }
-
         // ── Stair positions ────────────────────────────
         const stairCount = wall.stairAccessCount || 0;
         let uniqueStairPos: number[] = [];
@@ -725,29 +684,29 @@ export default function Scaffold3DView({
               addRealisticNunoBar(THREE, group, x1, shitasanY, 0, x2, 0, shitasanMat);
               addRealisticNunoBar(THREE, group, x1, shitasanY, widthM, x2, widthM, shitasanMat);
             } else {
-              // ── Kusabi: Brace on OUTER face only ──
-              addRealisticBrace(THREE, group, x1, baseYLv, 0, x2, y, braceMat);
+              // ── Kusabi: Brace on OUTER face (z=widthM), handrails/tesuri on INNER face (z=0) ──
+              addRealisticBrace(THREE, group, x1, baseYLv, widthM, x2, y, braceMat);
 
-              // INNER face — Tesuri/Nuno (z = widthM)
+              // INNER face — Tesuri/Nuno (z = 0, facing wall)
               if (isAiBim) {
                 const midRailY = baseYLv + 0.45;
                 const handrailY = baseYLv + 0.85;
-                addRealisticNunoBar(THREE, group, x1, midRailY, widthM, x2, widthM, nunoMat);
-                addRealisticNunoBar(THREE, group, x1, handrailY, widthM, x2, widthM, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, midRailY, 0, x2, 0, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, handrailY, 0, x2, 0, nunoMat);
                 const ledger1200Y = baseYLv + 1.2;
                 addPipe(group, x1, ledger1200Y, 0, x2, ledger1200Y, 0, pipeDarkMat, PIPE_R * 0.75);
                 addPipe(group, x1, ledger1200Y, widthM, x2, ledger1200Y, widthM, pipeDarkMat, PIPE_R * 0.75);
               } else {
                 const tesuriY1 = baseYLv + LEVEL_H * 0.5;
                 const tesuriY2 = y;
-                addRealisticNunoBar(THREE, group, x1, tesuriY1, widthM, x2, widthM, nunoMat);
-                addRealisticNunoBar(THREE, group, x1, tesuriY2, widthM, x2, widthM, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, tesuriY1, 0, x2, 0, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, tesuriY2, 0, x2, 0, nunoMat);
               }
             }
 
-            // Plank / Anchi — color by span size or texture
+            // Plank / Anchi — always yellow (reference look); generic, no texture
             const spanMm = spans[i];
-            const plankColorMat = textures.plank ? plankMatEff : getPlankMat(spanMm);
+            const plankColorMat = getPlankMat(spanMm);
             if (!isStairSpan) {
               addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanM - 0.04, widthM * 0.9, plankColorMat);
               addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, habakiMatEff);
