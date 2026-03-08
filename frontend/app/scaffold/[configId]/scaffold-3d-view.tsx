@@ -36,12 +36,12 @@ const C_TECH = {
   plank: 0xb45309, habaki: 0x44403c, jack: 0x334155, yokoji: 0x15803d,
   topGuard: 0x6d28d9, frame: 0x4f46e5, endStopper: 0x7c3aed, stair: 0x047857,
 };
-// Generic scaffold palette: silver/grey metal, yellow-orange planks (reference look)
+// Clean scaffold palette: light silver/grey metal, bright yellow planks
 const C = {
-  pipe:       0xc8d0d8,
-  pipeDark:   0xa8b4c0,
-  plank:      0xe8a030,
-  plankEdge:  0xd49428,
+  pipe:       0xc0c8d0,
+  pipeDark:   0xa8b0b8,
+  plank:      0xf5c842,
+  plankEdge:  0xe8b428,
   jackBase:   0xb0b8c0,
   basePlate:  0xa8b0b8,
   stair:      0xc0c8d0,
@@ -49,8 +49,8 @@ const C = {
   habaki:     0xc0c8d0,
   frame:      0xc0c8d0,
   frameDark:  0xa0a8b0,
-  ground:     0xe8eef4,
-  bg:         0x7eb8d4,
+  ground:     0xe0e4e8,
+  bg:         0xd8dce0,
   grid:       0xd0d8e0,
   ambient:    0xffffff,
   dirLight:   0xffffff,
@@ -64,13 +64,13 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank color (generic yellow-orange; single tone)
+// Span size (mm) → plank color (bright yellow; single tone for clean look)
 const SPAN_COLORS: Record<number, number> = {
-  600: 0xe8a030,
-  900: 0xe8a030,
-  1200: 0xe8a030,
-  1500: 0xe8a030,
-  1800: 0xe8a030,
+  600: 0xf5c842,
+  900: 0xf5c842,
+  1200: 0xf5c842,
+  1500: 0xf5c842,
+  1800: 0xf5c842,
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -330,20 +330,9 @@ export default function Scaffold3DView({
 
       // ── Scene ──────────────────────────────────────────
       const scene = new THREE.Scene();
-      // Blue-green gradient background (realistic scaffold photo style)
-      const bgCanvas = document.createElement('canvas');
-      bgCanvas.width = 2;
-      bgCanvas.height = 512;
-      const bgCtx = bgCanvas.getContext('2d')!;
-      const bgGrad = bgCtx.createLinearGradient(0, 0, 0, 512);
-      bgGrad.addColorStop(0, '#5a9fb8');
-      bgGrad.addColorStop(0.5, '#6bb5c4');
-      bgGrad.addColorStop(1, '#7eb8d4');
-      bgCtx.fillStyle = bgGrad;
-      bgCtx.fillRect(0, 0, 2, 512);
-      const bgTex = new THREE.CanvasTexture(bgCanvas);
-      scene.background = bgTex;
-      scene.fog = new THREE.Fog(0x7eb8d4, 80, 280);
+      // Plain light gray background (clean, uncluttered look)
+      scene.background = new THREE.Color(C.bg);
+      // No fog — keep view clear and clean
       sceneRef.current = scene;
       wallObjectsRef.current = [];
       wallFocusRef.current = [];
@@ -363,7 +352,7 @@ export default function Scaffold3DView({
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.35;
+      renderer.toneMappingExposure = 1.05;
       if ('outputColorSpace' in renderer) {
         (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
       }
@@ -1051,8 +1040,8 @@ export default function Scaffold3DView({
         }
       }
 
-      // ── Building outline at ground level ─────────────
-      const outlineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+      // ── Building outline at ground level (subtle gray) ─
+      const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
       const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, 0.01, v.z - cz));
       outlinePts.push(outlinePts[0].clone()); // close the loop
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
@@ -1075,7 +1064,7 @@ export default function Scaffold3DView({
         scene.add(shapeMesh);
       }
 
-      // ── Ground plane ─────────────────────────────────
+      // ── Ground plane with faint grid (clean look) ──────
       const groundSize = Math.max(maxExtent * 4 + 20, 100);
       const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
       const groundPlane = new THREE.Mesh(groundGeo, groundMat);
@@ -1083,6 +1072,13 @@ export default function Scaffold3DView({
       groundPlane.position.y = -0.03;
       groundPlane.receiveShadow = true;
       scene.add(groundPlane);
+      const gridDivisions = Math.min(40, Math.max(10, Math.floor(groundSize / 5)));
+      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xd0d4d8, 0xd8dce0);
+      gridHelper.rotation.x = -Math.PI / 2;
+      gridHelper.position.y = -0.02;
+      (gridHelper.material as THREE.Material).opacity = 0.4;
+      (gridHelper.material as THREE.Material).transparent = true;
+      scene.add(gridHelper);
 
       // ── Camera position — fit everything in view ───────
       const extent = Math.max(maxExtent, 5);
