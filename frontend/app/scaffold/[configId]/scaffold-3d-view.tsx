@@ -10,7 +10,6 @@ import html2canvas from 'html2canvas';
 import {
   loadScaffoldTextures,
   addRealisticPost,
-  addRealisticJack,
   addRealisticPlank,
   addRealisticNunoBar,
   addRealisticHabaki,
@@ -514,17 +513,14 @@ export default function Scaffold3DView({
           addBox(group, totalLen / 2, sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
         }
 
-        // ── Jack bases (simple) ───────────────────────
-        for (const px of postX) {
-          for (const pz of [0, widthM]) {
-            addRealisticJack(THREE, group, px, 0.005, pz, jackMatEff, PIPE_R * 0.7, JACK_H);
-          }
-        }
+        // No jack bases — only real posts (2×(N+1) per wall). No extra post-like elements at base.
 
-        // ── Vertical posts: 2 per position, N+1 positions for N spans ─────
+        // ── Vertical posts: 2 per position, N+1 positions for N spans. From ground (0) to top. ─────
+        const postBaseY = 0;
+        const postHeightFromGround = JACK_H + totalPostH;
         for (const px of postX) {
           for (const pz of [0, widthM]) {
-            addRealisticPost(THREE, group, px, JACK_H, pz, totalPostH, postMat);
+            addRealisticPost(THREE, group, px, postBaseY, pz, postHeightFromGround, postMat);
           }
         }
 
