@@ -397,15 +397,16 @@ export default function Scaffold3DView({
         metalness: metal,
         roughness: rough,
       });
+      // Planks always bright yellow for clean reference look (ignore technical brown)
       const plankMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.plank : C.plank,
+        color: C.plank,
         metalness: metal,
         roughness: rough,
       });
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
         spanPlankMats[span] = new THREE.MeshStandardMaterial({
-          color: isTech ? C_TECH.plank : (SPAN_COLORS[span] ?? C.plank),
+          color: SPAN_COLORS[span] ?? C.plank,
           metalness: metal,
           roughness: rough,
         });
@@ -573,7 +574,9 @@ export default function Scaffold3DView({
         const totalLen = postX[postX.length - 1] || 0;
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = maxLevelCap != null ? Math.min(levels, maxLevelCap) : levels;
-        const totalPostH = levelsToBuild * LEVEL_H + (levelsToBuild >= levels ? topGuardM : 0);
+        // Post height ends at top plank level; small cap above so posts don't extend far beyond last span
+        const postCapAbovePlank = levelsToBuild >= levels ? Math.min(topGuardM, 0.2) : 0;
+        const totalPostH = levelsToBuild * LEVEL_H + postCapAbovePlank;
 
         // Corner joint: extra inner post at (totalLen - widthM); last-span tesuri shortened to (lastSpan - width)
         const lastSpanM = spans.length > 0 ? spans[spans.length - 1] / 1000 : 0;
@@ -740,20 +743,20 @@ export default function Scaffold3DView({
           }
         }
 
-        // ── Top guard rails (only when showing all levels) ────────────────────────────
+        // ── Top guard rails (at capped post height so posts don't extend beyond last span) ────────────────────────────
         const topH = JACK_H + levelsToBuild * LEVEL_H;
-        const guardH = topH + (levelsToBuild >= levels ? topGuardM : 0);
+        const guardH = topH + postCapAbovePlank;
         for (let i = 0; i < spans.length; i++) {
           const x1 = postX[i];
           const x2 = postX[i + 1];
           for (const pz of [0, widthM]) {
             addRealisticNunoBar(THREE, group, x1, guardH, pz, x2, pz, topGuardMat);
-            addRealisticNunoBar(THREE, group, x1, topH + topGuardM * 0.5, pz, x2, pz, topGuardMat);
+            addRealisticNunoBar(THREE, group, x1, topH + postCapAbovePlank * 0.5, pz, x2, pz, topGuardMat);
           }
         }
         if (cornerInnerPostX != null) {
           addRealisticNunoBar(THREE, group, cornerInnerPostX, guardH, 0, totalLen, 0, topGuardMat);
-          addRealisticNunoBar(THREE, group, cornerInnerPostX, topH + topGuardM * 0.5, 0, totalLen, 0, topGuardMat);
+          addRealisticNunoBar(THREE, group, cornerInnerPostX, topH + postCapAbovePlank * 0.5, 0, totalLen, 0, topGuardMat);
         }
 
         // ── Stairs ─────────────────────────────────────
@@ -1004,7 +1007,8 @@ export default function Scaffold3DView({
         const currLevels = walls[j].levelCalc.fullLevels;
         let cornerLevels = Math.max(prevLevels, currLevels);
         if (maxLevelCap != null) cornerLevels = Math.min(cornerLevels, maxLevelCap);
-        const cornerH = JACK_H + cornerLevels * LEVEL_H + topGuardM;
+        const cornerCap = Math.min(topGuardM, 0.2);
+        const cornerH = JACK_H + cornerLevels * LEVEL_H + cornerCap;
 
         // Two vertical posts at this vertex (shared by both walls — closed polygon)
         for (const p of [midOuter, midInner]) {
@@ -1015,7 +1019,7 @@ export default function Scaffold3DView({
         const heights = [JACK_H + NEGR_H];
         for (let lv = 1; lv <= cornerLevels; lv++) heights.push(JACK_H + lv * LEVEL_H);
         heights.push(cornerH);
-        heights.push(JACK_H + cornerLevels * LEVEL_H + topGuardM * 0.5);
+        heights.push(JACK_H + cornerLevels * LEVEL_H + cornerCap * 0.5);
 
         for (const y of heights) {
           addPipe(scene, prevR0.x, y, prevR0.z, midOuter.x, y, midOuter.z, pipeDarkMat, PIPE_R * 0.8);
