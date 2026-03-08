@@ -92,6 +92,8 @@ export function addSimpleNunoBar(
   const geo = new THREE.CylinderGeometry(pipeR, pipeR, len, PIPE_SEG);
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(midX, y, midZ);
+  // Cylinder default axis is Y; lay it in XZ so bar is horizontal along (dx, dz).
+  mesh.rotation.x = Math.PI / 2;
   mesh.rotation.z = -Math.atan2(dz, dx);
   mesh.castShadow = true;
   parent.add(mesh);
