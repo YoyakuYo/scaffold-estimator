@@ -560,8 +560,9 @@ export default function Scaffold3DView({
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // maxLevelCap: when set, only build up to that level (level-by-level visualization)
+      // hasNextWall: when true, add corner inner post and split last-span tesuri for clean joint
       // ══════════════════════════════════════════════════════
-      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number, maxLevelCap?: number) {
+      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number, maxLevelCap?: number, hasNextWall?: boolean) {
         const allSpans: number[] = wall.spans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
@@ -573,6 +574,11 @@ export default function Scaffold3DView({
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = maxLevelCap != null ? Math.min(levels, maxLevelCap) : levels;
         const totalPostH = levelsToBuild * LEVEL_H + (levelsToBuild >= levels ? topGuardM : 0);
+
+        // Corner joint: extra inner post at (totalLen - widthM); last-span tesuri shortened to (lastSpan - width)
+        const lastSpanM = spans.length > 0 ? spans[spans.length - 1] / 1000 : 0;
+        const useCornerJoint = !!hasNextWall && spans.length > 0 && totalLen > widthM && lastSpanM > widthM;
+        const cornerInnerPostX = useCornerJoint ? totalLen - widthM : null as number | null;
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
 
@@ -613,6 +619,19 @@ export default function Scaffold3DView({
               if (levelsToBuild >= levels) addJoint(group, px, JACK_H + totalPostH, pz);
             }
           }
+          // Corner joint: one extra post on inner row only (between last span, for next wall connection)
+          if (cornerInnerPostX != null) {
+            addRealisticJack(THREE, group, cornerInnerPostX, 0.005, 0, jackMatEff, PIPE_R * 0.7, JACK_H);
+            const colGeo = new THREE.CylinderGeometry(PIPE_R * 1.8, PIPE_R * 1.8, 0.04, 12);
+            const colMesh = new THREE.Mesh(colGeo, jackMatEff);
+            colMesh.position.set(cornerInnerPostX, JACK_H, 0);
+            group.add(colMesh);
+            addRealisticPost(THREE, group, cornerInnerPostX, JACK_H, 0, totalPostH, postMat);
+            for (let lv = 0; lv <= levelsToBuild; lv++) {
+              addJoint(group, cornerInnerPostX, JACK_H + lv * LEVEL_H, 0);
+            }
+            if (levelsToBuild >= levels) addJoint(group, cornerInnerPostX, JACK_H + totalPostH, 0);
+          }
         }
 
         // ── 根がらみ (Base yokoji) ─────────────────────
@@ -626,6 +645,10 @@ export default function Scaffold3DView({
         }
         for (const px of postX) {
           addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, yokojiMat);
+        }
+        // Corner: 600mm (widthM) negarami at base on inner row from added post to last post
+        if (cornerInnerPostX != null) {
+          addRealisticNunoBar(THREE, group, cornerInnerPostX, baseY, 0, totalLen, 0, yokojiMat);
         }
 
         // ── Stair positions ────────────────────────────
@@ -654,6 +677,9 @@ export default function Scaffold3DView({
           for (const px of postX) {
             addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, yokojiMat);
           }
+          if (cornerInnerPostX != null) {
+            addRealisticNunoBar(THREE, group, cornerInnerPostX, y, 0, totalLen, 0, yokojiMat);
+          }
 
           for (let i = 0; i < spans.length; i++) {
             const x1 = postX[i];
@@ -662,6 +688,8 @@ export default function Scaffold3DView({
             const midX = (x1 + x2) / 2;
             const baseYLv = JACK_H + (lv - 1) * LEVEL_H;
             const isStairSpan = uniqueStairPos.includes(i);
+            const isLastSpanWithCorner = cornerInnerPostX != null && i === spans.length - 1;
+            const tesuriEndX = isLastSpanWithCorner ? cornerInnerPostX : x2;
 
             if (isWakugumi) {
               // ── Wakugumi: Brace on BOTH faces ──
@@ -676,20 +704,24 @@ export default function Scaffold3DView({
               // ── Kusabi: Brace on OUTER face (z=widthM), handrails/tesuri on INNER face (z=0) ──
               addRealisticBrace(THREE, group, x1, baseYLv, widthM, x2, y, braceMat);
 
-              // INNER face — Tesuri/Nuno (z = 0, facing wall)
+              // INNER face — Tesuri/Nuno (z = 0). Last span with corner: only up to corner post (e.g. 1200mm)
               if (isAiBim) {
                 const midRailY = baseYLv + 0.45;
                 const handrailY = baseYLv + 0.85;
-                addRealisticNunoBar(THREE, group, x1, midRailY, 0, x2, 0, nunoMat);
-                addRealisticNunoBar(THREE, group, x1, handrailY, 0, x2, 0, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, midRailY, 0, tesuriEndX, 0, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, handrailY, 0, tesuriEndX, 0, nunoMat);
                 const ledger1200Y = baseYLv + 1.2;
                 addPipe(group, x1, ledger1200Y, 0, x2, ledger1200Y, 0, pipeDarkMat, PIPE_R * 0.75);
                 addPipe(group, x1, ledger1200Y, widthM, x2, ledger1200Y, widthM, pipeDarkMat, PIPE_R * 0.75);
               } else {
                 const tesuriY1 = baseYLv + LEVEL_H * 0.5;
                 const tesuriY2 = y;
-                addRealisticNunoBar(THREE, group, x1, tesuriY1, 0, x2, 0, nunoMat);
-                addRealisticNunoBar(THREE, group, x1, tesuriY2, 0, x2, 0, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, tesuriY1, 0, tesuriEndX, 0, nunoMat);
+                addRealisticNunoBar(THREE, group, x1, tesuriY2, 0, tesuriEndX, 0, nunoMat);
+              }
+              // Corner: 600mm (widthM) bar at plank level from last inner post to added post
+              if (isLastSpanWithCorner) {
+                addRealisticNunoBar(THREE, group, cornerInnerPostX!, y + 0.015, 0, totalLen, 0, nunoMat);
               }
             }
 
@@ -718,6 +750,10 @@ export default function Scaffold3DView({
             addRealisticNunoBar(THREE, group, x1, guardH, pz, x2, pz, topGuardMat);
             addRealisticNunoBar(THREE, group, x1, topH + topGuardM * 0.5, pz, x2, pz, topGuardMat);
           }
+        }
+        if (cornerInnerPostX != null) {
+          addRealisticNunoBar(THREE, group, cornerInnerPostX, guardH, 0, totalLen, 0, topGuardMat);
+          addRealisticNunoBar(THREE, group, cornerInnerPostX, topH + topGuardM * 0.5, 0, totalLen, 0, topGuardMat);
         }
 
         // ── Stairs ─────────────────────────────────────
@@ -828,7 +864,8 @@ export default function Scaffold3DView({
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        buildWallScaffold(wall, group, spanCaps[i], maxLevelCap);
+        const hasNextWall = walls.length > 1;
+        buildWallScaffold(wall, group, spanCaps[i], maxLevelCap, hasNextWall);
 
         // Scale scaffold to fit exactly on polygon edge so corners join (closed perimeter).
         // Manual and DXF: edge length from polygon; wall length from spans — scale so end meets next vertex.
