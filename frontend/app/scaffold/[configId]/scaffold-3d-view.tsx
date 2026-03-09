@@ -383,7 +383,7 @@ export default function Scaffold3DView({
       rimLight.position.set(-8, 15, 15);
       scene.add(rimLight);
 
-      const isTech = technicalQuotationMode;
+      const isTech = technicalMode;
       const metal = isTech ? 0.45 : 0.88;
       const rough = isTech ? 0.5 : 0.22;
 
