@@ -15,6 +15,8 @@ export interface VisionFootprintResult {
   spanSizeMm?: number;
   /** For 枠組: 1700, 1800, or 1900. */
   frameSizeMm?: number;
+  /** True when wallLengthsMm came from explicit dimension text on the plan. */
+  wallLengthsFromDimText?: boolean;
 }
 
 export const visionBimApi = {

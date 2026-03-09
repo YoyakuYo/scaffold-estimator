@@ -26,6 +26,8 @@ export interface VisionFootprintResult {
   spanSizeMm?: number;
   /** Frame size in mm for 枠組足場: 1700, 1800, or 1900. */
   frameSizeMm?: number;
+  /** True when wallLengthsMm was read from plan dimension text (not estimated). */
+  wallLengthsFromDimText?: boolean;
 }
 
 /** Supported CAD/plan extensions (lowercase). */
@@ -33,28 +35,45 @@ const CAD_EXTENSIONS = ['.dxf', '.dwg', '.jww'];
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const PDF_EXTENSIONS = ['.pdf'];
 
-const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, or photo) and extract building footprint, dimensions, and scaffold hints.
+const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, or photo) and extract the building exterior footprint, dimensions, and scaffold hints.
 
-Output a JSON object with these fields (use exact keys):
+OUTPUT FORMAT: Output ONLY a raw JSON object. No markdown, no code fences, no prose before or after.
 
-Required:
-- vertices: array of polygon vertices for the building footprint (closed polygon), in order along the perimeter. Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized. Prefer mm when you can read scale/dimensions.
-- buildingHeightMm: total building height in mm (from ground to eaves/top). If not shown, use typical 3000mm per story.
+Required fields:
+- vertices: array of polygon vertices tracing the EXTERIOR building outline in perimeter order (clockwise or counter-clockwise). Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized. Prefer mm when you can read scale/dimensions.
+- buildingHeightMm: total building height in mm (ground to eaves/top). If not shown, use typical 3000mm per story.
 
-Optional but important for accuracy (read from dimension lines and annotations):
+Optional fields (read from dimension lines and annotations):
 - scaleDenominator: scale from drawing (e.g. 100 for S=1/100, 200 for S=1/200).
-- wallLengthsMm: array of lengths in mm, one per edge, in the same order as vertices (edge 0 = vertex[0] to vertex[1], edge 1 = vertex[1] to vertex[2], ...). Use dimension text on the plan (e.g. 2945, 7200, 10@1829=18290 means one edge 18290mm). This overrides lengths from vertex positions and greatly improves accuracy.
-- scaffoldTypeHint: "wakugumi" if the plan shows 枠組足場 or span sizes 1829, 914, 1219, 1524, 1829 (imperial). "kusabi" if くさび式 or spans 600, 900, 1200, 1500, 1800. Omit if unclear.
-- spanSizeMm: main span size in mm if visible (e.g. 1829, 914, 900, 1200).
-- frameSizeMm: for 枠組足場 only: 1700, 1800, or 1900 if shown.
-- groundLineY, eavesLineY: optional coordinates if visible.
+- wallLengthsMm: array of lengths in mm, one per edge, same count as vertices.
+  Edge i = vertex[i] → vertex[i+1]; last edge = last vertex → first vertex (closes polygon).
+  Read dimension annotations: "2945", "10@1829=18290" means 18290mm.
+  IMPORTANT: Always output in mm. If plan shows metres (e.g. "7.200 m") multiply by 1000. If centimetres (e.g. "720 cm") multiply by 10.
+  Only omit if no dimension annotations are visible at all.
+- wallLengthsFromDimText: true if wallLengthsMm was read from explicit dimension lines; false/omit if only estimated from proportions.
+- scaffoldTypeHint: "wakugumi" for 枠組足場 or imperial spans (1829/914/1219/1524); "kusabi" for くさび式 or metric spans (600/900/1200/1500/1800). Omit if unclear.
+- spanSizeMm: main span in mm if visible (1829, 914, 900, 1200, etc.).
+- frameSizeMm: for 枠組足場 only — 1700, 1800, or 1900 if shown.
+- groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
 
-Rules:
-- Footprint must be a closed polygon (at least 3 vertices). Follow the building outline; include angled corners (e.g. L-shape, cut corners) as separate vertices.
-- Read all dimension annotations: dimension lines, "10@1829=18290", "2945", "7200", etc. Put exact values into wallLengthsMm in the same order as the edges of your polygon.
-- If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and prefer outputting vertices and wallLengthsMm in real mm.
-- If scale is unknown, use xFrac/yFrac for shape and omit wallLengthsMm or estimate from proportions.`;
+Polygon rules — follow these exactly:
+1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
+2. EXTERIOR outline only: trace the outer building boundary. Ignore internal room lines, stairs, columns, grids, hatching, and scaffold layout lines.
+3. Multiple outlines: use the main building outline that corresponds to the dimension strings.
+4. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
+5. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
+6. wallLengthsMm count must equal vertices count exactly (one length per edge).
+
+Self-check before outputting (fix issues silently — never output the check itself):
+- edges count == vertices count (not vertices count + 1)
+- no duplicate consecutive vertices
+- no self-intersecting edges
+- if wallLengthsMm provided: sum of lengths is a plausible building perimeter (>4 m, <2000 m)
+- total of wallLengthsMm matches the plan's dimension string sums as closely as possible
+
+If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
+If scale is unknown, use xFrac/yFrac for shape.`;
 
 @Injectable()
 export class VisionBimService {
@@ -222,7 +241,7 @@ export class VisionBimService {
         'claude-sonnet-4-6';
       const message = await client.messages.create({
         model,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: VISION_SYSTEM_PROMPT,
         messages: [
           {
@@ -238,7 +257,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the building footprint (vertices), buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one length per edge in vertex order, from dimension lines), scaffoldTypeHint (wakugumi or kusabi from 枠組/くさび or span sizes 1829/914 vs 600/900), spanSizeMm, frameSizeMm. Reply with only the JSON object, no markdown.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). Trace only the outer boundary — ignore internal lines. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm.',
               },
             ],
           },
@@ -268,12 +287,26 @@ export class VisionBimService {
         parsed.buildingHeightMm = 3000;
       }
       const n = parsed.vertices.length;
-      if (Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === n) {
-        const valid = parsed.wallLengthsMm.filter((l: number) => typeof l === 'number' && l >= 600);
-        if (valid.length !== n) parsed.wallLengthsMm = undefined;
-      } else {
-        parsed.wallLengthsMm = undefined;
+      let wallLengths = Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === n
+        ? parsed.wallLengthsMm as number[]
+        : undefined;
+
+      if (wallLengths) {
+        const maxVal = Math.max(...wallLengths);
+        // If all values look like metres (max < 100), auto-convert to mm
+        if (maxVal < 100 && wallLengths.every((l) => typeof l === 'number' && l > 0)) {
+          wallLengths = wallLengths.map((l) => Math.round(l * 1000));
+          this.logger.warn(`wallLengthsMm auto-converted from m→mm (max was ${maxVal})`);
+        }
+        // Discard if any value is still below minimum scaffold wall (600mm)
+        if (!wallLengths.every((l) => typeof l === 'number' && l >= 600)) {
+          wallLengths = undefined;
+        }
       }
+      parsed.wallLengthsMm = wallLengths;
+      parsed.wallLengthsFromDimText = wallLengths != null
+        ? (parsed.wallLengthsFromDimText === true)
+        : undefined;
       if (parsed.scaffoldTypeHint !== 'kusabi' && parsed.scaffoldTypeHint !== 'wakugumi') {
         parsed.scaffoldTypeHint = undefined;
       }

@@ -27,6 +27,8 @@ import {
   Upload,
   Check,
   RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
@@ -77,9 +79,11 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
 /** Renders building footprint outline as SVG (for AI BIM double-check panel). */
 function BuildingShapeSvg({
   outline,
+  wallLengthsMm,
   className,
 }: {
   outline: Array<{ xFrac: number; yFrac: number }>;
+  wallLengthsMm?: number[];
   className?: string;
 }) {
   if (outline.length < 3) return <div className={className} />;
@@ -94,10 +98,22 @@ function BuildingShapeSvg({
   const nx = (x: number) => (x - minX) / w;
   const ny = (y: number) => (y - minY) / h;
   const points = outline.map((p) => `${nx(p.xFrac)},${ny(p.yFrac)}`).join(' ');
-  const viewBox = '-0.05 -0.05 1.1 1.1';
+  const labels = wallLengthsMm?.map((lenMm, i) => {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    const mx = nx((a.xFrac + b.xFrac) / 2);
+    const my = ny((a.yFrac + b.yFrac) / 2);
+    return { mx, my, text: `${(lenMm / 1000).toFixed(2)}m` };
+  }) ?? [];
   return (
-    <svg viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className={className}>
-      <polygon points={points} fill="#e0e7ff" stroke="#6366f1" strokeWidth={0.02} />
+    <svg viewBox="-0.1 -0.1 1.2 1.2" preserveAspectRatio="xMidYMid meet" className={className}>
+      <polygon points={points} fill="#e0e7ff" stroke="#6366f1" strokeWidth={0.025} />
+      {labels.map((l, i) => (
+        <text key={i} x={l.mx} y={l.my} textAnchor="middle" dominantBaseline="middle"
+          fontSize={0.07} fill="#3730a3" fontFamily="system-ui, sans-serif" fontWeight="600">
+          {l.text}
+        </text>
+      ))}
     </svg>
   );
 }
@@ -238,6 +254,7 @@ function ScaffoldPageContent() {
     buildingOutline: Array<{ xFrac: number; yFrac: number }>;
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
+    wallLengthsFromDimText?: boolean;
     dto: CreateScaffoldConfigDto;
   } | null>(null);
   const [aiBimConfirming, setAiBimConfirming] = useState(false);
@@ -625,6 +642,7 @@ function ScaffoldPageContent() {
                       buildingOutline,
                       scaffoldType,
                       frameSizeMm: frameSize,
+                      wallLengthsFromDimText: footprint.wallLengthsFromDimText,
                       dto,
                     });
                     setAiBimError(null);
@@ -685,29 +703,52 @@ function ScaffoldPageContent() {
                     </p>
                   </div>
                   <div>
-                    <span className="text-xs font-medium text-gray-500 block mb-2">壁面ごとの長さ</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-500">壁面ごとの長さ</span>
+                      {aiBimPreview.wallLengthsFromDimText
+                        ? <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700"><CheckCircle2 size={12} />寸法線から取得</span>
+                        : <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><AlertTriangle size={12} />頂点から推定</span>
+                      }
+                    </div>
                     <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-gray-100 border-b border-gray-200">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">側</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">壁面</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (mm)</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (m)</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {aiBimPreview.walls.map((w) => (
+                          {aiBimPreview.walls.map((w, i) => (
                             <tr key={w.side} className="border-b border-gray-100 last:border-0">
-                              <td className="py-2 px-3 text-gray-800">{w.side}</td>
+                              <td className="py-2 px-3 text-gray-800">壁面 {i + 1}</td>
                               <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
+                              <td className="py-2 px-3 text-right font-mono text-gray-500">{(w.wallLengthMm / 1000).toFixed(2)}</td>
                             </tr>
                           ))}
                         </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-50 border-t border-gray-200">
+                            <td className="py-2 px-3 text-xs font-semibold text-gray-600">合計 (周長)</td>
+                            <td className="py-2 px-3 text-right font-mono font-semibold text-gray-800">
+                              {aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0).toLocaleString()}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-semibold text-gray-600">
+                              {(aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0) / 1000).toFixed(2)}
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   </div>
                   <div>
                     <span className="text-xs font-medium text-gray-500 block mb-2">建物平面形</span>
-                    <BuildingShapeSvg outline={aiBimPreview.buildingOutline} className="w-full max-w-sm aspect-square rounded-lg border border-gray-200 bg-white" />
+                    <BuildingShapeSvg
+                      outline={aiBimPreview.buildingOutline}
+                      wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                      className="w-full max-w-sm aspect-square rounded-lg border border-gray-200 bg-white"
+                    />
                   </div>
                   <div className="flex items-center gap-2 pt-2">
                     <span className="text-xs text-gray-500">
