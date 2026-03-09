@@ -440,7 +440,8 @@ function UserDashboard() {
     }
   };
 
-  const hasBillingAccess = subscription?.hasAccess ?? true;
+  // Subscription check disabled until work is complete — always allow access
+  const hasBillingAccess = true;
 
   return (
     <div className="min-h-screen bg-gray-50">
