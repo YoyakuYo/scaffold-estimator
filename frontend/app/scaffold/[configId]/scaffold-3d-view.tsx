@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -896,6 +896,39 @@ export default function Scaffold3DView({
       }
       scene.add(cornerGroup);
 
+      // ── Corner space/distance: angle (degrees) and opening distance (m), with 3D indicator ─
+      for (let ci = 0; ci < verts.length; ci++) {
+        const prev = verts[(ci - 1 + verts.length) % verts.length];
+        const curr = verts[ci];
+        const next = verts[(ci + 1) % verts.length];
+        const ax = curr.x - prev.x;
+        const az = curr.z - prev.z;
+        const bx = next.x - curr.x;
+        const bz = next.z - curr.z;
+        const la = Math.hypot(ax, az) || 1e-6;
+        const lb = Math.hypot(bx, bz) || 1e-6;
+        const axn = ax / la;
+        const azn = az / la;
+        const bxn = bx / lb;
+        const bzn = bz / lb;
+        const cosTheta = Math.max(-1, Math.min(1, -(axn * bxn + azn * bzn)));
+        const angleRad = Math.acos(cosTheta);
+        const angleDeg = (angleRad * 180) / Math.PI;
+        const cornerOpeningM = 2 * widthM * Math.tan(angleRad / 2);
+        const labelY = Math.min(2.5, Math.max(1.2, maxH * 0.35));
+        const lx = curr.x - cx;
+        const lz = curr.z - cz;
+        const cornerLabel = makeTextSprite(`${angleDeg.toFixed(0)}°  ${cornerOpeningM.toFixed(2)} m`, {
+          bg: 'rgba(30, 58, 138, 0.88)',
+          fg: '#e0e7ff',
+          scale: 0.85,
+        });
+        if (cornerLabel) {
+          cornerLabel.position.set(lx, labelY, lz);
+          scene.add(cornerLabel);
+        }
+      }
+
       // ── Building outline at ground level (subtle gray) ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
       const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, 0.01, v.z - cz));
@@ -1131,6 +1164,31 @@ export default function Scaffold3DView({
           ),
         )
       : 0;
+
+  // Corner spaces: angle (degrees) and opening distance (m) per corner for overlay
+  const cornerData = useMemo(() => {
+    const verts = buildPolygonVertices(walls, result?.polygonVertices);
+    const widthM = (result?.scaffoldWidthMm ?? 900) / 1000;
+    if (verts.length < 2) return { count: 0, angles: [] as number[], openings: [] as number[] };
+    const angles: number[] = [];
+    const openings: number[] = [];
+    for (let ci = 0; ci < verts.length; ci++) {
+      const prev = verts[(ci - 1 + verts.length) % verts.length];
+      const curr = verts[ci];
+      const next = verts[(ci + 1) % verts.length];
+      const ax = curr.x - prev.x;
+      const az = curr.z - prev.z;
+      const bx = next.x - curr.x;
+      const bz = next.z - curr.z;
+      const la = Math.hypot(ax, az) || 1e-6;
+      const lb = Math.hypot(bx, bz) || 1e-6;
+      const cosTheta = Math.max(-1, Math.min(1, -((ax * bx + az * bz) / (la * lb))));
+      const angleRad = Math.acos(cosTheta);
+      angles.push((angleRad * 180) / Math.PI);
+      openings.push(2 * widthM * Math.tan(angleRad / 2));
+    }
+    return { count: verts.length, angles, openings };
+  }, [walls, result?.polygonVertices, result?.scaffoldWidthMm]);
 
   if (walls.length === 0) return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
 
@@ -1397,6 +1455,18 @@ export default function Scaffold3DView({
             <div className="font-semibold text-slate-300 mb-0.5">全体寸法</div>
             <div>周長　<span className="font-bold text-white">{totalLengthM.toFixed(3)} m</span></div>
             <div>高さ　<span className="font-bold text-white">{totalHeightM.toFixed(3)} m</span></div>
+            {cornerData.count > 0 && (
+              <div className="mt-1 pt-1 border-t border-slate-600/60">
+                <div className="font-semibold text-slate-300 mb-0.5">隅（コーナー）</div>
+                <div>角数　<span className="font-bold text-white">{cornerData.count}</span></div>
+                {cornerData.angles.length > 0 && (
+                  <div>角度　<span className="font-bold text-white">{Math.min(...cornerData.angles).toFixed(0)}° ～ {Math.max(...cornerData.angles).toFixed(0)}°</span></div>
+                )}
+                {cornerData.openings.length > 0 && (
+                  <div>開口　<span className="font-bold text-white">{(Math.min(...cornerData.openings) * 1000).toFixed(0)} ～ {(Math.max(...cornerData.openings) * 1000).toFixed(0)} mm</span></div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
