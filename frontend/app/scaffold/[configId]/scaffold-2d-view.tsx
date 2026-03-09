@@ -187,31 +187,19 @@ export default function Scaffold2DView({ result }: Props) {
         </text>
       );
 
-      // Posts (kusabi: single line; wakugumi: portal frame with curved legs and top bar)
+      // Posts (both kusabi & wakugumi: simple single vertical line — no extra emphasis)
       postXPositions.forEach((px, pi) => {
-        if (isWakugumi) {
-          const half = FRAME_WIDTH_PX / 2;
-          const curveH = LEVEL_H * FRAME_BOTTOM_RATIO;
-          const straightBaseY = baseY + curveH;
-          const xL = x(px) - half;
-          const xR = x(px) + half;
-          const yBase = y(baseY);
-          const yStraight = y(straightBaseY);
-          const yTop = y(topY);
-          const xFootL = x(px) - half - FRAME_SPLAY_PX;
-          const xFootR = x(px) + half + FRAME_SPLAY_PX;
-          elements.push(
-            <g key={`frame-${lvl}-${pi}`} stroke={COL.frame} strokeWidth={POST_STROKE} fill="none">
-              <path d={`M ${xL} ${yStraight} L ${xL} ${yTop} L ${xR} ${yTop} L ${xR} ${yStraight}`} />
-              <path d={`M ${xL} ${yStraight} L ${xFootL} ${yBase} L ${xFootR} ${yBase} L ${xR} ${yStraight}`} />
-            </g>
-          );
-        } else {
-          elements.push(
-            <line key={`post-${lvl}-${pi}`} x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
-              stroke={COL.post} strokeWidth={POST_STROKE} />
-          );
-        }
+        elements.push(
+          <line
+            key={`post-${lvl}-${pi}`}
+            x1={x(px)}
+            y1={y(baseY)}
+            x2={x(px)}
+            y2={y(topY)}
+            stroke={COL.post}
+            strokeWidth={POST_STROKE}
+          />
+        );
       });
 
       // Per span
