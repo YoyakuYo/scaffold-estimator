@@ -45,14 +45,16 @@ const C_TECH = {
   endStopper: 0x7c3aed,
   stair: 0x047857,
 };
-// Default scaffold palette: dark steel for ALL framework; warm wood ONLY for planks.
+// Default scaffold palette — matches industry reference:
+//   structural (posts/braces/rails/habaki): light galvanised steel, blue-tinted silver
+//   planks (anchi only): bright golden-yellow
 const C = {
-  structural: 0x374151,  // dark charcoal-steel — posts, braces, tesuri, habaki, jack, frame
-  plank:      0x8b5e14,  // warm wood/plank colour — ONLY for anchi planks
-  wood:       0x6b4810,  // darker wood for base sleepers
-  ground:     0xe0e4e8,
-  bg:         0xd8dce0,
-  grid:       0xd0d8e0,
+  structural: 0xb8c8dc,  // light silver-blue — galvanised steel pipe (posts, braces, tesuri, yokoji, habaki, frame)
+  plank:      0xf5b800,  // bright golden-yellow — anchi planks only
+  wood:       0x7a5520,  // warm brown for base sleepers
+  ground:     0xe8eaed,
+  bg:         0xdce4ec,  // soft sky-gray background
+  grid:       0xd0d8e4,
   ambient:    0xffffff,
   dirLight:   0xffffff,
 };
@@ -64,13 +66,13 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank colour (wood/tan in default mode; distinct in technical mode)
+// Span size (mm) → plank colour (bright golden-yellow in default; distinct in technical mode)
 const SPAN_COLORS: Record<number, number> = {
-  600: 0x8b5e14,
-  900: 0x8b5e14,
-  1200: 0x8b5e14,
-  1500: 0x8b5e14,
-  1800: 0x8b5e14,
+  600: 0xf5b800,
+  900: 0xf5b800,
+  1200: 0xf5b800,
+  1500: 0xf5b800,
+  1800: 0xf5b800,
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -390,13 +392,14 @@ export default function Scaffold3DView({
       scene.add(rimLight);
 
       const isTech = technicalMode;
-      const metal = isTech ? 0.45 : 0.30;
-      const rough  = isTech ? 0.5  : 0.60;
-      const plankMetal = isTech ? metal : 0.05;
-      const plankRough = isTech ? rough : 0.80;
+      // Default: high metalness → shiny galvanised-steel look (light catches on pipes, matching reference)
+      const metal = isTech ? 0.45 : 0.75;
+      const rough  = isTech ? 0.5  : 0.25;
+      const plankMetal = isTech ? metal : 0.08;
+      const plankRough = isTech ? rough : 0.65;
 
       // ── Shared materials ───
-      // Default mode: ALL structural elements use a single dark-steel colour.
+      // Default mode: ALL structural elements share one light silver-blue colour.
       // Technical mode: distinct colour per component type (see C_TECH).
       const pipeMat = new THREE.MeshStandardMaterial({
         color: isTech ? C_TECH.post : C.structural,
