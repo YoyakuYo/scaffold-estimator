@@ -740,31 +740,6 @@ export default function Scaffold3DView({
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
       const cz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
 
-      // ── Chamfer acute corners so 3D doesn't look "narrow" / walls touching ─
-      // Minimum corner opening (m) at outer face so plan-like "rectangle with slight curve" doesn't render as a sharp V.
-      const MIN_CORNER_OPENING_M = 1.2;
-      const cornerTrim: number[] = [];
-      for (let ci = 0; ci < verts.length; ci++) {
-        const prev = verts[(ci - 1 + verts.length) % verts.length];
-        const curr = verts[ci];
-        const next = verts[(ci + 1) % verts.length];
-        const ax = curr.x - prev.x;
-        const az = curr.z - prev.z;
-        const bx = next.x - curr.x;
-        const bz = next.z - curr.z;
-        const la = Math.hypot(ax, az) || 1e-6;
-        const lb = Math.hypot(bx, bz) || 1e-6;
-        const cosTheta = Math.max(-1, Math.min(1, -((ax * bx + az * bz) / (la * lb))));
-        const angleRad = Math.acos(cosTheta);
-        const opening = 2 * widthM * Math.tan(angleRad / 2);
-        let trim = 0;
-        if (opening < MIN_CORNER_OPENING_M && angleRad > 0.01) {
-          const halfGap = (MIN_CORNER_OPENING_M - opening) / 2;
-          trim = halfGap / Math.tan(angleRad / 2);
-        }
-        cornerTrim.push(trim);
-      }
-
       let maxH = 0;
       let maxExtent = 0;
 
@@ -781,16 +756,6 @@ export default function Scaffold3DView({
         const dz = v2.z - v1.z;
         const edgeLen = Math.hypot(dx, dz);
         if (edgeLen < 0.001) { wallNormals.push({ nx: 0, nz: 0 }); continue; }
-
-        const edgeDirX = dx / edgeLen;
-        const edgeDirZ = dz / edgeLen;
-
-        // Trim at acute corners so walls don't meet at a sharp point
-        const trim1 = Math.min(cornerTrim[i], edgeLen / 2);
-        const trim2 = Math.min(cornerTrim[(i + 1) % verts.length], edgeLen / 2);
-        const effectiveLen = Math.max(0.1, edgeLen - trim1 - trim2);
-        const v1Eff = { x: v1.x + edgeDirX * trim1, z: v1.z + edgeDirZ * trim1 };
-        const v2Eff = { x: v2.x - edgeDirX * trim2, z: v2.z - edgeDirZ * trim2 };
 
         // Normal pointing outward (away from polygon center)
         let nx = -dz / edgeLen;
@@ -813,9 +778,9 @@ export default function Scaffold3DView({
         wallRoot.add(group);
         buildWallScaffold(wall, group, spanCaps[i]);
 
-        // Scale wall to fit the (possibly trimmed) edge so it never extends past and doesn't look narrow at corners.
+        // Scale wall to fit exactly on polygon edge so it never extends past.
         const totalLenM = wall.wallLengthMm / 1000;
-        const fitScale = totalLenM > 1e-6 ? Math.min(1, effectiveLen / totalLenM) : 1;
+        const fitScale = totalLenM > 1e-6 ? Math.min(1, edgeLen / totalLenM) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
@@ -827,11 +792,14 @@ export default function Scaffold3DView({
         //   local X → edge direction
         //   local Z → outward normal direction
         //   local Y → world Y (up)
-        //   origin → v1Eff (trimmed start) + outward offset for outer face
+        //   origin → v1 (centered) + outward offset for outer face
 
-        // Translation: place origin at trimmed start (v1Eff), offset outward by widthM
-        const tx = (v1Eff.x - cx) + nx * widthM;
-        const tz = (v1Eff.z - cz) + nz * widthM;
+        const edgeDirX = dx / edgeLen;
+        const edgeDirZ = dz / edgeLen;
+
+        // Translation: place origin at v1, offset outward by widthM so walls go all the way to the corner.
+        const tx = (v1.x - cx) + nx * widthM;
+        const tz = (v1.z - cz) + nz * widthM;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -858,10 +826,10 @@ export default function Scaffold3DView({
         const dist = Math.hypot(v1.x - cx, v1.z - cz);
         if (dist + widthM > maxExtent) maxExtent = dist + widthM;
 
-        // Visible edge segment for click target hint (trimmed to match wall)
+        // Visible edge segment for click target hint
         const edgePts = [
-          new THREE.Vector3(v1Eff.x - cx, 0.14, v1Eff.z - cz),
-          new THREE.Vector3(v2Eff.x - cx, 0.14, v2Eff.z - cz),
+          new THREE.Vector3(v1.x - cx, 0.14, v1.z - cz),
+          new THREE.Vector3(v2.x - cx, 0.14, v2.z - cz),
         ];
         const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePts);
         const edgeMat = new THREE.LineBasicMaterial({
@@ -873,8 +841,8 @@ export default function Scaffold3DView({
         scene.add(edgeLine);
 
         // ── Dimension labels (length + height) — same as 2D: scaffold height = levels×LEVEL_H + top guard + jack ────────────
-        const midXw = (v1Eff.x + v2Eff.x) / 2 - cx + nx * (widthM * 1.1);
-        const midZw = (v1Eff.z + v2Eff.z) / 2 - cz + nz * (widthM * 1.1);
+        const midXw = (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.1);
+        const midZw = (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.1);
         const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
         const levelsForH = wall.levelCalc?.fullLevels ?? 0;
         const scaffoldHeightM = JACK_H + levelsForH * LEVEL_H + topGuardM;
@@ -889,15 +857,15 @@ export default function Scaffold3DView({
           scene.add(hLabel);
         }
 
-        // Invisible hit area to allow clicking each wall segment. Use ~85% of trimmed edge length.
-        const clickBoxLen = Math.max(effectiveLen * 0.85, 0.3);
+        // Invisible hit area to allow clicking each wall segment. Use ~85% of edge length.
+        const clickBoxLen = Math.max(edgeLen * 0.85, 0.3);
         const clickGeo = new THREE.BoxGeometry(clickBoxLen, Math.max(totalH, 2), Math.max(widthM * 0.35, 0.35));
         const clickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
         const clickMesh = new THREE.Mesh(clickGeo, clickMat);
         clickMesh.position.set(
-          (v1Eff.x + v2Eff.x) / 2 - cx + nx * (widthM * 0.42),
+          (v1.x + v2.x) / 2 - cx + nx * (widthM * 0.42),
           Math.max(totalH, 2) / 2,
-          (v1Eff.z + v2Eff.z) / 2 - cz + nz * (widthM * 0.42),
+          (v1.z + v2.z) / 2 - cz + nz * (widthM * 0.42),
         );
         clickMesh.rotation.y = Math.atan2(dz, dx);
         (clickMesh as any).userData = { wallIndex: i };
@@ -909,9 +877,9 @@ export default function Scaffold3DView({
           edge: edgeLine,
         });
         wallFocusRef.current.push({
-          x: (v1Eff.x + v2Eff.x) / 2 - cx + nx * (widthM * 1.6),
+          x: (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.6),
           y: Math.max(totalH * 0.45, 2.2),
-          z: (v1Eff.z + v2Eff.z) / 2 - cz + nz * (widthM * 1.6),
+          z: (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.6),
         });
         clickTargetsRef.current.push(clickMesh);
       }

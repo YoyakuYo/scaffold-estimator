@@ -71,11 +71,13 @@ Polygon rules — follow these exactly:
 
 3. SHAPE REALITY CHECK — Most Japanese buildings are elongated rectangles (taller or wider than they are square). If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline. Real buildings are NOT regular pentagons. Re-examine and trace the correct shape.
 
-4. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
+4. CURVED FACADES — If the plan shows ONE curved exterior wall (e.g. a long convex curve along the top): represent it with ONE or TWO straight segments connecting the same endpoints. Do NOT approximate the curve with many short segments; that creates a zigzag and wrong sharp angles. Output 4–6 vertices total: left, bottom, right, and the curved side as one or two segments (e.g. top-left and top-right). The result must look like an elongated rectangle with one gently bent side, not a narrow V or arrowhead.
 
-5. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
+5. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
 
-6. wallLengthsMm count must equal vertices count exactly (one length per edge).
+6. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
+
+7. wallLengthsMm count must equal vertices count exactly (one length per edge).
 
 CRITICAL — structural grid vs. building edge (most common error):
 Construction plans show internal structural grids (e.g. Y1/Y2/Y3/Y4/Y5 lines spaced 7200 mm, X1/X2 lines, column circles). These are NOT building edges.
