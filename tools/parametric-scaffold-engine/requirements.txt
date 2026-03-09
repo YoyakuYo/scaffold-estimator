@@ -1,0 +1,2 @@
+# Parametric Scaffold Rule Engine — DXF processing
+ezdxf>=1.4.0

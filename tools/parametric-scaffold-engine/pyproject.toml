@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parametric-scaffold-engine"
+version = "0.1.0"
+description = "Parametric Scaffold Rule Engine — DXF floor plan processing with ezdxf"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "ezdxf>=1.4.0",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["parametric_scaffold_engine*"]
