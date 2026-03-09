@@ -211,17 +211,27 @@ function buildPolygonVertices(
     }
   }
 
-  // ── Generic fallback: place walls at equal turning angles (best-effort) ──
+  // ── Generic fallback: place walls with lengths, force closed loop ──
+  // Build n-1 edges from origin with equal angle steps; last edge closes back to (0,0).
   const extAngle = (2 * Math.PI) / n;
-  let angle = 0;
+  const verts: { x: number; z: number }[] = [{ x: 0, z: 0 }];
   let cx = 0, cz = 0;
-  const verts: { x: number; z: number }[] = [];
-  for (let i = 0; i < n; i++) {
-    verts.push({ x: cx, z: cz });
+  let angle = 0;
+  for (let i = 0; i < n - 1; i++) {
     const lenM = Math.max(walls[i].wallLengthMm, 600) / 1000;
     cx += lenM * Math.cos(angle);
     cz += lenM * Math.sin(angle);
     angle += extAngle;
+    verts.push({ x: cx, z: cz });
+  }
+  // Last edge: from verts[n-1] back to verts[0] with length walls[n-1] (closed loop)
+  const lastLenM = Math.max(walls[n - 1].wallLengthMm, 600) / 1000;
+  const dx = -cx;
+  const dz = -cz;
+  const dist = Math.hypot(dx, dz);
+  if (dist >= 1e-6) {
+    const scale = lastLenM / dist;
+    verts[0] = { x: cx + dx * scale, z: cz + dz * scale };
   }
   return verts;
 }
