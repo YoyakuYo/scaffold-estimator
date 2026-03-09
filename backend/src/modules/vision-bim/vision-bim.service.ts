@@ -342,15 +342,15 @@ export class VisionBimService {
           wallLengths = wallLengths.map((l) => Math.round(l * 1000));
           this.logger.warn(`wallLengthsMm auto-converted from m→mm (max was ${maxVal})`);
         }
-        // Fix likely mis-read: one value 4xxx (e.g. 4593) when dimension was 34.593 m (leading digit dropped)
-        const small = wallLengths.filter((l) => typeof l === 'number' && l >= 4000 && l < 6000);
+        // Fix likely mis-read: one value 1xxx–5xxx (e.g. 1300, 4593) when dimension was 31.3 m / 34.593 m (leading digit dropped)
+        const small = wallLengths.filter((l) => typeof l === 'number' && l >= 1000 && l < 6000);
         const large = wallLengths.filter((l) => typeof l === 'number' && l >= 10000);
         if (small.length === 1 && large.length === wallLengths.length - 1) {
           wallLengths = wallLengths.map((l) =>
-            typeof l === 'number' && l >= 4000 && l < 6000 ? l + 30000 : l,
+            typeof l === 'number' && l >= 1000 && l < 6000 ? l + 30000 : l,
           ) as number[];
           this.logger.warn(
-            'wallLengthsMm: corrected one value 4xxx→34xxx (likely 4.593 m mis-read as 34.593 m)',
+            'wallLengthsMm: corrected one value 1xxx/4xxx→31xxx/34xxx (leading digit dropped)',
           );
         }
         // Discard if any value is still below minimum scaffold wall (600mm)

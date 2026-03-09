@@ -76,13 +76,13 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
-/** Fix likely mis-read: one edge 4xxx mm when dimension was 34.593 m (leading digit dropped). */
+/** Fix likely mis-read: one edge 1xxx–5xxx mm when dimension was 31.3 m / 34.593 m (leading digit dropped). */
 function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefined {
   if (!Array.isArray(lengths) || lengths.length < 2) return lengths;
-  const small = lengths.filter((l) => l >= 4000 && l < 6000);
+  const small = lengths.filter((l) => l >= 1000 && l < 6000);
   const large = lengths.filter((l) => l >= 10000);
   if (small.length !== 1 || large.length !== lengths.length - 1) return lengths;
-  return lengths.map((l) => (l >= 4000 && l < 6000 ? l + 30000 : l));
+  return lengths.map((l) => (l >= 1000 && l < 6000 ? l + 30000 : l));
 }
 
 /** Renders building footprint outline as SVG (for AI BIM double-check panel). */
