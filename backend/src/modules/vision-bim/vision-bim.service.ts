@@ -59,8 +59,8 @@ Optional fields (read from dimension lines and annotations):
 
 Polygon rules — follow these exactly:
 1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
-2. EXTERIOR outline only: trace the outer building boundary. Ignore internal room lines, stairs, columns, grids, hatching, and scaffold layout lines.
-3. Multiple outlines: use the main building outline that corresponds to the dimension strings.
+2. EXTERIOR outline only: trace the MAIN STRUCTURAL building perimeter — the solid black wall outline. Do NOT trace blue hatched areas, blue shaded zones, canopies, overhangs, or scaffold boundaries that extend outside the black building line. If the plan has blue hatching outside the black outline, ignore it completely; your vertices must follow only the black structural perimeter so the scaffold does not "go beyond" the building.
+3. Multiple outlines: use the main building outline (black) that corresponds to the dimension strings. Never use the outer edge of blue/shaded zones as the building boundary.
 4. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
 5. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
 6. wallLengthsMm count must equal vertices count exactly (one length per edge).

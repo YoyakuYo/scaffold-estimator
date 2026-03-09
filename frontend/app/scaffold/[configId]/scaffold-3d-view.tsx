@@ -572,7 +572,7 @@ export default function Scaffold3DView({
         // ── Wooden base sleepers (foundation timbers) ─────
         const sleeperH = 0.08;
         const sleeperW = 0.2;
-        const sleeperLen = totalLen + 0.4;
+        const sleeperLen = Math.max(0.4, totalLen);
         for (const pz of [0, widthM / 2, widthM]) {
           addBox(group, totalLen / 2, sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
         }
@@ -775,7 +775,10 @@ export default function Scaffold3DView({
         wallRoot.add(group);
         buildWallScaffold(wall, group, spanCaps[i]);
 
-        // Do NOT scale to polygon edge: each wall uses its natural span-derived length (wall-by-wall, open at corners).
+        // Scale wall to fit exactly on polygon edge so it never extends past (fixes "wall going extra").
+        const totalLenM = wall.wallLengthMm / 1000;
+        const fitScale = totalLenM > 1e-6 ? Math.min(1, edgeLen / totalLenM) : 1;
+        wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
         //   local X = along wall length (0 to totalLen)
