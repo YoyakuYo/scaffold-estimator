@@ -32,7 +32,7 @@ export const visionBimApi = {
     const response = await apiClient.post<VisionFootprintResult>(
       '/vision-bim/analyze',
       form,
-      { timeout: 60000 },
+      { timeout: 120000 }, // 2 min — vision + optional DXF parsing can be slow
     );
     return response.data;
   },
