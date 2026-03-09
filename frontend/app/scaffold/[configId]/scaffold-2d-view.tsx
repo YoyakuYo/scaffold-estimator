@@ -37,7 +37,7 @@ const COL = {
   bg: '#ffffff',
   grid: '#f1f5f9',
   topGuard: '#6d28d9',  // 上部手摺 — violet
-  frame: '#4f46e5',     // 建枠 — indigo
+  frame: '#0f172a',     // 建枠 — same as post (remove emphasis)
 };
 
 // Per-wall accent colors (cycle for many walls)
