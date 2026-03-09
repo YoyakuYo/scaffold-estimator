@@ -1,0 +1,12 @@
+{
+  "name": "zoomen-reader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scaffold estimation — frontend + backend monorepo",
+  "scripts": {
+    "claude": "claude"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "^2.1.71"
+  }
+}

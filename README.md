@@ -31,3 +31,12 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### Claude Code (optional)
+
+From the project root you can run [Claude Code](https://code.claude.com/docs) for terminal-based coding assistance:
+
+```bash
+npm run claude
+# or: npx claude
+```
