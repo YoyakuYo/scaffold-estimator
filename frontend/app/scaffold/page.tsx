@@ -578,6 +578,7 @@ function ScaffoldPageContent() {
                 : '写真・青写真・DXF/CAD図面をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
             </p>
             {!aiBimPreview && (
+            <>
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">クリックまたはドラッグでファイルをアップロード</span>
@@ -649,6 +650,7 @@ function ScaffoldPageContent() {
                 {aiBimError}
               </div>
             )}
+            </>
             )}
 
             {aiBimPreview && (
