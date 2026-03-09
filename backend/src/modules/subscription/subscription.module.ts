@@ -1,12 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Subscription } from './subscription.entity';
-import { User } from '../auth/user.entity';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Subscription, User])],
+  imports: [],
   controllers: [SubscriptionController],
   providers: [SubscriptionService],
   exports: [SubscriptionService],

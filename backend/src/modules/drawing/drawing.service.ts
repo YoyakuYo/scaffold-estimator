@@ -1,6 +1,4 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import * as path from 'path';
@@ -9,14 +7,15 @@ import { Drawing, DrawingFileFormat } from './drawing.entity';
 import { ImageDimensionExtractorService, ExtractedDimensions, ExtractionWarning } from './parsers/image-dimension-extractor.service';
 import { CadProcessingPipelineService } from './parsers/cad-processing-pipeline.service';
 import { DrawingParsingService } from './parsers/drawing-parsing.service';
+import { SupabaseService } from '../supabase/supabase.service';
+import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
 @Injectable()
 export class DrawingService {
   private readonly logger = new Logger(DrawingService.name);
 
   constructor(
-    @InjectRepository(Drawing)
-    private drawingRepository: Repository<Drawing>,
+    private readonly supabase: SupabaseService,
     @InjectQueue('drawing-processing')
     @Optional()
     private drawingQueue: Queue | null,
@@ -24,6 +23,10 @@ export class DrawingService {
     private cadPipeline: CadProcessingPipelineService,
     private drawingParsingService: DrawingParsingService,
   ) {}
+
+  private async drawingUpdate(id: string, body: Record<string, unknown>): Promise<void> {
+    await this.supabase.getClient().from('drawings').update(mapPayloadToSnake(body)).eq('id', id);
+  }
 
   async processDrawing(
     file: Express.Multer.File,
@@ -34,7 +37,7 @@ export class DrawingService {
       const format = this.getFormat(file.originalname);
       this.logger.log(`Processing drawing: ${file.originalname}, format: ${format}`);
       
-      const drawing = this.drawingRepository.create({
+      const ins = mapPayloadToSnake({
         projectId,
         filename: file.originalname,
         fileFormat: format,
@@ -43,9 +46,10 @@ export class DrawingService {
         uploadedBy,
         uploadStatus: 'pending',
       });
-
       this.logger.log(`Saving drawing to database...`);
-      const savedDrawing = await this.drawingRepository.save(drawing);
+      const { data: savedRow, error } = await this.supabase.getClient().from('drawings').insert(ins).select().single();
+      if (error || !savedRow) throw new Error(error?.message || 'Failed to save drawing');
+      const savedDrawing = mapRowToCamel<Drawing>(savedRow as Record<string, unknown>)!;
       this.logger.log(`Drawing saved with ID: ${savedDrawing.id}`);
 
       // ── CAD files: Process through the professional CAD pipeline ──
@@ -67,7 +71,7 @@ export class DrawingService {
 
       // ── Fallback: unknown format ──
       this.logger.warn(`Unknown format "${format}", marking as completed without processing.`);
-      await this.drawingRepository.update(savedDrawing.id, { uploadStatus: 'completed' });
+      await this.drawingUpdate(savedDrawing.id, { uploadStatus: 'completed' });
       return {
         id: savedDrawing.id,
         message: 'Drawing uploaded.',
@@ -91,15 +95,13 @@ export class DrawingService {
   private async processCadFile(savedDrawing: Drawing, filePath: string) {
     this.logger.log(`Running CAD processing pipeline on ${savedDrawing.id}...`);
 
-    await this.drawingRepository.update(savedDrawing.id, {
-      uploadStatus: 'processing',
-    });
+    await this.drawingUpdate(savedDrawing.id, { uploadStatus: 'processing' });
 
     try {
       const result = await this.cadPipeline.process(filePath);
 
       if (result.success && result.data) {
-        await this.drawingRepository.update(savedDrawing.id, {
+        await this.drawingUpdate(savedDrawing.id, {
           uploadStatus: 'completed',
           metadata: {
             cadProcessing: result.extractionInfo,
@@ -119,7 +121,7 @@ export class DrawingService {
           extractionInfo: result.extractionInfo,
         };
       } else {
-        await this.drawingRepository.update(savedDrawing.id, {
+        await this.drawingUpdate(savedDrawing.id, {
           uploadStatus: 'failed',
           metadata: {
             error: result.error,
@@ -137,9 +139,7 @@ export class DrawingService {
       }
     } catch (err: any) {
       this.logger.error(`CAD pipeline error: ${err.message}`, err.stack);
-      await this.drawingRepository.update(savedDrawing.id, {
-        uploadStatus: 'failed',
-      });
+      await this.drawingUpdate(savedDrawing.id, { uploadStatus: 'failed' });
 
       return {
         id: savedDrawing.id,
@@ -159,7 +159,7 @@ export class DrawingService {
     try {
       extractedDimensions = await this.imageDimensionExtractor.extractDimensions(filePath, savedDrawing.filename);
       
-      await this.drawingRepository.update(savedDrawing.id, {
+      await this.drawingUpdate(savedDrawing.id, {
         uploadStatus: 'completed',
         metadata: {
           drawingType: extractedDimensions.drawingType,
@@ -186,10 +186,8 @@ export class DrawingService {
         `height=${extractedDimensions.buildingHeightMm}mm`,
       );
     } catch (err) {
-      this.logger.warn(`OCR extraction failed for ${savedDrawing.id}, continuing without dimensions: ${err.message}`);
-      await this.drawingRepository.update(savedDrawing.id, {
-        uploadStatus: 'completed',
-      });
+      this.logger.warn(`OCR extraction failed for ${savedDrawing.id}, continuing without dimensions: ${(err as Error).message}`);
+      await this.drawingUpdate(savedDrawing.id, { uploadStatus: 'completed' });
     }
     
     return {
@@ -221,9 +219,7 @@ export class DrawingService {
   private async processPdfFile(savedDrawing: Drawing, filePath: string) {
     this.logger.log(`Processing PDF synchronously for ${savedDrawing.id}...`);
 
-    await this.drawingRepository.update(savedDrawing.id, {
-      uploadStatus: 'processing',
-    });
+    await this.drawingUpdate(savedDrawing.id, { uploadStatus: 'processing' });
 
     let extractedDimensions: ExtractedDimensions | null = null;
 
@@ -276,7 +272,7 @@ export class DrawingService {
       }
 
       // Step 3: Store results in database
-      await this.drawingRepository.update(savedDrawing.id, {
+      await this.drawingUpdate(savedDrawing.id, {
         normalizedGeometry: normalizedGeometry as any,
         uploadStatus: 'completed',
         metadata: {
@@ -326,8 +322,8 @@ export class DrawingService {
     } catch (err: any) {
       this.logger.error(`PDF processing failed for ${savedDrawing.id}: ${err.message}`, err.stack);
 
-      await this.drawingRepository.update(savedDrawing.id, {
-        uploadStatus: 'completed', // Mark completed even on parse failure — file is uploaded
+      await this.drawingUpdate(savedDrawing.id, {
+        uploadStatus: 'completed',
         metadata: { pdfParseError: err.message } as any,
       });
 
@@ -340,58 +336,43 @@ export class DrawingService {
     }
   }
 
-  async getDrawing(id: string, companyId: string) {
-    const drawing = await this.drawingRepository.findOne({
-      where: { id },
-      relations: ['geometryElements'],
-    });
-
-    if (!drawing) {
-      throw new NotFoundException('Drawing not found');
-    }
-
+  async getDrawing(id: string, _companyId: string) {
+    const { data: row, error } = await this.supabase
+      .getClient()
+      .from('drawings')
+      .select('*, geometry_elements(*)')
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !row) throw new NotFoundException('Drawing not found');
+    const drawing = mapRowToCamel<Drawing & { geometry_elements?: unknown[] }>(row as Record<string, unknown>);
+    if (!drawing) throw new NotFoundException('Drawing not found');
+    const ge = (drawing as any).geometryElements;
+    if (Array.isArray(ge)) (drawing as any).geometryElements = mapRowsToCamel(ge as Record<string, unknown>[]);
     return drawing;
   }
 
-  async listDrawings(companyId: string, projectId?: string) {
+  async listDrawings(_companyId: string, projectId?: string) {
     try {
-      this.logger.log(`Listing drawings for companyId: ${companyId}, projectId: ${projectId}`);
-      
-      const query = this.drawingRepository.createQueryBuilder('drawing');
-
-      if (projectId) {
-        query.where('drawing.projectId = :projectId', { projectId });
-      }
-
-      query.orderBy('drawing.uploadedAt', 'DESC');
-
-      const result = await query.getMany();
+      this.logger.log(`Listing drawings for projectId: ${projectId}`);
+      let q = this.supabase.getClient().from('drawings').select('*').order('uploaded_at', { ascending: false });
+      if (projectId) q = q.eq('project_id', projectId);
+      const { data: rows, error } = await q;
+      if (error) return [];
+      const result = mapRowsToCamel<Drawing>(rows || []);
       this.logger.log(`Found ${result.length} drawings`);
       return result;
     } catch (error) {
-      this.logger.error(`Error listing drawings: ${error.message}`);
-      this.logger.error(`Full error: ${JSON.stringify(error, null, 2)}`);
-      this.logger.error(`Stack: ${error.stack}`);
+      this.logger.error(`Error listing drawings: ${(error as Error).message}`);
       return [];
     }
   }
 
-  async updateDrawingStatus(
-    id: string,
-    status: 'pending' | 'processing' | 'completed' | 'failed',
-    metadata?: any,
-  ) {
-    await this.drawingRepository.update(id, {
-      uploadStatus: status,
-      metadata: metadata || undefined,
-    });
+  async updateDrawingStatus(id: string, status: 'pending' | 'processing' | 'completed' | 'failed', metadata?: any) {
+    await this.drawingUpdate(id, { uploadStatus: status, metadata: metadata || undefined });
   }
 
   async updateDrawingGeometry(id: string, normalizedGeometry: any) {
-    await this.drawingRepository.update(id, {
-      normalizedGeometry,
-      uploadStatus: 'completed',
-    });
+    await this.drawingUpdate(id, { normalizedGeometry, uploadStatus: 'completed' });
   }
 
   /**

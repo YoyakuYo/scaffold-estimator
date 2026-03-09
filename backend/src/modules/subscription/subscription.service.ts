@@ -6,11 +6,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import Stripe from 'stripe';
 import { Subscription, SubscriptionStatus } from './subscription.entity';
 import { User } from '../auth/user.entity';
+import { SupabaseService } from '../supabase/supabase.service';
+import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
 const TRIAL_DAYS = 14;
 
@@ -20,10 +20,7 @@ export class SubscriptionService {
   private readonly stripe: Stripe | null;
 
   constructor(
-    @InjectRepository(Subscription)
-    private readonly subscriptionRepository: Repository<Subscription>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly supabase: SupabaseService,
     private readonly configService: ConfigService,
   ) {
     const key = this.configService.get<string>('STRIPE_SECRET_KEY');
@@ -56,18 +53,22 @@ export class SubscriptionService {
   }
 
   private async getUserOrFail(userId: string): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const { data: row, error } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
+    if (error || !row) throw new NotFoundException('User not found');
+    const user = mapRowToCamel<User>(row as Record<string, unknown>);
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
   async ensureSubscriptionForUser(userId: string): Promise<Subscription> {
     const user = await this.getUserOrFail(userId);
-    const existing = await this.subscriptionRepository.findOne({ where: { userId } });
-    if (existing) return existing;
+    const { data: existingRow } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    if (existingRow) {
+      return mapRowToCamel<Subscription>(existingRow as Record<string, unknown>)!;
+    }
 
     const now = new Date();
-    const subscription = this.subscriptionRepository.create({
+    const ins = mapPayloadToSnake<Record<string, unknown>>({
       userId: user.id,
       companyId: user.companyId ?? null,
       plan: user.role === 'superadmin' ? 'enterprise' : 'free_trial',
@@ -77,33 +78,36 @@ export class SubscriptionService {
       currentPeriodStart: user.role === 'superadmin' ? now : null,
       currentPeriodEnd: user.role === 'superadmin' ? null : null,
     });
-    return this.subscriptionRepository.save(subscription);
+    const { data: saved, error } = await this.supabase.getClient().from('subscriptions').insert(ins).select().single();
+    if (error || !saved) throw new BadRequestException('Failed to create subscription.');
+    return mapRowToCamel<Subscription>(saved as Record<string, unknown>)!;
   }
 
   private async expireTrialIfNeeded(subscription: Subscription): Promise<Subscription> {
-    if (subscription.status === 'trialing' && subscription.trialEnd && subscription.trialEnd <= new Date()) {
-      subscription.status = 'expired';
-      return this.subscriptionRepository.save(subscription);
+    if (subscription.status === 'trialing' && subscription.trialEnd && new Date(subscription.trialEnd) <= new Date()) {
+      await this.supabase.getClient().from('subscriptions').update(mapPayloadToSnake({ status: 'expired' })).eq('id', subscription.id);
+      return { ...subscription, status: 'expired' as SubscriptionStatus };
     }
     return subscription;
   }
 
-  /** Subscription is at company level: only the company subscribes; all users under that company have access. */
   async hasActiveAccess(userId: string, role?: string): Promise<boolean> {
     if (role === 'superadmin') return true;
     const user = await this.getUserOrFail(userId);
     const companyId = user.companyId;
     if (!companyId) return false;
-    let subs = await this.subscriptionRepository.find({ where: { companyId } });
+    let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+    let subs = mapRowsToCamel<Subscription>(rows || []);
     if (subs.length === 0) {
       await this.ensureSubscriptionForUser(userId);
-      subs = await this.subscriptionRepository.find({ where: { companyId } });
+      const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+      subs = mapRowsToCamel<Subscription>(res.data || []);
     }
     const now = new Date();
     for (const sub of subs) {
       const s = await this.expireTrialIfNeeded(sub);
       if (s.status === 'active') return true;
-      if (s.status === 'trialing' && s.trialEnd && s.trialEnd > now) return true;
+      if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) return true;
     }
     return false;
   }
@@ -115,7 +119,7 @@ export class SubscriptionService {
     const now = Date.now();
     const trialDaysRemaining =
       sub.trialEnd && sub.status === 'trialing'
-        ? Math.max(0, Math.ceil((sub.trialEnd.getTime() - now) / (1000 * 60 * 60 * 24)))
+        ? Math.max(0, Math.ceil((new Date(sub.trialEnd).getTime() - now) / (1000 * 60 * 60 * 24)))
         : 0;
     const hasAccess = await this.hasActiveAccess(userId, user.role);
     return {
@@ -144,14 +148,12 @@ export class SubscriptionService {
         metadata: { userId: user.id, companyId: user.companyId || '' },
       });
       customerId = customer.id;
-      sub.stripeCustomerId = customer.id;
-      sub = await this.subscriptionRepository.save(sub);
+      await this.supabase.getClient().from('subscriptions').update(mapPayloadToSnake({ stripeCustomerId: customer.id })).eq('id', sub.id);
+      sub = { ...sub, stripeCustomerId: customer.id };
     }
 
     const priceId = this.configService.get<string>('STRIPE_PRICE_ID');
-    if (!priceId) {
-      throw new BadRequestException('STRIPE_PRICE_ID is not configured.');
-    }
+    if (!priceId) throw new BadRequestException('STRIPE_PRICE_ID is not configured.');
 
     const frontendUrl = this.getFrontendUrl();
     const session = await stripe.checkout.sessions.create({
@@ -164,19 +166,14 @@ export class SubscriptionService {
       metadata: { userId: user.id },
     });
 
-    if (!session.url) {
-      throw new BadRequestException('Could not create Stripe checkout session URL.');
-    }
+    if (!session.url) throw new BadRequestException('Could not create Stripe checkout session URL.');
     return { url: session.url };
   }
 
   async createPortalSession(userId: string): Promise<{ url: string }> {
     const stripe = this.requireStripe();
     const sub = await this.ensureSubscriptionForUser(userId);
-    if (!sub.stripeCustomerId) {
-      throw new BadRequestException('No Stripe customer found for this account.');
-    }
-
+    if (!sub.stripeCustomerId) throw new BadRequestException('No Stripe customer found for this account.');
     const session = await stripe.billingPortal.sessions.create({
       customer: sub.stripeCustomerId,
       return_url: `${this.getFrontendUrl()}/billing`,
@@ -185,16 +182,15 @@ export class SubscriptionService {
   }
 
   private async upsertFromStripeSubscription(stripeSub: Stripe.Subscription): Promise<void> {
+    const client = this.supabase.getClient();
     let sub: Subscription | null = null;
     if (stripeSub.id) {
-      sub = await this.subscriptionRepository.findOne({
-        where: { stripeSubscriptionId: stripeSub.id },
-      });
+      const { data } = await client.from('subscriptions').select('*').eq('stripe_subscription_id', stripeSub.id).maybeSingle();
+      if (data) sub = mapRowToCamel<Subscription>(data as Record<string, unknown>);
     }
     if (!sub && typeof stripeSub.customer === 'string') {
-      sub = await this.subscriptionRepository.findOne({
-        where: { stripeCustomerId: stripeSub.customer },
-      });
+      const { data } = await client.from('subscriptions').select('*').eq('stripe_customer_id', stripeSub.customer).maybeSingle();
+      if (data) sub = mapRowToCamel<Subscription>(data as Record<string, unknown>);
     }
     if (!sub) {
       this.logger.warn(`Ignoring Stripe subscription ${stripeSub.id}: no local subscription found.`);
@@ -202,40 +198,32 @@ export class SubscriptionService {
     }
 
     const priceId = stripeSub.items.data[0]?.price?.id || null;
-    sub.stripeSubscriptionId = stripeSub.id;
-    sub.stripePriceId = priceId;
-    sub.status = this.mapStripeStatus(stripeSub.status);
-    sub.plan = sub.status === 'active' ? 'professional' : sub.plan;
     const periodStart = (stripeSub as any).current_period_start as number | undefined;
     const periodEnd = (stripeSub as any).current_period_end as number | undefined;
-    sub.currentPeriodStart = periodStart
-      ? new Date(periodStart * 1000)
-      : null;
-    sub.currentPeriodEnd = periodEnd
-      ? new Date(periodEnd * 1000)
-      : null;
-    sub.cancelAt = stripeSub.cancel_at ? new Date(stripeSub.cancel_at * 1000) : null;
-    sub.canceledAt = stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null;
-    await this.subscriptionRepository.save(sub);
+    const updates = mapPayloadToSnake({
+      stripeSubscriptionId: stripeSub.id,
+      stripePriceId: priceId,
+      status: this.mapStripeStatus(stripeSub.status),
+      plan: (sub as any).plan === 'active' ? 'professional' : sub.plan,
+      currentPeriodStart: periodStart ? new Date(periodStart * 1000) : null,
+      currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
+      cancelAt: stripeSub.cancel_at ? new Date(stripeSub.cancel_at * 1000) : null,
+      canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null,
+    });
+    await client.from('subscriptions').update(updates).eq('id', sub.id);
   }
 
   async handleWebhook(signature: string | undefined, rawBody: Buffer): Promise<{ received: true }> {
     const stripe = this.requireStripe();
     const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
-    if (!webhookSecret) {
-      throw new BadRequestException('STRIPE_WEBHOOK_SECRET is not configured.');
-    }
-    if (!signature) {
-      throw new BadRequestException('Missing Stripe signature header.');
-    }
-
+    if (!webhookSecret) throw new BadRequestException('STRIPE_WEBHOOK_SECRET is not configured.');
+    if (!signature) throw new BadRequestException('Missing Stripe signature header.');
     let event: Stripe.Event;
     try {
       event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (error) {
       throw new BadRequestException(`Invalid Stripe webhook signature: ${(error as Error).message}`);
     }
-
     if (
       event.type === 'customer.subscription.created' ||
       event.type === 'customer.subscription.updated' ||
@@ -243,7 +231,6 @@ export class SubscriptionService {
     ) {
       await this.upsertFromStripeSubscription(event.data.object as Stripe.Subscription);
     }
-
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       if (session.subscription && typeof session.subscription === 'string') {
@@ -251,43 +238,31 @@ export class SubscriptionService {
         await this.upsertFromStripeSubscription(stripeSub);
       }
     }
-
     return { received: true };
   }
 
   async listSubscribers(): Promise<any[]> {
-    const subscriptions = await this.subscriptionRepository.find({
-      order: { updatedAt: 'DESC' },
-    });
-    const users =
-      subscriptions.length > 0
-        ? await this.userRepository.find({
-            where: subscriptions.map((s) => ({ id: s.userId })),
-          })
-        : [];
+    const { data: subRows } = await this.supabase.getClient().from('subscriptions').select('*').order('updated_at', { ascending: false });
+    const subs = mapRowsToCamel<Subscription>(subRows || []);
+    if (subs.length === 0) return [];
+    const ids = subs.map((s) => s.userId);
+    const { data: userRows } = await this.supabase.getClient().from('users').select('*').in('id', ids);
+    const users = mapRowsToCamel<User>(userRows || []);
     const userMap = new Map(users.map((u) => [u.id, u]));
     const now = Date.now();
-
-    return subscriptions
+    return subs
       .map((sub) => {
         const user = userMap.get(sub.userId);
         if (user?.role === 'superadmin') return null;
         const trialDaysRemaining =
           sub.trialEnd && sub.status === 'trialing'
-            ? Math.max(0, Math.ceil((sub.trialEnd.getTime() - now) / (1000 * 60 * 60 * 24)))
+            ? Math.max(0, Math.ceil((new Date(sub.trialEnd).getTime() - now) / (1000 * 60 * 60 * 24)))
             : 0;
         return {
           ...sub,
           trialDaysRemaining,
           user: user
-            ? {
-                id: user.id,
-                email: user.email,
-                role: user.role,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                companyId: user.companyId,
-              }
+            ? { id: user.id, email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName, companyId: user.companyId }
             : null,
         };
       })
@@ -295,41 +270,32 @@ export class SubscriptionService {
   }
 
   async adminExtendTrial(userId: string, days: number): Promise<Subscription> {
-    if (!Number.isFinite(days) || days <= 0) {
-      throw new BadRequestException('days must be a positive number');
-    }
+    if (!Number.isFinite(days) || days <= 0) throw new BadRequestException('days must be a positive number');
     const user = await this.getUserOrFail(userId);
-    if (user.role === 'superadmin') {
-      throw new BadRequestException('Superadmin account does not use trial extension.');
-    }
-
+    if (user.role === 'superadmin') throw new BadRequestException('Superadmin account does not use trial extension.');
     const sub = await this.ensureSubscriptionForUser(userId);
-    const from = sub.trialEnd && sub.trialEnd > new Date() ? sub.trialEnd : new Date();
-    sub.trialStart = sub.trialStart || new Date();
-    sub.trialEnd = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
-    sub.status = 'trialing';
-    sub.plan = 'free_trial';
-    return this.subscriptionRepository.save(sub);
+    const from = sub.trialEnd && new Date(sub.trialEnd) > new Date() ? new Date(sub.trialEnd) : new Date();
+    const trialStart = sub.trialStart || new Date();
+    const trialEnd = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+    const updates = mapPayloadToSnake({ trialStart, trialEnd, status: 'trialing', plan: 'free_trial' });
+    const { data: saved, error } = await this.supabase.getClient().from('subscriptions').update(updates).eq('id', sub.id).select().single();
+    if (error || !saved) throw new BadRequestException('Update failed.');
+    return mapRowToCamel<Subscription>(saved as Record<string, unknown>)!;
   }
 
-  async adminSetAccess(
-    userId: string,
-    access: 'active' | 'canceled' | 'expired',
-  ): Promise<Subscription> {
+  async adminSetAccess(userId: string, access: 'active' | 'canceled' | 'expired'): Promise<Subscription> {
     const user = await this.getUserOrFail(userId);
-    if (user.role === 'superadmin') {
-      throw new BadRequestException('Superadmin account should remain active.');
-    }
+    if (user.role === 'superadmin') throw new BadRequestException('Superadmin account should remain active.');
     const sub = await this.ensureSubscriptionForUser(userId);
-    sub.status = access;
+    const updates: Record<string, unknown> = { status: access };
     if (access === 'active') {
-      sub.plan = 'professional';
-      sub.currentPeriodStart = new Date();
-      sub.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      updates.plan = 'professional';
+      updates.currentPeriodStart = new Date();
+      updates.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
-    if (access === 'canceled') {
-      sub.canceledAt = new Date();
-    }
-    return this.subscriptionRepository.save(sub);
+    if (access === 'canceled') updates.canceledAt = new Date();
+    const { data: saved, error } = await this.supabase.getClient().from('subscriptions').update(mapPayloadToSnake(updates)).eq('id', sub.id).select().single();
+    if (error || !saved) throw new BadRequestException('Update failed.');
+    return mapRowToCamel<Subscription>(saved as Record<string, unknown>)!;
   }
 }

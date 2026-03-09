@@ -1,12 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { DrawingController } from './drawing.controller';
 import { DrawingService } from './drawing.service';
 import { DrawingParsingService } from './parsers/drawing-parsing.service';
 import { ImageDimensionExtractorService } from './parsers/image-dimension-extractor.service';
-import { Drawing } from './drawing.entity';
-import { GeometryElement } from './geometry-element.entity';
 import { DxfParsingService } from './parsers/dxf.parser';
 import { PdfParsingService } from './parsers/pdf.parser';
 import { GeometryNormalizerService } from './parsers/geometry.normalizer';
@@ -22,7 +19,6 @@ import { CadProcessingPipelineService } from './parsers/cad-processing-pipeline.
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Drawing, GeometryElement]),
     BullModule.registerQueue({
       name: 'drawing-processing',
     }),

@@ -1,8 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { ScaffoldMaterial } from './scaffold-material.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { SupabaseService } from '../supabase/supabase.service';
+import { mapRowsToCamel } from '../../common/utils/db-mapper';
 
 export interface PriceMapping {
   materialName?: string;
@@ -10,7 +10,7 @@ export interface PriceMapping {
   sizeSpec?: string;
   price: number;
   rowNumber?: number;
-  source: string; // Original text from file
+  source: string;
 }
 
 export interface MatchedPrice {
@@ -25,10 +25,7 @@ export interface MatchedPrice {
 export class PriceTableParserService {
   private readonly logger = new Logger(PriceTableParserService.name);
 
-  constructor(
-    @InjectRepository(ScaffoldMaterial)
-    private materialRepo: Repository<ScaffoldMaterial>,
-  ) {}
+  constructor(private readonly supabase: SupabaseService) {}
 
   /**
    * Parse Excel file and extract price mappings
@@ -160,10 +157,13 @@ export class PriceTableParserService {
    * Match uploaded prices to material master
    */
   async matchToMaterials(mappings: PriceMapping[]): Promise<MatchedPrice[]> {
-    // Load all materials
-    const allMaterials = await this.materialRepo.find({
-      where: { scaffoldType: 'kusabi', isActive: true },
-    });
+    const { data: rows } = await this.supabase
+      .getClient()
+      .from('scaffold_materials')
+      .select('*')
+      .eq('scaffold_type', 'kusabi')
+      .eq('is_active', true);
+    const allMaterials = mapRowsToCamel<ScaffoldMaterial>(rows || []);
 
     const matched: MatchedPrice[] = [];
 

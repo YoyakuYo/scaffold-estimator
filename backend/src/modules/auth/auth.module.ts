@@ -2,21 +2,15 @@ import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
-import { User } from './user.entity';
-import { Company } from './company.entity';
-import { CompanyBranch } from '../company/company-branch.entity';
-import { LoginHistory } from './login-history.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Company, CompanyBranch, LoginHistory]),
     forwardRef(() => SubscriptionModule),
     forwardRef(() => NotificationsModule),
     PassportModule,

@@ -1,65 +1,55 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Notification } from './notification.entity';
+import { SupabaseService } from '../supabase/supabase.service';
+import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
 export type NotificationType = 'approval' | 'rejection' | 'new_message' | 'system';
 
 @Injectable()
 export class NotificationsService {
-  constructor(
-    @InjectRepository(Notification)
-    private notificationRepository: Repository<Notification>,
-  ) {}
+  constructor(private readonly supabase: SupabaseService) {}
 
-  create(
+  async create(
     userId: string,
     type: NotificationType,
     title: string,
     options?: { body?: string; link?: string },
   ): Promise<Notification> {
-    const n = this.notificationRepository.create({
+    const ins = mapPayloadToSnake({
       userId,
       type,
       title,
       body: options?.body ?? null,
       link: options?.link ?? null,
     });
-    return this.notificationRepository.save(n);
+    const { data: saved, error } = await this.supabase.getClient().from('notifications').insert(ins).select().single();
+    if (error || !saved) throw new Error(error?.message || 'Insert failed');
+    return mapRowToCamel<Notification>(saved as Record<string, unknown>)!;
   }
 
   async listForUser(userId: string, limit = 50): Promise<Notification[]> {
-    return this.notificationRepository.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+    const { data: rows } = await this.supabase
+      .getClient()
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    return mapRowsToCamel<Notification>(rows || []);
   }
 
   async markAsRead(notificationId: string, userId: string): Promise<void> {
-    const n = await this.notificationRepository.findOne({
-      where: { id: notificationId, userId },
-    });
-    if (!n) throw new NotFoundException('Notification not found');
-    n.readAt = new Date();
-    await this.notificationRepository.save(n);
+    const { data: row } = await this.supabase.getClient().from('notifications').select('id').eq('id', notificationId).eq('user_id', userId).maybeSingle();
+    if (!row) throw new NotFoundException('Notification not found');
+    await this.supabase.getClient().from('notifications').update(mapPayloadToSnake({ readAt: new Date() })).eq('id', notificationId);
   }
 
   async markAllAsRead(userId: string): Promise<void> {
-    await this.notificationRepository
-      .createQueryBuilder()
-      .update(Notification)
-      .set({ readAt: new Date() })
-      .where('user_id = :userId', { userId })
-      .andWhere('read_at IS NULL')
-      .execute();
+    await this.supabase.getClient().from('notifications').update(mapPayloadToSnake({ readAt: new Date() })).eq('user_id', userId).is('read_at', null);
   }
 
   async getUnreadCount(userId: string): Promise<number> {
-    return this.notificationRepository
-      .createQueryBuilder('n')
-      .where('n.user_id = :userId', { userId })
-      .andWhere('n.read_at IS NULL')
-      .getCount();
+    const { count } = await this.supabase.getClient().from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).is('read_at', null);
+    return count ?? 0;
   }
 }

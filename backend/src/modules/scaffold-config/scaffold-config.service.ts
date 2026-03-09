@@ -1,6 +1,4 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { CalculatedQuantity } from './calculated-quantity.entity';
 import { ScaffoldMaterial } from './scaffold-material.entity';
@@ -10,18 +8,15 @@ import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { ALL_RULES } from './scaffold-rules';
 import { ALL_WAKUGUMI_RULES } from './scaffold-rules-wakugumi';
 import { PolygonToWallsService } from './polygon-to-walls.service';
+import { SupabaseService } from '../supabase/supabase.service';
+import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
 @Injectable()
 export class ScaffoldConfigService {
   private readonly logger = new Logger(ScaffoldConfigService.name);
 
   constructor(
-    @InjectRepository(ScaffoldConfiguration)
-    private configRepo: Repository<ScaffoldConfiguration>,
-    @InjectRepository(CalculatedQuantity)
-    private quantityRepo: Repository<CalculatedQuantity>,
-    @InjectRepository(ScaffoldMaterial)
-    private materialRepo: Repository<ScaffoldMaterial>,
+    private readonly supabase: SupabaseService,
     private calculatorService: ScaffoldCalculatorService,
     private calculatorWakugumiService: ScaffoldCalculatorWakugumiService,
     private polygonToWallsService: PolygonToWallsService,
@@ -67,13 +62,13 @@ export class ScaffoldConfigService {
     // NOTE: Removed polygon-to-walls conversion logic.
     // Walls are now passed directly from frontend as ordered segments from perimeter editor.
 
-    // Save configuration
-    const config = this.configRepo.create({
+    const client = this.supabase.getClient();
+    const configIns = mapPayloadToSnake<Record<string, unknown>>({
       projectId: dto.projectId,
       drawingId: dto.drawingId || null,
       mode: dto.mode,
       scaffoldType,
-      structureType: dto.structureType || '改修工事', // Default to most complex
+      structureType: dto.structureType || '改修工事',
       buildingHeightMm: Math.max(...wallsToCalculate.map(w => w.wallHeightMm), 0),
       walls: wallsToCalculate.map(w => ({
         side: w.side,
@@ -84,10 +79,8 @@ export class ScaffoldConfigService {
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
-      // Kusabi-specific
       preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
       topGuardHeightMm: dto.topGuardHeightMm || 900,
-      // Wakugumi-specific
       frameSizeMm: dto.frameSizeMm || 1700,
       habakiCountPerSpan: dto.habakiCountPerSpan || 2,
       endStopperType: dto.endStopperType || 'nuno',
@@ -97,8 +90,12 @@ export class ScaffoldConfigService {
       createdBy: userId,
       status: 'configured',
     });
-
-    const savedConfig = await this.configRepo.save(config) as ScaffoldConfiguration;
+    const { data: savedConfigRow, error: configErr } = await client.from('scaffold_configurations').insert(configIns).select().single();
+    if (configErr || !savedConfigRow) {
+      this.logger.error('Insert config failed', configErr);
+      throw new BadRequestException('Failed to save configuration.');
+    }
+    const savedConfig = mapRowToCamel<ScaffoldConfiguration>(savedConfigRow as Record<string, unknown>)!;
 
     // Run calculation — dispatch based on scaffold type
     let result: ScaffoldCalculationResult;
@@ -123,31 +120,22 @@ export class ScaffoldConfigService {
       });
     }
 
-    // Store calculation result as JSON for quick retrieval
-    // Include polygon vertices for accurate plan/3D rendering
-    savedConfig.calculationResult = {
+    const calculationResult = {
       ...result,
-      ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && {
-        polygonVertices: dto.buildingOutline,
-      }),
+      ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
     };
+    await client
+      .from('scaffold_configurations')
+      .update(mapPayloadToSnake({ calculationResult, status: 'calculated' }))
+      .eq('id', savedConfig.id);
+    savedConfig.calculationResult = calculationResult;
     savedConfig.status = 'calculated';
-    await this.configRepo.save(savedConfig);
 
-    // Save individual quantity rows for editing
-    // Auto-populate unit prices from scaffold_materials master
     const priceMap = await this.buildPriceMap(scaffoldType);
-
-    const quantityEntities: CalculatedQuantity[] = [];
-
-    // Save summary quantities (aggregated)
+    const quantityInserts: Record<string, unknown>[] = [];
     for (const comp of result.summary) {
       let price = 0;
-      
-      // For Nuno Bars (布材), match by category + sizeSpec instead of materialCode
       if (comp.category === '布材' && comp.sizeSpec) {
-        // Try to find any nuno bar type with matching size
-        // Check tesuri, stopper, negarami, bearer codes for this size
         const size = comp.sizeSpec;
         const nunoCodes = [
           `KUSABI-TESURI-${size}`,
@@ -155,23 +143,13 @@ export class ScaffoldConfigService {
           `KUSABI-NEGR-${size}`,
           `KUSABI-BEARER-${size}`,
         ];
-        
-        // Use first available price (or average if multiple found)
-        const prices = nunoCodes
-          .map(code => priceMap.get(code))
-          .filter((p): p is number => p !== undefined && p > 0);
-        
-        if (prices.length > 0) {
-          // Use average price of all nuno bar types for this size
-          price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-        }
+        const prices = nunoCodes.map(code => priceMap.get(code)).filter((p): p is number => p !== undefined && p > 0);
+        if (prices.length > 0) price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
       } else if (comp.materialCode) {
-        // For other components, use materialCode
         price = priceMap.get(comp.materialCode) || 0;
       }
-      
-      quantityEntities.push(
-        this.quantityRepo.create({
+      quantityInserts.push(
+        mapPayloadToSnake({
           configId: savedConfig.id,
           componentType: comp.type,
           componentName: comp.nameJp,
@@ -184,14 +162,15 @@ export class ScaffoldConfigService {
         }),
       );
     }
-
     if (priceMap.size > 0) {
-      const pricedCount = quantityEntities.filter(q => q.unitPrice > 0).length;
-      this.logger.log(`Auto-populated prices: ${pricedCount}/${quantityEntities.length} components from materials master`);
+      const pricedCount = quantityInserts.filter(q => Number((q as any).unit_price) > 0).length;
+      this.logger.log(`Auto-populated prices: ${pricedCount}/${quantityInserts.length} components from materials master`);
     }
-
-    const savedQuantities = await this.quantityRepo.save(quantityEntities);
-
+    let savedQuantities: CalculatedQuantity[] = [];
+    if (quantityInserts.length > 0) {
+      const { data: qRows, error: qErr } = await client.from('calculated_quantities').insert(quantityInserts).select();
+      if (!qErr && qRows) savedQuantities = mapRowsToCamel<CalculatedQuantity>(qRows as Record<string, unknown>[]);
+    }
     return { config: savedConfig, result, quantities: savedQuantities };
   }
 
@@ -217,30 +196,34 @@ export class ScaffoldConfigService {
       segments: w.segments,
     }));
 
-    await this.quantityRepo.delete({ configId });
+    const client = this.supabase.getClient();
+    await client.from('calculated_quantities').delete().eq('config_id', configId);
 
-    config.mode = dto.mode;
-    config.scaffoldType = scaffoldType;
-    config.structureType = dto.structureType || '改修工事';
-    config.buildingHeightMm = Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0);
-    config.walls = wallsToCalculate.map((w) => ({
-      side: w.side,
-      wallLengthMm: w.wallLengthMm,
-      wallHeightMm: w.wallHeightMm,
-      enabled: true,
-      stairAccessCount: w.stairAccessCount,
-      ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
-    }));
-    config.scaffoldWidthMm = dto.scaffoldWidthMm;
-    config.preferredMainTatejiMm = dto.preferredMainTatejiMm ?? 1800;
-    config.topGuardHeightMm = dto.topGuardHeightMm ?? 900;
-    config.frameSizeMm = dto.frameSizeMm ?? 1700;
-    config.habakiCountPerSpan = dto.habakiCountPerSpan ?? 2;
-    config.endStopperType = dto.endStopperType ?? 'nuno';
-    config.rentalType = dto.rentalType ?? null;
-    config.rentalStartDate = dto.rentalStartDate ? new Date(dto.rentalStartDate) : null;
-    config.rentalEndDate = dto.rentalEndDate ? new Date(dto.rentalEndDate) : null;
-
+    const configUpdates = mapPayloadToSnake({
+      mode: dto.mode,
+      scaffoldType,
+      structureType: dto.structureType || '改修工事',
+      buildingHeightMm: Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0),
+      walls: wallsToCalculate.map((w) => ({
+        side: w.side,
+        wallLengthMm: w.wallLengthMm,
+        wallHeightMm: w.wallHeightMm,
+        enabled: true,
+        stairAccessCount: w.stairAccessCount,
+        ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
+      })),
+      scaffoldWidthMm: dto.scaffoldWidthMm,
+      preferredMainTatejiMm: dto.preferredMainTatejiMm ?? 1800,
+      topGuardHeightMm: dto.topGuardHeightMm ?? 900,
+      frameSizeMm: dto.frameSizeMm ?? 1700,
+      habakiCountPerSpan: dto.habakiCountPerSpan ?? 2,
+      endStopperType: dto.endStopperType ?? 'nuno',
+      rentalType: dto.rentalType ?? null,
+      rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
+      rentalEndDate: dto.rentalEndDate ? new Date(dto.rentalEndDate) : null,
+      calculationResult: null as any,
+      status: 'calculated',
+    });
     let result: ScaffoldCalculationResult;
     if (scaffoldType === 'wakugumi') {
       result = this.calculatorWakugumiService.calculate({
@@ -261,38 +244,36 @@ export class ScaffoldConfigService {
         topGuardHeightMm: dto.topGuardHeightMm || 900,
       });
     }
-
-    config.calculationResult = {
+    const calculationResult = {
       ...result,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
     };
+    configUpdates.calculation_result = calculationResult;
+    await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);
+    config.mode = dto.mode;
+    config.scaffoldType = scaffoldType;
+    config.structureType = dto.structureType || '改修工事';
+    config.buildingHeightMm = Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0);
+    config.walls = wallsToCalculate.map((w) => ({ side: w.side, wallLengthMm: w.wallLengthMm, wallHeightMm: w.wallHeightMm, enabled: true, stairAccessCount: w.stairAccessCount, ...(w.segments && w.segments.length > 0 && { segments: w.segments }) }));
+    config.scaffoldWidthMm = dto.scaffoldWidthMm;
+    config.calculationResult = calculationResult;
     config.status = 'calculated';
-    await this.configRepo.save(config);
 
     const priceMap = await this.buildPriceMap(scaffoldType);
-    const quantityEntities: CalculatedQuantity[] = [];
+    const quantityInserts: Record<string, unknown>[] = [];
     for (const comp of result.summary) {
       let price = 0;
       if (comp.category === '布材' && comp.sizeSpec) {
         const size = comp.sizeSpec;
-        const nunoCodes = [
-          `KUSABI-TESURI-${size}`,
-          `KUSABI-STOPPER-${size}`,
-          `KUSABI-NEGR-${size}`,
-          `KUSABI-BEARER-${size}`,
-        ];
-        const prices = nunoCodes
-          .map((code) => priceMap.get(code))
-          .filter((p): p is number => p !== undefined && p > 0);
-        if (prices.length > 0) {
-          price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-        }
+        const nunoCodes = [`KUSABI-TESURI-${size}`, `KUSABI-STOPPER-${size}`, `KUSABI-NEGR-${size}`, `KUSABI-BEARER-${size}`];
+        const prices = nunoCodes.map((code) => priceMap.get(code)).filter((p): p is number => p !== undefined && p > 0);
+        if (prices.length > 0) price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
       } else if (comp.materialCode) {
         price = priceMap.get(comp.materialCode) || 0;
       }
-      quantityEntities.push(
-        this.quantityRepo.create({
-          configId: config.id,
+      quantityInserts.push(
+        mapPayloadToSnake({
+          configId,
           componentType: comp.type,
           componentName: comp.nameJp,
           sizeSpec: comp.sizeSpec,
@@ -304,79 +285,81 @@ export class ScaffoldConfigService {
         }),
       );
     }
-    const savedQuantities = await this.quantityRepo.save(quantityEntities);
+    let savedQuantities: CalculatedQuantity[] = [];
+    if (quantityInserts.length > 0) {
+      const { data: qRows } = await client.from('calculated_quantities').insert(quantityInserts).select();
+      if (qRows) savedQuantities = mapRowsToCamel<CalculatedQuantity>(qRows as Record<string, unknown>[]);
+    }
     return { config, result, quantities: savedQuantities };
   }
 
   async getConfig(id: string): Promise<ScaffoldConfiguration> {
-    const config = await this.configRepo.findOne({
-      where: { id },
-    });
+    const { data: row, error } = await this.supabase.getClient().from('scaffold_configurations').select('*').eq('id', id).maybeSingle();
+    if (error || !row) throw new NotFoundException('Scaffold configuration not found');
+    const config = mapRowToCamel<ScaffoldConfiguration>(row as Record<string, unknown>);
     if (!config) throw new NotFoundException('Scaffold configuration not found');
     return config;
   }
 
   async getConfigByDrawing(drawingId: string): Promise<ScaffoldConfiguration | null> {
-    return await this.configRepo.findOne({
-      where: { drawingId },
-      order: { createdAt: 'DESC' },
-    });
+    const { data: rows } = await this.supabase
+      .getClient()
+      .from('scaffold_configurations')
+      .select('*')
+      .eq('drawing_id', drawingId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (!rows || rows.length === 0) return null;
+    return mapRowToCamel<ScaffoldConfiguration>(rows[0] as Record<string, unknown>);
   }
 
   async getQuantities(configId: string): Promise<CalculatedQuantity[]> {
-    return await this.quantityRepo.find({
-      where: { configId },
-      order: { sortOrder: 'ASC' },
-    });
+    const { data: rows } = await this.supabase
+      .getClient()
+      .from('calculated_quantities')
+      .select('*')
+      .eq('config_id', configId)
+      .order('sort_order', { ascending: true });
+    return mapRowsToCamel<CalculatedQuantity>(rows || []);
   }
 
   async updateQuantity(quantityId: string, adjustedQuantity: number, reason?: string): Promise<CalculatedQuantity> {
-    const qty = await this.quantityRepo.findOne({ where: { id: quantityId } });
-    if (!qty) throw new NotFoundException('Quantity record not found');
-
-    qty.adjustedQuantity = adjustedQuantity;
-    qty.adjustmentReason = reason || null;
-
-    return await this.quantityRepo.save(qty);
+    const { data: row } = await this.supabase.getClient().from('calculated_quantities').select('*').eq('id', quantityId).maybeSingle();
+    if (!row) throw new NotFoundException('Quantity record not found');
+    const updates = mapPayloadToSnake({ adjustedQuantity, adjustmentReason: reason || null });
+    const { data: saved, error } = await this.supabase.getClient().from('calculated_quantities').update(updates).eq('id', quantityId).select().single();
+    if (error || !saved) throw new BadRequestException('Update failed.');
+    return mapRowToCamel<CalculatedQuantity>(saved as Record<string, unknown>)!;
   }
 
   async markReviewed(configId: string): Promise<ScaffoldConfiguration> {
     const config = await this.getConfig(configId);
-
     if (config.status !== 'calculated') {
       const quantities = await this.getQuantities(configId);
       if (quantities.length > 0) {
+        await this.supabase.getClient().from('scaffold_configurations').update(mapPayloadToSnake({ status: 'calculated' })).eq('id', configId);
         config.status = 'calculated';
-        await this.configRepo.save(config);
       } else {
-        throw new BadRequestException(
-          `Configuration must be calculated before review. Current status: '${config.status}'.`,
-        );
+        throw new BadRequestException(`Configuration must be calculated before review. Current status: '${config.status}'.`);
       }
     }
-
+    await this.supabase.getClient().from('scaffold_configurations').update(mapPayloadToSnake({ status: 'reviewed' })).eq('id', configId);
     config.status = 'reviewed';
-    return await this.configRepo.save(config);
+    return config;
   }
 
   async listConfigs(projectId?: string): Promise<ScaffoldConfiguration[]> {
-    const query = this.configRepo.createQueryBuilder('config');
-    if (projectId) {
-      query.where('config.projectId = :projectId', { projectId });
-    }
-    query.orderBy('config.createdAt', 'DESC');
-    return await query.getMany();
+    let q = this.supabase.getClient().from('scaffold_configurations').select('*').order('created_at', { ascending: false });
+    if (projectId) q = q.eq('project_id', projectId);
+    const { data: rows } = await q;
+    return mapRowsToCamel<ScaffoldConfiguration>(rows || []);
   }
 
-  /**
-   * Delete a scaffold configuration
-   */
   async deleteConfig(configId: string): Promise<void> {
-    const config = await this.configRepo.findOne({ where: { id: configId } });
-    if (!config) {
-      throw new Error('Configuration not found');
-    }
-    await this.configRepo.remove(config);
+    const { data: row } = await this.supabase.getClient().from('scaffold_configurations').select('id').eq('id', configId).maybeSingle();
+    if (!row) throw new Error('Configuration not found');
+    await this.supabase.getClient().from('calculated_quantities').delete().eq('config_id', configId);
+    await this.supabase.getClient().from('scaffold_configurations').delete().eq('id', configId);
     this.logger.log(`Deleted scaffold config ${configId}`);
   }
 
@@ -386,88 +369,74 @@ export class ScaffoldConfigService {
    * Build a Map of materialCode → rentalPriceMonthly from scaffold_materials.
    */
   private async buildPriceMap(scaffoldType: 'kusabi' | 'wakugumi' = 'kusabi'): Promise<Map<string, number>> {
-    const materials = await this.materialRepo.find({
-      where: { isActive: true, scaffoldType },
-    });
+    const { data: rows } = await this.supabase
+      .getClient()
+      .from('scaffold_materials')
+      .select('code, rental_price_monthly')
+      .eq('is_active', true)
+      .eq('scaffold_type', scaffoldType);
+    const materials = mapRowsToCamel<{ code: string; rentalPriceMonthly: number }>(rows || []);
     const map = new Map<string, number>();
     for (const m of materials) {
-      if (m.code && Number(m.rentalPriceMonthly) > 0) {
-        map.set(m.code, Number(m.rentalPriceMonthly));
-      }
+      if (m.code && Number(m.rentalPriceMonthly) > 0) map.set(m.code, Number(m.rentalPriceMonthly));
     }
     return map;
   }
 
-  /**
-   * List all active materials for the price master UI.
-   */
   async listMaterials(scaffoldType?: 'kusabi' | 'wakugumi'): Promise<ScaffoldMaterial[]> {
-    const where: any = {};
-    if (scaffoldType) {
-      where.scaffoldType = scaffoldType;
-    }
-    return await this.materialRepo.find({
-      where,
-      order: { sortOrder: 'ASC', category: 'ASC', code: 'ASC' },
-    });
+    let q = this.supabase
+      .getClient()
+      .from('scaffold_materials')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('category', { ascending: true })
+      .order('code', { ascending: true });
+    if (scaffoldType) q = q.eq('scaffold_type', scaffoldType);
+    const { data: rows } = await q;
+    return mapRowsToCamel<ScaffoldMaterial>(rows || []);
   }
 
-  /**
-   * Update a material's rental price (and optionally other fields).
-   */
   async updateMaterialPrice(
     materialId: string,
     updates: { rentalPriceMonthly?: number; purchasePrice?: number; isActive?: boolean },
   ): Promise<ScaffoldMaterial> {
-    const material = await this.materialRepo.findOne({ where: { id: materialId } });
-    if (!material) throw new NotFoundException('Material not found');
-
-    if (updates.rentalPriceMonthly !== undefined) {
-      material.rentalPriceMonthly = updates.rentalPriceMonthly;
-    }
-    if (updates.purchasePrice !== undefined) {
-      material.purchasePrice = updates.purchasePrice;
-    }
-    if (updates.isActive !== undefined) {
-      material.isActive = updates.isActive;
-    }
-
-    return await this.materialRepo.save(material);
+    const { data: row } = await this.supabase.getClient().from('scaffold_materials').select('*').eq('id', materialId).maybeSingle();
+    if (!row) throw new NotFoundException('Material not found');
+    const payload: Record<string, unknown> = {};
+    if (updates.rentalPriceMonthly !== undefined) payload.rentalPriceMonthly = updates.rentalPriceMonthly;
+    if (updates.purchasePrice !== undefined) payload.purchasePrice = updates.purchasePrice;
+    if (updates.isActive !== undefined) payload.isActive = updates.isActive;
+    if (Object.keys(payload).length === 0) return mapRowToCamel<ScaffoldMaterial>(row as Record<string, unknown>)!;
+    const { data: saved, error } = await this.supabase.getClient().from('scaffold_materials').update(mapPayloadToSnake(payload)).eq('id', materialId).select().single();
+    if (error || !saved) throw new BadRequestException('Update failed.');
+    return mapRowToCamel<ScaffoldMaterial>(saved as Record<string, unknown>)!;
   }
 
-  /**
-   * Bulk update material prices.
-   */
-  async bulkUpdatePrices(
-    updates: Array<{ id: string; rentalPriceMonthly: number }>,
-  ): Promise<ScaffoldMaterial[]> {
+  async bulkUpdatePrices(updates: Array<{ id: string; rentalPriceMonthly: number }>): Promise<ScaffoldMaterial[]> {
     const results: ScaffoldMaterial[] = [];
     for (const update of updates) {
-      const material = await this.materialRepo.findOne({ where: { id: update.id } });
-      if (material) {
-        material.rentalPriceMonthly = update.rentalPriceMonthly;
-        results.push(await this.materialRepo.save(material));
-      }
+      const { data: saved } = await this.supabase
+        .getClient()
+        .from('scaffold_materials')
+        .update(mapPayloadToSnake({ rentalPriceMonthly: update.rentalPriceMonthly }))
+        .eq('id', update.id)
+        .select()
+        .single();
+      if (saved) results.push(mapRowToCamel<ScaffoldMaterial>(saved as Record<string, unknown>)!);
     }
     this.logger.log(`Bulk updated ${results.length} material prices`);
     return results;
   }
 
-  /**
-   * Seed initial materials if the table is empty.
-   * Called on startup or via API.
-   */
   async seedMaterials(): Promise<{ created: number; existing: number }> {
-    const existingCount = await this.materialRepo.count({ where: { scaffoldType: 'kusabi' } });
-    if (existingCount > 0) {
-      return { created: 0, existing: existingCount };
-    }
-
+    const { count } = await this.supabase.getClient().from('scaffold_materials').select('*', { count: 'exact', head: true }).eq('scaffold_type', 'kusabi');
+    if (count && count > 0) return { created: 0, existing: count };
     const materials = this.getDefaultMaterials();
-    const entities = materials.map(m => this.materialRepo.create(m));
-    await this.materialRepo.save(entities);
-    this.logger.log(`Seeded ${entities.length} kusabi scaffold materials`);
-    return { created: entities.length, existing: 0 };
+    const inserts = materials.map((m) => mapPayloadToSnake(m as Record<string, unknown>));
+    const { data: inserted } = await this.supabase.getClient().from('scaffold_materials').insert(inserts).select();
+    const created = inserted?.length ?? 0;
+    this.logger.log(`Seeded ${created} kusabi scaffold materials`);
+    return { created, existing: 0 };
   }
 
   /**

@@ -1,8 +1,4 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScaffoldConfiguration } from './scaffold-config.entity';
-import { CalculatedQuantity } from './calculated-quantity.entity';
-import { ScaffoldMaterial } from './scaffold-material.entity';
 import { ScaffoldConfigController } from './scaffold-config.controller';
 import { ScaffoldConfigService } from './scaffold-config.service';
 import { ScaffoldCalculatorService } from './scaffold-calculator.service';
@@ -16,10 +12,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([ScaffoldConfiguration, CalculatedQuantity, ScaffoldMaterial]),
-    SubscriptionModule,
-  ],
+  imports: [SubscriptionModule],
   controllers: [ScaffoldConfigController],
   providers: [
     ScaffoldConfigService,

@@ -1,95 +1,81 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { CostLineItem, CostCategory } from './cost-line-item.entity';
-import { Estimate } from '../estimate/estimate.entity';
 import { FormulaEvaluationService } from './formula-evaluation.service';
 import { CostMasterService } from './cost-master.service';
+import { SupabaseService } from '../supabase/supabase.service';
+import { mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+
+interface EstimateWithBreakdown {
+  id: string;
+  rentalStartDate: Date | string;
+  rentalEndDate: Date | string;
+  billOfMaterials: {
+    totalArea: number;
+    totalHeight: number;
+    adjustmentCoefficient: number;
+    components: Array<{ quantity: number }>;
+  };
+}
 
 @Injectable()
 export class CostCalculationService {
   private readonly logger = new Logger(CostCalculationService.name);
 
   constructor(
-    @InjectRepository(CostLineItem)
-    private costItemRepository: Repository<CostLineItem>,
-    @InjectRepository(Estimate)
-    private estimateRepository: Repository<Estimate>,
+    private readonly supabase: SupabaseService,
     private formulaService: FormulaEvaluationService,
     private costMasterService: CostMasterService,
   ) {}
 
   async compute(estimateId: string, companyId: string): Promise<CostLineItem[]> {
-    const estimate = await this.estimateRepository.findOne({
-      where: { id: estimateId },
-      relations: ['costBreakdown'],
-    });
+    const { data: row } = await this.supabase.getClient().from('estimates').select('*, cost_line_items(*)').eq('id', estimateId).maybeSingle();
+    if (!row) throw new NotFoundException('Estimate not found');
+    const estimate = row as any;
+    const costItemsRaw = estimate.cost_line_items;
+    let costItems: CostLineItem[] = Array.isArray(costItemsRaw) ? mapRowsToCamel<CostLineItem>(costItemsRaw) : [];
 
-    if (!estimate) {
-      throw new NotFoundException('Estimate not found');
-    }
-
-    // Get cost master data for company
     const costConfigs = await this.costMasterService.getCostConfigurations(companyId);
-
-    // Calculate rental duration
-    const rentalStart = new Date(estimate.rentalStartDate);
-    const rentalEnd = new Date(estimate.rentalEndDate);
+    const rentalStart = new Date(estimate.rental_start_date);
+    const rentalEnd = new Date(estimate.rental_end_date);
     const rentalDays = Math.ceil((rentalEnd.getTime() - rentalStart.getTime()) / (1000 * 60 * 60 * 24));
     const rentalWeeks = Math.ceil(rentalDays / 7);
     const rentalMonths = Math.ceil(rentalDays / 30);
 
-    // Build evaluation context
+    const bill = estimate.bill_of_materials || {};
     const context = {
-      totalArea: estimate.billOfMaterials.totalArea,
-      totalHeight: estimate.billOfMaterials.totalHeight,
+      totalArea: bill.totalArea ?? bill.total_area ?? 0,
+      totalHeight: bill.totalHeight ?? bill.total_height ?? 0,
       rentalDays,
       rentalWeeks,
       rentalMonths,
-      totalComponents: estimate.billOfMaterials.components.reduce(
-        (sum, comp) => sum + comp.quantity,
-        0,
-      ),
-      adjustmentCoefficient: estimate.billOfMaterials.adjustmentCoefficient,
+      totalComponents: (bill.components || []).reduce((sum: number, comp: any) => sum + (comp.quantity ?? 0), 0),
+      adjustmentCoefficient: bill.adjustmentCoefficient ?? bill.adjustment_coefficient ?? 1,
       ...costConfigs,
     };
 
-    // Get or create cost line items
-    let costItems = estimate.costBreakdown || [];
-
     if (costItems.length === 0) {
-      // Create initial cost line items
       costItems = await this.createInitialCostLineItems(estimateId, costConfigs);
     }
 
-    // Evaluate formulas in dependency order
     for (const item of costItems) {
-      if (item.isLocked && item.userEditedValue !== null) {
-        // Use user-edited value if locked
+      if (item.isLocked && item.userEditedValue != null) {
         item.computedValue = item.userEditedValue;
       } else {
         try {
-          item.computedValue = await this.formulaService.evaluate(
-            item.formulaExpression,
-            item.formulaVariables,
-            context,
-          );
+          item.computedValue = await this.formulaService.evaluate(item.formulaExpression, item.formulaVariables, context);
         } catch (error) {
           this.logger.error(`Formula evaluation failed for ${item.code}:`, error);
-          item.computedValue = 0; // Fallback
+          item.computedValue = 0;
         }
       }
     }
 
-    // Save updated values
-    await this.costItemRepository.save(costItems);
-
-    // Update estimate total
+    const client = this.supabase.getClient();
+    for (const item of costItems) {
+      await client.from('cost_line_items').update(mapPayloadToSnake({ computedValue: item.computedValue })).eq('id', item.id);
+    }
     const total = costItems.reduce((sum, item) => sum + item.computedValue, 0);
-    await this.estimateRepository.update(estimateId, {
-      totalEstimatedCost: total,
-    });
-
+    await client.from('estimates').update(mapPayloadToSnake({ totalEstimatedCost: total })).eq('id', estimateId);
     return costItems;
   }
 
@@ -176,6 +162,8 @@ export class CostCalculationService {
       },
     ];
 
-    return await this.costItemRepository.save(items as CostLineItem[]);
+    const inserts = items.map((i) => mapPayloadToSnake(i as Record<string, unknown>));
+    const { data: saved } = await this.supabase.getClient().from('cost_line_items').insert(inserts).select();
+    return mapRowsToCamel<CostLineItem>(saved || []);
   }
 }
