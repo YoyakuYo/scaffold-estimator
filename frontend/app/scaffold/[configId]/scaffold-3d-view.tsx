@@ -48,6 +48,8 @@ const C_TECH = {
   endStopper: 0x7c3aed,
   stair: 0x047857,
 };
+/** Buragetto (bracket) sections — always blue for visual verification */
+const C_BRACKET = 0x2563eb;
 // Default scaffold palette — matches industry reference:
 //   structural (posts/braces/rails/habaki): light galvanised steel, blue-tinted silver
 //   planks (anchi only): bright golden-yellow
@@ -120,6 +122,34 @@ function buildPolygonVertices(
       { x: w0, z: w1 },
       { x: 0, z: w1 },
     ];
+  }
+
+  // ── 6 walls: Irregular hexagon — rebuild from stored vertices + wall lengths, closed loop ──
+  // Wall 6 end connects back to Wall 1 start (continuous perimeter, no gap).
+  if (n === 6 && storedVertices && storedVertices.length >= 6) {
+    const raw = storedVertices.slice(0, 6).map(v => ({
+      x: Number.isFinite(v.xFrac) ? v.xFrac : 0,
+      z: Number.isFinite(v.yFrac) ? v.yFrac : 0,
+    }));
+    const corrected: { x: number; z: number }[] = [{ x: 0, z: 0 }];
+    for (let i = 0; i < 6; i++) {
+      const next = (i + 1) % 6;
+      const rawDx = raw[next].x - raw[i].x;
+      const rawDz = raw[next].z - raw[i].z;
+      const rawLen = Math.hypot(rawDx, rawDz);
+      const tgtLen = Math.max(walls[i].wallLengthMm, 600) / 1000;
+      const from = corrected[i];
+      if (rawLen >= 0.001) {
+        const dx = (rawDx / rawLen) * tgtLen;
+        const dz = (rawDz / rawLen) * tgtLen;
+        if (next > 0) {
+          corrected.push({ x: from.x + dx, z: from.z + dz });
+        } else {
+          corrected[0] = { x: from.x + dx, z: from.z + dz };
+        }
+      }
+    }
+    return corrected;
   }
 
   // ── Use stored vertices for non-rectangular shapes (n !== 4) ──
@@ -476,6 +506,11 @@ export default function Scaffold3DView({
       const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
       const braceMat = pipeDarkMat;
       const habakiMatEff = habakiMat;
+      const bracketMat = new THREE.MeshStandardMaterial({
+        color: C_BRACKET,
+        metalness: metal,
+        roughness: rough,
+      });
 
       const topGuardM = result.topGuardHeightMm / 1000;
       const scaffoldType: 'kusabi' | 'wakugumi' = result.scaffoldType || 'kusabi';
@@ -562,6 +597,7 @@ export default function Scaffold3DView({
       // ══════════════════════════════════════════════════════
       function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number) {
         const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
+        const isBracket = wall.layoutMode === 'bracket';
         const allSpans: number[] = wall.spans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
@@ -593,17 +629,19 @@ export default function Scaffold3DView({
         }
 
         // ── Jack bases: from ground up to JACK_H (scaffold base, not building floor) ──────────
+        // Bracket mode: only outer row (z=0); double_post: both rows
         for (const px of postX) {
-          for (const pz of [0, widthM]) {
+          for (const pz of isBracket ? [0] : [0, widthM]) {
             addPipe(group, px, GROUND_Y, pz, px, GROUND_Y + JACK_H, pz, jackMatEff, PIPE_R * 0.95);
           }
         }
 
         // ── Vertical posts: from top of jack to top of scaffold (above ground, not at floor level) ─────
+        // Bracket mode: only outer posts (z=0); inner posts deleted
         const postBaseY = GROUND_Y + JACK_H;
         const postHeightFromGround = totalPostH;
         for (const px of postX) {
-          for (const pz of [0, widthM]) {
+          for (const pz of isBracket ? [0] : [0, widthM]) {
             addRealisticPost(THREE, group, px, postBaseY, pz, postHeightFromGround, postMat);
           }
         }
@@ -632,11 +670,16 @@ export default function Scaffold3DView({
         for (let lv = 1; lv <= levelsToBuild; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Width yokoji
+          // Width yokoji (horizontal bars along scaffold depth)
+          // Bracket mode: only outer row; add Buragetto bars (Blue) from wall toward outer post
           for (const px of postX) {
-            addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, yokojiMat);
+            if (isBracket) {
+              addPipe(group, px, y, widthM, px, y, 0, bracketMat, PIPE_R * 0.8);
+            } else {
+              addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, yokojiMat);
+            }
           }
-          if (cornerInnerPostX != null) {
+          if (cornerInnerPostX != null && !isBracket) {
             addRealisticNunoBar(THREE, group, cornerInnerPostX, y, 0, totalLen, 0, yokojiMat);
           }
 
@@ -647,12 +690,12 @@ export default function Scaffold3DView({
             const midX = (x1 + x2) / 2;
             const isStairSpan = uniqueStairPos.includes(i);
 
-            // Braces (ブレス) — inner face only (z=widthM), 1 per span per level.
-            // Render as an X for clarity (two diagonals).
+            // Braces (ブレス) — inner face (z=widthM) for double_post; outer face (z=0) for bracket
+            const braceZ = isBracket ? 0 : widthM;
             const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
             const braceTopY = y - 0.18;
-            addPipe(group, x1, braceBottomY, widthM, x2, braceTopY, widthM, braceMat, PIPE_R * 0.75);
-            addPipe(group, x1, braceTopY, widthM, x2, braceBottomY, widthM, braceMat, PIPE_R * 0.75);
+            addPipe(group, x1, braceBottomY, braceZ, x2, braceTopY, braceZ, braceMat, PIPE_R * 0.75);
+            addPipe(group, x1, braceTopY, braceZ, x2, braceBottomY, braceZ, braceMat, PIPE_R * 0.75);
 
             // Guard rails (手摺/布材) — outer face only (z=0), 2 rails per span per level.
             // Use fixed heights for consistency (0.90m and 0.45m above platform).
@@ -675,9 +718,9 @@ export default function Scaffold3DView({
             addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
           }
 
-          // Top guard posts + top rail (最上段) — BOTH outer and inner face to protect walkers.
+          // Top guard posts + top rail (最上段) — both faces for double_post; outer only for bracket
           if (lv === levelsToBuild && topGuardM > 0) {
-            for (const pz of [0, widthM]) {
+            for (const pz of isBracket ? [0] : [0, widthM]) {
               for (const px of postX) {
                 addPipe(group, px, y, pz, px, y + topGuardM, pz, topGuardMat, PIPE_R * 0.7);
               }
@@ -1370,6 +1413,15 @@ export default function Scaffold3DView({
           ))}
           <span className="text-gray-400">|</span>
           <span>All levels shown</span>
+          {walls.some((w) => w.layoutMode === 'bracket') && (
+            <>
+              <span className="text-gray-400">|</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#' + C_BRACKET.toString(16).padStart(6, '0') }} />
+                ブラケット（柱回避）
+              </span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <button

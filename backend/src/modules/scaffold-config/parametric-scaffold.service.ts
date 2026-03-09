@@ -182,6 +182,24 @@ export function buildEdgesFromVertices(
   return edges;
 }
 
+/**
+ * Site boundary / obstacle rule: if requested width hits obstacle (clearance < width + 200mm),
+ * try downsize to 600mm first; if still insufficient, use bracket.
+ */
+function resolveWidthAndLayout(
+  requestedMm: number,
+  clearanceMm: number,
+): { widthMm: number; layoutMode: LayoutMode } {
+  const tryWidth = (w: number) => checkBuragetto(w, clearanceMm);
+  if (clearanceMm >= requestedMm + CLEARANCE_THRESHOLD_EXTRA) {
+    return { widthMm: requestedMm, layoutMode: 'double_post' };
+  }
+  if (clearanceMm >= 600 + CLEARANCE_THRESHOLD_EXTRA) {
+    return { widthMm: 600, layoutMode: 'double_post' };
+  }
+  return { widthMm: requestedMm, layoutMode: 'bracket' };
+}
+
 /** Compute per-edge config: width, layout mode, clearance. */
 export function computeSideConfigs(
   edges: BuildingEdge[],
@@ -194,9 +212,9 @@ export function computeSideConfigs(
   const configs: SideConfig[] = [];
 
   for (const edge of edges) {
-    const widthMm = widthBySide[edge.index] ?? widthBySide[edge.label.toLowerCase()] ?? defaultWidth;
+    const requestedMm = widthBySide[edge.index] ?? widthBySide[edge.label.toLowerCase()] ?? defaultWidth;
     const clearance = obstacleSet.minDistanceToSegment(edge.segment);
-    const layoutMode = checkBuragetto(widthMm, clearance);
+    const { widthMm, layoutMode } = resolveWidthAndLayout(requestedMm, clearance);
     configs.push({ widthMm, layoutMode, clearanceMm: clearance });
   }
   return configs;
