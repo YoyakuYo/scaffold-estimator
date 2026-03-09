@@ -45,25 +45,16 @@ const C_TECH = {
   endStopper: 0x7c3aed,
   stair: 0x047857,
 };
-// Clean scaffold palette: light silver/grey metal, bright yellow planks
+// Default scaffold palette: dark steel for ALL framework; warm wood ONLY for planks.
 const C = {
-  pipe:       0xc0c8d0,
-  pipeDark:   0xa8b0b8,
-  plank:      0xf5c842,
-  plankEdge:  0xe8b428,
-  jackBase:   0xb0b8c0,
-  basePlate:  0xa8b0b8,
-  stair:      0xc0c8d0,
-  stairRail:  0xb8c0c8,
-  habaki:     0xc0c8d0,
-  frame:      0xc0c8d0,
-  frameDark:  0xa0a8b0,
+  structural: 0x374151,  // dark charcoal-steel — posts, braces, tesuri, habaki, jack, frame
+  plank:      0x8b5e14,  // warm wood/plank colour — ONLY for anchi planks
+  wood:       0x6b4810,  // darker wood for base sleepers
   ground:     0xe0e4e8,
   bg:         0xd8dce0,
   grid:       0xd0d8e0,
   ambient:    0xffffff,
   dirLight:   0xffffff,
-  wood:       0xc4a574,
 };
 
 // Per-wall accent colors (for edge/click hint only)
@@ -73,13 +64,13 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank color (bright yellow; single tone for clean look)
+// Span size (mm) → plank colour (wood/tan in default mode; distinct in technical mode)
 const SPAN_COLORS: Record<number, number> = {
-  600: 0xf5c842,
-  900: 0xf5c842,
-  1200: 0xf5c842,
-  1500: 0xf5c842,
-  1800: 0xf5c842,
+  600: 0x8b5e14,
+  900: 0x8b5e14,
+  1200: 0x8b5e14,
+  1500: 0x8b5e14,
+  1800: 0x8b5e14,
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -144,7 +135,22 @@ function buildPolygonVertices(
       Math.max(...verts.map(v => v.x)) - Math.min(...verts.map(v => v.x)),
       Math.max(...verts.map(v => v.z)) - Math.min(...verts.map(v => v.z)),
     );
-    if (spreadM > 0.01) return verts;
+    if (spreadM > 0.01) {
+      // Re-scale each edge to exactly walls[i].wallLengthMm while preserving the original
+      // edge directions from the stored polygon. This ensures scaffold geometry never
+      // overshoots the polygon edge (edge i length === walls[i].wallLengthMm / 1000).
+      const corrected: { x: number; z: number }[] = [{ ...verts[0] }];
+      for (let i = 0; i < n - 1; i++) {
+        const from = corrected[i];
+        const rawDx = verts[i + 1].x - verts[i].x;
+        const rawDz = verts[i + 1].z - verts[i].z;
+        const rawLen = Math.hypot(rawDx, rawDz);
+        if (rawLen < 0.001) { corrected.push({ x: from.x, z: from.z }); continue; }
+        const tgtLen = walls[i].wallLengthMm / 1000;
+        corrected.push({ x: from.x + (rawDx / rawLen) * tgtLen, z: from.z + (rawDz / rawLen) * tgtLen });
+      }
+      return corrected;
+    }
     }
   }
 
@@ -384,32 +390,36 @@ export default function Scaffold3DView({
       scene.add(rimLight);
 
       const isTech = technicalMode;
-      const metal = isTech ? 0.45 : 0.88;
-      const rough = isTech ? 0.5 : 0.22;
+      const metal = isTech ? 0.45 : 0.30;
+      const rough  = isTech ? 0.5  : 0.60;
+      const plankMetal = isTech ? metal : 0.05;
+      const plankRough = isTech ? rough : 0.80;
 
       // ── Shared materials ───
+      // Default mode: ALL structural elements use a single dark-steel colour.
+      // Technical mode: distinct colour per component type (see C_TECH).
       const pipeMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.post : C.pipe,
+        color: isTech ? C_TECH.post : C.structural,
         metalness: metal,
         roughness: rough,
       });
       const pipeDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : C.pipeDark,
+        color: isTech ? C_TECH.brace : C.structural,
         metalness: metal,
         roughness: rough,
       });
-      // Planks always bright yellow for clean reference look (ignore technical brown)
+      // Planks: warm wood/tan in default; bright yellow in technical quotation mode.
       const plankMat = new THREE.MeshStandardMaterial({
-        color: C.plank,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.plank : C.plank,
+        metalness: plankMetal,
+        roughness: plankRough,
       });
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
         spanPlankMats[span] = new THREE.MeshStandardMaterial({
-          color: SPAN_COLORS[span] ?? C.plank,
-          metalness: metal,
-          roughness: rough,
+          color: isTech ? C_TECH.plank : C.plank,
+          metalness: plankMetal,
+          roughness: plankRough,
         });
       }
       const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
@@ -419,17 +429,17 @@ export default function Scaffold3DView({
         return spanPlankMats[closest] ?? plankMat;
       };
       const jackMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.jack : C.jackBase,
+        color: isTech ? C_TECH.jack : C.structural,
         metalness: metal,
         roughness: rough,
       });
       const habakiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.habaki : C.habaki,
+        color: isTech ? C_TECH.habaki : C.structural,
         metalness: metal,
         roughness: rough,
       });
       const stairMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.stair : C.stair,
+        color: isTech ? C_TECH.stair : C.structural,
         metalness: metal,
         roughness: rough,
       });
@@ -542,7 +552,9 @@ export default function Scaffold3DView({
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
-        const totalLen = postX[postX.length - 1] || 0;
+        // Force last post to exactly wallLengthMm so geometry never overshoots the polygon edge.
+        const totalLen = wall.wallLengthMm / 1000;
+        if (postX.length > 1) postX[postX.length - 1] = totalLen;
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = levels;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
@@ -1084,6 +1096,10 @@ export default function Scaffold3DView({
     if (viewMode === 'wall') focusCameraOnWall(activeWallIdx);
   }, [viewMode, activeWallIdx]);
 
+  // Derived totals — computed from wall data (no extra state needed)
+  const totalLengthM = walls.reduce((s, w) => s + (w.wallLengthMm ?? 0), 0) / 1000;
+  const totalHeightM = walls.reduce<number>((s, w) => Math.max(s, (w as any).wallHeightMm ?? result?.buildingHeightMm ?? 3000), 0) / 1000;
+
   if (walls.length === 0) return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
 
   if (error) {
@@ -1310,6 +1326,13 @@ export default function Scaffold3DView({
               <Loader2 className="h-8 w-8 animate-spin text-slate-500 mx-auto mb-2" />
               <p className="text-slate-600 text-sm">Loading 3D scaffold view...</p>
             </div>
+          </div>
+        )}
+        {ready && (
+          <div className="absolute bottom-3 right-3 z-10 pointer-events-none select-none bg-slate-900/85 text-white rounded-lg shadow-lg px-3 py-2 text-xs font-mono leading-5">
+            <div className="font-semibold text-slate-300 mb-0.5">全体寸法</div>
+            <div>周長　<span className="font-bold text-white">{totalLengthM.toFixed(2)} m</span></div>
+            <div>高さ　<span className="font-bold text-white">{totalHeightM.toFixed(2)} m</span></div>
           </div>
         )}
       </div>
