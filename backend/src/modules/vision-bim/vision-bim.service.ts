@@ -28,6 +28,15 @@ export interface VisionFootprintResult {
   frameSizeMm?: number;
   /** True when wallLengthsMm was read from plan dimension text (not estimated). */
   wallLengthsFromDimText?: boolean;
+  /**
+   * Optional obstacles / special areas that affect scaffold layout (clearance, Buragetto).
+   * Balconies and AC (outdoor unit) areas reduce clearance and may trigger single-pole + bracket layout.
+   */
+  obstacles?: Array<{
+    type: 'balcony' | 'ac';
+    /** Polygon vertices in same coordinate system as vertices (mm or xFrac/yFrac). */
+    vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+  }>;
 }
 
 /** Supported CAD/plan extensions (lowercase). */
@@ -58,6 +67,11 @@ Optional fields (read from dimension lines and annotations):
 - frameSizeMm: for 枠組足場 only — 1700, 1800, or 1900 if shown.
 - groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
+- obstacles: optional array of special areas that affect scaffold clearance (for Buragetto / bracket layout).
+  If the plan shows balconies (バルコニー, ベランダ) or AC outdoor units (室外機, エアコン設置) as distinct outlines or hatched zones, add each as:
+  { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] } — closed polygon in same units as vertices.
+  Balconies: protruding floor areas outside the main wall. AC: typical small rectangles or circles for outdoor units.
+  Omit obstacles if none are clearly visible or labeled.
 
 Polygon rules — follow these exactly:
 1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
@@ -280,7 +294,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). Trace only the outer boundary — ignore internal lines. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). Trace only the outer boundary — ignore internal lines. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies (バルコニー, ベランダ) or AC outdoor unit areas (室外機, エアコン), add an obstacles array with type "balcony" or "ac" and vertices (same coordinate system as vertices).',
               },
             ],
           },
@@ -378,6 +392,24 @@ export class VisionBimService {
       }
       if (typeof parsed.frameSizeMm !== 'number' || ![1700, 1800, 1900].includes(parsed.frameSizeMm)) {
         parsed.frameSizeMm = undefined;
+      }
+      // Normalize optional obstacles (balcony / AC areas)
+      if (Array.isArray(parsed.obstacles) && parsed.obstacles.length > 0) {
+        parsed.obstacles = parsed.obstacles
+          .filter(
+            (o: any) =>
+              o &&
+              (o.type === 'balcony' || o.type === 'ac') &&
+              Array.isArray(o.vertices) &&
+              o.vertices.length >= 3,
+          )
+          .map((o: any) => ({
+            type: o.type as 'balcony' | 'ac',
+            vertices: o.vertices as Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
+          }));
+        if ((parsed.obstacles as any[]).length === 0) parsed.obstacles = undefined;
+      } else {
+        parsed.obstacles = undefined;
       }
       // Remove collinear intermediate vertices caused by grid-line tracing.
       this.cleanupPolygon(parsed);

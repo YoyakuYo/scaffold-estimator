@@ -22,6 +22,18 @@ from ezdxf.layouts import Modelspace
 
 # ─── Constants (mm) ─────────────────────────────────────────────────────
 PATTANKO_GAP_MM = 200
+
+# DXF $INSUNITS: 4=mm, 5=cm, 6=m (and 0=unitless, 1=in, 2=ft, etc.)
+DETECTED_UNIT_MM = "mm"
+DETECTED_UNIT_CM = "cm"
+DETECTED_UNIT_M = "m"
+DetectedUnit = str  # "mm" | "cm" | "m"
+
+# Layer name substrings (case-insensitive) for balcony / AC area detection
+OBSTACLE_LAYER_BALCONY = ("BALCONY", "BALCONIES", "VERANDA", "ベランダ", "バルコニー", "BLCN")
+OBSTACLE_LAYER_AC = ("AC", "AC_UNIT", "室外機", "エアコン", "AIRCON", "MEP_AC", "AC_UNITS")
+OBSTACLE_TYPE_BALCONY = "balcony"
+OBSTACLE_TYPE_AC = "ac"
 """Gap between platform edge and wall for Pattanko flaps (both Double-Post and Bracket)."""
 
 
@@ -95,11 +107,33 @@ def _is_ccw(vertices: List[Point2D]) -> bool:
     return _polygon_area_2d(vertices) > 0
 
 
+def _obstacle_type_from_layer(layer: str) -> Optional[str]:
+    """Return 'balcony' or 'ac' if layer name matches known patterns; else None."""
+    raw = layer or ""
+    u = raw.upper()
+    for pat in OBSTACLE_LAYER_BALCONY:
+        if pat.upper() in u or (len(pat) > 1 and pat in raw):
+            return OBSTACLE_TYPE_BALCONY
+    for pat in OBSTACLE_LAYER_AC:
+        if pat.upper() in u or (len(pat) > 1 and pat in raw):
+            return OBSTACLE_TYPE_AC
+    return None
+
+
+@dataclass
+class ObstacleRegion:
+    """Labeled obstacle area (balcony or AC) for reporting; also included in ObstacleSet for clearance."""
+    type: str  # 'balcony' | 'ac'
+    segments: List[Segment2D] = field(default_factory=list)
+    circles: List[Tuple[Point2D, float]] = field(default_factory=list)
+
+
 @dataclass
 class ObstacleSet:
-    """Obstacles for clearance check: segments and circles (pillars)."""
+    """Obstacles for clearance check: segments and circles (pillars, balconies, AC areas)."""
     segments: List[Segment2D] = field(default_factory=list)
     circles: List[Tuple[Point2D, float]] = field(default_factory=list)  # (center, radius_mm)
+    regions: List[ObstacleRegion] = field(default_factory=list)  # labeled balcony / AC for reporting
 
     def min_distance_to_segment(self, seg: Segment2D) -> float:
         """Minimum distance from any obstacle to the given segment (wall)."""
@@ -165,48 +199,130 @@ def _get_vertices_wcs(lwp: LWPolyline) -> List[Point2D]:
     return [Point2D(float(v[0]), float(v[1])) for v in verts]
 
 
+def _get_insunits(doc: Drawing) -> Optional[int]:
+    """Get $INSUNITS from DXF header (4=mm, 5=cm, 6=m). Returns None if missing or unitless."""
+    try:
+        v = doc.header.get("$INSUNITS")
+        if v is not None:
+            return int(v)
+    except Exception:
+        pass
+    try:
+        # ezdxf: doc.units
+        u = getattr(doc, "units", None)
+        if u is not None and hasattr(u, "value"):
+            return getattr(u, "value", None)
+    except Exception:
+        pass
+    return None
+
+
+def _raw_bbox_from_modelspace(msp: Modelspace) -> Tuple[float, float, float, float]:
+    """Compute bounding box from LWPOLYLINE, LINE, CIRCLE in modelspace (raw DXF coordinates)."""
+    min_x = min_y = float("inf")
+    max_x = max_y = float("-inf")
+
+    for entity in msp:
+        if entity.dxftype() == "LWPOLYLINE":
+            verts = _get_vertices_wcs(entity)
+            for p in verts:
+                min_x, max_x = min(min_x, p.x), max(max_x, p.x)
+                min_y, max_y = min(min_y, p.y), max(max_y, p.y)
+        elif entity.dxftype() == "LINE":
+            try:
+                s, e = entity.dxf.start, entity.dxf.end
+                for pt in ((s.x, s.y), (e.x, e.y)):
+                    min_x, max_x = min(min_x, pt[0]), max(max_x, pt[0])
+                    min_y, max_y = min(min_y, pt[1]), max(max_y, pt[1])
+            except Exception:
+                pass
+        elif entity.dxftype() == "CIRCLE":
+            try:
+                c, r = entity.dxf.center, float(entity.dxf.radius)
+                min_x = min(min_x, c.x - r)
+                max_x = max(max_x, c.x + r)
+                min_y = min(min_y, c.y - r)
+                max_y = max(max_y, c.y + r)
+            except Exception:
+                pass
+
+    if min_x == float("inf"):
+        return 0.0, 0.0, 1.0, 1.0
+    return min_x, min_y, max_x, max_y
+
+
+def detect_dxf_units(
+    doc: Drawing,
+    msp: Modelspace,
+    *,
+    force_unit: Optional[DetectedUnit] = None,
+) -> Tuple[float, DetectedUnit]:
+    """
+    Detect DXF drawing units and return (scale_to_mm, unit_label).
+
+    - If force_unit is "mm" | "cm" | "m", use it and set scale accordingly.
+    - Else read $INSUNITS: 4=mm, 5=cm, 6=m.
+    - If header missing or unitless (0): infer from geometry size.
+      Typical building: 5–50 m or 5000–50000 mm. If max dimension < 200 → assume meters; else mm.
+    """
+    if force_unit is not None:
+        u = force_unit.lower()
+        if u == DETECTED_UNIT_M:
+            return (1000.0, DETECTED_UNIT_M)
+        if u == DETECTED_UNIT_CM:
+            return (10.0, DETECTED_UNIT_CM)
+        return (1.0, DETECTED_UNIT_MM)
+
+    insunits = _get_insunits(doc)
+    if insunits == 4:
+        return (1.0, DETECTED_UNIT_MM)
+    if insunits == 5:
+        return (10.0, DETECTED_UNIT_CM)
+    if insunits == 6:
+        return (1000.0, DETECTED_UNIT_M)
+    # Unitless or unknown: infer from bounding box
+    min_x, min_y, max_x, max_y = _raw_bbox_from_modelspace(msp)
+    max_dim = max(max_x - min_x, max_y - min_y, 1.0)
+    # Buildings: usually 5–50 m (5–50 in file) or 5000–50000 mm
+    if max_dim < 200:
+        return (1000.0, DETECTED_UNIT_M)
+    return (1.0, DETECTED_UNIT_MM)
+
+
 def extract_building_perimeter(
     dxf_path: str | Path,
     *,
     building_layer: Optional[str] = None,
     prefer_largest_area: bool = True,
-) -> Tuple[List[BuildingEdge], ObstacleSet, float]:
+    force_unit: Optional[DetectedUnit] = None,
+) -> Tuple[List[BuildingEdge], ObstacleSet, float, DetectedUnit]:
     """
     Parse DXF and extract building perimeter from LWPOLYLINE entities.
 
     - Building: closed LWPOLYLINE. If building_layer is set, only consider that layer.
       Otherwise take the closed polyline with largest area (or first closed).
-    - Obstacles: other closed polylines (e.g. property line), circles (pillars), lines
-      on layers that suggest obstacles (e.g. "OBSTACLE", "PILLAR", "PROPERTY").
-    - Units: assumed mm; scale_to_mm can convert (e.g. 1000 if DXF in meters).
+    - Obstacles: other closed polylines (e.g. property line), circles (pillars), lines.
+    - Units: detected from $INSUNITS (mm/m/cm) or from geometry size; all lengths output in mm.
 
     Returns:
         edges: List of BuildingEdge (one per side)
         obstacles: ObstacleSet for clearance checks
-        scale_to_mm: 1.0 or conversion factor from DXF units to mm
+        scale_to_mm: conversion factor used (1.0 = mm, 1000 = m, 10 = cm)
+        detected_unit: "mm" | "m" | "cm"
     """
     doc, msp = parse_dxf_lwpolylines(dxf_path)
-
-    # DXF units → mm
-    scale_to_mm = 1.0
-    try:
-        insunits = doc.header.get("$INSUNITS", 4)
-        if insunits == 5:
-            scale_to_mm = 10.0   # cm → mm
-        elif insunits == 6:
-            scale_to_mm = 1000.0  # m → mm
-        # 4 = mm
-    except Exception:
-        pass
+    scale_to_mm, detected_unit = detect_dxf_units(doc, msp, force_unit=force_unit)
 
     closed_polys: List[Tuple[LWPolyline, List[Point2D], float]] = []
     obstacle_segments: List[Segment2D] = []
     obstacle_circles: List[Tuple[Point2D, float]] = []
+    obstacle_regions: List[ObstacleRegion] = []
 
     for entity in msp:
         if entity.dxftype() == "LWPOLYLINE":
             lwp = entity
-            layer = (lwp.dxf.layer or "").upper()
+            layer_raw = lwp.dxf.layer or ""
+            layer = layer_raw.upper()
             verts = _get_vertices_wcs(lwp)
             if len(verts) < 3:
                 continue
@@ -217,35 +333,51 @@ def extract_building_perimeter(
                 except Exception:
                     closed = False
 
-            # Scale vertices
+            # Scale vertices to mm
             verts = [Point2D(p.x * scale_to_mm, p.y * scale_to_mm) for p in verts]
             area = abs(_polygon_area_2d(verts))
 
             if closed:
-                # Heuristic: building is usually the largest closed polygon; obstacles might be named
                 if building_layer and layer != building_layer.upper():
-                    obstacle_segments.extend(_poly_to_segments(verts, closed=True))
+                    segs = _poly_to_segments(verts, closed=True)
+                    obstacle_segments.extend(segs)
+                    obs_type = _obstacle_type_from_layer(layer_raw)
+                    if obs_type:
+                        obstacle_regions.append(ObstacleRegion(type=obs_type, segments=segs, circles=[]))
                 else:
                     closed_polys.append((lwp, verts, area))
             else:
-                # Open polylines as obstacle segments (e.g. property lines)
-                obstacle_segments.extend(_poly_to_segments(verts, closed=False))
+                segs = _poly_to_segments(verts, closed=False)
+                obstacle_segments.extend(segs)
+                obs_type = _obstacle_type_from_layer(layer_raw)
+                if obs_type:
+                    obstacle_regions.append(ObstacleRegion(type=obs_type, segments=segs, circles=[]))
 
         elif entity.dxftype() == "CIRCLE":
             try:
+                layer_raw = getattr(entity.dxf, "layer", None) or ""
                 c = entity.dxf.center
                 r = float(entity.dxf.radius) * scale_to_mm
-                obstacle_circles.append((Point2D(c.x * scale_to_mm, c.y * scale_to_mm), r))
+                center_pt = Point2D(c.x * scale_to_mm, c.y * scale_to_mm)
+                obstacle_circles.append((center_pt, r))
+                obs_type = _obstacle_type_from_layer(layer_raw)
+                if obs_type:
+                    obstacle_regions.append(ObstacleRegion(type=obs_type, segments=[], circles=[(center_pt, r)]))
             except Exception:
                 pass
         elif entity.dxftype() == "LINE":
             try:
+                layer_raw = getattr(entity.dxf, "layer", None) or ""
                 s = entity.dxf.start
                 e = entity.dxf.end
-                obstacle_segments.append(Segment2D(
+                seg = Segment2D(
                     Point2D(s.x * scale_to_mm, s.y * scale_to_mm),
                     Point2D(e.x * scale_to_mm, e.y * scale_to_mm),
-                ))
+                )
+                obstacle_segments.append(seg)
+                obs_type = _obstacle_type_from_layer(layer_raw)
+                if obs_type:
+                    obstacle_regions.append(ObstacleRegion(type=obs_type, segments=[seg], circles=[]))
             except Exception:
                 pass
 
@@ -255,11 +387,9 @@ def extract_building_perimeter(
     if prefer_largest_area:
         closed_polys.sort(key=lambda x: x[2], reverse=True)
     building_verts = closed_polys[0][1]
-    # Add other closed polylines (e.g. property line, interior) as obstacles
     for _lwp, verts, _area in closed_polys[1:]:
         obstacle_segments.extend(_poly_to_segments(verts, closed=True))
-    obstacles = ObstacleSet(segments=obstacle_segments, circles=obstacle_circles)
-    is_ccw = _is_ccw(building_verts)
+    obstacles = ObstacleSet(segments=obstacle_segments, circles=obstacle_circles, regions=obstacle_regions)
     # Build edges
     n = len(building_verts)
     labels = ["North", "South", "East", "West"]
@@ -275,7 +405,7 @@ def extract_building_perimeter(
             length_mm=seg.length(),
         ))
 
-    return edges, obstacles, scale_to_mm
+    return edges, obstacles, scale_to_mm, detected_unit
 
 
 def _poly_to_segments(verts: List[Point2D], closed: bool) -> List[Segment2D]:

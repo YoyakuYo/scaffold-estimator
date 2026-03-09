@@ -70,11 +70,15 @@ python -m parametric_scaffold_engine plan.dxf --span 1200 --json
 ## DXF assumptions
 
 - **Building perimeter**: closed **LWPOLYLINE** (largest by area is used if multiple closed polylines exist).
-- **Obstacles** (for Buragetto clearance):
+- **Obstacles** (for Buragetto clearance and reporting):
   - Other closed LWPOLYLINEs (e.g. property line),
   - **CIRCLE** entities (pillars),
   - **LINE** entities.
-- Units: DXF header `$INSUNITS` 4 = mm, 5 = cm, 6 = m (converted to mm internally).
+  - **Balcony and AC areas**: if DXF layer names contain `BALCONY`, `VERANDA`, `ベランダ`, `バルコニー`, or `AC`, `室外機`, `エアコン`, `AIRCON`, those entities are treated as obstacles and reported as `balcony` / `ac` in `detected_obstacle_regions`.
+- **Units**: The platform detects **millimetres** and **metres** (and centimetres):
+  - From DXF header **$INSUNITS**: 4 = mm, 5 = cm, 6 = m (all output coordinates are in mm).
+  - If the header is missing or unitless, units are inferred from geometry size (max dimension &lt; 200 → metres, else mm).
+  - You can override with `--unit mm` or `--unit m` (or `EngineInput.force_unit` in the API).
 
 ## Output
 

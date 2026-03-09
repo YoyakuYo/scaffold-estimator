@@ -40,6 +40,8 @@ class EngineInput:
     span_mm: float = 900.0
     # Optional: only consider this layer as building perimeter.
     building_layer: Optional[str] = None
+    # Optional: force DXF unit interpretation ("mm" | "m" | "cm"). If None, auto-detect from header or geometry.
+    force_unit: Optional[str] = None
 
 
 @dataclass
@@ -63,6 +65,10 @@ class EngineOutput:
     transition_connections: List[TransitionConnection]
     edge_results: List[EdgeResult]
     scale_to_mm: float
+    """Detected DXF drawing unit: 'mm' | 'm' | 'cm' (all output coordinates are in mm)."""
+    detected_unit: str
+    """Detected obstacle regions by type (balcony / AC) from DXF layer names; used for clearance and reporting."""
+    detected_obstacle_regions: List[dict]  # [{"type": "balcony"|"ac", "segment_count": n, "circle_count": m}, ...]
 
     def post_coordinates_list(self) -> List[Dict]:
         """List of post coordinates for export (e.g. JSON)."""
@@ -110,10 +116,11 @@ class ParametricScaffoldEngine:
         """
         Process DXF and return post positions and transitions.
         """
-        edges, obstacles, scale_to_mm = extract_building_perimeter(
+        edges, obstacles, scale_to_mm, detected_unit = extract_building_perimeter(
             inp.dxf_path,
             building_layer=inp.building_layer,
             prefer_largest_area=True,
+            force_unit=inp.force_unit,
         )
         side_configs = compute_side_configs(edges, inp.width_by_side, obstacles)
         post_positions, transition_connections = collect_all_posts(
@@ -137,6 +144,10 @@ class ParametricScaffoldEngine:
                 post_positions=posts_by_edge.get(edge.index, []),
             ))
 
+        detected_regions = [
+            {"type": r.type, "segment_count": len(r.segments), "circle_count": len(r.circles)}
+            for r in getattr(obstacles, "regions", []) or []
+        ]
         return EngineOutput(
             edges=edges,
             side_configs=side_configs,
@@ -144,4 +155,6 @@ class ParametricScaffoldEngine:
             transition_connections=transition_connections,
             edge_results=edge_results,
             scale_to_mm=scale_to_mm,
+            detected_unit=detected_unit,
+            detected_obstacle_regions=detected_regions,
         )

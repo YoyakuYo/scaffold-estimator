@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
-import { visionBimApi } from '@/lib/api/vision-bim';
+import { visionBimApi, type VisionFootprintResult } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
 
@@ -640,7 +640,10 @@ function ScaffoldPageContent() {
                   setAiBimError(null);
                   setAiBimUploading(true);
                   try {
-                    const footprint = await visionBimApi.analyze(file);
+                    const raw = await visionBimApi.analyze(file);
+                    const footprint = raw as VisionFootprintResult;
+                    type WithObstacles = { obstacles?: Array<{ type: 'balcony' | 'ac'; vertices: unknown[] }> };
+                    const obstacles = (raw as WithObstacles).obstacles;
                     const manager = scaffoldManagerRef.current!;
                     const refMm = footprint.vertices.some((v) => 'xFrac' in v)
                       ? (footprint.scaleDenominator ? 20000 : 10000)
@@ -666,7 +669,7 @@ function ScaffoldPageContent() {
                       topGuardHeightMm: defaults.topGuardHeightMm,
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
-                      ...(footprint.obstacles && footprint.obstacles.length > 0 && { obstacles: footprint.obstacles }),
+                      ...(obstacles && obstacles.length > 0 && { obstacles }),
                     };
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
@@ -675,7 +678,7 @@ function ScaffoldPageContent() {
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
-                      obstacles: footprint.obstacles,
+                      obstacles,
                       dto,
                     });
                     setAiBimError(null);

@@ -36,6 +36,13 @@ def main() -> None:
         help="Building perimeter layer name (optional)",
     )
     parser.add_argument(
+        "--unit",
+        type=str,
+        choices=["mm", "m", "cm"],
+        default=None,
+        help="Force DXF unit: mm, m, or cm. If not set, auto-detect from $INSUNITS or geometry.",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Output full result as JSON",
@@ -54,6 +61,7 @@ def main() -> None:
         width_by_side=width_by_side,
         span_mm=args.span,
         building_layer=args.layer,
+        force_unit=args.unit,
     )
 
     try:
@@ -68,6 +76,9 @@ def main() -> None:
 
     if args.json:
         obj = {
+            "detected_unit": out.detected_unit,
+            "scale_to_mm": out.scale_to_mm,
+            "detected_obstacle_regions": getattr(out, "detected_obstacle_regions", []),
             "post_positions": out.post_coordinates_list(),
             "transition_connections": out.transition_summary(),
             "edges": [
@@ -97,10 +108,17 @@ def main() -> None:
     # Human-readable summary
     print("Parametric Scaffold Rule Engine — Result")
     print("=" * 50)
+    print(f"  DXF units detected: {out.detected_unit} (output coordinates in mm)")
     for er in out.edge_results:
         print(f"  {er.label} (edge {er.edge_index}): length={er.length_mm:.0f}mm, width={er.width_mm}mm, layout={er.layout_mode.value}, clearance={er.clearance_mm:.0f}mm, posts={len(er.post_positions)}")
     print(f"\nTotal post positions: {len(out.post_positions)}")
     print(f"Width transitions: {len(out.transition_connections)}")
+    regions = getattr(out, "detected_obstacle_regions", []) or []
+    if regions:
+        bal = sum(1 for r in regions if r.get("type") == "balcony")
+        ac = sum(1 for r in regions if r.get("type") == "ac")
+        if bal or ac:
+            print(f"Detected obstacles: {bal} balcony area(s), {ac} AC area(s)")
     if out.transition_connections:
         for t in out.transition_connections:
             print(f"  — {t.note}")

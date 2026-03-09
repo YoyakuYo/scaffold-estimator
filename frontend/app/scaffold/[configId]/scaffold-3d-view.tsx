@@ -24,8 +24,11 @@ import {
 
 const PIPE_R = 0.024;
 const PIPE_SEG = 10;
+/** Ground level (y=0): building footprint and physical ground. Scaffold working levels are above this. */
+const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
+/** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
 
 // Technical palette (distinct per component for estimation/quotation)
@@ -572,25 +575,23 @@ export default function Scaffold3DView({
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
 
-        // ── Wooden base sleepers (foundation timbers) ─────
+        // ── Wooden base sleepers (foundation timbers) at ground level ─────
         const sleeperH = 0.08;
         const sleeperW = 0.2;
         const sleeperLen = Math.max(0.4, totalLen);
         for (const pz of [0, widthM / 2, widthM]) {
-          addBox(group, totalLen / 2, sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
+          addBox(group, totalLen / 2, GROUND_Y + sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
         }
 
-        // ── Jack bases (black in technical mode) ──────────
-        // Visually separate the jack from the main post so users can see it.
+        // ── Jack bases: from ground up to JACK_H (scaffold base, not building floor) ──────────
         for (const px of postX) {
           for (const pz of [0, widthM]) {
-            // Short cylinder for jack base
-            addPipe(group, px, 0, pz, px, JACK_H, pz, jackMatEff, PIPE_R * 0.95);
+            addPipe(group, px, GROUND_Y, pz, px, GROUND_Y + JACK_H, pz, jackMatEff, PIPE_R * 0.95);
           }
         }
 
-        // ── Vertical posts: 2 per position, N+1 positions for N spans. From ground (0) to top. ─────
-        const postBaseY = JACK_H;
+        // ── Vertical posts: from top of jack to top of scaffold (above ground, not at floor level) ─────
+        const postBaseY = GROUND_Y + JACK_H;
         const postHeightFromGround = totalPostH;
         for (const px of postX) {
           for (const pz of [0, widthM]) {
@@ -618,9 +619,9 @@ export default function Scaffold3DView({
           uniqueStairPos.sort((a, b) => a - b);
         }
 
-        // ── Per-level components ───────────────────────
+        // ── Per-level components: working levels above ground (y = ground + jack + level height), not building floor level ───────────────────────
         for (let lv = 1; lv <= levelsToBuild; lv++) {
-          const y = JACK_H + lv * LEVEL_H;
+          const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
           // Width yokoji
           for (const px of postX) {
@@ -639,7 +640,7 @@ export default function Scaffold3DView({
 
             // Braces (ブレス) — inner face only (z=widthM), 1 per span per level.
             // Render as an X for clarity (two diagonals).
-            const braceBottomY = JACK_H + (lv - 1) * LEVEL_H + 0.18;
+            const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
             const braceTopY = y - 0.18;
             addPipe(group, x1, braceBottomY, widthM, x2, braceTopY, widthM, braceMat, PIPE_R * 0.75);
             addPipe(group, x1, braceTopY, widthM, x2, braceBottomY, widthM, braceMat, PIPE_R * 0.75);
@@ -695,8 +696,8 @@ export default function Scaffold3DView({
           const stairZback  = widthM - 0.05;
           const stairZcenter = (stairZfront + stairZback) / 2;
 
-          const btmY = JACK_H + (lv - 1) * LEVEL_H + 0.04;
-          const topYStair = JACK_H + lv * LEVEL_H + 0.04;
+          const btmY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.04;
+          const topYStair = GROUND_Y + JACK_H + lv * LEVEL_H + 0.04;
           const sStartX = sx1 + 0.06;
           const sEndX   = sx2 - 0.06;
 
@@ -820,16 +821,16 @@ export default function Scaffold3DView({
         // Track extents
         const levels = wall.levelCalc.fullLevels;
         const levelsShown = levels;
-        const totalH = JACK_H + levelsShown * LEVEL_H + (levelsShown >= levels ? topGuardM : 0);
+        const totalH = GROUND_Y + JACK_H + levelsShown * LEVEL_H + (levelsShown >= levels ? topGuardM : 0);
         if (totalH > maxH) maxH = totalH;
 
         const dist = Math.hypot(v1.x - cx, v1.z - cz);
         if (dist + widthM > maxExtent) maxExtent = dist + widthM;
 
-        // Visible edge segment for click target hint
+        // Visible edge segment for click target hint (slightly above ground)
         const edgePts = [
-          new THREE.Vector3(v1.x - cx, 0.14, v1.z - cz),
-          new THREE.Vector3(v2.x - cx, 0.14, v2.z - cz),
+          new THREE.Vector3(v1.x - cx, GROUND_Y + 0.14, v1.z - cz),
+          new THREE.Vector3(v2.x - cx, GROUND_Y + 0.14, v2.z - cz),
         ];
         const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePts);
         const edgeMat = new THREE.LineBasicMaterial({
@@ -845,7 +846,7 @@ export default function Scaffold3DView({
         const midZw = (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.1);
         const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
         const levelsForH = wall.levelCalc?.fullLevels ?? 0;
-        const scaffoldHeightM = JACK_H + levelsForH * LEVEL_H + topGuardM;
+        const scaffoldHeightM = GROUND_Y + JACK_H + levelsForH * LEVEL_H + topGuardM;
         const lenLabel = makeTextSprite(`L ${(wallLenMm / 1000).toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
         const hLabel = makeTextSprite(`H ${scaffoldHeightM.toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
         if (lenLabel) {
@@ -889,7 +890,7 @@ export default function Scaffold3DView({
       for (let ci = 0; ci < verts.length; ci++) {
         const vx = verts[ci].x - cx;
         const vz = verts[ci].z - cz;
-        addPipe(cornerGroup, vx, 0, vz, vx, maxH, vz, postMat, PIPE_R);
+        addPipe(cornerGroup, vx, GROUND_Y, vz, vx, maxH, vz, postMat, PIPE_R);
       }
       scene.add(cornerGroup);
 
@@ -926,9 +927,9 @@ export default function Scaffold3DView({
         }
       }
 
-      // ── Building outline at ground level (subtle gray) ─
+      // ── Building outline at ground level (not scaffold level); scaffold working levels are above this ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
-      const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, 0.01, v.z - cz));
+      const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, GROUND_Y + 0.01, v.z - cz));
       outlinePts.push(outlinePts[0].clone()); // close the loop
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
       const outlineLine = new THREE.Line(outlineGeo, outlineMat);
@@ -946,7 +947,7 @@ export default function Scaffold3DView({
         const shapeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
         const shapeMesh = new THREE.Mesh(shapeGeo, shapeMat);
         shapeMesh.rotation.x = -Math.PI / 2;
-        shapeMesh.position.y = 0.02;
+        shapeMesh.position.y = GROUND_Y + 0.02;
         scene.add(shapeMesh);
       }
 
@@ -955,13 +956,13 @@ export default function Scaffold3DView({
       const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
       const groundPlane = new THREE.Mesh(groundGeo, groundMat);
       groundPlane.rotation.x = -Math.PI / 2;
-      groundPlane.position.y = -0.03;
+      groundPlane.position.y = GROUND_Y - 0.03;
       groundPlane.receiveShadow = true;
       scene.add(groundPlane);
       const gridDivisions = Math.min(40, Math.max(10, Math.floor(groundSize / 5)));
       const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xd0d4d8, 0xd8dce0);
       gridHelper.rotation.x = -Math.PI / 2;
-      gridHelper.position.y = -0.02;
+      gridHelper.position.y = GROUND_Y - 0.02;
       (gridHelper.material as THREE.Material).opacity = 0.4;
       (gridHelper.material as THREE.Material).transparent = true;
       scene.add(gridHelper);
@@ -1353,7 +1354,7 @@ export default function Scaffold3DView({
             </span>
           ))}
           <span className="text-gray-400">|</span>
-          <span>All floors shown</span>
+          <span>All levels shown</span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap mb-2">
           <button

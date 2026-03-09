@@ -137,4 +137,12 @@ export class CreateScaffoldConfigDto {
   @IsOptional()
   @IsArray()
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
+
+  /** Optional: Detected balconies / AC areas from vision (for Buragetto / clearance) */
+  @IsOptional()
+  @IsArray()
+  obstacles?: Array<{
+    type: 'balcony' | 'ac';
+    vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+  }>;
 }

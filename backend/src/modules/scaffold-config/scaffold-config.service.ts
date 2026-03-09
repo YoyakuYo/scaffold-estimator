@@ -123,6 +123,7 @@ export class ScaffoldConfigService {
     const calculationResult = {
       ...result,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
+      ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
     };
     await client
       .from('scaffold_configurations')
@@ -247,6 +248,7 @@ export class ScaffoldConfigService {
     const calculationResult = {
       ...result,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
+      ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);

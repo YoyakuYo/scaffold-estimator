@@ -11,8 +11,13 @@ from .engine import ParametricScaffoldEngine, EngineInput, EngineOutput
 from .geometry import (
     extract_building_perimeter,
     parse_dxf_lwpolylines,
+    detect_dxf_units,
     ObstacleSet,
+    ObstacleRegion,
     BuildingEdge,
+    DETECTED_UNIT_MM,
+    DETECTED_UNIT_CM,
+    DETECTED_UNIT_M,
 )
 
 __all__ = [
@@ -21,6 +26,11 @@ __all__ = [
     "EngineOutput",
     "extract_building_perimeter",
     "parse_dxf_lwpolylines",
+    "detect_dxf_units",
     "ObstacleSet",
+    "ObstacleRegion",
     "BuildingEdge",
+    "DETECTED_UNIT_MM",
+    "DETECTED_UNIT_CM",
+    "DETECTED_UNIT_M",
 ]

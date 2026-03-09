@@ -384,6 +384,19 @@ function ScaffoldResultPage() {
                   <div className="text-xs text-gray-500">{t('result', 'wallsActive')}</div>
                 </div>
               </div>
+              {Array.isArray((result as any).obstacles) && (result as any).obstacles.length > 0 && (() => {
+                const obs = (result as any).obstacles as Array<{ type: string }>;
+                const bal = obs.filter((o) => o.type === 'balcony').length;
+                const ac = obs.filter((o) => o.type === 'ac').length;
+                return (
+                  <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                    <span className="text-xs font-medium text-slate-600 block mb-1">検出した障害物（ブラケット検討用）</span>
+                    <p className="text-sm text-slate-800">
+                      バルコニー {bal} 箇所{ac > 0 ? ` · 室外機・AC ${ac} 箇所` : ''}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Status indicator */}
               <div className="flex items-center gap-2 mb-4">
