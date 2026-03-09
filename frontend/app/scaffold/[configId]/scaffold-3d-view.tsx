@@ -322,8 +322,11 @@ export default function Scaffold3DView({
   const isAiBim = complianceMode === 'ai_bim';
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
-  const walls: WallCalculationResult[] =
-    (result?.walls ?? (result as any)?.result?.walls) ?? [];
+  const walls: WallCalculationResult[] = Array.isArray(result?.walls)
+    ? result.walls
+    : Array.isArray((result as any)?.result?.walls)
+      ? (result as any).result.walls
+      : [];
 
   function setOpacityRecursive(obj: any, opacity: number) {
     obj.traverse((child: any) => {
@@ -367,7 +370,11 @@ export default function Scaffold3DView({
   }
 
   useEffect(() => {
-    if (!canvasContainerRef.current || !wrapperRef.current || walls.length === 0) return;
+    if (!canvasContainerRef.current || !wrapperRef.current) return;
+    if (walls.length === 0) {
+      setError('No wall data. Run calculation for this configuration to see the 3D view.');
+      return;
+    }
 
     setReady(false);
 
@@ -788,10 +795,14 @@ export default function Scaffold3DView({
       // BUILD POLYGON VERTICES & POSITION WALLS
       // ══════════════════════════════════════════════════════
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
-        result?.polygonVertices;
+        result?.polygonVertices ?? (result as any)?.polygonVertices;
       const verts = buildPolygonVertices(walls, storedVerts);
       if (verts.length < 2) {
-        setError('Need at least 1 wall to build 3D view');
+        setError(
+          walls.length === 0
+            ? 'No wall data. Run calculation for this configuration to see the 3D view.'
+            : 'Need at least 1 wall to build 3D view',
+        );
         return;
       }
 
@@ -1256,7 +1267,16 @@ export default function Scaffold3DView({
     return { count: verts.length, angles, openings };
   }, [walls, result?.polygonVertices, result?.scaffoldWidthMm]);
 
-  if (walls.length === 0) return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
+  if (walls.length === 0) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center" style={{ height: '650px' }}>
+        <div className="text-center text-gray-500 p-8">
+          <p className="font-medium mb-1">3D view</p>
+          <p className="text-sm">No wall data. Run calculation for this configuration to see the 3D view.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
