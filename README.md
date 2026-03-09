@@ -40,3 +40,11 @@ From the project root you can run [Claude Code](https://code.claude.com/docs) fo
 npm run claude
 # or: npx claude
 ```
+
+On Windows (without editing PATH), you can also run the repo-local launchers:
+
+```powershell
+.\claude.ps1
+# or (cmd)
+.\claude.cmd
+```

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Scaffold estimation — frontend + backend monorepo",
   "scripts": {
-    "claude": "claude"
+    "claude": "powershell -NoProfile -ExecutionPolicy Bypass -File \"./claude.ps1\""
   },
   "devDependencies": {
     "@anthropic-ai/claude-code": "^2.1.71"
