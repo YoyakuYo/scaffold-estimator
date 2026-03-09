@@ -17,9 +17,9 @@ import {
 
 /**
  * 3D Scaffold View — Independent Walls (No Closed Polygon)
- * Each wall is treated as an independent scaffold segment. Walls do not connect at corners.
- * Span generation uses correct post reuse: N spans → N+1 post positions (shared between spans).
- * Corner closing logic is disabled; will be rebuilt later.
+ * Each wall is treated as an independent scaffold segment; span generation uses correct
+* post reuse (N spans → N+1 post positions). One shared vertical post per polygon vertex
+* closes the corners visually.
  */
 
 const PIPE_R = 0.024;
@@ -887,7 +887,14 @@ export default function Scaffold3DView({
         clickTargetsRef.current.push(clickMesh);
       }
 
-      // Corner connectors disabled: each wall is independent (no shared corner posts; corners remain open).
+      // ── Corner connectors: one shared vertical post per polygon vertex to close corners ─
+      const cornerGroup = new THREE.Group();
+      for (let ci = 0; ci < verts.length; ci++) {
+        const vx = verts[ci].x - cx;
+        const vz = verts[ci].z - cz;
+        addPipe(cornerGroup, vx, 0, vz, vx, maxH, vz, postMat, PIPE_R);
+      }
+      scene.add(cornerGroup);
 
       // ── Building outline at ground level (subtle gray) ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
