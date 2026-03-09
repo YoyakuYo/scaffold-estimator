@@ -842,13 +842,14 @@ export default function Scaffold3DView({
         const edgeLine = new THREE.Line(edgeGeo, edgeMat);
         scene.add(edgeLine);
 
-        // ── Dimension labels (length + height) — use real values from result ────────────
+        // ── Dimension labels (length + height) — same as 2D: scaffold height = levels×LEVEL_H + top guard + jack ────────────
         const midXw = (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.1);
         const midZw = (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.1);
         const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
-        const buildingHMm = (result as any)?.result?.buildingHeightMm ?? (result as any)?.buildingHeightMm ?? 3000;
+        const levelsForH = wall.levelCalc?.fullLevels ?? 0;
+        const scaffoldHeightM = JACK_H + levelsForH * LEVEL_H + topGuardM;
         const lenLabel = makeTextSprite(`L ${(wallLenMm / 1000).toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
-        const hLabel = makeTextSprite(`H ${(buildingHMm / 1000).toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
+        const hLabel = makeTextSprite(`H ${scaffoldHeightM.toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
         if (lenLabel) {
           lenLabel.position.set(midXw, 0.65, midZw);
           scene.add(lenLabel);
@@ -1106,9 +1107,23 @@ export default function Scaffold3DView({
     if (viewMode === 'wall') focusCameraOnWall(activeWallIdx);
   }, [viewMode, activeWallIdx]);
 
-  // Derived totals — real values from result (building height from config/API)
+  // Derived totals — use same scaffold height as 2D (levels × level height + top guard + jack)
   const totalLengthM = walls.reduce((s, w) => s + (w.wallLengthMm ?? 0), 0) / 1000;
-  const totalHeightM = ((result as any)?.result?.buildingHeightMm ?? (result as any)?.buildingHeightMm ?? 3000) / 1000;
+  const isWakugumiResult = result?.scaffoldType === 'wakugumi';
+  const LEVEL_H_M = isWakugumiResult ? (result?.frameSizeMm ?? 1700) / 1000 : LEVEL_H_KUSABI;
+  const topGuardMForTotal = (result?.topGuardHeightMm ?? 900) / 1000;
+  const JACK_H_M = 0.3;
+  const totalHeightM =
+    walls.length > 0
+      ? Math.max(
+          ...walls.map(
+            (w) =>
+              JACK_H_M +
+              (w.levelCalc?.fullLevels ?? 0) * LEVEL_H_M +
+              topGuardMForTotal,
+          ),
+        )
+      : 0;
 
   if (walls.length === 0) return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
 
