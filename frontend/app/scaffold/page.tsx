@@ -103,7 +103,7 @@ function BuildingShapeSvg({
     const b = outline[(i + 1) % outline.length];
     const mx = nx((a.xFrac + b.xFrac) / 2);
     const my = ny((a.yFrac + b.yFrac) / 2);
-    return { mx, my, text: `${(lenMm / 1000).toFixed(2)}m` };
+    return { mx, my, text: `${(lenMm / 1000).toFixed(3)}m` };
   }) ?? [];
   return (
     <svg viewBox="-0.1 -0.1 1.2 1.2" preserveAspectRatio="xMidYMid meet" className={className}>
@@ -697,7 +697,7 @@ function ScaffoldPageContent() {
                       {aiBimPreview.buildingHeightMm.toLocaleString()} mm
                       {aiBimPreview.buildingHeightMm >= 1000 && (
                         <span className="text-sm font-normal text-gray-600 ml-1">
-                          ({(aiBimPreview.buildingHeightMm / 1000).toFixed(1)} m)
+                          ({(aiBimPreview.buildingHeightMm / 1000).toFixed(3)} m)
                         </span>
                       )}
                     </p>
@@ -724,7 +724,7 @@ function ScaffoldPageContent() {
                             <tr key={w.side} className="border-b border-gray-100 last:border-0">
                               <td className="py-2 px-3 text-gray-800">壁面 {i + 1}</td>
                               <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
-                              <td className="py-2 px-3 text-right font-mono text-gray-500">{(w.wallLengthMm / 1000).toFixed(2)}</td>
+                              <td className="py-2 px-3 text-right font-mono text-gray-500">{(w.wallLengthMm / 1000).toFixed(3)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -735,7 +735,7 @@ function ScaffoldPageContent() {
                               {aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0).toLocaleString()}
                             </td>
                             <td className="py-2 px-3 text-right font-mono font-semibold text-gray-600">
-                              {(aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0) / 1000).toFixed(2)}
+                              {(aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0) / 1000).toFixed(3)}
                             </td>
                           </tr>
                         </tfoot>

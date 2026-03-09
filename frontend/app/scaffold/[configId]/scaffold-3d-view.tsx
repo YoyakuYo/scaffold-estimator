@@ -662,16 +662,17 @@ export default function Scaffold3DView({
             addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
           }
 
-          // Top guard posts + top rail (最上段) — inner face only.
-          // Add small vertical posts at each inner post position, then a top rail across the wall.
+          // Top guard posts + top rail (最上段) — BOTH outer and inner face to protect walkers.
           if (lv === levelsToBuild && topGuardM > 0) {
-            for (const px of postX) {
-              addPipe(group, px, y, widthM, px, y + topGuardM, widthM, topGuardMat, PIPE_R * 0.7);
-            }
-            for (let i = 0; i < spans.length; i++) {
-              const x1 = postX[i];
-              const x2 = postX[i + 1];
-              addPipe(group, x1, y + topGuardM, widthM, x2, y + topGuardM, widthM, topGuardMat, PIPE_R * 0.65);
+            for (const pz of [0, widthM]) {
+              for (const px of postX) {
+                addPipe(group, px, y, pz, px, y + topGuardM, pz, topGuardMat, PIPE_R * 0.7);
+              }
+              for (let i = 0; i < spans.length; i++) {
+                const x1 = postX[i];
+                const x2 = postX[i + 1];
+                addPipe(group, x1, y + topGuardM, pz, x2, y + topGuardM, pz, topGuardMat, PIPE_R * 0.65);
+              }
             }
           }
         }
@@ -838,13 +839,13 @@ export default function Scaffold3DView({
         const edgeLine = new THREE.Line(edgeGeo, edgeMat);
         scene.add(edgeLine);
 
-        // ── Dimension labels (length + height) ────────────
+        // ── Dimension labels (length + height) — use real values from result ────────────
         const midXw = (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.1);
         const midZw = (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.1);
         const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
-        const wallHgtMm = (wall as any).wallHeightMm ?? result?.buildingHeightMm ?? result?.buildingHeight ?? 3000;
-        const lenLabel = makeTextSprite(`L ${(wallLenMm / 1000).toFixed(2)}m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
-        const hLabel = makeTextSprite(`H ${(wallHgtMm / 1000).toFixed(2)}m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
+        const buildingHMm = (result as any)?.result?.buildingHeightMm ?? (result as any)?.buildingHeightMm ?? 3000;
+        const lenLabel = makeTextSprite(`L ${(wallLenMm / 1000).toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
+        const hLabel = makeTextSprite(`H ${(buildingHMm / 1000).toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
         if (lenLabel) {
           lenLabel.position.set(midXw, 0.65, midZw);
           scene.add(lenLabel);
@@ -1102,9 +1103,9 @@ export default function Scaffold3DView({
     if (viewMode === 'wall') focusCameraOnWall(activeWallIdx);
   }, [viewMode, activeWallIdx]);
 
-  // Derived totals — computed from wall data (no extra state needed)
+  // Derived totals — real values from result (building height from config/API)
   const totalLengthM = walls.reduce((s, w) => s + (w.wallLengthMm ?? 0), 0) / 1000;
-  const totalHeightM = walls.reduce<number>((s, w) => Math.max(s, (w as any).wallHeightMm ?? result?.buildingHeightMm ?? 3000), 0) / 1000;
+  const totalHeightM = ((result as any)?.result?.buildingHeightMm ?? (result as any)?.buildingHeightMm ?? 3000) / 1000;
 
   if (walls.length === 0) return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
 
@@ -1369,8 +1370,8 @@ export default function Scaffold3DView({
         {ready && (
           <div className="absolute bottom-3 right-3 z-10 pointer-events-none select-none bg-slate-900/85 text-white rounded-lg shadow-lg px-3 py-2 text-xs font-mono leading-5">
             <div className="font-semibold text-slate-300 mb-0.5">全体寸法</div>
-            <div>周長　<span className="font-bold text-white">{totalLengthM.toFixed(2)} m</span></div>
-            <div>高さ　<span className="font-bold text-white">{totalHeightM.toFixed(2)} m</span></div>
+            <div>周長　<span className="font-bold text-white">{totalLengthM.toFixed(3)} m</span></div>
+            <div>高さ　<span className="font-bold text-white">{totalHeightM.toFixed(3)} m</span></div>
           </div>
         )}
       </div>
