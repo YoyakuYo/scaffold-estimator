@@ -89,7 +89,53 @@ function ScaffoldResultPage() {
     queryFn: () => scaffoldConfigsApi.get(configId),
   });
 
-  const result = config?.calculationResult;
+  const rawResult = config?.calculationResult;
+  const resultWalls = Array.isArray(rawResult?.walls)
+    ? rawResult.walls
+    : Array.isArray((rawResult as any)?.result?.walls)
+      ? (rawResult as any).result.walls
+      : [];
+  const result = rawResult
+    ? {
+        ...rawResult,
+        walls: resultWalls.length > 0 ? resultWalls : undefined,
+      }
+    : undefined;
+
+  const resultFor3D = useMemo(() => {
+    if (!result) return result;
+    if (Array.isArray(result.walls) && result.walls.length > 0) return result;
+    if (!config?.walls?.length) return result;
+    const levelH = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800;
+    const levels = Math.max(1, Math.floor((config.buildingHeightMm ?? 3000) / levelH));
+    const topGuardMm = result.topGuardHeightMm ?? 900;
+    const minimalWalls: WallCalculationResult[] = config.walls
+      .filter((w) => w.enabled !== false)
+      .map((w) => ({
+        side: w.side,
+        sideJp: w.side,
+        wallLengthMm: w.wallLengthMm,
+        spans: [1800],
+        totalSpans: 1,
+        postPositions: 2,
+        stairAccessCount: w.stairAccessCount ?? 0,
+        components: [],
+        scaffoldWidthMm: config.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900,
+        layoutMode: 'double_post' as const,
+        levelCalc: {
+          fullLevels: levels,
+          jackBaseAdjustmentMm: 0,
+          topPlankHeightMm: levels * levelH,
+          topGuardHeightMm: topGuardMm,
+          totalScaffoldHeightMm: levels * levelH + topGuardMm,
+          mainPostsPerLine: 2,
+          mainPostHeightMm: levelH,
+          topGuardPostHeightMm: topGuardMm,
+        },
+      }));
+    return { ...result, walls: minimalWalls };
+  }, [result, config]);
+
   const maxLevels = result ? (result.totalLevels ?? Math.max(...(result.walls?.map((w: WallCalculationResult) => w.levelCalc?.fullLevels ?? 1) ?? [1]))) : 1;
 
   useEffect(() => {
@@ -347,7 +393,7 @@ function ScaffoldResultPage() {
         {activeTab === 'plan' && <ScaffoldPlanView result={result} />}
         {activeTab === '3d' && (
           <Scaffold3DView
-            result={result}
+            result={resultFor3D ?? result}
             totalLevels={maxLevels}
             complianceMode={isAiBim ? 'ai_bim' : 'default'}
           />
