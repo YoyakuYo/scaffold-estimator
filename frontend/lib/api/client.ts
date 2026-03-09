@@ -82,6 +82,21 @@ apiClient.interceptors.response.use(
         }
       }
     }
+
+    // 403 subscription: show friendly message instead of "Request failed with status code 403"
+    if (error.response?.status === 403) {
+      const msg = error.response?.data?.message as string | undefined;
+      const isSubscription =
+        msg &&
+        (msg.includes('Subscription') ||
+          msg.includes('trial') ||
+          msg.includes('Billing') ||
+          msg.toLowerCase().includes('subscribe'));
+      if (isSubscription) {
+        error.message = msg || 'Subscribe to continue. Open Billing to upgrade your plan.';
+      }
+    }
+
     // For network errors or other errors, just reject without logging out
     return Promise.reject(error);
   }

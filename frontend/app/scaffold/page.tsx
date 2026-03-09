@@ -274,6 +274,8 @@ function ScaffoldPageContent() {
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
+    /** Detected balconies / AC areas from vision (for display and future Buragetto). */
+    obstacles?: Array<{ type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }>;
     dto: CreateScaffoldConfigDto;
   } | null>(null);
   const [aiBimConfirming, setAiBimConfirming] = useState(false);
@@ -353,11 +355,12 @@ function ScaffoldPageContent() {
   }, [editConfigId, editConfig]);
 
   // ─── Fetch rules from backend ───────────────────────────
-  const { data: rules } = useQuery<ScaffoldRules>({
+  const { data: rules, isError: rulesError, error: rulesErrorDetail } = useQuery<ScaffoldRules>({
     queryKey: ['scaffold-rules'],
     queryFn: () => scaffoldConfigsApi.getRules(),
     staleTime: 1000 * 60 * 30,
   });
+  const subscriptionMessage = rulesError && (rulesErrorDetail as Error)?.message;
 
   const calculateMutation = useMutation({
     mutationFn: ({
@@ -596,6 +599,14 @@ function ScaffoldPageContent() {
               </button>
             </div>
           )}
+
+          {/* Subscription required (when rules fail with 403) */}
+          {rulesError && subscriptionMessage && (
+            <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <span>{subscriptionMessage}</span>
+            </div>
+          )}
         </div>
 
       {/* ═══════════════════════════════════════════════════════
@@ -655,6 +666,7 @@ function ScaffoldPageContent() {
                       topGuardHeightMm: defaults.topGuardHeightMm,
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
+                      ...(footprint.obstacles && footprint.obstacles.length > 0 && { obstacles: footprint.obstacles }),
                     };
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
@@ -663,6 +675,7 @@ function ScaffoldPageContent() {
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
+                      obstacles: footprint.obstacles,
                       dto,
                     });
                     setAiBimError(null);
@@ -762,6 +775,18 @@ function ScaffoldPageContent() {
                       </table>
                     </div>
                   </div>
+                  {aiBimPreview.obstacles && aiBimPreview.obstacles.length > 0 && (
+                    <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                      <span className="text-xs font-medium text-slate-600 block mb-1">検出した障害物（ブラケット検討用）</span>
+                      <p className="text-sm text-slate-800">
+                        バルコニー {aiBimPreview.obstacles.filter((o) => o.type === 'balcony').length} 箇所
+                        {aiBimPreview.obstacles.some((o) => o.type === 'ac') && (
+                          <> · 室外機・AC {aiBimPreview.obstacles.filter((o) => o.type === 'ac').length} 箇所</>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">クリアランス不足時は当該区間を単管＋ブラケット（ブラgetto）で提案します。</p>
+                    </div>
+                  )}
                   <div>
                     <span className="text-xs font-medium text-gray-500 block mb-2">建物平面形</span>
                     <BuildingShapeSvg
