@@ -453,9 +453,12 @@ export default function Scaffold3DView({
       const postMat = pipeMat;
       const jackMatEff = jackMat;
       const plankMatEff = plankMat;
-      const tesuriMat = isTech
-        ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough })
-        : pipeMat;
+      // Tesuri (guard rails) — force bright blue and dedicated material so they are always clearly visible.
+      const tesuriMat = new THREE.MeshStandardMaterial({
+        color: C_TECH.brace, // use the same vivid blue as braces
+        metalness: metal,
+        roughness: rough,
+      });
       const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : pipeMat;
       const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : pipeMat;
       const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
@@ -634,19 +637,19 @@ export default function Scaffold3DView({
             const midX = (x1 + x2) / 2;
             const isStairSpan = uniqueStairPos.includes(i);
 
-            // Braces (ブレス) — outer face only (z=0), 1 per span per level.
+            // Braces (ブレス) — inner face only (z=widthM), 1 per span per level.
             // Render as an X for clarity (two diagonals).
             const braceBottomY = JACK_H + (lv - 1) * LEVEL_H + 0.18;
             const braceTopY = y - 0.18;
-            addPipe(group, x1, braceBottomY, 0, x2, braceTopY, 0, braceMat, PIPE_R * 0.75);
-            addPipe(group, x1, braceTopY, 0, x2, braceBottomY, 0, braceMat, PIPE_R * 0.75);
+            addPipe(group, x1, braceBottomY, widthM, x2, braceTopY, widthM, braceMat, PIPE_R * 0.75);
+            addPipe(group, x1, braceTopY, widthM, x2, braceBottomY, widthM, braceMat, PIPE_R * 0.75);
 
-            // Guard rails (手摺/布材) — inner face only (z=widthM), 2 rails per span per level.
+            // Guard rails (手摺/布材) — outer face only (z=0), 2 rails per span per level.
             // Use fixed heights for consistency (0.90m and 0.45m above platform).
             const railTop = y + 0.9;
             const railMid = y + 0.45;
-            addPipe(group, x1, railTop, widthM, x2, railTop, widthM, tesuriMat, PIPE_R * 0.65);
-            addPipe(group, x1, railMid, widthM, x2, railMid, widthM, tesuriMat, PIPE_R * 0.6);
+            addPipe(group, x1, railTop, 0, x2, railTop, 0, tesuriMat, PIPE_R * 0.65);
+            addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
 
             // Plank / Anchi
             const spanMm = spans[i];
