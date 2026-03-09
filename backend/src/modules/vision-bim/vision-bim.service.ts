@@ -40,7 +40,9 @@ const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanes
 OUTPUT FORMAT: Output ONLY a raw JSON object. No markdown, no code fences, no prose before or after.
 
 Required fields:
-- vertices: array of polygon vertices tracing the EXTERIOR building outline in perimeter order (clockwise or counter-clockwise). Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized. Prefer mm when you can read scale/dimensions.
+- vertices: array of polygon vertices tracing the EXTERIOR building wall outline in perimeter order (clockwise or counter-clockwise).
+  Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized.
+  UNITS: If the drawing shows a scale (S=1/100, S=1/200, 縮尺 etc.) you MUST output { x, y } in real mm. Never use fractions when scale is readable.
 - buildingHeightMm: total building height in mm (ground to eaves/top). If not shown, use typical 3000mm per story.
 
 Optional fields (read from dimension lines and annotations):
@@ -59,10 +61,20 @@ Optional fields (read from dimension lines and annotations):
 
 Polygon rules — follow these exactly:
 1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
-2. EXTERIOR outline only: trace the MAIN STRUCTURAL building perimeter — the solid black wall outline. Do NOT trace blue hatched areas, blue shaded zones, canopies, overhangs, or scaffold boundaries that extend outside the black building line. If the plan has blue hatching outside the black outline, ignore it completely; your vertices must follow only the black structural perimeter so the scaffold does not "go beyond" the building.
-3. Multiple outlines: use the main building outline (black) that corresponds to the dimension strings. Never use the outer edge of blue/shaded zones as the building boundary.
+
+2. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
+   Japanese scaffold drawings use color coding that you must understand:
+   - BLUE FILLED/HATCHED ZONE: this is the scaffold overhang area (the zone between the building wall and the outer scaffold edge). DO NOT trace its outer boundary.
+   - BLUE PERIMETER LINE (the inner boundary of the blue zone, adjacent to the building): this IS the building wall face. TRACE THIS LINE as your polygon.
+   - Confirm: the dimension strings on the plan (e.g. "10@1829=18290") should match the edges you are tracing. If a long dimension string aligns with your traced edge, you have the right line.
+   For non-scaffold plans (architectural cross-sections, photos): trace the visible outer wall boundary.
+
+3. SHAPE REALITY CHECK — Most Japanese buildings are elongated rectangles (taller or wider than they are square). If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline. Real buildings are NOT regular pentagons. Re-examine and trace the correct shape.
+
 4. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
+
 5. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
+
 6. wallLengthsMm count must equal vertices count exactly (one length per edge).
 
 CRITICAL — structural grid vs. building edge (most common error):
@@ -79,6 +91,7 @@ Self-check before outputting (fix issues silently — never output the check its
 - if wallLengthsMm provided: sum of lengths is a plausible building perimeter (>4 m, <2000 m)
 - total of wallLengthsMm matches the plan's dimension string sums as closely as possible
 - no run of 3+ consecutive edges with the same length unless the building genuinely has those equal-length faces
+- polygon must NOT be a regular polygon (equal sides + equal angles) unless the building genuinely is one
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
@@ -396,10 +409,10 @@ export class VisionBimService {
     if (pts.length < 4) return;
 
     // ── Pass 2: iteratively remove near-collinear vertices ───────────────────
-    // Threshold: sin(angle at B) < 0.21  ≈  deviation ≤ 12°.
+    // Threshold: sin(angle at B) < 0.13  ≈  deviation ≤ 7.5°.
     // This catches vertices placed where structural grid lines cross a straight
-    // or slightly-angled exterior wall.
-    const SIN_THR = 0.21;
+    // exterior wall, while preserving genuine diagonal corners (≥ 8°).
+    const SIN_THR = 0.13;
     let changed = true;
     while (changed && pts.length > 3) {
       changed = false;
