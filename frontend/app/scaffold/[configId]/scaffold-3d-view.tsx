@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Loader2, FileText, FileCode, Box, Download, Info } from 'lucide-react';
+import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { WallCalculationResult, CalculatedComponent } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
@@ -1217,7 +1217,39 @@ export default function Scaffold3DView({
               3D 足場ビュー
             </span>
           </div>
-          <div className="text-xs text-gray-500">{t('result', 'dragHint')} / Click wall segment to focus</div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">{t('result', 'dragHint')} / Click wall segment to focus</span>
+            <span className="text-gray-300">|</span>
+            <span className="text-xs text-gray-500">Zoom:</span>
+            <button
+              type="button"
+              onClick={() => {
+                const c = controlsRef.current;
+                if (c?.spherical) {
+                  c.spherical.radius = Math.min(80, c.spherical.radius + 3);
+                }
+              }}
+              className="p-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              title="Zoom out"
+              disabled={!ready}
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const c = controlsRef.current;
+                if (c?.spherical) {
+                  c.spherical.radius = Math.max(3, c.spherical.radius - 3);
+                }
+              }}
+              className="p-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              title="Zoom in"
+              disabled={!ready}
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap mb-2 text-xs text-gray-600">
           <button
