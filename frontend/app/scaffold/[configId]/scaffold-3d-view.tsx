@@ -26,7 +26,6 @@ const PIPE_R = 0.024;
 const PIPE_SEG = 10;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
-const NEGR_H = 0.2;
 type ViewMode = 'all' | 'wall';
 
 // Technical palette (distinct per component for estimation/quotation)
@@ -524,22 +523,7 @@ export default function Scaffold3DView({
           }
         }
 
-        // ── 根がらみ (Base yokoji) ─────────────────────
-        const baseY = JACK_H + NEGR_H;
-        for (let i = 0; i < spans.length; i++) {
-          const x1 = postX[i];
-          const x2 = postX[i + 1];
-          for (const pz of [0, widthM]) {
-            addRealisticNunoBar(THREE, group, x1, baseY, pz, x2, pz, yokojiMat);
-          }
-        }
-        for (const px of postX) {
-          addRealisticNunoBar(THREE, group, px, baseY, 0, px, widthM, yokojiMat);
-        }
-        // Corner: 600mm (widthM) negarami at base on inner row from added post to last post
-        if (cornerInnerPostX != null) {
-          addRealisticNunoBar(THREE, group, cornerInnerPostX, baseY, 0, totalLen, 0, yokojiMat);
-        }
+        // Base yokoji (根がらみ) removed — no yokoji on ground base in 3D view.
 
         // ── Stair positions ────────────────────────────
         const stairCount = wall.stairAccessCount || 0;
