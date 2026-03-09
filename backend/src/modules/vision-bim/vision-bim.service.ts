@@ -65,12 +65,20 @@ Polygon rules — follow these exactly:
 5. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
 6. wallLengthsMm count must equal vertices count exactly (one length per edge).
 
+CRITICAL — structural grid vs. building edge (most common error):
+Construction plans show internal structural grids (e.g. Y1/Y2/Y3/Y4/Y5 lines spaced 7200 mm, X1/X2 lines, column circles). These are NOT building edges.
+- NEVER place an extra vertex where a grid line crosses an exterior wall. A straight or diagonal exterior wall is ONE edge (2 vertices: start and end), even if 4 grid lines cross it.
+- NEVER trace a diagonal edge as a staircase of alternating horizontal/vertical steps. A slanted wall = one straight edge.
+- WARNING SIGN: if you have 3 or more consecutive edges with the same length (e.g. four × 7200 mm in a row), you are following a grid, not the building perimeter. Replace those segments with the single outer wall they belong to.
+- Typical buildings have 4–8 vertices. More than 10 almost always means grid-line tracing errors — review and remove spurious vertices before outputting.
+
 Self-check before outputting (fix issues silently — never output the check itself):
 - edges count == vertices count (not vertices count + 1)
 - no duplicate consecutive vertices
 - no self-intersecting edges
 - if wallLengthsMm provided: sum of lengths is a plausible building perimeter (>4 m, <2000 m)
 - total of wallLengthsMm matches the plan's dimension string sums as closely as possible
+- no run of 3+ consecutive edges with the same length unless the building genuinely has those equal-length faces
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
@@ -313,11 +321,114 @@ export class VisionBimService {
       if (typeof parsed.frameSizeMm !== 'number' || ![1700, 1800, 1900].includes(parsed.frameSizeMm)) {
         parsed.frameSizeMm = undefined;
       }
+      // Remove collinear intermediate vertices caused by grid-line tracing.
+      this.cleanupPolygon(parsed);
       return parsed as VisionFootprintResult;
     } catch (err) {
       const msg = (err as Error)?.message || String(err);
       this.logger.error('Vision BIM processing failed', msg);
       throw new Error(`Vision BIM processing failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Post-process extracted polygon to remove collinear intermediate vertices.
+   *
+   * The most common AI error on technical plans is placing a vertex at every
+   * structural-grid crossing along a straight or diagonal wall edge, producing
+   * runs of 3-6 identical-length edges where one edge should be.
+   *
+   * Algorithm (iterative until stable):
+   *  1. Remove duplicate consecutive vertices.
+   *  2. Remove any vertex B where the turn angle A→B→C is ≤ SIN_THR (≈12°),
+   *     i.e. B lies essentially on the straight line from A to C.
+   *  3. After simplification, recompute wallLengthsMm from the new geometry
+   *     (valid for mm-coordinate vertices; for fractional, clear it so the
+   *     engine falls back to vertex-distance-derived lengths).
+   */
+  private cleanupPolygon(parsed: VisionFootprintResult): void {
+    const verts = parsed.vertices;
+    if (!Array.isArray(verts) || verts.length < 5) return;
+
+    const isMm = 'x' in verts[0];
+
+    // Normalise to {x, y} in whatever unit the AI used (mm or 0-1 fraction).
+    let pts: Array<{ x: number; y: number }> = verts.map((v) =>
+      isMm
+        ? { x: (v as { x: number; y: number }).x, y: (v as { x: number; y: number }).y }
+        : { x: (v as { xFrac: number; yFrac: number }).xFrac, y: (v as { xFrac: number; yFrac: number }).yFrac },
+    );
+
+    // ── Pass 1: remove duplicate / degenerate consecutive vertices ──────────
+    const polyExtent = (arr: Array<{ x: number; y: number }>) => {
+      const xs = arr.map((p) => p.x);
+      const ys = arr.map((p) => p.y);
+      return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    };
+    const minDist = polyExtent(pts) * 0.0005; // 0.05 % of extent
+    pts = pts.filter((p, i, a) => {
+      const next = a[(i + 1) % a.length];
+      return Math.hypot(p.x - next.x, p.y - next.y) > minDist;
+    });
+    if (pts.length < 4) return;
+
+    // ── Pass 2: iteratively remove near-collinear vertices ───────────────────
+    // Threshold: sin(angle at B) < 0.21  ≈  deviation ≤ 12°.
+    // This catches vertices placed where structural grid lines cross a straight
+    // or slightly-angled exterior wall.
+    const SIN_THR = 0.21;
+    let changed = true;
+    while (changed && pts.length > 3) {
+      changed = false;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[(i - 1 + pts.length) % pts.length];
+        const b = pts[i];
+        const c = pts[(i + 1) % pts.length];
+        const abx = b.x - a.x, aby = b.y - a.y;
+        const bcx = c.x - b.x, bcy = c.y - b.y;
+        const abLen = Math.hypot(abx, aby);
+        const bcLen = Math.hypot(bcx, bcy);
+        if (abLen < 1e-12 || bcLen < 1e-12) {
+          pts.splice(i, 1);
+          changed = true;
+          break;
+        }
+        const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
+        if (sinAngle < SIN_THR) {
+          pts.splice(i, 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    if (pts.length >= verts.length || pts.length < 3) return; // nothing changed
+
+    this.logger.log(
+      `cleanupPolygon: reduced ${verts.length} → ${pts.length} vertices (removed collinear grid-line artifacts)`,
+    );
+
+    // Rebuild vertices in the original coordinate format.
+    parsed.vertices = pts.map((p) =>
+      isMm
+        ? { x: Math.round(p.x), y: Math.round(p.y) }
+        : { xFrac: p.x, yFrac: p.y },
+    ) as VisionFootprintResult['vertices'];
+
+    // Recompute wallLengthsMm from the cleaned geometry.
+    if (isMm) {
+      const n = pts.length;
+      parsed.wallLengthsMm = pts.map((p, i) => {
+        const next = pts[(i + 1) % n];
+        return Math.round(Math.hypot(next.x - p.x, next.y - p.y));
+      });
+      // Lengths are now geometry-derived, not from dimension text.
+      parsed.wallLengthsFromDimText = false;
+    } else {
+      // Fractional vertices: lengths were in mm units from the AI but now refer
+      // to different edges — clear so the caller recomputes from vertex distances.
+      parsed.wallLengthsMm = undefined;
+      parsed.wallLengthsFromDimText = undefined;
     }
   }
 
