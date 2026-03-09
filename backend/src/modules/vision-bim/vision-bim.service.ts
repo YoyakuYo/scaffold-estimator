@@ -278,13 +278,36 @@ export class VisionBimService {
           ? (textBlock as any).text
           : '';
 
-      // Robust JSON extraction: models sometimes wrap in prose or code fences.
+      // Robust JSON extraction: take only the first complete {...} object (ignore trailing text or second JSON).
       const cleaned = text.replace(/```json?\s*/gi, '').replace(/```/g, '').trim();
       const start = cleaned.indexOf('{');
-      const end = cleaned.lastIndexOf('}');
-      if (start < 0 || end < 0 || end <= start) {
-        throw new Error('Vision model did not return JSON');
+      if (start < 0) throw new Error('Vision model did not return JSON');
+      let depth = 0;
+      let end = -1;
+      let i = start;
+      while (i < cleaned.length) {
+        const c = cleaned[i];
+        if (c === '"' && depth > 0) {
+          i++;
+          while (i < cleaned.length) {
+            if (cleaned[i] === '\\') i += 2;
+            else if (cleaned[i] === '"') break;
+            else i++;
+          }
+          i++;
+          continue;
+        }
+        if (c === '{') depth++;
+        else if (c === '}') {
+          depth--;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
+        i++;
       }
+      if (end < start) throw new Error('Vision model did not return valid JSON object');
       const jsonStr = cleaned.slice(start, end + 1);
       const parsed = JSON.parse(jsonStr) as VisionFootprintResult;
 
