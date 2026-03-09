@@ -342,7 +342,16 @@ export class VisionBimService {
           wallLengths = wallLengths.map((l) => Math.round(l * 1000));
           this.logger.warn(`wallLengthsMm auto-converted from m→mm (max was ${maxVal})`);
         }
-        // Fix likely mis-read: one value 1xxx–5xxx (e.g. 1300, 4593) when dimension was 31.3 m / 34.593 m (leading digit dropped)
+        // Fix 1: one value 3xxx (e.g. 3593) when dimension was 33.593 m – even if another small (e.g. 1733) exists
+        const threeK = wallLengths.filter((l) => typeof l === 'number' && l >= 3000 && l < 4000);
+        const hasLarge = wallLengths.some((l) => typeof l === 'number' && l >= 10000);
+        if (threeK.length === 1 && hasLarge) {
+          wallLengths = wallLengths.map((l) =>
+            typeof l === 'number' && l >= 3000 && l < 4000 ? l + 30000 : l,
+          ) as number[];
+          this.logger.warn('wallLengthsMm: corrected one value 3xxx→33xxx (leading digit dropped)');
+        }
+        // Fix 2: one value 1xxx–5xxx and all others >= 10000
         const small = wallLengths.filter((l) => typeof l === 'number' && l >= 1000 && l < 6000);
         const large = wallLengths.filter((l) => typeof l === 'number' && l >= 10000);
         if (small.length === 1 && large.length === wallLengths.length - 1) {

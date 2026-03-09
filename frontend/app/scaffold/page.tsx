@@ -76,13 +76,23 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
-/** Fix likely mis-read: one edge 1xxx–5xxx mm when dimension was 31.3 m / 34.593 m (leading digit dropped). */
+/** Fix likely mis-read: leading digit dropped on plan (e.g. 3.593 m → 33.593 m, 1.3 m → 31.3 m). */
 function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefined {
   if (!Array.isArray(lengths) || lengths.length < 2) return lengths;
-  const small = lengths.filter((l) => l >= 1000 && l < 6000);
-  const large = lengths.filter((l) => l >= 10000);
-  if (small.length !== 1 || large.length !== lengths.length - 1) return lengths;
-  return lengths.map((l) => (l >= 1000 && l < 6000 ? l + 30000 : l));
+  let out = lengths;
+  // Case 1: exactly one value 3xxx (e.g. 3593) when dimension was 33.593 m – fix even if another small (e.g. 1733) exists
+  const threeK = out.filter((l) => l >= 3000 && l < 4000);
+  const hasLarge = out.some((l) => l >= 10000);
+  if (threeK.length === 1 && hasLarge) {
+    out = out.map((l) => (l >= 3000 && l < 4000 ? l + 30000 : l));
+  }
+  // Case 2: exactly one value 1xxx–5xxx and all others >= 10000 (single small edge)
+  const small = out.filter((l) => l >= 1000 && l < 6000);
+  const large = out.filter((l) => l >= 10000);
+  if (small.length === 1 && large.length === out.length - 1) {
+    out = out.map((l) => (l >= 1000 && l < 6000 ? l + 30000 : l));
+  }
+  return out;
 }
 
 /** Renders building footprint outline as SVG (for AI BIM double-check panel). */
