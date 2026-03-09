@@ -76,6 +76,15 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
+/** Fix likely mis-read: one edge 4xxx mm when dimension was 34.593 m (leading digit dropped). */
+function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefined {
+  if (!Array.isArray(lengths) || lengths.length < 2) return lengths;
+  const small = lengths.filter((l) => l >= 4000 && l < 6000);
+  const large = lengths.filter((l) => l >= 10000);
+  if (small.length !== 1 || large.length !== lengths.length - 1) return lengths;
+  return lengths.map((l) => (l >= 4000 && l < 6000 ? l + 30000 : l));
+}
+
 /** Renders building footprint outline as SVG (for AI BIM double-check panel). */
 function BuildingShapeSvg({
   outline,
@@ -615,11 +624,12 @@ function ScaffoldPageContent() {
                     const refMm = footprint.vertices.some((v) => 'xFrac' in v)
                       ? (footprint.scaleDenominator ? 20000 : 10000)
                       : undefined;
+                    const wallLengthsMm = correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm;
                     const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
                       footprint.vertices,
                       footprint.buildingHeightMm,
                       refMm,
-                      { wallLengthsMm: footprint.wallLengthsMm },
+                      { wallLengthsMm },
                     );
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';

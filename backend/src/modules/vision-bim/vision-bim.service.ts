@@ -342,6 +342,17 @@ export class VisionBimService {
           wallLengths = wallLengths.map((l) => Math.round(l * 1000));
           this.logger.warn(`wallLengthsMm auto-converted from m→mm (max was ${maxVal})`);
         }
+        // Fix likely mis-read: one value 4xxx (e.g. 4593) when dimension was 34.593 m (leading digit dropped)
+        const small = wallLengths.filter((l) => typeof l === 'number' && l >= 4000 && l < 6000);
+        const large = wallLengths.filter((l) => typeof l === 'number' && l >= 10000);
+        if (small.length === 1 && large.length === wallLengths.length - 1) {
+          wallLengths = wallLengths.map((l) =>
+            typeof l === 'number' && l >= 4000 && l < 6000 ? l + 30000 : l,
+          ) as number[];
+          this.logger.warn(
+            'wallLengthsMm: corrected one value 4xxx→34xxx (likely 4.593 m mis-read as 34.593 m)',
+          );
+        }
         // Discard if any value is still below minimum scaffold wall (600mm)
         if (!wallLengths.every((l) => typeof l === 'number' && l >= 600)) {
           wallLengths = undefined;
