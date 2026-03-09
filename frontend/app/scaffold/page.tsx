@@ -642,7 +642,8 @@ function ScaffoldPageContent() {
                   try {
                     const raw = await visionBimApi.analyze(file);
                     const footprint = raw as VisionFootprintResult;
-                    type WithObstacles = { obstacles?: Array<{ type: 'balcony' | 'ac'; vertices: unknown[] }> };
+                    type ObstacleVertex = { x: number; y: number } | { xFrac: number; yFrac: number };
+                    type WithObstacles = { obstacles?: Array<{ type: 'balcony' | 'ac'; vertices: ObstacleVertex[] }> };
                     const obstacles = (raw as WithObstacles).obstacles;
                     const manager = scaffoldManagerRef.current!;
                     const refMm = footprint.vertices.some((v) => 'xFrac' in v)
