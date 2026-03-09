@@ -251,6 +251,7 @@ export const translations = {
     tab3d: { ja: '3D表示', en: '3D View' },
     noResult: { ja: '計算結果が見つかりません', en: 'No calculation results found' },
     spanConfig: { ja: 'スパン構成', en: 'Span Configuration' },
+    scaffoldLevelsHeader: { ja: '足場レベル', en: 'Levels' },
     wallLengthLabel: { ja: '壁長:', en: 'Wall:' },
     spansLabel: { ja: 'スパン', en: 'spans' },
     stairsLabel: { ja: '階段:', en: 'Stairs:' },

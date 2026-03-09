@@ -8,6 +8,7 @@ import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { ALL_RULES } from './scaffold-rules';
 import { ALL_WAKUGUMI_RULES } from './scaffold-rules-wakugumi';
 import { PolygonToWallsService } from './polygon-to-walls.service';
+import { runParametricPipeline } from './parametric-scaffold.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
@@ -48,8 +49,8 @@ export class ScaffoldConfigService {
     const scaffoldType = dto.scaffoldType || 'kusabi';
     this.logger.log(`Creating ${scaffoldType} scaffold config (mode: ${dto.mode})`);
 
-    // ── Step 1: Convert polygon outline to walls if provided ──
-    let wallsToCalculate = dto.walls.map(w => ({
+    // ── Step 1: Build walls with optional per-wall width from parametric pipeline ──
+    let wallsToCalculate = dto.walls.map((w, idx) => ({
       side: w.side,
       wallLengthMm: w.wallLengthMm,
       wallHeightMm: w.wallHeightMm,
@@ -57,7 +58,50 @@ export class ScaffoldConfigService {
       kaidanCount: w.kaidanCount,
       kaidanOffsets: w.kaidanOffsets,
       segments: w.segments,
+      scaffoldWidthMm: w.scaffoldWidthMm,
     }));
+
+    // ── Step 2: Run parametric pipeline when we have buildingOutline + (obstacles or widthBySide) ──
+    let parametricTransitions: ScaffoldCalculationResult['parametricTransitions'];
+    const hasOutline = dto.buildingOutline && dto.buildingOutline.length >= 3;
+    const hasObstacles = dto.obstacles && dto.obstacles.length > 0;
+    const hasWidthBySide = dto.widthBySide && Object.keys(dto.widthBySide).length > 0;
+
+    if (hasOutline && (hasObstacles || hasWidthBySide) && wallsToCalculate.length >= 3) {
+      const widthBySide: Record<number | string, number> = { ...(dto.widthBySide ?? {}) };
+      for (let i = 0; i < wallsToCalculate.length; i++) {
+        const w = wallsToCalculate[i];
+        const sideKey = w.side.toLowerCase();
+        if (widthBySide[sideKey] == null && widthBySide[i] == null) {
+          widthBySide[i] = dto.scaffoldWidthMm;
+          widthBySide[sideKey] = dto.scaffoldWidthMm;
+        }
+      }
+      const refMm = 10000;
+      const parametric = runParametricPipeline(
+        dto.buildingOutline!,
+        (dto.obstacles ?? []).map((o) => ({ type: o.type, vertices: o.vertices })),
+        widthBySide,
+        refMm,
+      );
+      if (parametric.sideConfigs.length === wallsToCalculate.length) {
+        wallsToCalculate = wallsToCalculate.map((w, i) => ({
+          ...w,
+          scaffoldWidthMm: parametric.sideConfigs[i].widthMm,
+          layoutMode: parametric.sideConfigs[i].layoutMode,
+        }));
+        parametricTransitions = parametric.transitions.map((t) => ({
+          cornerIndex: t.cornerIndex,
+          edgeBefore: t.edgeBefore,
+          edgeAfter: t.edgeAfter,
+          widthBeforeMm: t.widthBeforeMm,
+          widthAfterMm: t.widthAfterMm,
+          innerPoint: t.innerPoint,
+          outerBefore: t.outerBefore,
+          outerAfter: t.outerAfter,
+        }));
+      }
+    }
 
     // NOTE: Removed polygon-to-walls conversion logic.
     // Walls are now passed directly from frontend as ordered segments from perimeter editor.
@@ -124,6 +168,7 @@ export class ScaffoldConfigService {
       ...result,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
+      ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
     };
     await client
       .from('scaffold_configurations')
@@ -187,7 +232,7 @@ export class ScaffoldConfigService {
     const scaffoldType = dto.scaffoldType || config.scaffoldType || 'kusabi';
     this.logger.log(`Updating and recalculating ${scaffoldType} config ${configId}`);
 
-    const wallsToCalculate = dto.walls.map((w) => ({
+    let wallsToCalculate = dto.walls.map((w, idx) => ({
       side: w.side,
       wallLengthMm: w.wallLengthMm,
       wallHeightMm: w.wallHeightMm,
@@ -195,7 +240,49 @@ export class ScaffoldConfigService {
       kaidanCount: w.kaidanCount,
       kaidanOffsets: w.kaidanOffsets,
       segments: w.segments,
+      scaffoldWidthMm: w.scaffoldWidthMm,
     }));
+
+    const hasOutline = dto.buildingOutline && dto.buildingOutline.length >= 3;
+    const hasObstacles = dto.obstacles && dto.obstacles.length > 0;
+    const hasWidthBySide = dto.widthBySide && Object.keys(dto.widthBySide).length > 0;
+    let parametricTransitions: ScaffoldCalculationResult['parametricTransitions'];
+
+    if (hasOutline && (hasObstacles || hasWidthBySide) && wallsToCalculate.length >= 3) {
+      const widthBySide: Record<number | string, number> = { ...(dto.widthBySide ?? {}) };
+      for (let i = 0; i < wallsToCalculate.length; i++) {
+        const w = wallsToCalculate[i];
+        const sideKey = w.side.toLowerCase();
+        if (widthBySide[sideKey] == null && widthBySide[i] == null) {
+          widthBySide[i] = dto.scaffoldWidthMm;
+          widthBySide[sideKey] = dto.scaffoldWidthMm;
+        }
+      }
+      const refMm = 10000;
+      const parametric = runParametricPipeline(
+        dto.buildingOutline!,
+        (dto.obstacles ?? []).map((o) => ({ type: o.type, vertices: o.vertices })),
+        widthBySide,
+        refMm,
+      );
+      if (parametric.sideConfigs.length === wallsToCalculate.length) {
+        wallsToCalculate = wallsToCalculate.map((w, i) => ({
+          ...w,
+          scaffoldWidthMm: parametric.sideConfigs[i].widthMm,
+          layoutMode: parametric.sideConfigs[i].layoutMode,
+        }));
+        parametricTransitions = parametric.transitions.map((t) => ({
+          cornerIndex: t.cornerIndex,
+          edgeBefore: t.edgeBefore,
+          edgeAfter: t.edgeAfter,
+          widthBeforeMm: t.widthBeforeMm,
+          widthAfterMm: t.widthAfterMm,
+          innerPoint: t.innerPoint,
+          outerBefore: t.outerBefore,
+          outerAfter: t.outerAfter,
+        }));
+      }
+    }
 
     const client = this.supabase.getClient();
     await client.from('calculated_quantities').delete().eq('config_id', configId);
@@ -249,6 +336,7 @@ export class ScaffoldConfigService {
       ...result,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
+      ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);

@@ -21,6 +21,8 @@ export interface WallInput {
   /** Multi-segment wall definition (stepped/L-shaped walls).
    *  If provided, wallLengthMm = sum of segments + return wall transitions. */
   segments?: WallSegment[];
+  /** Per-wall scaffold width (600/900/1200). Overrides global scaffoldWidthMm. */
+  scaffoldWidthMm?: number;
 }
 
 export interface CreateScaffoldConfigDto {
@@ -31,6 +33,8 @@ export interface CreateScaffoldConfigDto {
   structureType?: '改修工事' | 'S造' | 'RC造';
   walls: WallInput[];
   scaffoldWidthMm: number;
+  /** Per-side scaffold width. e.g. { north: 900, south: 600 }. Overrides scaffoldWidthMm for matching sides. */
+  widthBySide?: Record<string, number>;
   // Kusabi-specific
   preferredMainTatejiMm?: number;
   topGuardHeightMm?: number;
@@ -113,6 +117,10 @@ export interface WallCalculationResult {
   /** Multi-segment wall shape (passed through from input) */
   segments?: WallSegment[];
   components: CalculatedComponent[];
+  /** Per-wall scaffold width used (from parametric or global). */
+  scaffoldWidthMm?: number;
+  /** Buragetto layout: bracket = single-pole when obstacle too close. */
+  layoutMode?: 'double_post' | 'bracket';
   levelCalc: {
     fullLevels: number;
     jackBaseAdjustmentMm: number;

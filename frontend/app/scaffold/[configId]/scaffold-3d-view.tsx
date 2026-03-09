@@ -82,7 +82,12 @@ const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 /**
  * Build polygon vertices from stored vertices or regular polygon fallback.
  * Returns 3D positions on XZ plane (in meters). Always NaN-safe.
- * Stored vertices may be: (a) mm — divide by 1000; (b) 0–1 fraction (e.g. image outline) — scale to meters from wall lengths; (c) already meters.
+ *
+ * Rules:
+ * - Uniform scale: X and Z use the SAME scale factor (no aspect distortion).
+ * - 90° corners: For 4 walls (rectangle), use explicit rectangle with correct dimensions.
+ * - Closed loop: Last vertex connects back to first; all n edges use wall lengths.
+ * - Dimensions: Each edge length = walls[i].wallLengthMm (e.g. 11'-6" = 3505mm).
  */
 function buildPolygonVertices(
   walls: WallCalculationResult[],
@@ -104,64 +109,9 @@ function buildPolygonVertices(
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
-  // ── Use actual polygon vertices if available & valid ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(v => ({
-      x: Number.isFinite(v.xFrac) ? v.xFrac : 0,
-      z: Number.isFinite(v.yFrac) ? v.yFrac : 0,
-    }));
-    const xs = raw.map(v => v.x);
-    const zs = raw.map(v => v.z);
-    const spread = Math.max(
-      Math.max(...xs) - Math.min(...xs),
-      Math.max(...zs) - Math.min(...zs),
-    );
-    // Don't return [] for degenerate outline — fall through to length-based fallback so 3D still renders
-    if (spread >= 1e-6) {
-
-    // Detect units: fraction 0–1 (e.g. from image outline), mm, or meters
-    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
-    let verts: { x: number; z: number }[];
-
-    if (maxCoord <= 1.1 && spread <= 1.1) {
-      // Likely 0–1 fraction: scale to meters using max wall length as reference
-      const refM = Math.max(...walls.map(w => Math.max(w.wallLengthMm, 600))) / 1000;
-      const scale = refM / Math.max(spread, 0.001);
-      verts = raw.map(v => ({ x: v.x * scale, z: v.z * scale }));
-    } else if (spread > 1000 || maxCoord > 1000) {
-      // Likely mm
-      verts = raw.map(v => ({ x: v.x / 1000, z: v.z / 1000 }));
-    } else {
-      // Assume already in meters (e.g. fallback from another path)
-      verts = raw.map(v => ({ x: v.x, z: v.z }));
-    }
-
-    const spreadM = Math.max(
-      Math.max(...verts.map(v => v.x)) - Math.min(...verts.map(v => v.x)),
-      Math.max(...verts.map(v => v.z)) - Math.min(...verts.map(v => v.z)),
-    );
-    if (spreadM > 0.01) {
-      // Re-scale each edge to exactly walls[i].wallLengthMm while preserving the original
-      // edge directions from the stored polygon. This ensures scaffold geometry never
-      // overshoots the polygon edge (edge i length === walls[i].wallLengthMm / 1000).
-      const corrected: { x: number; z: number }[] = [{ ...verts[0] }];
-      for (let i = 0; i < n - 1; i++) {
-        const from = corrected[i];
-        const rawDx = verts[i + 1].x - verts[i].x;
-        const rawDz = verts[i + 1].z - verts[i].z;
-        const rawLen = Math.hypot(rawDx, rawDz);
-        if (rawLen < 0.001) { corrected.push({ x: from.x, z: from.z }); continue; }
-        const tgtLen = walls[i].wallLengthMm / 1000;
-        corrected.push({ x: from.x + (rawDx / rawLen) * tgtLen, z: from.z + (rawDz / rawLen) * tgtLen });
-      }
-      return corrected;
-    }
-    }
-  }
-
-  // ── Fallback: place walls as a rectangle (4 walls) or regular polygon ──
+  // ── 4 walls: Explicit rectangle with 90° corners and exact dimensions ──
+  // Avoids distortion from stored vertices; ensures correct depth (Z) vs width (X).
   if (n === 4) {
-    // For 4 walls, assume rectangle: sides 0,2 are parallel, 1,3 are parallel
     const w0 = Math.max(walls[0].wallLengthMm, 600) / 1000;
     const w1 = Math.max(walls[1].wallLengthMm, 600) / 1000;
     return [
@@ -172,7 +122,66 @@ function buildPolygonVertices(
     ];
   }
 
-  // Generic: place walls at equal turning angles (best-effort)
+  // ── Use stored vertices for non-rectangular shapes (n !== 4) ──
+  if (storedVertices && storedVertices.length >= n && n !== 4) {
+    const raw = storedVertices.slice(0, n).map(v => ({
+      x: Number.isFinite(v.xFrac) ? v.xFrac : 0,
+      z: Number.isFinite(v.yFrac) ? v.yFrac : 0,
+    }));
+    const xs = raw.map(v => v.x);
+    const zs = raw.map(v => v.z);
+    const spreadX = Math.max(...xs) - Math.min(...xs);
+    const spreadZ = Math.max(...zs) - Math.min(...zs);
+    const spread = Math.max(spreadX, spreadZ, 1e-6);
+    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
+
+    if (spread >= 1e-6) {
+      let verts: { x: number; z: number }[];
+      if (maxCoord <= 1.1 && spread <= 1.1) {
+        // 0–1 fraction: UNIFORM scale (same factor for X and Z) to preserve aspect
+        const refM = Math.max(...walls.map(w => Math.max(w.wallLengthMm, 600))) / 1000;
+        const scale = refM / spread;
+        verts = raw.map(v => ({ x: v.x * scale, z: v.z * scale }));
+      } else if (spread > 1000 || maxCoord > 1000) {
+        verts = raw.map(v => ({ x: v.x / 1000, z: v.z / 1000 }));
+      } else {
+        verts = raw.map(v => ({ x: v.x, z: v.z }));
+      }
+
+      const spreadM = Math.max(
+        Math.max(...verts.map(v => v.x)) - Math.min(...verts.map(v => v.x)),
+        Math.max(...verts.map(v => v.z)) - Math.min(...verts.map(v => v.z)),
+      );
+      if (spreadM > 0.01) {
+        // Rebuild polygon: each edge i has length walls[i].wallLengthMm, direction from stored.
+        // CLOSED LOOP: include the closing edge (n-1) -> 0.
+        const corrected: { x: number; z: number }[] = [{ ...verts[0] }];
+        for (let i = 0; i < n; i++) {
+          const next = (i + 1) % n;
+          const rawDx = verts[next].x - verts[i].x;
+          const rawDz = verts[next].z - verts[i].z;
+          const rawLen = Math.hypot(rawDx, rawDz);
+          const tgtLen = walls[i].wallLengthMm / 1000;
+          const from = corrected[i];
+          if (rawLen < 0.001) {
+            if (next > 0) corrected.push({ x: from.x, z: from.z });
+            continue;
+          }
+          const dx = (rawDx / rawLen) * tgtLen;
+          const dz = (rawDz / rawLen) * tgtLen;
+          if (next > 0) {
+            corrected.push({ x: from.x + dx, z: from.z + dz });
+          } else {
+            // Closing edge: ensure vertex 0 is reached (closed loop)
+            corrected[0] = { x: from.x + dx, z: from.z + dz };
+          }
+        }
+        return corrected;
+      }
+    }
+  }
+
+  // ── Generic fallback: place walls at equal turning angles (best-effort) ──
   const extAngle = (2 * Math.PI) / n;
   let angle = 0;
   let cx = 0, cz = 0;
@@ -468,7 +477,6 @@ export default function Scaffold3DView({
       const braceMat = pipeDarkMat;
       const habakiMatEff = habakiMat;
 
-      const widthM = result.scaffoldWidthMm / 1000;
       const topGuardM = result.topGuardHeightMm / 1000;
       const scaffoldType: 'kusabi' | 'wakugumi' = result.scaffoldType || 'kusabi';
       const isWakugumi = scaffoldType === 'wakugumi';
@@ -553,6 +561,7 @@ export default function Scaffold3DView({
       // First span: 4 posts. Each next span: reuse 2 closest, add 2 new → N+1 positions, 2 posts per position.
       // ══════════════════════════════════════════════════════
       function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number) {
+        const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
         const allSpans: number[] = wall.spans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
@@ -749,6 +758,7 @@ export default function Scaffold3DView({
 
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
+        const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const v1 = verts[i];
         const v2 = verts[(i + 1) % verts.length];
 
@@ -798,9 +808,9 @@ export default function Scaffold3DView({
         const edgeDirX = dx / edgeLen;
         const edgeDirZ = dz / edgeLen;
 
-        // Translation: place origin at v1, offset outward by widthM so walls go all the way to the corner.
-        const tx = (v1.x - cx) + nx * widthM;
-        const tz = (v1.z - cz) + nz * widthM;
+        // Translation: place origin at v1, offset outward by wallWidthM so walls go all the way to the corner.
+        const tx = (v1.x - cx) + nx * wallWidthM;
+        const tz = (v1.z - cz) + nz * wallWidthM;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -825,7 +835,7 @@ export default function Scaffold3DView({
         if (totalH > maxH) maxH = totalH;
 
         const dist = Math.hypot(v1.x - cx, v1.z - cz);
-        if (dist + widthM > maxExtent) maxExtent = dist + widthM;
+        if (dist + wallWidthM > maxExtent) maxExtent = dist + wallWidthM;
 
         // Visible edge segment for click target hint (slightly above ground)
         const edgePts = [
@@ -842,8 +852,8 @@ export default function Scaffold3DView({
         scene.add(edgeLine);
 
         // ── Dimension labels (length + height) — same as 2D: scaffold height = levels×LEVEL_H + top guard + jack ────────────
-        const midXw = (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.1);
-        const midZw = (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.1);
+        const midXw = (v1.x + v2.x) / 2 - cx + nx * (wallWidthM * 1.1);
+        const midZw = (v1.z + v2.z) / 2 - cz + nz * (wallWidthM * 1.1);
         const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
         const levelsForH = wall.levelCalc?.fullLevels ?? 0;
         const scaffoldHeightM = GROUND_Y + JACK_H + levelsForH * LEVEL_H + topGuardM;
@@ -860,13 +870,13 @@ export default function Scaffold3DView({
 
         // Invisible hit area to allow clicking each wall segment. Use ~85% of edge length.
         const clickBoxLen = Math.max(edgeLen * 0.85, 0.3);
-        const clickGeo = new THREE.BoxGeometry(clickBoxLen, Math.max(totalH, 2), Math.max(widthM * 0.35, 0.35));
+        const clickGeo = new THREE.BoxGeometry(clickBoxLen, Math.max(totalH, 2), Math.max(wallWidthM * 0.35, 0.35));
         const clickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
         const clickMesh = new THREE.Mesh(clickGeo, clickMat);
         clickMesh.position.set(
-          (v1.x + v2.x) / 2 - cx + nx * (widthM * 0.42),
+          (v1.x + v2.x) / 2 - cx + nx * (wallWidthM * 0.42),
           Math.max(totalH, 2) / 2,
-          (v1.z + v2.z) / 2 - cz + nz * (widthM * 0.42),
+          (v1.z + v2.z) / 2 - cz + nz * (wallWidthM * 0.42),
         );
         clickMesh.rotation.y = Math.atan2(dz, dx);
         (clickMesh as any).userData = { wallIndex: i };
@@ -878,9 +888,9 @@ export default function Scaffold3DView({
           edge: edgeLine,
         });
         wallFocusRef.current.push({
-          x: (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.6),
+          x: (v1.x + v2.x) / 2 - cx + nx * (wallWidthM * 1.6),
           y: Math.max(totalH * 0.45, 2.2),
-          z: (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.6),
+          z: (v1.z + v2.z) / 2 - cz + nz * (wallWidthM * 1.6),
         });
         clickTargetsRef.current.push(clickMesh);
       }
@@ -912,7 +922,10 @@ export default function Scaffold3DView({
         const cosTheta = Math.max(-1, Math.min(1, -(axn * bxn + azn * bzn)));
         const angleRad = Math.acos(cosTheta);
         const angleDeg = (angleRad * 180) / Math.PI;
-        const cornerOpeningM = 2 * widthM * Math.tan(angleRad / 2);
+        const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const cornerWidthM = Math.max(wPrev, wCurr);
+        const cornerOpeningM = 2 * cornerWidthM * Math.tan(angleRad / 2);
         const labelY = Math.min(2.5, Math.max(1.2, maxH * 0.35));
         const lx = curr.x - cx;
         const lz = curr.z - cz;
@@ -967,21 +980,21 @@ export default function Scaffold3DView({
       (gridHelper.material as THREE.Material).transparent = true;
       scene.add(gridHelper);
 
-      // ── Camera position — fit everything in view ───────
+      // ── Camera: center on building, maintain true proportions (no stretch) ───────
       const extent = Math.max(maxExtent, 5);
-      const dist = Math.max(extent * 2.2, maxH * 2, 12);
+      const dist = Math.max(extent * 2.5, maxH * 2.2, 12);
       const centerY = Math.max(maxH * 0.4, 2);
       camera.position.set(
-        dist * 0.55,
-        centerY + dist * 0.45,
-        dist * 0.65,
+        dist * 0.6,
+        centerY + dist * 0.5,
+        dist * 0.6,
       );
-      camera.lookAt(0, centerY * 0.6, 0);
+      camera.lookAt(0, centerY * 0.5, 0);
       camera.far = dist * 5;
       camera.updateProjectionMatrix();
 
       // ── Orbit Controls ───────────────────────────────
-      const target = new THREE.Vector3(0, centerY * 0.6, 0);
+      const target = new THREE.Vector3(0, centerY * 0.5, 0);
       const camOffset = new THREE.Vector3().subVectors(camera.position, target);
       let spherical = new THREE.Spherical().setFromVector3(camOffset);
       let isDragging = false;
@@ -1166,7 +1179,6 @@ export default function Scaffold3DView({
   // Corner spaces: angle (degrees) and opening distance (m) per corner for overlay
   const cornerData = useMemo(() => {
     const verts = buildPolygonVertices(walls, result?.polygonVertices);
-    const widthM = (result?.scaffoldWidthMm ?? 900) / 1000;
     if (verts.length < 2) return { count: 0, angles: [] as number[], openings: [] as number[] };
     const angles: number[] = [];
     const openings: number[] = [];
@@ -1183,7 +1195,10 @@ export default function Scaffold3DView({
       const cosTheta = Math.max(-1, Math.min(1, -((ax * bx + az * bz) / (la * lb))));
       const angleRad = Math.acos(cosTheta);
       angles.push((angleRad * 180) / Math.PI);
-      openings.push(2 * widthM * Math.tan(angleRad / 2));
+      const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+      const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+      const cornerWidthM = Math.max(wPrev, wCurr);
+      openings.push(2 * cornerWidthM * Math.tan(angleRad / 2));
     }
     return { count: verts.length, angles, openings };
   }, [walls, result?.polygonVertices, result?.scaffoldWidthMm]);

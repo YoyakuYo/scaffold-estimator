@@ -22,6 +22,9 @@ export class WallSegmentDto {
   offsetMm: number;
 }
 
+/** Per-wall scaffold width (600/900/1200). When set, overrides global scaffoldWidthMm for this wall. */
+export const SCAFFOLD_WIDTH_OPTIONS = [600, 900, 1200] as const;
+
 export class WallInputDto {
   @IsString()
   side: string; // Can be 'north' | 'south' | 'east' | 'west' or arbitrary edge names for complex polygons
@@ -59,6 +62,13 @@ export class WallInputDto {
   @ValidateNested({ each: true })
   @Type(() => WallSegmentDto)
   segments?: WallSegmentDto[];
+
+  /** Per-wall scaffold width (600/900/1200). Overrides global scaffoldWidthMm for this wall. */
+  @IsOptional()
+  @IsNumber()
+  @Min(600)
+  @Max(1200)
+  scaffoldWidthMm?: number;
 }
 
 export class CreateScaffoldConfigDto {
@@ -87,9 +97,13 @@ export class CreateScaffoldConfigDto {
   @Type(() => WallInputDto)
   walls: WallInputDto[];
 
-  /** Scaffold width (front↔back): 600, 900, 1200 */
+  /** Scaffold width (front↔back): 600, 900, 1200. Used when widthBySide not set. */
   @IsNumber()
   scaffoldWidthMm: number;
+
+  /** Per-side scaffold width (mm). e.g. { north: 900, south: 600 }. Overrides scaffoldWidthMm for matching sides. */
+  @IsOptional()
+  widthBySide?: Record<string, number>;
 
   /** Preferred main tateji: 1800, 2700, 3600 (kusabi only) */
   @IsOptional()

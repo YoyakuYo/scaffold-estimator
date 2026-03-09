@@ -54,6 +54,10 @@ function isLikelyFractionCoords(points: Array<{ x: number; z: number }>): boolea
   return maxCoord <= 1.1 && spread <= 1.1;
 }
 
+/**
+ * Normalize footprint to mm. Uses UNIFORM scale for X and Z (same factor) to preserve
+ * aspect ratio and avoid distortion. 90° corners in the source are preserved.
+ */
 function normalizeFootprintToMm(
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
   refLengthMm?: number,
@@ -68,9 +72,11 @@ function normalizeFootprintToMm(
 
   const xs = raw.map((p) => p.x);
   const zs = raw.map((p) => p.z);
-  const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+  const spreadX = Math.max(...xs) - Math.min(...xs);
+  const spreadZ = Math.max(...zs) - Math.min(...zs);
+  const spread = Math.max(spreadX, spreadZ, 0.001);
   const target = Math.max(6000, refLengthMm ?? 10000);
-  const scale = target / Math.max(spread, 0.001);
+  const scale = target / spread;
   return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
 }
 

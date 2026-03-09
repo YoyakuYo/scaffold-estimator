@@ -536,7 +536,7 @@ function QuotationTable({ result }: { result: any }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Span Info per wall + wall dimensions + floor labels */}
+      {/* Span Info per wall + wall dimensions + scaffold level labels */}
       <div className="p-4 bg-gray-50 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-600 mb-2">{t('result', 'spanConfig')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -568,18 +568,18 @@ function QuotationTable({ result }: { result: any }) {
             );
           })}
         </div>
-        {/* Floor labels (1階, 2階, ... with height range) */}
+        {/* Scaffold level labels (1段, 2段, ... with height range) */}
         {result.totalLevels > 0 && (
           <div className="mt-4 pt-3 border-t border-gray-200">
             <h4 className="text-xs font-semibold text-gray-500 mb-2">
-              {locale === 'ja' ? '階（フロア）' : 'Floors'}
+              {t('result', 'scaffoldLevelsHeader')}
             </h4>
             <div className="flex flex-wrap gap-2">
               {Array.from({ length: result.totalLevels }, (_, i) => i + 1).map((f) => {
                 const levelHeightMm = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm || 1800) : 1800;
                 const from = (f - 1) * levelHeightMm;
                 const to = f * levelHeightMm;
-                const label = f === 1 ? (locale === 'ja' ? '1階' : '1st') : f === 2 ? (locale === 'ja' ? '2階' : '2nd') : locale === 'ja' ? `${f}階` : `${f}th`;
+                const label = locale === 'ja' ? `${f}段` : `Level ${f}`;
                 return (
                   <span
                     key={f}

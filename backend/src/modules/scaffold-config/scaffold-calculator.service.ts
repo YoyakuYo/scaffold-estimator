@@ -40,6 +40,10 @@ export interface WallCalculationInput {
   /** Multi-segment wall definition. If provided, wallLengthMm should
    *  already be the total (segments + return transitions). */
   segments?: WallSegment[];
+  /** Per-wall scaffold width (600/900/1200). Overrides global when set. */
+  scaffoldWidthMm?: number;
+  /** Buragetto: 'bracket' = single-pole + bracket when obstacle clearance < width+200mm. */
+  layoutMode?: 'double_post' | 'bracket';
 }
 
 export interface ScaffoldCalculationInput {
@@ -77,6 +81,10 @@ export interface WallCalculationResult {
   needsExtendedBay?: boolean;      // Whether extended bay pattern is used (width <= 600mm)
   segments?: WallSegment[];        // Multi-segment shape (passed through from input)
   components: CalculatedComponent[];
+  /** Per-wall scaffold width used (from parametric or global). */
+  scaffoldWidthMm?: number;
+  /** Buragetto layout: bracket = single-pole when obstacle too close. */
+  layoutMode?: 'double_post' | 'bracket';
 }
 
 export interface ScaffoldCalculationResult {
@@ -91,6 +99,17 @@ export interface ScaffoldCalculationResult {
   frameSizeMm?: number;
   habakiCountPerSpan?: number;
   endStopperType?: 'nuno' | 'frame';
+  /** Parametric: transition connections at corners where width changes (for mitered 3D). */
+  parametricTransitions?: Array<{
+    cornerIndex: number;
+    edgeBefore: number;
+    edgeAfter: number;
+    widthBeforeMm: number;
+    widthAfterMm: number;
+    innerPoint: { x: number; y: number };
+    outerBefore?: { x: number; y: number };
+    outerAfter?: { x: number; y: number };
+  }>;
 }
 
 // Helper to get Japanese label for any side (polygon edges)
@@ -198,7 +217,7 @@ export class ScaffoldCalculatorService {
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
     const L = levelCalc.fullLevels;
-    const widthMm = input.scaffoldWidthMm;
+    const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
 
     // ─── Convert kaidan offsets to span indices ──────────────
     // Helper: find which 2-span window is closest to an offset
@@ -559,6 +578,8 @@ export class ScaffoldCalculatorService {
       needsExtendedBay: needsExtendedBay,
       segments: wall.segments,
       components,
+      scaffoldWidthMm: widthMm,
+      layoutMode: wall.layoutMode ?? 'double_post',
     };
   }
 

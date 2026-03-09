@@ -143,7 +143,7 @@ export class ScaffoldCalculatorWakugumiService {
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;
-    const widthMm = input.scaffoldWidthMm;
+    const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
 
     // ─── Kaidan offset → span index mapping ──────────────
     const findKaidanSpanIndex = (offsetMm: number): number => {
@@ -490,6 +490,8 @@ export class ScaffoldCalculatorWakugumiService {
       needsExtendedBay,
       segments: wall.segments,
       components,
+      scaffoldWidthMm: widthMm,
+      layoutMode: wall.layoutMode ?? 'double_post',
     };
   }
 
