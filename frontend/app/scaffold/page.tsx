@@ -25,6 +25,8 @@ import {
   PenTool,
   ScanLine,
   Upload,
+  Check,
+  RotateCcw,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
@@ -70,6 +72,34 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
     total += Math.abs(segments[i].offsetMm - segments[i - 1].offsetMm);
   }
   return total;
+}
+
+/** Renders building footprint outline as SVG (for AI BIM double-check panel). */
+function BuildingShapeSvg({
+  outline,
+  className,
+}: {
+  outline: Array<{ xFrac: number; yFrac: number }>;
+  className?: string;
+}) {
+  if (outline.length < 3) return <div className={className} />;
+  const xs = outline.map((p) => p.xFrac);
+  const ys = outline.map((p) => p.yFrac);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const w = Math.max(maxX - minX, 1e-6);
+  const h = Math.max(maxY - minY, 1e-6);
+  const nx = (x: number) => (x - minX) / w;
+  const ny = (y: number) => (y - minY) / h;
+  const points = outline.map((p) => `${nx(p.xFrac)},${ny(p.yFrac)}`).join(' ');
+  const viewBox = '-0.05 -0.05 1.1 1.1';
+  return (
+    <svg viewBox={viewBox} preserveAspectRatio="xMidYMid meet" className={className}>
+      <polygon points={points} fill="#e0e7ff" stroke="#6366f1" strokeWidth={0.02} />
+    </svg>
+  );
 }
 
 // ─── Manual building geometry: single closed footprint, walls derived from it ───
@@ -201,6 +231,16 @@ function ScaffoldPageContent() {
   const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_bim'>('drawing');
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
+  /** After AI extract: show for double-check before creating config. */
+  const [aiBimPreview, setAiBimPreview] = useState<{
+    buildingHeightMm: number;
+    walls: WallInput[];
+    buildingOutline: Array<{ xFrac: number; yFrac: number }>;
+    scaffoldType: 'kusabi' | 'wakugumi';
+    frameSizeMm?: number;
+    dto: CreateScaffoldConfigDto;
+  } | null>(null);
+  const [aiBimConfirming, setAiBimConfirming] = useState(false);
   const scaffoldManagerRef = useRef<ScaffoldManager | null>(null);
   if (!scaffoldManagerRef.current) scaffoldManagerRef.current = new ScaffoldManager();
 
@@ -526,15 +566,18 @@ function ScaffoldPageContent() {
           AI BIM MODE — Vision-to-BIM upload
          ═══════════════════════════════════════════════════════ */}
       {inputMode === 'ai_bim' && !editConfigId && (
-        <div className="max-w-[800px] mx-auto px-4 pb-8">
+        <div className="max-w-[1200px] mx-auto px-4 pb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <ScanLine className="h-5 w-5 text-violet-600" />
               AI BIM Mode — 写真・図面から足場モデル
             </h2>
             <p className="text-sm text-gray-600 mb-6">
-              写真・青写真・DXF/CAD図面をアップロードすると、建物の外形と高さを検出し、くさび式足場（締め式・MHLW準拠）で3DモデルとBOMを生成します。
+              {aiBimPreview
+                ? '抽出結果を確認し、問題なければ「確認して足場モデルを作成」を押してください。'
+                : '写真・青写真・DXF/CAD図面をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
             </p>
+            {!aiBimPreview && (
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">クリックまたはドラッグでファイルをアップロード</span>
@@ -562,6 +605,7 @@ function ScaffoldPageContent() {
                     );
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
+                    const frameSize = scaffoldType === 'wakugumi' ? (footprint.frameSizeMm ?? 1800) : undefined;
                     const dto: CreateScaffoldConfigDto = {
                       projectId: 'default-project',
                       mode: 'manual',
@@ -571,13 +615,18 @@ function ScaffoldPageContent() {
                       scaffoldWidthMm: defaults.scaffoldWidthMm,
                       preferredMainTatejiMm: defaults.preferredMainTatejiMm,
                       topGuardHeightMm: defaults.topGuardHeightMm,
-                      ...(scaffoldType === 'wakugumi' && {
-                        frameSizeMm: footprint.frameSizeMm ?? 1800,
-                      }),
+                      ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
                     };
-                    const data = await scaffoldConfigsApi.createAndCalculate(dto);
-                    router.push(`/scaffold/${data.config.id}?aiBim=1`);
+                    setAiBimPreview({
+                      buildingHeightMm: footprint.buildingHeightMm,
+                      walls,
+                      buildingOutline,
+                      scaffoldType,
+                      frameSizeMm: frameSize,
+                      dto,
+                    });
+                    setAiBimError(null);
                   } catch (err: any) {
                     setAiBimError(err?.message || 'Analysis failed. Try another image or use Drawing/Quick mode.');
                   } finally {
@@ -598,6 +647,92 @@ function ScaffoldPageContent() {
               <div className="mt-4 flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
                 {aiBimError}
+              </div>
+            )}
+            )}
+
+            {aiBimPreview && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                    <p className="text-sm font-medium text-green-800 flex items-center gap-2">
+                      <Check className="h-5 w-5" />
+                      抽出完了 — 右側で内容を確認してください
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setAiBimPreview(null); setAiBimError(null); }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    別のファイルをアップロード
+                  </button>
+                </div>
+                <div className="border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-800">抽出結果の確認</h3>
+                  <div>
+                    <span className="text-xs font-medium text-gray-500">建物高さ</span>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {aiBimPreview.buildingHeightMm.toLocaleString()} mm
+                      {aiBimPreview.buildingHeightMm >= 1000 && (
+                        <span className="text-sm font-normal text-gray-600 ml-1">
+                          ({(aiBimPreview.buildingHeightMm / 1000).toFixed(1)} m)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 block mb-2">壁面ごとの長さ</span>
+                    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-100 border-b border-gray-200">
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">側</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (mm)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aiBimPreview.walls.map((w) => (
+                            <tr key={w.side} className="border-b border-gray-100 last:border-0">
+                              <td className="py-2 px-3 text-gray-800">{w.side}</td>
+                              <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 block mb-2">建物平面形</span>
+                    <BuildingShapeSvg outline={aiBimPreview.buildingOutline} className="w-full max-w-sm aspect-square rounded-lg border border-gray-200 bg-white" />
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <span className="text-xs text-gray-500">
+                      {aiBimPreview.scaffoldType === 'wakugumi' ? '枠組足場' : 'くさび式足場'}
+                      {aiBimPreview.frameSizeMm != null && ` · 建枠 ${aiBimPreview.frameSizeMm}mm`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={aiBimConfirming}
+                    onClick={async () => {
+                      if (!aiBimPreview) return;
+                      setAiBimConfirming(true);
+                      try {
+                        const data = await scaffoldConfigsApi.createAndCalculate(aiBimPreview.dto);
+                        router.push(`/scaffold/${data.config.id}?aiBim=1`);
+                      } catch (err: any) {
+                        setAiBimError(err?.message ?? 'Failed to create scaffold');
+                        setAiBimConfirming(false);
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 text-white font-medium hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {aiBimConfirming ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+                    {aiBimConfirming ? '作成中…' : '確認して足場モデルを作成'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
