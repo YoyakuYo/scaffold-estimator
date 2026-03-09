@@ -30,9 +30,20 @@ type ViewMode = 'all' | 'wall';
 
 // Technical palette (distinct per component for estimation/quotation)
 const C_TECH = {
-  post: 0x0f172a, brace: 0xb91c1c, tesuri: 0x1d4ed8, shitasan: 0x0e7490,
-  plank: 0xb45309, habaki: 0x44403c, jack: 0x334155, yokoji: 0x15803d,
-  topGuard: 0x6d28d9, frame: 0x4f46e5, endStopper: 0x7c3aed, stair: 0x047857,
+  // User-requested color scheme for 3D clarity
+  jack: 0x111827,      // black
+  brace: 0x2563eb,     // blue
+  tesuri: 0x16a34a,    // green
+  habaki: 0xef4444,    // red
+  plank: 0xf5c842,     // yellow
+  // Remaining components
+  post: 0x0f172a,
+  shitasan: 0x0e7490,
+  yokoji: 0x15803d,
+  topGuard: 0x6d28d9,
+  frame: 0x4f46e5,
+  endStopper: 0x7c3aed,
+  stair: 0x047857,
 };
 // Clean scaffold palette: light silver/grey metal, bright yellow planks
 const C = {
@@ -429,7 +440,9 @@ export default function Scaffold3DView({
       const postMat = pipeMat;
       const jackMatEff = jackMat;
       const plankMatEff = plankMat;
-      const nunoMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough }) : pipeMat;
+      const tesuriMat = isTech
+        ? new THREE.MeshStandardMaterial({ color: C_TECH.tesuri, metalness: metal, roughness: rough })
+        : pipeMat;
       const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : pipeMat;
       const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : pipeMat;
       const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
@@ -463,6 +476,43 @@ export default function Scaffold3DView({
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         parent.add(mesh);
+      }
+
+      function makeTextSprite(text: string, options?: { bg?: string; fg?: string; scale?: number }) {
+        const bg = options?.bg ?? 'rgba(15, 23, 42, 0.80)';
+        const fg = options?.fg ?? '#ffffff';
+        const scale = options?.scale ?? 1;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        const fontSize = 42;
+        ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+        const padX = 22;
+        const padY = 14;
+        const metrics = ctx.measureText(text);
+        const w = Math.ceil(metrics.width + padX * 2);
+        const h = Math.ceil(fontSize + padY * 2);
+        canvas.width = w;
+        canvas.height = h;
+        ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+
+        // background
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+        // text
+        ctx.fillStyle = fg;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, padX, h / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(mat);
+        const base = 1.2 * scale;
+        sprite.scale.set(base * (w / h), base, 1);
+        sprite.renderOrder = 999;
+        return sprite;
       }
 
       function addBox(
@@ -512,11 +562,18 @@ export default function Scaffold3DView({
           addBox(group, totalLen / 2, sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
         }
 
-        // No jack bases — only real posts (2×(N+1) per wall). No extra post-like elements at base.
+        // ── Jack bases (black in technical mode) ──────────
+        // Visually separate the jack from the main post so users can see it.
+        for (const px of postX) {
+          for (const pz of [0, widthM]) {
+            // Short cylinder for jack base
+            addPipe(group, px, 0, pz, px, JACK_H, pz, jackMatEff, PIPE_R * 0.95);
+          }
+        }
 
         // ── Vertical posts: 2 per position, N+1 positions for N spans. From ground (0) to top. ─────
-        const postBaseY = 0;
-        const postHeightFromGround = JACK_H + totalPostH;
+        const postBaseY = JACK_H;
+        const postHeightFromGround = totalPostH;
         for (const px of postX) {
           for (const pz of [0, widthM]) {
             addRealisticPost(THREE, group, px, postBaseY, pz, postHeightFromGround, postMat);
@@ -562,6 +619,20 @@ export default function Scaffold3DView({
             const midX = (x1 + x2) / 2;
             const isStairSpan = uniqueStairPos.includes(i);
 
+            // Braces (ブレス) — outer face only (z=0), 1 per span per level.
+            // Render as an X for clarity (two diagonals).
+            const braceBottomY = JACK_H + (lv - 1) * LEVEL_H + 0.18;
+            const braceTopY = y - 0.18;
+            addPipe(group, x1, braceBottomY, 0, x2, braceTopY, 0, braceMat, PIPE_R * 0.75);
+            addPipe(group, x1, braceTopY, 0, x2, braceBottomY, 0, braceMat, PIPE_R * 0.75);
+
+            // Guard rails (手摺/布材) — inner face only (z=widthM), 2 rails per span per level.
+            // Use fixed heights for consistency (0.90m and 0.45m above platform).
+            const railTop = y + 0.9;
+            const railMid = y + 0.45;
+            addPipe(group, x1, railTop, widthM, x2, railTop, widthM, tesuriMat, PIPE_R * 0.65);
+            addPipe(group, x1, railMid, widthM, x2, railMid, widthM, tesuriMat, PIPE_R * 0.6);
+
             // Plank / Anchi
             const spanMm = spans[i];
             const plankColorMat = getPlankMat(spanMm);
@@ -574,6 +645,19 @@ export default function Scaffold3DView({
             // Habaki / Toe boards
             addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanM - 0.04, habakiMatEff);
             addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
+          }
+
+          // Top guard posts + top rail (最上段) — inner face only.
+          // Add small vertical posts at each inner post position, then a top rail across the wall.
+          if (lv === levelsToBuild && topGuardM > 0) {
+            for (const px of postX) {
+              addPipe(group, px, y, widthM, px, y + topGuardM, widthM, topGuardMat, PIPE_R * 0.7);
+            }
+            for (let i = 0; i < spans.length; i++) {
+              const x1 = postX[i];
+              const x2 = postX[i + 1];
+              addPipe(group, x1, y + topGuardM, widthM, x2, y + topGuardM, widthM, topGuardMat, PIPE_R * 0.65);
+            }
           }
         }
 
@@ -735,6 +819,22 @@ export default function Scaffold3DView({
         });
         const edgeLine = new THREE.Line(edgeGeo, edgeMat);
         scene.add(edgeLine);
+
+        // ── Dimension labels (length + height) ────────────
+        const midXw = (v1.x + v2.x) / 2 - cx + nx * (widthM * 1.1);
+        const midZw = (v1.z + v2.z) / 2 - cz + nz * (widthM * 1.1);
+        const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
+        const wallHgtMm = (wall as any).wallHeightMm ?? result?.buildingHeightMm ?? result?.buildingHeight ?? 3000;
+        const lenLabel = makeTextSprite(`L ${(wallLenMm / 1000).toFixed(2)}m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
+        const hLabel = makeTextSprite(`H ${(wallHgtMm / 1000).toFixed(2)}m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
+        if (lenLabel) {
+          lenLabel.position.set(midXw, 0.65, midZw);
+          scene.add(lenLabel);
+        }
+        if (hLabel) {
+          hLabel.position.set(midXw, Math.max(totalH * 0.65, 2.2), midZw);
+          scene.add(hLabel);
+        }
 
         // Invisible hit area to allow clicking each wall segment. Use ~85% of edge length
         // so two adjacent walls' boxes do not overlap at corners (avoids a visible "vertical plank" artifact).
