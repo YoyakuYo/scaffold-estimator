@@ -34,9 +34,9 @@ export interface BuildingEdge {
 
 export interface ObstacleInput {
   type: 'balcony' | 'ac' | 'pillar';
-  vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
-  /** For pillars: center and radius in mm */
-  center?: Point2D;
+  vertices?: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+  /** For pillars: center (mm or xFrac/yFrac) and radius in mm */
+  center?: { x?: number; y?: number; xFrac?: number; yFrac?: number };
   radiusMm?: number;
 }
 
@@ -106,10 +106,10 @@ function buildObstacleSet(
 
   for (const obs of obstacles) {
     if (obs.center != null && obs.radiusMm != null) {
-      circles.push({ center: obs.center, radius: obs.radiusMm });
+      circles.push({ center: toMm(obs.center), radius: obs.radiusMm });
       continue;
     }
-    const verts = obs.vertices.map(toMm).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+    const verts = (obs.vertices ?? []).map(toMm).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     for (let i = 0; i < verts.length - 1; i++) {
       segments.push({ start: verts[i], end: verts[i + 1] });
     }

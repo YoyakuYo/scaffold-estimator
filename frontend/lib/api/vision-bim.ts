@@ -17,11 +17,18 @@ export interface VisionFootprintResult {
   frameSizeMm?: number;
   /** True when wallLengthsMm came from explicit dimension text on the plan. */
   wallLengthsFromDimText?: boolean;
-  /** Detected balconies and AC (outdoor unit) areas; affects clearance / Buragetto. */
-  obstacles?: Array<{
-    type: 'balcony' | 'ac';
-    vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
-  }>;
+  /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */
+  obstacles?: Array<
+    | {
+        type: 'balcony' | 'ac';
+        vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+      }
+    | {
+        type: 'pillar';
+        center: { x: number; y: number } | { xFrac: number; yFrac: number };
+        radiusMm: number;
+      }
+  >;
 }
 
 export const visionBimApi = {

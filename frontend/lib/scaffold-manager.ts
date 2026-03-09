@@ -78,7 +78,9 @@ export class ScaffoldManager {
     refLengthMm?: number,
     options?: { wallLengthsMm?: number[] },
   ): { walls: WallInput[]; buildingOutline: FootprintVertex[] } {
-    const graph = buildGraphFromFootprint(vertices, refLengthMm);
+    const graph = buildGraphFromFootprint(vertices, refLengthMm, {
+      wallLengthsMm: options?.wallLengthsMm,
+    });
     this.state = {
       ...this.state,
       buildingGraph: graph,

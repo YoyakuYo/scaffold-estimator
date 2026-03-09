@@ -274,8 +274,11 @@ function ScaffoldPageContent() {
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
-    /** Detected balconies / AC areas from vision (for display and future Buragetto). */
-    obstacles?: Array<{ type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }>;
+    /** Detected balconies / AC areas / pillars from vision (for display and Buragetto). */
+    obstacles?: Array<
+      | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
+      | { type: 'pillar'; center: { x: number; y: number } | { xFrac: number; yFrac: number }; radiusMm: number }
+    >;
     dto: CreateScaffoldConfigDto;
   } | null>(null);
   const [aiBimConfirming, setAiBimConfirming] = useState(false);
@@ -642,9 +645,7 @@ function ScaffoldPageContent() {
                   try {
                     const raw = await visionBimApi.analyze(file);
                     const footprint = raw as VisionFootprintResult;
-                    type ObstacleVertex = { x: number; y: number } | { xFrac: number; yFrac: number };
-                    type WithObstacles = { obstacles?: Array<{ type: 'balcony' | 'ac'; vertices: ObstacleVertex[] }> };
-                    const obstacles = (raw as WithObstacles).obstacles;
+                    const obstacles = footprint.obstacles;
                     const manager = scaffoldManagerRef.current!;
                     const refMm = footprint.vertices.some((v) => 'xFrac' in v)
                       ? (footprint.scaleDenominator ? 20000 : 10000)
@@ -786,6 +787,9 @@ function ScaffoldPageContent() {
                         バルコニー {aiBimPreview.obstacles.filter((o) => o.type === 'balcony').length} 箇所
                         {aiBimPreview.obstacles.some((o) => o.type === 'ac') && (
                           <> · 室外機・AC {aiBimPreview.obstacles.filter((o) => o.type === 'ac').length} 箇所</>
+                        )}
+                        {aiBimPreview.obstacles.some((o) => o.type === 'pillar') && (
+                          <> · 柱 {aiBimPreview.obstacles.filter((o) => o.type === 'pillar').length} 箇所</>
                         )}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">クリアランス不足時は当該区間を単管＋ブラケット（ブラgetto）で提案します。</p>

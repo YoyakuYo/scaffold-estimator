@@ -80,7 +80,11 @@ export class ScaffoldConfigService {
       const refMm = 10000;
       const parametric = runParametricPipeline(
         dto.buildingOutline!,
-        (dto.obstacles ?? []).map((o) => ({ type: o.type, vertices: o.vertices })),
+        (dto.obstacles ?? []).map((o) =>
+          o.type === 'pillar' && 'center' in o && 'radiusMm' in o
+            ? { type: 'pillar' as const, center: o.center, radiusMm: o.radiusMm }
+            : { type: o.type as 'balcony' | 'ac', vertices: o.vertices },
+        ),
         widthBySide,
         refMm,
       );
@@ -261,7 +265,11 @@ export class ScaffoldConfigService {
       const refMm = 10000;
       const parametric = runParametricPipeline(
         dto.buildingOutline!,
-        (dto.obstacles ?? []).map((o) => ({ type: o.type, vertices: o.vertices })),
+        (dto.obstacles ?? []).map((o) =>
+          o.type === 'pillar' && 'center' in o && 'radiusMm' in o
+            ? { type: 'pillar' as const, center: o.center, radiusMm: o.radiusMm }
+            : { type: o.type as 'balcony' | 'ac', vertices: o.vertices },
+        ),
         widthBySide,
         refMm,
       );

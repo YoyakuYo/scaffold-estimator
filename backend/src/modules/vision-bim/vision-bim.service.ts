@@ -31,12 +31,22 @@ export interface VisionFootprintResult {
   /**
    * Optional obstacles / special areas that affect scaffold layout (clearance, Buragetto).
    * Balconies and AC (outdoor unit) areas reduce clearance and may trigger single-pole + bracket layout.
+   * Pillars (columns) near the perimeter trigger Single-Pole + Buragetto when scaffold path intersects.
    */
-  obstacles?: Array<{
-    type: 'balcony' | 'ac';
-    /** Polygon vertices in same coordinate system as vertices (mm or xFrac/yFrac). */
-    vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
-  }>;
+  obstacles?: Array<
+    | {
+        type: 'balcony' | 'ac';
+        /** Polygon vertices in same coordinate system as vertices (mm or xFrac/yFrac). */
+        vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+      }
+    | {
+        type: 'pillar';
+        /** Center in same coordinate system as vertices. */
+        center: { x: number; y: number } | { xFrac: number; yFrac: number };
+        /** Radius in mm (or fraction of ref length). */
+        radiusMm: number;
+      }
+  >;
 }
 
 /** Supported CAD/plan extensions (lowercase). */
@@ -50,6 +60,8 @@ OUTPUT FORMAT: Output ONLY a raw JSON object. No markdown, no code fences, no pr
 
 Required fields:
 - vertices: array of polygon vertices tracing the EXTERIOR building wall outline in perimeter order (clockwise or counter-clockwise).
+  CONTOUR-FOLLOWING (critical): Trace the actual perimeter — do NOT use bounding boxes or convex hulls.
+  Include INTERIOR VERTICES for L-shapes, notches, and indents: if a wall indents inward, add a vertex at that corner so the scaffold path follows the indent exactly.
   Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized.
   UNITS: If the drawing shows a scale (S=1/100, S=1/200, 縮尺 etc.) you MUST output { x, y } in real mm. Never use fractions when scale is readable.
 - buildingHeightMm: total building height in mm (ground to eaves/top). If not shown, use typical 3000mm per story.
@@ -68,30 +80,37 @@ Optional fields (read from dimension lines and annotations):
 - groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
 - obstacles: optional array of special areas that affect scaffold clearance (for Buragetto / bracket layout).
-  If the plan shows balconies (バルコニー, ベランダ) or AC outdoor units (室外機, エアコン設置) as distinct outlines or hatched zones, add each as:
-  { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] } — closed polygon in same units as vertices.
-  Balconies: protruding floor areas outside the main wall. AC: typical small rectangles or circles for outdoor units.
+  Balconies/AC: { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] } — closed polygon in same units as vertices.
+  Pillars/columns: { "type": "pillar", "center": { x, y } or { xFrac, yFrac }, "radiusMm": number } — circular or square columns near the perimeter.
+  When a scaffold path (600/900/1200mm from wall) would intersect a pillar, the system switches to Single-Pole + Buragetto (bracket) layout.
+  Balconies: protruding floor areas. AC: outdoor unit areas. Pillars: 柱, コラム, circular or square structural columns at building corners or along walls.
   Omit obstacles if none are clearly visible or labeled.
 
 Polygon rules — follow these exactly:
 1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
+   The scaffold wraps the entire building without gaps — explicitly close the loop.
 
-2. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
+2. CONCAVE HULL (no bounding box): Trace the real perimeter. L-shaped buildings need 6 vertices (not 4).
+   Interior corners (indents, notches) must each be a vertex. Never simplify to a rectangle if the plan shows an L, U, or stepped outline.
+
+3. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
    Japanese scaffold drawings use color coding that you must understand:
    - BLUE FILLED/HATCHED ZONE: this is the scaffold overhang area (the zone between the building wall and the outer scaffold edge). DO NOT trace its outer boundary.
    - BLUE PERIMETER LINE (the inner boundary of the blue zone, adjacent to the building): this IS the building wall face. TRACE THIS LINE as your polygon.
    - Confirm: the dimension strings on the plan (e.g. "10@1829=18290") should match the edges you are tracing. If a long dimension string aligns with your traced edge, you have the right line.
    For non-scaffold plans (architectural cross-sections, photos): trace the visible outer wall boundary.
 
-3. SHAPE REALITY CHECK — Most Japanese buildings are elongated rectangles (taller or wider than they are square). If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline. Real buildings are NOT regular pentagons. Re-examine and trace the correct shape.
+4. SHAPE REALITY CHECK — Most Japanese buildings are elongated rectangles (taller or wider than they are square). If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline. Real buildings are NOT regular pentagons. Re-examine and trace the correct shape.
 
-4. CURVED FACADES — If the plan shows ONE curved exterior wall (e.g. a long convex curve along the top): represent it with ONE or TWO straight segments connecting the same endpoints. Do NOT approximate the curve with many short segments; that creates a zigzag and wrong sharp angles. Output 4–6 vertices total: left, bottom, right, and the curved side as one or two segments (e.g. top-left and top-right). The result must look like an elongated rectangle with one gently bent side, not a narrow V or arrowhead.
+5. CURVED FACADES — If the plan shows ONE curved exterior wall (e.g. a long convex curve along the top): represent it with ONE or TWO straight segments connecting the same endpoints. Do NOT approximate the curve with many short segments; that creates a zigzag and wrong sharp angles. Output 4–6 vertices total: left, bottom, right, and the curved side as one or two segments (e.g. top-left and top-right). The result must look like an elongated rectangle with one gently bent side, not a narrow V or arrowhead.
 
-5. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
+6. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
 
-6. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
+7. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
 
-7. wallLengthsMm count must equal vertices count exactly (one length per edge).
+8. wallLengthsMm count must equal vertices count exactly (one length per edge). Use dimension strings (e.g. 11'-6", 3500) to set a single global scale for both X and Y axes so the 3D model proportions match real-world measurements.
+
+9. ORTHOGONAL: For walls intended to be perpendicular, vertices should form 90° angles — avoid "squashed" or narrow looks.
 
 CRITICAL — structural grid vs. building edge (most common error):
 Construction plans show internal structural grids (e.g. Y1/Y2/Y3/Y4/Y5 lines spaced 7200 mm, X1/X2 lines, column circles). These are NOT building edges.
@@ -209,30 +228,178 @@ export class VisionBimService {
 
       let vertices = bestVertices;
       if (vertices.length < 3) {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const e of dxf.entities) {
-          if (e.type === 'LINE' && e.start && e.end) {
-            const s = e.start as { x: number; y: number };
-            const en = e.end as { x: number; y: number };
-            minX = Math.min(minX, s.x, en.x); maxX = Math.max(maxX, s.x, en.x);
-            minY = Math.min(minY, s.y, en.y); maxY = Math.max(maxY, s.y, en.y);
+        // Try LINE-based polygon detection (concave hull) instead of bounding box
+        const linePoly = this.detectPolygonFromLines(dxf.entities, scaleToMm);
+        if (linePoly.length >= 3) {
+          vertices = linePoly;
+          this.logger.log(`DXF: extracted polygon from ${linePoly.length} LINE segments (no LWPOLYLINE)`);
+        } else {
+          // Fallback: bounding box only when LINE-based detection fails
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const e of dxf.entities) {
+            if (e.type === 'LINE' && e.start && e.end) {
+              const s = e.start as { x: number; y: number };
+              const en = e.end as { x: number; y: number };
+              minX = Math.min(minX, s.x, en.x); maxX = Math.max(maxX, s.x, en.x);
+              minY = Math.min(minY, s.y, en.y); maxY = Math.max(maxY, s.y, en.y);
+            }
+          }
+          if (minX !== Infinity && maxX - minX > 100 && maxY - minY > 100) {
+            vertices = [
+              { x: minX * scaleToMm, y: minY * scaleToMm },
+              { x: maxX * scaleToMm, y: minY * scaleToMm },
+              { x: maxX * scaleToMm, y: maxY * scaleToMm },
+              { x: minX * scaleToMm, y: maxY * scaleToMm },
+            ];
           }
         }
-        if (minX !== Infinity && maxX - minX > 100 && maxY - minY > 100) {
-          vertices = [
-            { x: minX * scaleToMm, y: minY * scaleToMm },
-            { x: maxX * scaleToMm, y: minY * scaleToMm },
-            { x: maxX * scaleToMm, y: maxY * scaleToMm },
-            { x: minX * scaleToMm, y: maxY * scaleToMm },
-          ];
-        }
       }
-      if (vertices.length < 3) return this.getFallbackFootprint();
-      return { vertices, buildingHeightMm, confidence: 0.8 };
+
+      // Extract CIRCLE entities as pillar obstacles (near perimeter)
+      const pillars = this.extractPillarsFromDxf(dxf.entities, vertices, scaleToMm);
+      const obstacles =
+        pillars.length > 0
+          ? pillars.map((p) => ({ type: 'pillar' as const, center: p.center, radiusMm: p.radiusMm }))
+          : undefined;
+
+      return { vertices, buildingHeightMm, confidence: 0.8, ...(obstacles && { obstacles }) };
     } catch (err) {
       this.logger.error('DXF processing failed', (err as Error)?.message);
       return this.getFallbackFootprint();
     }
+  }
+
+  /**
+   * Build closed polygon from LINE entities (concave hull).
+   * Uses adjacency + loop walking; selects largest-area loop.
+   * Avoids bounding box when a real perimeter can be traced.
+   */
+  private detectPolygonFromLines(
+    entities: any[],
+    scaleToMm: number,
+  ): Array<{ x: number; y: number }> {
+    const segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    for (const e of entities) {
+      if (e.type === 'LINE' && e.start && e.end) {
+        const s = e.start as { x: number; y: number };
+        const en = e.end as { x: number; y: number };
+        segments.push({
+          x1: s.x * scaleToMm,
+          y1: s.y * scaleToMm,
+          x2: en.x * scaleToMm,
+          y2: en.y * scaleToMm,
+        });
+      }
+    }
+    if (segments.length < 3) return [];
+
+    const snap = 5;
+    const key = (x: number, y: number) =>
+      `${Math.round(x / snap) * snap},${Math.round(y / snap) * snap}`;
+    const adj = new Map<string, string[]>();
+    const add = (a: string, b: string) => {
+      if (a === b) return;
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.get(a)!.includes(b)) adj.get(a)!.push(b);
+    };
+    for (const seg of segments) {
+      const k1 = key(seg.x1, seg.y1);
+      const k2 = key(seg.x2, seg.y2);
+      add(k1, k2);
+      add(k2, k1);
+    }
+
+    const polygons: Array<{ points: Array<{ x: number; y: number }>; area: number }> = [];
+
+    const walkLoop = (start: string): string[] | null => {
+      const path: string[] = [start];
+      let cur = start;
+      const maxSteps = adj.size + 5;
+      for (let step = 0; step < maxSteps; step++) {
+        const nexts = adj.get(cur) ?? [];
+        let found = false;
+        for (const n of nexts) {
+          if (n === start && path.length >= 3) return path;
+          if (!path.includes(n)) {
+            path.push(n);
+            cur = n;
+            found = true;
+            break;
+          }
+        }
+        if (!found) return null;
+      }
+      return null;
+    };
+
+    for (const [node] of adj) {
+      const loop = walkLoop(node);
+      if (loop && loop.length >= 3) {
+        const pts = loop.map((k) => {
+          const [x, y] = k.split(',').map(Number);
+          return { x, y };
+        });
+        const area = Math.abs(this.polygonArea(pts));
+        if (area > 1) polygons.push({ points: pts, area });
+      }
+    }
+
+    if (polygons.length === 0) return [];
+    polygons.sort((a, b) => b.area - a.area);
+    return polygons[0].points;
+  }
+
+  /**
+   * Extract CIRCLE entities near the building perimeter as pillar obstacles.
+   */
+  private extractPillarsFromDxf(
+    entities: any[],
+    vertices: Array<{ x: number; y: number }>,
+    scaleToMm: number,
+  ): Array<{ center: { x: number; y: number }; radiusMm: number }> {
+    const pillars: Array<{ center: { x: number; y: number }; radiusMm: number }> = [];
+    const n = vertices.length;
+    const perimeter = vertices.reduce((sum, p, i) => {
+      const next = vertices[(i + 1) % n];
+      return sum + Math.hypot(next.x - p.x, next.y - p.y);
+    }, 0);
+    const nearDist = Math.min(perimeter * 0.1, 2000);
+
+    for (const e of entities) {
+      if (e.type === 'CIRCLE' && e.center != null) {
+        const c = e.center as { x: number; y: number };
+        const r = (e.radius ?? 0) * scaleToMm;
+        const cx = c.x * scaleToMm;
+        const cy = c.y * scaleToMm;
+        const distToPerimeter = vertices.reduce((min, p, i) => {
+          const next = vertices[(i + 1) % n];
+          const d = this.pointToSegmentDist(cx, cy, p.x, p.y, next.x, next.y);
+          return Math.min(min, d);
+        }, Infinity);
+        if (distToPerimeter <= nearDist && r > 50 && r < 2000) {
+          pillars.push({ center: { x: cx, y: cy }, radiusMm: Math.round(r) });
+        }
+      }
+    }
+    return pillars;
+  }
+
+  private pointToSegmentDist(
+    px: number,
+    py: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+  ): number {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) return Math.hypot(px - x1, py - y1);
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (len * len)));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    return Math.hypot(px - projX, py - projY);
   }
 
   private polygonArea(pts: Array<{ x: number; y: number }>): number {
@@ -294,7 +461,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). Trace only the outer boundary — ignore internal lines. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies (バルコニー, ベランダ) or AC outdoor unit areas (室外機, エアコン), add an obstacles array with type "balcony" or "ac" and vertices (same coordinate system as vertices).',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, or pillars/columns (柱, コラム) near the perimeter, add obstacles: type "balcony"/"ac" with vertices, or type "pillar" with center and radiusMm.',
               },
             ],
           },
@@ -393,20 +560,24 @@ export class VisionBimService {
       if (typeof parsed.frameSizeMm !== 'number' || ![1700, 1800, 1900].includes(parsed.frameSizeMm)) {
         parsed.frameSizeMm = undefined;
       }
-      // Normalize optional obstacles (balcony / AC areas)
+      // Normalize optional obstacles (balcony / AC areas / pillars)
       if (Array.isArray(parsed.obstacles) && parsed.obstacles.length > 0) {
         parsed.obstacles = parsed.obstacles
           .filter(
             (o: any) =>
               o &&
-              (o.type === 'balcony' || o.type === 'ac') &&
-              Array.isArray(o.vertices) &&
-              o.vertices.length >= 3,
+              (((o.type === 'balcony' || o.type === 'ac') && Array.isArray(o.vertices) && o.vertices.length >= 3) ||
+                (o.type === 'pillar' && o.center && typeof o.radiusMm === 'number' && o.radiusMm > 0)),
           )
-          .map((o: any) => ({
-            type: o.type as 'balcony' | 'ac',
-            vertices: o.vertices as Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
-          }));
+          .map((o: any) => {
+            if (o.type === 'pillar') {
+              return { type: 'pillar' as const, center: o.center, radiusMm: o.radiusMm };
+            }
+            return {
+              type: o.type as 'balcony' | 'ac',
+              vertices: o.vertices as Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
+            };
+          });
         if ((parsed.obstacles as any[]).length === 0) parsed.obstacles = undefined;
       } else {
         parsed.obstacles = undefined;

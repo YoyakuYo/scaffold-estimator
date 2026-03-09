@@ -48,11 +48,18 @@ export interface CreateScaffoldConfigDto {
   rentalEndDate?: string;
   /** Optional: Building outline polygon (for complex shapes) */
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
-  /** Optional: Detected balconies / AC areas from vision (for Buragetto / clearance) */
-  obstacles?: Array<{
-    type: 'balcony' | 'ac';
-    vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
-  }>;
+  /** Optional: Detected balconies / AC areas / pillars from vision (for Buragetto / clearance) */
+  obstacles?: Array<
+    | {
+        type: 'balcony' | 'ac';
+        vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+      }
+    | {
+        type: 'pillar';
+        center: { x: number; y: number } | { xFrac: number; yFrac: number };
+        radiusMm: number;
+      }
+  >;
   /** Optional: Extracted dimensions (for scaling polygon edges) */
   extractedDimensions?: {
     walls: {

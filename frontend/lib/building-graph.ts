@@ -2,8 +2,11 @@
  * BuildingGraph — Node-and-Edge graph for advanced scaffold geometry.
  * Every building corner is a Vector3 Node; walls are Edges connecting Nodes.
  * Miter join logic ensures wall endpoints snap to shared nodes (zero gaps at intersections).
+ * Contour-following: orthogonal correction, dimension-based scaling, closed-loop.
  * This layer feeds the existing rendering engine; it does not replace it.
  */
+
+import { applyContourExtraction } from './contour-extraction';
 
 export interface Vector3Like {
   x: number;
@@ -80,19 +83,31 @@ function normalizeFootprintToMm(
   return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
 }
 
+export interface BuildGraphOptions {
+  /** Wall lengths from plan dimensions (mm); used for scaling and closed-loop */
+  wallLengthsMm?: number[];
+}
+
 /**
  * Build a BuildingGraph from a 2D footprint (closed polygon).
  * Vertices become nodes; each edge (i → i+1) becomes an edge with length.
+ * Applies contour-following: orthogonal correction (90° snap), dimension-based scaling, closed-loop.
  * Units: assume vertices in mm on XZ plane (y=0), or 0–1 fraction (scaled by refLengthMm).
  */
 export function buildGraphFromFootprint(
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
   refLengthMm?: number,
+  options?: BuildGraphOptions,
 ): BuildingGraphData {
   const n = vertices.length;
   if (n < 3) return { nodes: [], edges: [] };
 
-  const mm = normalizeFootprintToMm(vertices, refLengthMm);
+  let mm = normalizeFootprintToMm(vertices, refLengthMm);
+
+  // Contour-following: orthogonal correction, scale from dimensions, ensure closed loop
+  const pts2d = mm.map((p) => ({ x: p.x, y: p.z }));
+  const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm);
+  mm = contourPts.map((p) => ({ x: p.x, z: p.y }));
 
   // Snap / dedupe: merge vertices that are effectively identical (vision output often repeats endpoints).
   const tolMm = 1; // 1mm tolerance for node snapping
