@@ -70,11 +70,13 @@ export class ScaffoldManager {
   /**
    * Inject footprint from vision/BIM pipeline and build graph.
    * Returns wall inputs suitable for createAndCalculate (existing API).
+   * When wallLengthsMm is provided (e.g. from plan dimension text), overrides graph-derived lengths for accuracy.
    */
   injectFootprintAndGetWalls(
     vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
     buildingHeightMm: number,
     refLengthMm?: number,
+    options?: { wallLengthsMm?: number[] },
   ): { walls: WallInput[]; buildingOutline: FootprintVertex[] } {
     const graph = buildGraphFromFootprint(vertices, refLengthMm);
     this.state = {
@@ -83,14 +85,17 @@ export class ScaffoldManager {
       buildingHeightMm,
       inputSource: 'ai_bim',
     };
-    const walls: WallInput[] = graphToWallInputs(graph, buildingHeightMm).map(
-      (w) => ({
-        side: w.side,
-        wallLengthMm: w.wallLengthMm,
-        wallHeightMm: w.wallHeightMm,
-        stairAccessCount: w.stairAccessCount,
-      }),
-    );
+    const walls: WallInput[] = graphToWallInputs(
+      graph,
+      buildingHeightMm,
+      0,
+      options?.wallLengthsMm,
+    ).map((w) => ({
+      side: w.side,
+      wallLengthMm: w.wallLengthMm,
+      wallHeightMm: w.wallHeightMm,
+      stairAccessCount: w.stairAccessCount,
+    }));
     const buildingOutline = graph.polygonVertices ?? [];
     return { walls, buildingOutline };
   }

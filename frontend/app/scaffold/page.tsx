@@ -551,22 +551,29 @@ function ScaffoldPageContent() {
                   try {
                     const footprint = await visionBimApi.analyze(file);
                     const manager = scaffoldManagerRef.current!;
-                    const refMm = footprint.vertices.some((v) => 'xFrac' in v) ? 10000 : undefined;
+                    const refMm = footprint.vertices.some((v) => 'xFrac' in v)
+                      ? (footprint.scaleDenominator ? 20000 : 10000)
+                      : undefined;
                     const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
                       footprint.vertices,
                       footprint.buildingHeightMm,
                       refMm,
+                      { wallLengthsMm: footprint.wallLengthsMm },
                     );
                     const defaults = getAiBimDefaults();
+                    const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
                     const dto: CreateScaffoldConfigDto = {
                       projectId: 'default-project',
                       mode: 'manual',
-                      scaffoldType: 'kusabi',
+                      scaffoldType,
                       structureType: '改修工事',
                       walls,
                       scaffoldWidthMm: defaults.scaffoldWidthMm,
                       preferredMainTatejiMm: defaults.preferredMainTatejiMm,
                       topGuardHeightMm: defaults.topGuardHeightMm,
+                      ...(scaffoldType === 'wakugumi' && {
+                        frameSizeMm: footprint.frameSizeMm ?? 1800,
+                      }),
                       buildingOutline,
                     };
                     const data = await scaffoldConfigsApi.createAndCalculate(dto);

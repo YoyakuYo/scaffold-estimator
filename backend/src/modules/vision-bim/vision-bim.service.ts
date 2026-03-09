@@ -16,6 +16,16 @@ export interface VisionFootprintResult {
   eavesLineY?: number;
   /** Confidence 0-1 */
   confidence?: number;
+  /** Scale denominator from drawing (e.g. 100 for S=1/100). */
+  scaleDenominator?: number;
+  /** Per-edge lengths in mm, one per polygon edge (same order as vertices). Use dimension text from plan. */
+  wallLengthsMm?: number[];
+  /** Inferred scaffold type from plan: 枠組足場 (1829/914 etc.) vs くさび式 (600/900 etc.). */
+  scaffoldTypeHint?: 'kusabi' | 'wakugumi';
+  /** Span size in mm if visible (e.g. 1829 for wakugumi, 900 for kusabi). */
+  spanSizeMm?: number;
+  /** Frame size in mm for 枠組足場: 1700, 1800, or 1900. */
+  frameSizeMm?: number;
 }
 
 /** Supported CAD/plan extensions (lowercase). */
@@ -23,19 +33,28 @@ const CAD_EXTENSIONS = ['.dxf', '.dwg', '.jww'];
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const PDF_EXTENSIONS = ['.pdf'];
 
-const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst. Analyze the image (photo or blueprint) and extract building footprint and height for scaffold estimation.
+const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, or photo) and extract building footprint, dimensions, and scaffold hints.
 
-Output a JSON object with:
-- vertices: array of polygon vertices for the building footprint (closed polygon). Each vertex: { x, y } in millimeters, or { xFrac, yFrac } if using 0-1 normalized coordinates. Use consistent units. For blueprints, infer scale from dimensions or typical floor heights.
-- buildingHeightMm: total building height in millimeters (from ground to eaves/top).
-- groundLineY: optional, Y coordinate of ground line if visible.
-- eavesLineY: optional, Y of eaves/top if visible.
-- confidence: optional number 0-1.
+Output a JSON object with these fields (use exact keys):
+
+Required:
+- vertices: array of polygon vertices for the building footprint (closed polygon), in order along the perimeter. Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized. Prefer mm when you can read scale/dimensions.
+- buildingHeightMm: total building height in mm (from ground to eaves/top). If not shown, use typical 3000mm per story.
+
+Optional but important for accuracy (read from dimension lines and annotations):
+- scaleDenominator: scale from drawing (e.g. 100 for S=1/100, 200 for S=1/200).
+- wallLengthsMm: array of lengths in mm, one per edge, in the same order as vertices (edge 0 = vertex[0] to vertex[1], edge 1 = vertex[1] to vertex[2], ...). Use dimension text on the plan (e.g. 2945, 7200, 10@1829=18290 means one edge 18290mm). This overrides lengths from vertex positions and greatly improves accuracy.
+- scaffoldTypeHint: "wakugumi" if the plan shows 枠組足場 or span sizes 1829, 914, 1219, 1524, 1829 (imperial). "kusabi" if くさび式 or spans 600, 900, 1200, 1500, 1800. Omit if unclear.
+- spanSizeMm: main span size in mm if visible (e.g. 1829, 914, 900, 1200).
+- frameSizeMm: for 枠組足場 only: 1700, 1800, or 1900 if shown.
+- groundLineY, eavesLineY: optional coordinates if visible.
+- confidence: 0-1.
 
 Rules:
-- Footprint must be a closed polygon (at least 3 vertices). Rectangle = 4 vertices.
-- All dimensions in millimeters (mm).
-- If scale is unknown, use typical single-story height ~3000mm and estimate footprint from proportions.`;
+- Footprint must be a closed polygon (at least 3 vertices). Follow the building outline; include angled corners (e.g. L-shape, cut corners) as separate vertices.
+- Read all dimension annotations: dimension lines, "10@1829=18290", "2945", "7200", etc. Put exact values into wallLengthsMm in the same order as the edges of your polygon.
+- If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and prefer outputting vertices and wallLengthsMm in real mm.
+- If scale is unknown, use xFrac/yFrac for shape and omit wallLengthsMm or estimate from proportions.`;
 
 @Injectable()
 export class VisionBimService {
@@ -219,7 +238,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the building footprint polygon (vertices in mm or xFrac/yFrac) and building height in mm. Reply with only the JSON object, no markdown.',
+                text: 'Extract the building footprint (vertices), buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one length per edge in vertex order, from dimension lines), scaffoldTypeHint (wakugumi or kusabi from 枠組/くさび or span sizes 1829/914 vs 600/900), spanSizeMm, frameSizeMm. Reply with only the JSON object, no markdown.',
               },
             ],
           },
@@ -248,7 +267,20 @@ export class VisionBimService {
       if (!parsed.buildingHeightMm || parsed.buildingHeightMm < 1000) {
         parsed.buildingHeightMm = 3000;
       }
-      return parsed;
+      const n = parsed.vertices.length;
+      if (Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === n) {
+        const valid = parsed.wallLengthsMm.filter((l: number) => typeof l === 'number' && l >= 600);
+        if (valid.length !== n) parsed.wallLengthsMm = undefined;
+      } else {
+        parsed.wallLengthsMm = undefined;
+      }
+      if (parsed.scaffoldTypeHint !== 'kusabi' && parsed.scaffoldTypeHint !== 'wakugumi') {
+        parsed.scaffoldTypeHint = undefined;
+      }
+      if (typeof parsed.frameSizeMm !== 'number' || ![1700, 1800, 1900].includes(parsed.frameSizeMm)) {
+        parsed.frameSizeMm = undefined;
+      }
+      return parsed as VisionFootprintResult;
     } catch (err) {
       const msg = (err as Error)?.message || String(err);
       this.logger.error('Vision BIM processing failed', msg);

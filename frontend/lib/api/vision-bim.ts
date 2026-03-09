@@ -6,6 +6,15 @@ export interface VisionFootprintResult {
   groundLineY?: number;
   eavesLineY?: number;
   confidence?: number;
+  /** Scale from drawing (e.g. 100 for S=1/100). */
+  scaleDenominator?: number;
+  /** Per-edge lengths in mm (one per vertex/edge); from dimension text on plan. */
+  wallLengthsMm?: number[];
+  /** Inferred from plan: 枠組足場 (1829 etc.) vs くさび式 (600/900 etc.). */
+  scaffoldTypeHint?: 'kusabi' | 'wakugumi';
+  spanSizeMm?: number;
+  /** For 枠組: 1700, 1800, or 1900. */
+  frameSizeMm?: number;
 }
 
 export const visionBimApi = {
