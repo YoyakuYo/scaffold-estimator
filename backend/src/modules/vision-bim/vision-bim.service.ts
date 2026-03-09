@@ -197,8 +197,12 @@ export class VisionBimService {
       const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
       const mediaType = isJpeg ? 'image/jpeg' : 'image/png';
 
+      // Use env override or a current vision-capable model (claude-3-5-sonnet-20241022 was retired)
+      const model =
+        this.config.get<string>('ANTHROPIC_VISION_MODEL') ||
+        'claude-sonnet-4-6';
       const message = await client.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model,
         max_tokens: 1024,
         system: VISION_SYSTEM_PROMPT,
         messages: [
