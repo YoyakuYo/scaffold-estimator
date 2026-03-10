@@ -256,32 +256,97 @@ export const CALC_RULES = {
 // ─── Span Fitting Algorithm ──────────────────────────────────
 /**
  * Given a wall length, find the optimal combination of standard spans
- * to fit exactly. Uses largest-first greedy approach.
+ * to fit.
+ *
+ * Corner alignment rule:
+ * - Never leave a gap (total span length must be >= wall length).
+ * - Prefer to keep the overrun small (≤ 300mm) to allow tight corner connections
+ *   and installation of パッタンコ (corner connector).
+ * - If an overrun ≤ 300mm is impossible with standard spans, choose the smallest
+ *   overrun achievable.
  * Returns array of span sizes.
  */
 export function fitSpansToWallLength(wallLengthMm: number): number[] {
-  const available = [...SPAN_SIZES].sort((a, b) => b - a); // descending
-  const spans: number[] = [];
-  let remaining = wallLengthMm;
+  return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, 300);
+}
 
-  while (remaining > 0) {
-    let fitted = false;
-    for (const size of available) {
-      if (size <= remaining) {
-        spans.push(size);
-        remaining -= size;
-        fitted = true;
-        break;
-      }
-    }
-    if (!fitted) {
-      // Remaining is smaller than smallest span, use smallest
-      spans.push(available[available.length - 1]);
-      remaining = 0;
-    }
-  }
+function fitSpansToWallLengthWithOverrun(
+  wallLengthMm: number,
+  spanSizesMm: number[],
+  maxOverrunMm: number,
+): number[] {
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [];
 
-  return spans;
+  const sizes = [...spanSizesMm].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => b - a); // desc
+  if (sizes.length === 0) return [];
+
+  const max = sizes[0];
+  const min = sizes[sizes.length - 1];
+
+  // Use a long prefix of max spans, and search only the tail.
+  // This keeps the search tiny even for very long walls.
+  const tailMaxCount = 10;
+  const reserve = max * 4; // leave room for tail adjustments
+  const prefixCount = wallLengthMm > reserve ? Math.floor((wallLengthMm - reserve) / max) : 0;
+  const prefixSum = prefixCount * max;
+  const target = wallLengthMm - prefixSum;
+
+  const tailMaxSum = target + Math.max(maxOverrunMm, max);
+  const maxCountByMin = Math.ceil(tailMaxSum / min);
+  const maxCount = Math.max(1, Math.min(tailMaxCount, maxCountByMin));
+
+  type BestCandidate = { spans: number[]; sum: number; overrun: number; within: boolean };
+  let best: BestCandidate | undefined;
+
+  const betterThan = (a: BestCandidate, b: BestCandidate) => {
+    if (a.within !== b.within) return a.within; // within max overrun first
+    if (a.overrun !== b.overrun) return a.overrun < b.overrun;
+    if (a.spans.length !== b.spans.length) return a.spans.length < b.spans.length;
+    // Tie-breaker: prefer larger spans earlier (more standard looking)
+    for (let i = 0; i < Math.min(a.spans.length, b.spans.length); i++) {
+      if (a.spans[i] !== b.spans[i]) return a.spans[i] > b.spans[i];
+    }
+    return false;
+  };
+
+  const dfs = (startIdx: number, chosen: number[], sum: number) => {
+    if (sum >= target) {
+      const overrun = sum - target;
+      const within = overrun <= maxOverrunMm;
+      const cand: BestCandidate = { spans: [...chosen], sum, overrun, within };
+      if (!best || betterThan(cand, best)) best = cand;
+      // Prune: if we're already within max overrun and exact, can't improve.
+      if (within && overrun === 0) return;
+      // If within, adding more only increases overrun.
+      return;
+    }
+
+    if (chosen.length >= maxCount) return;
+
+    // Lower bound pruning: even if we fill remaining slots with max spans, can we reach target?
+    const remainingSlots = maxCount - chosen.length;
+    if (sum + remainingSlots * max < target) return;
+
+    for (let i = startIdx; i < sizes.length; i++) {
+      const s = sizes[i];
+      const nextSum = sum + s;
+      // Overrun pruning: if we already have a within-max solution, don't explore sums that exceed it.
+      if (best && best.within && nextSum - target > maxOverrunMm) continue;
+      chosen.push(s);
+      dfs(i, chosen, nextSum); // allow repeats
+      chosen.pop();
+    }
+  };
+
+  dfs(0, [], 0);
+
+  const tail = best?.spans?.length ? best.spans : [min];
+  const result = [...Array(prefixCount).fill(max), ...tail];
+
+  // Final safety: ensure no gap.
+  const total = result.reduce((a, b) => a + b, 0);
+  if (total < wallLengthMm) result.push(min);
+  return result;
 }
 
 // ─── Level Calculation ───────────────────────────────────────

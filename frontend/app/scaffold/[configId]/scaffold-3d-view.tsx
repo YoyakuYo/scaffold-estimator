@@ -28,6 +28,7 @@ const PIPE_SEG = 10;
 const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
+const CORNER_OVERRUN_M = 0.3; // allow ~200–300mm overrun to keep corners tight
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
 
@@ -612,7 +613,11 @@ export default function Scaffold3DView({
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // First span: 4 posts. Each next span: reuse 2 closest, add 2 new → N+1 positions, 2 posts per position.
       // ══════════════════════════════════════════════════════
-      function buildWallScaffold(wall: WallCalculationResult, group: THREE.Group, maxSpans?: number) {
+      function buildWallScaffold(
+        wall: WallCalculationResult,
+        group: THREE.Group,
+        maxSpans?: number,
+      ): { runLenM: number } {
         const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
         const isBracket = wall.layoutMode === 'bracket';
         const allSpans: number[] = wall.spans;
@@ -623,9 +628,10 @@ export default function Scaffold3DView({
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
-        // Force last post to exactly wallLengthMm so geometry never overshoots the polygon edge.
-        const totalLen = wall.wallLengthMm / 1000;
-        if (postX.length > 1) postX[postX.length - 1] = totalLen;
+        // IMPORTANT (corner alignment):
+        // Do NOT force the last post to exactly wallLengthMm.
+        // A small overrun (≈200–300mm) is allowed/preferred to keep corners tight for pattanko.
+        const totalLen = postX.length > 1 ? postX[postX.length - 1] : Math.max(wall.wallLengthMm, 600) / 1000;
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = levels;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
@@ -789,6 +795,7 @@ export default function Scaffold3DView({
           }
           } // end for stairSpanIdx
         }
+        return { runLenM: totalLen };
       }
 
       // ══════════════════════════════════════════════════════
@@ -851,14 +858,17 @@ export default function Scaffold3DView({
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        buildWallScaffold(wall, group, spanCaps[i]);
+        const { runLenM } = buildWallScaffold(wall, group, spanCaps[i]);
 
-        // Scale wall to fit exactly on polygon edge so it never extends past.
-        const totalLenM = wall.wallLengthMm / 1000;
-        // Note: polygon edge length can be longer than wallLengthMm (e.g. stored vertex directions),
-        // so we must allow scaling UP as well, otherwise the scaffold looks "cut short".
-        // Clamp to avoid extreme distortion when polygon data is bad.
-        const rawScale = totalLenM > 1e-6 ? edgeLen / totalLenM : 1;
+        // Scale wall to meet the polygon edge tightly (corner alignment).
+        // - If the span-run is shorter than the edge, scale up to avoid a gap.
+        // - If the span-run is longer, allow up to CORNER_OVERRUN_M beyond the corner
+        //   (preferred over leaving a gap) before scaling down.
+        const baseLen = Math.max(runLenM, 1e-6);
+        const desiredLen = runLenM < edgeLen
+          ? edgeLen
+          : Math.min(runLenM, edgeLen + CORNER_OVERRUN_M);
+        const rawScale = desiredLen / baseLen;
         const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
