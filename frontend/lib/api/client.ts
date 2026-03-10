@@ -8,9 +8,17 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === 'production' ? '/api/v1' : 'http://localhost:3000/api/v1');
 
+const DEFAULT_TIMEOUT_MS = 30000;
+const API_TIMEOUT_MS = (() => {
+  const raw = process.env.NEXT_PUBLIC_API_TIMEOUT_MS;
+  if (!raw) return DEFAULT_TIMEOUT_MS;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_TIMEOUT_MS;
+})();
+
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000, // 10s timeout — fail fast if backend is down
+  timeout: API_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
