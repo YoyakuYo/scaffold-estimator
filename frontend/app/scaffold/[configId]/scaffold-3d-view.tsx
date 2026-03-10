@@ -16,10 +16,11 @@ import {
 } from '@/lib/scaffold-3d-components';
 
 /**
- * 3D Scaffold View — Independent Walls (No Closed Polygon)
- * Each wall is treated as an independent scaffold segment; span generation uses correct
-* post reuse (N spans → N+1 post positions). One shared vertical post per polygon vertex
-* closes the corners visually.
+ * 3D Scaffold View — Closed Polygon
+ * The building is one closed polygon; each edge is one wall. Walls are scaled to exactly
+ * match the polygon edge length so corners meet with no gap (rectangle or any n-gon).
+ * Span generation uses correct post reuse (N spans → N+1 post positions). One shared
+ * vertical post per polygon vertex closes the corners visually.
  */
 
 const PIPE_R = 0.024;
@@ -28,7 +29,6 @@ const PIPE_SEG = 10;
 const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
-const CORNER_OVERRUN_M = 0.3; // allow ~200–300mm overrun to keep corners tight
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
 
@@ -884,14 +884,10 @@ export default function Scaffold3DView({
         wallRoot.add(group);
         const { runLenM } = buildWallScaffold(wall, group, spanCaps[i]);
 
-        // Scale wall to meet the polygon edge tightly (corner alignment).
-        // - If the span-run is shorter than the edge, scale up to avoid a gap.
-        // - If the span-run is longer, allow up to CORNER_OVERRUN_M beyond the corner
-        //   (preferred over leaving a gap) before scaling down.
+        // Scale wall to exactly match the polygon edge so corners close (one continuous polygon).
+        // Each wall must end exactly at the next vertex so there is no gap or overlap at corners.
         const baseLen = Math.max(runLenM, 1e-6);
-        const desiredLen = runLenM < edgeLen
-          ? edgeLen
-          : Math.min(runLenM, edgeLen + CORNER_OVERRUN_M);
+        const desiredLen = edgeLen;
         const rawScale = desiredLen / baseLen;
         const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
