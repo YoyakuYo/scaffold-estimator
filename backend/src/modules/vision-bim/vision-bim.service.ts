@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const DxfParser = require('dxf-parser');
@@ -134,6 +135,10 @@ If scale is unknown, use xFrac/yFrac for shape.`;
 @Injectable()
 export class VisionBimService {
   private readonly logger = new Logger(VisionBimService.name);
+  private static readonly imageCache = new Map<
+    string,
+    { savedAtMs: number; result: VisionFootprintResult }
+  >();
 
   constructor(private readonly config: ConfigService) {}
 
@@ -432,6 +437,19 @@ export class VisionBimService {
     }
 
     try {
+      // Determinism + repeatability: cache by file hash so re-uploading the same plan
+      // returns the same extracted footprint (within this server process lifetime).
+      const cacheTtlMs = 1000 * 60 * 60; // 1 hour
+      const modelForKey =
+        this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
+      const hash = createHash('sha256').update(buffer).digest('hex');
+      const cacheKey = `vision-bim:v1:${modelForKey}:${hash}`;
+      const cached = VisionBimService.imageCache.get(cacheKey);
+      if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
+        this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
+        return cached.result;
+      }
+
       const Anthropic = await import('@anthropic-ai/sdk');
       const client = new Anthropic.default({ apiKey });
 
@@ -446,6 +464,9 @@ export class VisionBimService {
       const message = await client.messages.create({
         model,
         max_tokens: 2048,
+        // Reduce randomness to avoid shape changes between identical uploads
+        // (Anthropic supports temperature on messages.create).
+        temperature: 0,
         system: VISION_SYSTEM_PROMPT,
         messages: [
           {
@@ -584,6 +605,11 @@ export class VisionBimService {
       }
       // Remove collinear intermediate vertices caused by grid-line tracing.
       this.cleanupPolygon(parsed);
+      // Save to cache after successful parse/cleanup.
+      VisionBimService.imageCache.set(cacheKey, {
+        savedAtMs: Date.now(),
+        result: parsed as VisionFootprintResult,
+      });
       return parsed as VisionFootprintResult;
     } catch (err) {
       const msg = (err as Error)?.message || String(err);

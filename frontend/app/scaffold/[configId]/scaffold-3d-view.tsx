@@ -99,24 +99,52 @@ function buildPolygonVertices(
   const n = walls.length;
   if (n < 1) return [];
 
+  // Normalise incoming vertices:
+  // - DXF / vision-bim may send absolute mm coordinates: { x, y }
+  // - Older AI output may send 0–1 fractions: { xFrac, yFrac }
+  // We convert both into a unified { x, z } shape-space.
+  const normaliseVertex = (v: any): { x: number; z: number } => {
+    const hasMm = typeof v?.x === 'number' && typeof v?.y === 'number';
+    if (hasMm) {
+      // Keep mm as-is here; later logic decides whether to divide by 1000
+      // or rescale uniformly based on spread/maxCoord.
+      return {
+        x: Number.isFinite(v.x) ? v.x : 0,
+        z: Number.isFinite(v.y) ? v.y : 0,
+      };
+    }
+    const xf = v?.xFrac;
+    const yf = v?.yFrac;
+    return {
+      x: Number.isFinite(xf) ? xf : 0,
+      z: Number.isFinite(yf) ? yf : 0,
+    };
+  };
+
+  const wallLenM = (i: number) => {
+    const mm = (walls[i] as any)?.wallLengthMm;
+    const safeMm = Number.isFinite(mm) ? Math.max(600, Number(mm)) : 6000;
+    return safeMm / 1000;
+  };
+
   // ── 1 wall: single edge (2 vertices) ──
   if (n === 1) {
-    const lenM = Math.max(walls[0].wallLengthMm, 600) / 1000;
+    const lenM = wallLenM(0);
     return [{ x: 0, z: 0 }, { x: lenM, z: 0 }];
   }
 
   // ── 2 walls: L-shape (3 vertices) ──
   if (n === 2) {
-    const len0 = Math.max(walls[0].wallLengthMm, 600) / 1000;
-    const len1 = Math.max(walls[1].wallLengthMm, 600) / 1000;
+    const len0 = wallLenM(0);
+    const len1 = wallLenM(1);
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
   // ── 4 walls: Explicit rectangle with 90° corners and exact dimensions ──
   // Avoids distortion from stored vertices; ensures correct depth (Z) vs width (X).
   if (n === 4) {
-    const w0 = Math.max(walls[0].wallLengthMm, 600) / 1000;
-    const w1 = Math.max(walls[1].wallLengthMm, 600) / 1000;
+    const w0 = wallLenM(0);
+    const w1 = wallLenM(1);
     return [
       { x: 0, z: 0 },
       { x: w0, z: 0 },
@@ -128,17 +156,14 @@ function buildPolygonVertices(
   // ── 6 walls: Irregular hexagon — rebuild from stored vertices + wall lengths, closed loop ──
   // Wall 6 end connects back to Wall 1 start (continuous perimeter, no gap).
   if (n === 6 && storedVertices && storedVertices.length >= 6) {
-    const raw = storedVertices.slice(0, 6).map(v => ({
-      x: Number.isFinite(v.xFrac) ? v.xFrac : 0,
-      z: Number.isFinite(v.yFrac) ? v.yFrac : 0,
-    }));
+    const raw = storedVertices.slice(0, 6).map(normaliseVertex);
     const corrected: { x: number; z: number }[] = [{ x: 0, z: 0 }];
     for (let i = 0; i < 6; i++) {
       const next = (i + 1) % 6;
       const rawDx = raw[next].x - raw[i].x;
       const rawDz = raw[next].z - raw[i].z;
       const rawLen = Math.hypot(rawDx, rawDz);
-      const tgtLen = Math.max(walls[i].wallLengthMm, 600) / 1000;
+      const tgtLen = wallLenM(i);
       const from = corrected[i];
       if (rawLen >= 0.001) {
         const dx = (rawDx / rawLen) * tgtLen;
@@ -155,10 +180,7 @@ function buildPolygonVertices(
 
   // ── Use stored vertices for non-rectangular shapes (n !== 4) ──
   if (storedVertices && storedVertices.length >= n && n !== 4) {
-    const raw = storedVertices.slice(0, n).map(v => ({
-      x: Number.isFinite(v.xFrac) ? v.xFrac : 0,
-      z: Number.isFinite(v.yFrac) ? v.yFrac : 0,
-    }));
+    const raw = storedVertices.slice(0, n).map(normaliseVertex);
     const xs = raw.map(v => v.x);
     const zs = raw.map(v => v.z);
     const spreadX = Math.max(...xs) - Math.min(...xs);
@@ -192,7 +214,7 @@ function buildPolygonVertices(
           const rawDx = verts[next].x - verts[i].x;
           const rawDz = verts[next].z - verts[i].z;
           const rawLen = Math.hypot(rawDx, rawDz);
-          const tgtLen = walls[i].wallLengthMm / 1000;
+          const tgtLen = wallLenM(i);
           const from = corrected[i];
           if (rawLen < 0.001) {
             if (next > 0) corrected.push({ x: from.x, z: from.z });
@@ -219,14 +241,14 @@ function buildPolygonVertices(
   let cx = 0, cz = 0;
   let angle = 0;
   for (let i = 0; i < n - 1; i++) {
-    const lenM = Math.max(walls[i].wallLengthMm, 600) / 1000;
+    const lenM = wallLenM(i);
     cx += lenM * Math.cos(angle);
     cz += lenM * Math.sin(angle);
     angle += extAngle;
     verts.push({ x: cx, z: cz });
   }
   // Last edge: from verts[n-1] back to verts[0] with length walls[n-1] (closed loop)
-  const lastLenM = Math.max(walls[n - 1].wallLengthMm, 600) / 1000;
+  const lastLenM = wallLenM(n - 1);
   const dx = -cx;
   const dz = -cz;
   const dist = Math.hypot(dx, dz);
@@ -804,11 +826,13 @@ export default function Scaffold3DView({
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices ?? (result as any)?.polygonVertices;
       const verts = buildPolygonVertices(walls, storedVerts);
-      if (verts.length < 2) {
+      const vertsOk =
+        verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+      if (!vertsOk) {
         setError(
           walls.length === 0
             ? 'No wall data. Run calculation for this configuration to see the 3D view.'
-            : 'Need at least 1 wall to build 3D view',
+            : '3D viewer error: wall geometry is invalid (missing/NaN lengths). Recalculate or edit wall lengths.',
         );
         return;
       }
