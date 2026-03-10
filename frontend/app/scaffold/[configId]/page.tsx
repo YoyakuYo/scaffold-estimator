@@ -282,7 +282,7 @@ function ScaffoldResultPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <SummaryCard
             icon={<Building2 className="h-5 w-5" />}
             label={t('result', 'maxHeight') || 'Max Height'}
@@ -325,6 +325,20 @@ function ScaffoldResultPage() {
               />
             </>
           )}
+        </div>
+
+        {/* Scaffold spec hint (applies to 2D / Plan / 3D) */}
+        <div className="mb-3 text-xs text-gray-500 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
+            <ShieldCheck className="h-3.5 w-3.5 text-gray-600" />
+            {result.scaffoldType === 'wakugumi' ? '枠組足場' : 'くさび式足場'}
+          </span>
+          <span>
+            幅 {result.scaffoldWidthMm}mm
+            {result.scaffoldType === 'wakugumi'
+              ? result.frameSizeMm != null && ` · 建枠 ${result.frameSizeMm}mm`
+              : result.preferredMainTatejiMm != null && ` · 主支柱 ${result.preferredMainTatejiMm}mm`}
+          </span>
         </div>
 
         {/* Tab Switcher */}
