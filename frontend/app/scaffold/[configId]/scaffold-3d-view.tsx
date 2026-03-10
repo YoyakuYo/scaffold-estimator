@@ -851,6 +851,12 @@ export default function Scaffold3DView({
       // Store per-wall outward normals so we can build corner connectors afterwards
       const wallNormals: Array<{ nx: number; nz: number }> = [];
 
+      // Standoff: distance from building wall to nearest posts (250–500mm) so scaffold can breathe
+      const standoffMm = Number.isFinite(result?.wallStandoffMm) && result.wallStandoffMm >= 250 && result.wallStandoffMm <= 500
+        ? result.wallStandoffMm
+        : 350;
+      const standoffM = standoffMm / 1000;
+
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
@@ -901,14 +907,14 @@ export default function Scaffold3DView({
         //   local X → edge direction
         //   local Z → outward normal direction
         //   local Y → world Y (up)
-        //   origin → v1 (centered) + outward offset for outer face
+        //   origin → v1 (centered) + standoff from building so near posts are 250–500mm from wall
 
         const edgeDirX = dx / edgeLen;
         const edgeDirZ = dz / edgeLen;
 
-        // Translation: place origin at v1, offset outward by wallWidthM so walls go all the way to the corner.
-        const tx = (v1.x - cx) + nx * wallWidthM;
-        const tz = (v1.z - cz) + nz * wallWidthM;
+        // Translation: place scaffold so near row is at building + standoff (250–500mm)
+        const tx = (v1.x - cx) + nx * standoffM;
+        const tz = (v1.z - cz) + nz * standoffM;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -950,8 +956,8 @@ export default function Scaffold3DView({
         scene.add(edgeLine);
 
         // ── Dimension labels (length + height) — same as 2D: scaffold height = levels×LEVEL_H + top guard + jack ────────────
-        const midXw = (v1.x + v2.x) / 2 - cx + nx * (wallWidthM * 1.1);
-        const midZw = (v1.z + v2.z) / 2 - cz + nz * (wallWidthM * 1.1);
+        const midXw = (v1.x + v2.x) / 2 - cx + nx * (standoffM + wallWidthM * 0.55);
+        const midZw = (v1.z + v2.z) / 2 - cz + nz * (standoffM + wallWidthM * 0.55);
         const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
         const levelsForH = wall.levelCalc?.fullLevels ?? 0;
         const scaffoldHeightM = GROUND_Y + JACK_H + levelsForH * LEVEL_H + topGuardM;
@@ -972,9 +978,9 @@ export default function Scaffold3DView({
         const clickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
         const clickMesh = new THREE.Mesh(clickGeo, clickMat);
         clickMesh.position.set(
-          (v1.x + v2.x) / 2 - cx + nx * (wallWidthM * 0.42),
+          (v1.x + v2.x) / 2 - cx + nx * (standoffM + wallWidthM * 0.5),
           Math.max(totalH, 2) / 2,
-          (v1.z + v2.z) / 2 - cz + nz * (wallWidthM * 0.42),
+          (v1.z + v2.z) / 2 - cz + nz * (standoffM + wallWidthM * 0.5),
         );
         clickMesh.rotation.y = Math.atan2(dz, dx);
         (clickMesh as any).userData = { wallIndex: i };
@@ -986,9 +992,9 @@ export default function Scaffold3DView({
           edge: edgeLine,
         });
         wallFocusRef.current.push({
-          x: (v1.x + v2.x) / 2 - cx + nx * (wallWidthM * 1.6),
+          x: (v1.x + v2.x) / 2 - cx + nx * (standoffM + wallWidthM * 1.1),
           y: Math.max(totalH * 0.45, 2.2),
-          z: (v1.z + v2.z) / 2 - cz + nz * (wallWidthM * 1.6),
+          z: (v1.z + v2.z) / 2 - cz + nz * (standoffM + wallWidthM * 1.1),
         });
         clickTargetsRef.current.push(clickMesh);
       }
@@ -1249,7 +1255,7 @@ export default function Scaffold3DView({
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, isAiBim, technicalMode, t]);
+  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, result?.wallStandoffMm, isAiBim, technicalMode, t]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);

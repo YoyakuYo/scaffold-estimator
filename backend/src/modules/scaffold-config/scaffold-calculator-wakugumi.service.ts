@@ -85,13 +85,14 @@ export class ScaffoldCalculatorWakugumiService {
 
     const wallResults: WallCalculationResult[] = [];
 
-    for (const wall of input.walls) {
+    for (let wallIndex = 0; wallIndex < input.walls.length; wallIndex++) {
+      const wall = input.walls[wallIndex];
       const levelCalc = calculateLevelsWakugumi(
         wall.wallHeightMm,
         input.frameSizeMm,
         topGuardHeight,
       );
-      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, topGuardHeight);
+      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, topGuardHeight, wallIndex);
       wallResults.push(result);
     }
 
@@ -138,8 +139,9 @@ export class ScaffoldCalculatorWakugumiService {
     levelCalc: WakugumiLevelCalcResult,
     complexityMultiplier: number,
     topGuardHeight: number,
+    wallIndex: number = 0,
   ): WallCalculationResult {
-    const spans = fitSpansToWallLengthWakugumi(wall.wallLengthMm);
+    const spans = fitSpansToWallLengthWakugumi(wall.wallLengthMm, { northWall: wallIndex === 0 });
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;

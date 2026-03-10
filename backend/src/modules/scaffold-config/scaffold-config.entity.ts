@@ -70,6 +70,10 @@ export class ScaffoldConfiguration {
   @Column({ type: 'int', name: 'scaffold_width_mm', default: 600 })
   scaffoldWidthMm: number;
 
+  /** Distance from building wall to nearest posts (tateji) in mm: 250–500. Lets scaffold "breathe". */
+  @Column({ type: 'int', name: 'wall_standoff_mm', default: 350 })
+  wallStandoffMm: number;
+
   /** Preferred main tateji size: 1800, 2700, 3600 (kusabi only) */
   @Column({ type: 'int', name: 'preferred_main_tateji_mm', default: 1800 })
   preferredMainTatejiMm: number;

@@ -169,9 +169,14 @@ export const WAKUGUMI_CALC_RULES = {
  * - Prefer to keep the overrun small (≤ 300mm) to allow tight corner connections.
  * - If an overrun ≤ 300mm is impossible with standard spans, choose the smallest
  *   overrun achievable.
+ * - North wall (wall index 0): last span may overrun up to 600mm to close corner with East.
  */
-export function fitSpansToWallLengthWakugumi(wallLengthMm: number): number[] {
-  return fitSpansToWallLengthWithOverrun(wallLengthMm, WAKUGUMI_SPAN_SIZES, 300);
+export function fitSpansToWallLengthWakugumi(
+  wallLengthMm: number,
+  options?: { northWall?: boolean },
+): number[] {
+  const maxOverrunMm = options?.northWall ? 600 : 300;
+  return fitSpansToWallLengthWithOverrun(wallLengthMm, WAKUGUMI_SPAN_SIZES, maxOverrunMm);
 }
 
 function fitSpansToWallLengthWithOverrun(

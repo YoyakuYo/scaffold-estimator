@@ -127,6 +127,7 @@ export class ScaffoldConfigService {
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
+      wallStandoffMm: dto.wallStandoffMm ?? 350,
       preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
       topGuardHeightMm: dto.topGuardHeightMm || 900,
       frameSizeMm: dto.frameSizeMm || 1700,
@@ -168,17 +169,20 @@ export class ScaffoldConfigService {
       });
     }
 
+    const standoffMm = dto.wallStandoffMm ?? 350;
     const calculationResult = {
       ...result,
+      wallStandoffMm: standoffMm,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
     };
     await client
       .from('scaffold_configurations')
-      .update(mapPayloadToSnake({ calculationResult, status: 'calculated' }))
+      .update(mapPayloadToSnake({ calculationResult, status: 'calculated', wallStandoffMm: standoffMm }))
       .eq('id', savedConfig.id);
     savedConfig.calculationResult = calculationResult;
+    savedConfig.wallStandoffMm = standoffMm;
     savedConfig.status = 'calculated';
 
     const priceMap = await this.buildPriceMap(scaffoldType);
@@ -295,6 +299,7 @@ export class ScaffoldConfigService {
     const client = this.supabase.getClient();
     await client.from('calculated_quantities').delete().eq('config_id', configId);
 
+    const wallStandoffMm = dto.wallStandoffMm ?? config.wallStandoffMm ?? 350;
     const configUpdates = mapPayloadToSnake({
       mode: dto.mode,
       scaffoldType,
@@ -309,6 +314,7 @@ export class ScaffoldConfigService {
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
+      wallStandoffMm,
       preferredMainTatejiMm: dto.preferredMainTatejiMm ?? 1800,
       topGuardHeightMm: dto.topGuardHeightMm ?? 900,
       frameSizeMm: dto.frameSizeMm ?? 1700,
@@ -342,6 +348,7 @@ export class ScaffoldConfigService {
     }
     const calculationResult = {
       ...result,
+      wallStandoffMm: wallStandoffMm,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
@@ -354,6 +361,7 @@ export class ScaffoldConfigService {
     config.buildingHeightMm = Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0);
     config.walls = wallsToCalculate.map((w) => ({ side: w.side, wallLengthMm: w.wallLengthMm, wallHeightMm: w.wallHeightMm, enabled: true, stairAccessCount: w.stairAccessCount, ...(w.segments && w.segments.length > 0 && { segments: w.segments }) }));
     config.scaffoldWidthMm = dto.scaffoldWidthMm;
+    config.wallStandoffMm = wallStandoffMm;
     config.calculationResult = calculationResult;
     config.status = 'calculated';
 

@@ -33,6 +33,8 @@ export interface CreateScaffoldConfigDto {
   structureType?: '改修工事' | 'S造' | 'RC造';
   walls: WallInput[];
   scaffoldWidthMm: number;
+  /** Distance from building wall to nearest posts (mm). 250–500 so scaffold can breathe. */
+  wallStandoffMm?: number;
   /** Per-side scaffold width. e.g. { north: 900, south: 600 }. Overrides scaffoldWidthMm for matching sides. */
   widthBySide?: Record<string, number>;
   // Kusabi-specific
@@ -88,6 +90,8 @@ export interface ScaffoldConfiguration {
     segments?: WallSegment[];
   }>;
   scaffoldWidthMm: number;
+  /** Distance from building wall to nearest posts (mm). 250–500. */
+  wallStandoffMm?: number;
   preferredMainTatejiMm: number;
   topGuardHeightMm: number;
   frameSizeMm?: number;

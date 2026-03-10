@@ -101,6 +101,13 @@ export class CreateScaffoldConfigDto {
   @IsNumber()
   scaffoldWidthMm: number;
 
+  /** Distance from building wall to nearest posts (mm). 250–500 so scaffold can breathe. */
+  @IsOptional()
+  @IsNumber()
+  @Min(250)
+  @Max(500)
+  wallStandoffMm?: number;
+
   /** Per-side scaffold width (mm). e.g. { north: 900, south: 600 }. Overrides scaffoldWidthMm for matching sides. */
   @IsOptional()
   widthBySide?: Record<string, number>;

@@ -156,14 +156,15 @@ export class ScaffoldCalculatorService {
 
     const wallResults: WallCalculationResult[] = [];
 
-    for (const wall of input.walls) {
+    for (let wallIndex = 0; wallIndex < input.walls.length; wallIndex++) {
+      const wall = input.walls[wallIndex];
       // Calculate levels for this specific wall's height
       const levelCalc = calculateLevels(
         wall.wallHeightMm,
         input.preferredMainTatejiMm,
         input.topGuardHeightMm,
       );
-      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier);
+      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, wallIndex);
       wallResults.push(result);
     }
 
@@ -205,15 +206,17 @@ export class ScaffoldCalculatorService {
 
   /**
    * Calculate all component quantities for a single wall.
+   * @param wallIndex - 0 = North; North's last span may overrun to close corner with East.
    */
   private calculateWall(
     wall: WallCalculationInput,
     input: ScaffoldCalculationInput,
     levelCalc: LevelCalcResult,
     complexityMultiplier: number = 1.0,
+    wallIndex: number = 0,
   ): WallCalculationResult {
-    // Step 1: Fit spans to wall length
-    const spans = fitSpansToWallLength(wall.wallLengthMm);
+    // Step 1: Fit spans to wall length (North = index 0 may overrun last span up to 600mm)
+    const spans = fitSpansToWallLength(wall.wallLengthMm, { northWall: wallIndex === 0 });
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
     const L = levelCalc.fullLevels;

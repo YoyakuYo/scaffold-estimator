@@ -265,9 +265,14 @@ export const CALC_RULES = {
  * - If an overrun ≤ 300mm is impossible with standard spans, choose the smallest
  *   overrun achievable.
  * Returns array of span sizes.
+ * @param options.northWall - When true (North = wall index 0), allow last span to overrun up to 600mm to close corner with East.
  */
-export function fitSpansToWallLength(wallLengthMm: number): number[] {
-  return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, 300);
+export function fitSpansToWallLength(
+  wallLengthMm: number,
+  options?: { northWall?: boolean },
+): number[] {
+  const maxOverrunMm = options?.northWall ? 600 : 300;
+  return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
 }
 
 function fitSpansToWallLengthWithOverrun(
