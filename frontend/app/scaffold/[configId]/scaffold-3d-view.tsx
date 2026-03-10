@@ -855,7 +855,11 @@ export default function Scaffold3DView({
 
         // Scale wall to fit exactly on polygon edge so it never extends past.
         const totalLenM = wall.wallLengthMm / 1000;
-        const fitScale = totalLenM > 1e-6 ? Math.min(1, edgeLen / totalLenM) : 1;
+        // Note: polygon edge length can be longer than wallLengthMm (e.g. stored vertex directions),
+        // so we must allow scaling UP as well, otherwise the scaffold looks "cut short".
+        // Clamp to avoid extreme distortion when polygon data is bad.
+        const rawScale = totalLenM > 1e-6 ? edgeLen / totalLenM : 1;
+        const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
