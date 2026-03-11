@@ -999,16 +999,8 @@ export default function Scaffold3DView({
         clickTargetsRef.current.push(clickMesh);
       }
 
-      // ── Corner connectors: one shared vertical post per polygon vertex to close corners ─
+      // ── Corner: outer post + width bar (inner → outer) at each level. Same rule for 600 / 900 / 1200 mm (seamless corner, Fusion-style). ─
       const cornerGroup = new THREE.Group();
-      for (let ci = 0; ci < verts.length; ci++) {
-        const vx = verts[ci].x - cx;
-        const vz = verts[ci].z - cz;
-        addPipe(cornerGroup, vx, GROUND_Y, vz, vx, maxH, vz, postMat, PIPE_R);
-      }
-      scene.add(cornerGroup);
-
-      // ── Corner width bars (inner post → outer post) at each level: plank support so East first span / North last span almost touch ─
       const cornerWidthBarsGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       for (let ci = 0; ci < verts.length; ci++) {
@@ -1017,6 +1009,7 @@ export default function Scaffold3DView({
         const bisectorLen = Math.hypot(nPrev.nx + nCurr.nx, nPrev.nz + nCurr.nz) || 1e-6;
         const bx = (nPrev.nx + nCurr.nx) / bisectorLen;
         const bz = (nPrev.nz + nCurr.nz) / bisectorLen;
+        // Per-wall scaffold width (600, 900, or 1200 mm); at corner use max of the two meeting walls
         const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const cornerWidthM = Math.max(wPrev, wCurr);
@@ -1026,11 +1019,15 @@ export default function Scaffold3DView({
         const innerZ = vz + standoffM * bz;
         const outerX = vx + (standoffM + cornerWidthM) * bx;
         const outerZ = vz + (standoffM + cornerWidthM) * bz;
+        // Vertical post at outer corner of scaffold grid (ledgers/beams from both faces connect here)
+        addPipe(cornerGroup, outerX, GROUND_Y, outerZ, outerX, maxH, outerZ, postMat, PIPE_R);
+        // Width bar inner → outer at each level (transverse beam; planks of adjacent sides meet here)
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
           addPipe(cornerWidthBarsGroup, innerX, y, innerZ, outerX, y, outerZ, yokojiMat, PIPE_R * 0.8);
         }
       }
+      scene.add(cornerGroup);
       scene.add(cornerWidthBarsGroup);
 
       // ── Corner space/distance: angle (degrees) and opening distance (m), with 3D indicator ─
