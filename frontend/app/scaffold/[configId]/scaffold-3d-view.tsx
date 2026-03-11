@@ -1030,6 +1030,43 @@ export default function Scaffold3DView({
       scene.add(cornerGroup);
       scene.add(cornerWidthBarsGroup);
 
+      // ── Corner filler planks (PATTANKO): close the gap so planks from adjacent sides meet seamlessly ─
+      const cornerPlanksGroup = new THREE.Group();
+      const plankThick = 0.025;
+      const cornerPlankWidthM = 0.5; // depth of filler plank in the corner angle
+      for (let ci = 0; ci < verts.length; ci++) {
+        const nPrev = wallNormals[(ci - 1 + verts.length) % verts.length];
+        const nCurr = wallNormals[ci];
+        const bisectorLen = Math.hypot(nPrev.nx + nCurr.nx, nPrev.nz + nCurr.nz) || 1e-6;
+        const bx = (nPrev.nx + nCurr.nx) / bisectorLen;
+        const bz = (nPrev.nz + nCurr.nz) / bisectorLen;
+        const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const cornerWidthM = Math.max(wPrev, wCurr);
+        const vx = verts[ci].x - cx;
+        const vz = verts[ci].z - cz;
+        const innerX = vx + standoffM * bx;
+        const innerZ = vz + standoffM * bz;
+        const outerX = vx + (standoffM + cornerWidthM) * bx;
+        const outerZ = vz + (standoffM + cornerWidthM) * bz;
+        const midX = (innerX + outerX) / 2;
+        const midZ = (innerZ + outerZ) / 2;
+        const bisectorAngleY = Math.atan2(bz, bx);
+        for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
+          const y = GROUND_Y + JACK_H + lv * LEVEL_H + plankThick / 2 + 0.015;
+          const cornerPlank = new THREE.Group();
+          const geo = new THREE.BoxGeometry(cornerWidthM, plankThick, cornerPlankWidthM);
+          const mesh = new THREE.Mesh(geo, plankMat);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          cornerPlank.add(mesh);
+          cornerPlank.position.set(midX, y, midZ);
+          cornerPlank.rotation.y = bisectorAngleY;
+          cornerPlanksGroup.add(cornerPlank);
+        }
+      }
+      scene.add(cornerPlanksGroup);
+
       // ── Corner space/distance: angle (degrees) and opening distance (m), with 3D indicator ─
       for (let ci = 0; ci < verts.length; ci++) {
         const prev = verts[(ci - 1 + verts.length) % verts.length];
