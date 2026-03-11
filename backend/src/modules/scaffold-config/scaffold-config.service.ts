@@ -127,7 +127,7 @@ export class ScaffoldConfigService {
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
-      wallStandoffMm: dto.wallStandoffMm ?? 350,
+      // wallStandoffMm omitted from insert until migration 113 is applied; see calculationResult for value
       preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
       topGuardHeightMm: dto.topGuardHeightMm || 900,
       frameSizeMm: dto.frameSizeMm || 1700,
@@ -179,7 +179,7 @@ export class ScaffoldConfigService {
     };
     await client
       .from('scaffold_configurations')
-      .update(mapPayloadToSnake({ calculationResult, status: 'calculated', wallStandoffMm: standoffMm }))
+      .update(mapPayloadToSnake({ calculationResult, status: 'calculated' }))
       .eq('id', savedConfig.id);
     savedConfig.calculationResult = calculationResult;
     savedConfig.wallStandoffMm = standoffMm;
@@ -299,7 +299,7 @@ export class ScaffoldConfigService {
     const client = this.supabase.getClient();
     await client.from('calculated_quantities').delete().eq('config_id', configId);
 
-    const wallStandoffMm = dto.wallStandoffMm ?? config.wallStandoffMm ?? 350;
+    const wallStandoffMm = dto.wallStandoffMm ?? config.wallStandoffMm ?? (config.calculationResult as any)?.wallStandoffMm ?? 350;
     const configUpdates = mapPayloadToSnake({
       mode: dto.mode,
       scaffoldType,
@@ -314,7 +314,7 @@ export class ScaffoldConfigService {
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
-      wallStandoffMm,
+      // wallStandoffMm omitted from update until migration 113 is applied
       preferredMainTatejiMm: dto.preferredMainTatejiMm ?? 1800,
       topGuardHeightMm: dto.topGuardHeightMm ?? 900,
       frameSizeMm: dto.frameSizeMm ?? 1700,
