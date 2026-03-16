@@ -577,9 +577,9 @@ export default function Scaffold3DView({
         roughness: rough,
       });
       const yokojiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.yokoji : 0xc03030,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.yokoji : 0xe53e3e,
+        metalness: 0.1,
+        roughness: 0.6,
       });
       const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : pipeMat;
       const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
@@ -788,6 +788,7 @@ export default function Scaffold3DView({
 
           // Width yokoji (horizontal bars along scaffold depth)
           // Skip at corner positions where inner post is absent — corner code handles bridging.
+          const yokojiOverhang = 0.06;
           for (let pi = 0; pi < postX.length; pi++) {
             const px = postX[pi];
             const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
@@ -795,7 +796,7 @@ export default function Scaffold3DView({
             if (isBracket) {
               addPipe(group, px, y, widthM, px, y, 0, bracketMat, PIPE_R * 0.8);
             } else {
-              addRealisticNunoBar(THREE, group, px, y, 0, px, widthM, yokojiMat);
+              addPipe(group, px, y - 0.02, -yokojiOverhang, px, y - 0.02, widthM + yokojiOverhang, yokojiMat, PIPE_R * 1.1);
             }
           }
           if (cornerInnerPostX != null && !isBracket) {
