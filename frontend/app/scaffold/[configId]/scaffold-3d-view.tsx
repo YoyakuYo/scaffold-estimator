@@ -1024,49 +1024,11 @@ export default function Scaffold3DView({
         clickTargetsRef.current.push(clickMesh);
       }
 
-      // ── Corner platform: posts, planks, bars, habaki, guard rails at each corner ─
-      // At each corner vertex the end of wall (ci-1) meets the start of wall ci.
-      // We compute the 4 scaffold row endpoints + 2 intersection points (outer-outer
-      // and inner-inner) and build a proper walkable platform filling the corner gap.
-
-      function lineIntersect2D(
-        p1x: number, p1z: number, d1x: number, d1z: number,
-        p2x: number, p2z: number, d2x: number, d2z: number,
-      ): { x: number; z: number } | null {
-        const det = d1z * d2x - d1x * d2z;
-        if (Math.abs(det) < 1e-10) return null;
-        const t = (-(p2x - p1x) * d2z + (p2z - p1z) * d2x) / det;
-        return { x: p1x + t * d1x, z: p1z + t * d1z };
-      }
-
-      function addCornerPlatformMesh(
-        parent: THREE.Object3D,
-        pts: Array<{ x: number; z: number }>,
-        y: number,
-        mat: THREE.MeshStandardMaterial,
-      ) {
-        if (pts.length < 3) return;
-        const thick = 0.025;
-        const np = pts.length;
-        const pos: number[] = [];
-        const idx: number[] = [];
-        for (const p of pts) pos.push(p.x, y + thick / 2, p.z);
-        for (const p of pts) pos.push(p.x, y - thick / 2, p.z);
-        for (let i = 1; i < np - 1; i++) idx.push(0, i + 1, i);
-        for (let i = 1; i < np - 1; i++) idx.push(np, np + i, np + i + 1);
-        for (let i = 0; i < np; i++) {
-          const j = (i + 1) % np;
-          idx.push(i, np + i, j, j, np + i, np + j);
-        }
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-        geo.setIndex(idx);
-        geo.computeVertexNormals();
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        parent.add(mesh);
-      }
+      // ── Corner connection (reference: 足場コーナー詳細図) ─
+      // No pattanko/hex plank. Previous wall's last two posts (inner + outer) and current
+      // wall's first two posts define the corner. We only add connecting bars so the two
+      // walls are joined: inner→inner and outer→outer at each level, plus habaki and
+      // guard rails along the outer edge.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
@@ -1081,75 +1043,30 @@ export default function Scaffold3DView({
         const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
-        // 4 scaffold row endpoints at this corner vertex
+        // 4 scaffold row endpoints: prev wall end (pi, po) and curr wall start (ciPt, co)
         const pi = { x: vx + nPrev.nx * standoffM, z: vz + nPrev.nz * standoffM };
         const po = { x: vx + nPrev.nx * (standoffM + wPrev), z: vz + nPrev.nz * (standoffM + wPrev) };
         const ciPt = { x: vx + nCurr.nx * standoffM, z: vz + nCurr.nz * standoffM };
         const co = { x: vx + nCurr.nx * (standoffM + wCurr), z: vz + nCurr.nz * (standoffM + wCurr) };
 
-        // Edge directions for the two walls meeting here
-        const prevV = verts[(ci - 1 + verts.length) % verts.length];
-        const currV = verts[ci];
-        const nextV = verts[(ci + 1) % verts.length];
-        const pLen = Math.hypot(currV.x - prevV.x, currV.z - prevV.z) || 1e-6;
-        const prevDir = { x: (currV.x - prevV.x) / pLen, z: (currV.z - prevV.z) / pLen };
-        const nLen = Math.hypot(nextV.x - currV.x, nextV.z - currV.z) || 1e-6;
-        const currDir = { x: (nextV.x - currV.x) / nLen, z: (nextV.z - currV.z) / nLen };
-
-        // Outer-outer corner: intersection of both walls' outer row lines
-        const oo = lineIntersect2D(
-          po.x, po.z, prevDir.x, prevDir.z,
-          co.x, co.z, -currDir.x, -currDir.z,
-        );
-        // Inner-inner corner: intersection of both walls' inner row lines
-        const ii = lineIntersect2D(
-          pi.x, pi.z, prevDir.x, prevDir.z,
-          ciPt.x, ciPt.z, -currDir.x, -currDir.z,
-        );
-        if (!oo || !ii) continue;
-        const maxCornerDist = Math.max(wPrev, wCurr) * 5;
-        if (Math.hypot(oo.x - vx, oo.z - vz) > maxCornerDist) continue;
-        if (Math.hypot(ii.x - vx, ii.z - vz) > maxCornerDist) continue;
-
-        const cornerPostBaseY = GROUND_Y + JACK_H;
-        const cornerPostH = maxH - cornerPostBaseY;
-
-        // Posts at outer-outer and inner-inner intersections
-        addRealisticPost(THREE, cornerGroup, oo.x, cornerPostBaseY, oo.z, cornerPostH, postMat);
-        addPipe(cornerGroup, oo.x, GROUND_Y, oo.z, oo.x, cornerPostBaseY, oo.z, jackMatEff, PIPE_R * 0.95);
-        addRealisticPost(THREE, cornerGroup, ii.x, cornerPostBaseY, ii.z, cornerPostH, postMat);
-        addPipe(cornerGroup, ii.x, GROUND_Y, ii.z, ii.x, cornerPostBaseY, ii.z, jackMatEff, PIPE_R * 0.95);
-
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Horizontal bars connecting both walls (outer ring: po→oo→co, inner ring: pi→ii→ciPt)
-          addPipe(cornerGroup, po.x, y, po.z, oo.x, y, oo.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, oo.x, y, oo.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, pi.x, y, pi.z, ii.x, y, ii.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, ii.x, y, ii.z, ciPt.x, y, ciPt.z, yokojiMat, PIPE_R * 0.8);
-          // Width bar inner↔outer at the corner intersection
-          addPipe(cornerGroup, ii.x, y, ii.z, oo.x, y, oo.z, yokojiMat, PIPE_R * 0.8);
+          // Connecting bars: prev wall end ↔ curr wall start (inner and outer)
+          addPipe(cornerGroup, pi.x, y, pi.z, ciPt.x, y, ciPt.z, yokojiMat, PIPE_R * 0.8);
+          addPipe(cornerGroup, po.x, y, po.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
 
-          // Corner plank (hexagonal area: ciPt→co→oo→po→pi→ii, CCW from above)
-          addCornerPlatformMesh(cornerGroup, [ciPt, co, oo, po, pi, ii], y + 0.015, plankMatEff);
-
-          // Habaki (toe boards) along outer edges
+          // Habaki (toe boards) along outer edge at corner
           const hY = y + 0.06;
-          addPipe(cornerGroup, po.x, hY, po.z, oo.x, hY, oo.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, oo.x, hY, oo.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, po.x, hY, po.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
 
-          // Guard rails along outer corner edges
-          addPipe(cornerGroup, po.x, y + 0.9, po.z, oo.x, y + 0.9, oo.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, oo.x, y + 0.9, oo.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, po.x, y + 0.45, po.z, oo.x, y + 0.45, oo.z, tesuriMat, PIPE_R * 0.6);
-          addPipe(cornerGroup, oo.x, y + 0.45, oo.z, co.x, y + 0.45, co.z, tesuriMat, PIPE_R * 0.6);
+          // Guard rails along outer corner edge
+          addPipe(cornerGroup, po.x, y + 0.9, po.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, po.x, y + 0.45, po.z, co.x, y + 0.45, co.z, tesuriMat, PIPE_R * 0.6);
 
-          // Top guard at highest level
+          // Top guard rail along outer edge at highest level
           if (lv === maxLevelsForCorners && topGuardM > 0) {
-            addPipe(cornerGroup, oo.x, y, oo.z, oo.x, y + topGuardM, oo.z, topGuardMat, PIPE_R * 0.7);
-            addPipe(cornerGroup, po.x, y + topGuardM, po.z, oo.x, y + topGuardM, oo.z, topGuardMat, PIPE_R * 0.65);
-            addPipe(cornerGroup, oo.x, y + topGuardM, oo.z, co.x, y + topGuardM, co.z, topGuardMat, PIPE_R * 0.65);
+            addPipe(cornerGroup, po.x, y + topGuardM, po.z, co.x, y + topGuardM, co.z, topGuardMat, PIPE_R * 0.65);
           }
         }
       }
