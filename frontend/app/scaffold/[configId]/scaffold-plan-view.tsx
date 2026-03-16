@@ -430,6 +430,47 @@ export default function ScaffoldPlanView({ result }: Props) {
           {/* Scaffold strips for each edge */}
           {edges.map((edge, idx) => renderEdge(edge, idx))}
 
+          {/* Corner patches — fill the gap where two adjacent scaffold strips meet */}
+          {isClosed && edges.length >= 2 && edges.map((_, wi) => {
+            const eA = edges[wi];
+            const eB = edges[(wi + 1) % edges.length];
+            const colA = WALL_ACCENT[wi % WALL_ACCENT.length];
+            const colB = WALL_ACCENT[((wi + 1) % edges.length) % WALL_ACCENT.length];
+
+            const lenA = Math.hypot(eA.x2 - eA.x1, eA.y2 - eA.y1);
+            const lenB = Math.hypot(eB.x2 - eB.x1, eB.y2 - eB.y1);
+            if (lenA < 1 || lenB < 1) return null;
+
+            const nAx = normalSign * (-(eA.y2 - eA.y1) / lenA);
+            const nAy = normalSign * ((eA.x2 - eA.x1) / lenA);
+            const nBx = normalSign * (-(eB.y2 - eB.y1) / lenB);
+            const nBy = normalSign * ((eB.x2 - eB.x1) / lenB);
+
+            const sw = SCAFFOLD_STRIP_W;
+            const vx = eA.x2 + offsetX;
+            const vy = eA.y2 + offsetY;
+
+            // 4 corners of the patch
+            const p1x = vx, p1y = vy;                           // building corner (inner)
+            const p2x = vx + nAx * sw, p2y = vy + nAy * sw;     // wall A outer
+            const p3x = vx + nAx * sw + nBx * sw, p3y = vy + nAy * sw + nBy * sw; // far outer
+            const p4x = vx + nBx * sw, p4y = vy + nBy * sw;     // wall B outer
+
+            return (
+              <g key={`corner-${wi}`}>
+                <polygon
+                  points={`${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y} ${p4x},${p4y}`}
+                  fill="#e2e8f0" stroke="#94a3b8" strokeWidth={1.2} opacity={0.8}
+                />
+                {/* Corner post markers */}
+                <circle cx={p1x} cy={p1y} r={2.5} fill="#334155" />
+                <circle cx={p2x} cy={p2y} r={2.5} fill={colA.stroke} />
+                <circle cx={p3x} cy={p3y} r={2.5} fill="#334155" />
+                <circle cx={p4x} cy={p4y} r={2.5} fill={colB.stroke} />
+              </g>
+            );
+          })}
+
           {/* Legend */}
           <g transform={`translate(${PAD - 20}, ${svgH - 18})`}>
             {walls.map((w, i) => {
