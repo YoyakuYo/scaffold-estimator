@@ -51,7 +51,7 @@ export function addSimpleJack(
   parent.add(mesh);
 }
 
-/** Simple plank: rectangular box. */
+/** Simple plank: rectangular box with optional texture tiling. */
 export function addSimplePlank(
   THREE: ThreeNS,
   parent: InstanceType<ThreeNS['Object3D']>,
@@ -64,6 +64,18 @@ export function addSimplePlank(
 ): void {
   const thick = 0.025;
   const geo = new THREE.BoxGeometry(lengthM, thick, widthM);
+  if (material.map) {
+    const uvAttr = geo.getAttribute('uv');
+    if (uvAttr) {
+      const repeatX = lengthM / 0.5;
+      const repeatZ = widthM / 0.25;
+      for (let i = 0; i < uvAttr.count; i++) {
+        uvAttr.setX(i, uvAttr.getX(i) * repeatX);
+        uvAttr.setY(i, uvAttr.getY(i) * repeatZ);
+      }
+      uvAttr.needsUpdate = true;
+    }
+  }
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(midX, midY, midZ);
   mesh.castShadow = true;
@@ -152,7 +164,6 @@ export const addRealisticNunoBar = addSimpleNunoBar;
 export const addRealisticBrace = addSimpleBrace;
 export const addRealisticHabaki = addSimpleHabaki;
 
-/** Texture loading removed. Returns nulls so callers use fallback materials. */
 export function loadScaffoldTextures(
   THREE: ThreeNS,
   _baseUrl?: string,
@@ -160,15 +171,27 @@ export function loadScaffoldTextures(
   const color = 0xc0c8d0;
   const pipe = new THREE.MeshStandardMaterial({ color, metalness: 0.5, roughness: 0.4 });
   const pipeDark = new THREE.MeshStandardMaterial({ color: 0xa0a8b0, metalness: 0.5, roughness: 0.4 });
-  return Promise.resolve({
-    post: null,
-    jack: null,
-    plank: null,
-    nuno: null,
-    brace: null,
-    habaki: null,
-    pipe,
-    pipeDark,
+
+  return new Promise<ScaffoldTextureSet>((resolve) => {
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      '/textures/plank.png',
+      (tex) => {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        const plankMat = new THREE.MeshStandardMaterial({
+          map: tex,
+          metalness: 0.55,
+          roughness: 0.35,
+          color: 0xd0d8e0,
+        });
+        resolve({ post: null, jack: null, plank: plankMat, nuno: null, brace: null, habaki: null, pipe, pipeDark });
+      },
+      undefined,
+      () => {
+        resolve({ post: null, jack: null, plank: null, nuno: null, brace: null, habaki: null, pipe, pipeDark });
+      },
+    );
   });
 }
 
