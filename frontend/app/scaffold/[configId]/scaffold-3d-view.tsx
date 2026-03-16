@@ -834,6 +834,53 @@ export default function Scaffold3DView({
           }
           } // end for stairSpanIdx
         }
+
+        // ── 300mm overrun extension at wall end (real plank for corner coverage) ──
+        // Each wall extends 300mm past the corner vertex with actual posts, planks,
+        // habaki, and guard rails so the corner junction is a real walkable platform.
+        const overrunM = 0.3;
+        const overrunEndX = totalLen + overrunM;
+        const lastPostX_val = postX[postX.length - 1];
+
+        // Overrun: jack bases
+        for (const pz of isBracket ? [0] : [0, widthM]) {
+          addPipe(group, overrunEndX, GROUND_Y, pz, overrunEndX, GROUND_Y + JACK_H, pz, jackMatEff, PIPE_R * 0.95);
+        }
+        // Overrun: vertical posts
+        for (const pz of isBracket ? [0] : [0, widthM]) {
+          addRealisticPost(THREE, group, overrunEndX, postBaseY, pz, postHeightFromGround, postMat);
+        }
+        // Overrun: per-level components
+        for (let lv = 1; lv <= levelsToBuild; lv++) {
+          const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+          // Width yokoji at overrun post
+          if (isBracket) {
+            addPipe(group, overrunEndX, y, widthM, overrunEndX, y, 0, bracketMat, PIPE_R * 0.8);
+          } else {
+            addRealisticNunoBar(THREE, group, overrunEndX, y, 0, overrunEndX, widthM, yokojiMat);
+          }
+          // Plank in overrun area
+          const midXOvr = (lastPostX_val + overrunEndX) / 2;
+          addRealisticPlank(THREE, group, midXOvr, y + 0.015, widthM / 2, overrunM - 0.02, widthM * 0.9, plankMat);
+          // Habaki (toe boards) — front and back
+          addRealisticHabaki(THREE, group, midXOvr, y + 0.015, widthM * 0.05, overrunM - 0.02, habakiMatEff);
+          addRealisticHabaki(THREE, group, midXOvr, y + 0.015, widthM * 0.95, overrunM - 0.02, habakiMatEff);
+          addRealisticHabaki(THREE, group, midXOvr, y + 0.06, 0, overrunM - 0.02, habakiMatEff);
+          addRealisticHabaki(THREE, group, midXOvr, y + 0.06, widthM, overrunM - 0.02, habakiMatEff);
+          // Guard rails in overrun area
+          const railTopOvr = y + 0.9;
+          const railMidOvr = y + 0.45;
+          addPipe(group, lastPostX_val, railTopOvr, 0, overrunEndX, railTopOvr, 0, tesuriMat, PIPE_R * 0.65);
+          addPipe(group, lastPostX_val, railMidOvr, 0, overrunEndX, railMidOvr, 0, tesuriMat, PIPE_R * 0.6);
+          // Top guard at last level
+          if (lv === levelsToBuild && topGuardM > 0) {
+            for (const pz of isBracket ? [0] : [0, widthM]) {
+              addPipe(group, overrunEndX, y, pz, overrunEndX, y + topGuardM, pz, topGuardMat, PIPE_R * 0.7);
+              addPipe(group, lastPostX_val, y + topGuardM, pz, overrunEndX, y + topGuardM, pz, topGuardMat, PIPE_R * 0.65);
+            }
+          }
+        }
+
         return { runLenM: totalLen };
       }
 
@@ -1053,76 +1100,8 @@ export default function Scaffold3DView({
       scene.add(cornerGroup);
       scene.add(cornerWidthBarsGroup);
 
-      // ── Corner filler planks (PATTANKO): 2 per corner per level.
-      //    At each corner the previous wall's last span extends ~300mm past the corner
-      //    (overrun). The pattanko fills the L-shaped gap where the two walls meet:
-      //      Pattanko 1: runs along the PREVIOUS wall direction, at the current wall's scaffold depth
-      //      Pattanko 2: runs along the CURRENT wall direction, at the previous wall's scaffold depth
-      //    This matches real kusabi construction: planks aligned with wall directions, not diagonally.
-      const cornerPlanksGroup = new THREE.Group();
-      const plankThick = 0.025;
-      const overrunM = 0.3;
-      for (let ci = 0; ci < verts.length; ci++) {
-        const prevIdx = (ci - 1 + verts.length) % verts.length;
-        const nextIdx = (ci + 1) % verts.length;
-
-        // Previous wall direction (the wall that ENDS at this corner)
-        const prevDx = verts[ci].x - verts[prevIdx].x;
-        const prevDz = verts[ci].z - verts[prevIdx].z;
-        const prevLen = Math.hypot(prevDx, prevDz) || 1e-6;
-        const pdx = prevDx / prevLen;
-        const pdz = prevDz / prevLen;
-
-        // Current wall direction (the wall that STARTS at this corner)
-        const currDx = verts[nextIdx].x - verts[ci].x;
-        const currDz = verts[nextIdx].z - verts[ci].z;
-        const currLen = Math.hypot(currDx, currDz) || 1e-6;
-        const cdx = currDx / currLen;
-        const cdz = currDz / currLen;
-
-        const nPrev = wallNormals[prevIdx];
-        const nCurr = wallNormals[ci];
-        const wPrev = (walls[prevIdx]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-
-        const vx = verts[ci].x - cx;
-        const vz = verts[ci].z - cz;
-
-        for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
-          const y = GROUND_Y + JACK_H + lv * LEVEL_H + plankThick / 2 + 0.015;
-
-          // Pattanko 1: along prev wall direction, at current wall's scaffold centerline.
-          // Sits between the previous wall's last outer post and the corner post.
-          const p1x = vx + nCurr.nx * (standoffM + wCurr / 2) + pdx * overrunM / 2;
-          const p1z = vz + nCurr.nz * (standoffM + wCurr / 2) + pdz * overrunM / 2;
-          const p1Angle = Math.atan2(pdz, pdx);
-          const p1 = new THREE.Group();
-          const p1Geo = new THREE.BoxGeometry(overrunM, plankThick, wCurr * 0.9);
-          const p1Mesh = new THREE.Mesh(p1Geo, plankMat);
-          p1Mesh.castShadow = true;
-          p1Mesh.receiveShadow = true;
-          p1.add(p1Mesh);
-          p1.position.set(p1x, y, p1z);
-          p1.rotation.y = p1Angle;
-          cornerPlanksGroup.add(p1);
-
-          // Pattanko 2: along curr wall direction, at previous wall's scaffold centerline.
-          // Sits between the current wall's first post and the corner post.
-          const p2x = vx + nPrev.nx * (standoffM + wPrev / 2) + cdx * overrunM / 2;
-          const p2z = vz + nPrev.nz * (standoffM + wPrev / 2) + cdz * overrunM / 2;
-          const p2Angle = Math.atan2(cdz, cdx);
-          const p2 = new THREE.Group();
-          const p2Geo = new THREE.BoxGeometry(overrunM, plankThick, wPrev * 0.9);
-          const p2Mesh = new THREE.Mesh(p2Geo, plankMat);
-          p2Mesh.castShadow = true;
-          p2Mesh.receiveShadow = true;
-          p2.add(p2Mesh);
-          p2.position.set(p2x, y, p2z);
-          p2.rotation.y = p2Angle;
-          cornerPlanksGroup.add(p2);
-        }
-      }
-      scene.add(cornerPlanksGroup);
+      // Corner planks (pattanko) removed: each wall now extends 300mm past the corner
+      // with real posts, planks, habaki, and guard rails — no separate filler needed.
 
       // ── Corner space/distance: angle (degrees) and opening distance (m), with 3D indicator ─
       for (let ci = 0; ci < verts.length; ci++) {
