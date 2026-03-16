@@ -430,7 +430,7 @@ export default function ScaffoldPlanView({ result }: Props) {
           {/* Scaffold strips for each edge */}
           {edges.map((edge, idx) => renderEdge(edge, idx))}
 
-          {/* Corner patches — simple bridge (パッタンコ) between adjacent wall ends */}
+          {/* Corner patches — L-shaped fill where two adjacent scaffold strips meet */}
           {isClosed && edges.length >= 2 && edges.map((_, wi) => {
             const eA = edges[wi];
             const eB = edges[(wi + 1) % edges.length];
@@ -450,18 +450,32 @@ export default function ScaffoldPlanView({ result }: Props) {
             const vx = eA.x2 + offsetX;
             const vy = eA.y2 + offsetY;
 
-            // Wall A end face (outer/inner) and wall B start face (outer/inner)
-            const oAx = vx + nAx * sw, oAy = vy + nAy * sw;
-            const oBx = vx + nBx * sw, oBy = vy + nBy * sw;
+            // 6-point L-shape: outerA → farOuter → outerB → innerB → innerMid → innerA
+            const p1x = vx + nAx * sw, p1y = vy + nAy * sw;                         // outer A
+            const p2x = vx + nAx * sw + nBx * sw, p2y = vy + nAy * sw + nBy * sw;   // far outer
+            const p3x = vx + nBx * sw, p3y = vy + nBy * sw;                         // outer B
+            const p4x = vx, p4y = vy;                                               // building corner
 
             return (
               <g key={`corner-${wi}`}>
                 <polygon
-                  points={`${oAx},${oAy} ${oBx},${oBy} ${vx},${vy}`}
-                  fill="#e2e8f0" stroke="#94a3b8" strokeWidth={1.2} opacity={0.6}
+                  points={`${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y} ${p4x},${p4y}`}
+                  fill="#e2e8f0" stroke="#94a3b8" strokeWidth={1.2} opacity={0.8}
                 />
-                <circle cx={oAx} cy={oAy} r={2} fill={colA.stroke} opacity={0.7} />
-                <circle cx={oBx} cy={oBy} r={2} fill={colB.stroke} opacity={0.7} />
+                {/* Post markers at L-shape corners */}
+                <circle cx={p1x} cy={p1y} r={2.5} fill={colA.stroke} />
+                <circle cx={p2x} cy={p2y} r={2.5} fill="#334155" />
+                <circle cx={p3x} cy={p3y} r={2.5} fill={colB.stroke} />
+                <circle cx={p4x} cy={p4y} r={2.5} fill="#334155" />
+                {/* Dimension label */}
+                <text
+                  x={(p1x + p2x + p3x + p4x) / 4}
+                  y={(p1y + p2y + p3y + p4y) / 4 + 1}
+                  textAnchor="middle" dominantBaseline="central"
+                  fontSize={6} fill={DIM_COLOR}
+                >
+                  600
+                </text>
               </g>
             );
           })}
