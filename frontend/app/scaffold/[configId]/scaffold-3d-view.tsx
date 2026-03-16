@@ -1140,15 +1140,15 @@ export default function Scaffold3DView({
       }
       maxHeightRef.current = maxH;
 
-      // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // L-shaped plank with 6 vertices — all edges parallel to wall directions, no diagonals.
-      // p1=outerA, p2=farOuter, p3=outerB, p4=innerB, p5=innerMid, p6=innerA
+      // ── Corner connection (per 足場コーナー詳細図) ─
+      // L-shape structural frame only: yokoji ties + corner posts + outer guard rails.
+      // NO plank / NO habaki here — the walls already render their own 600mm end
+      // span planks and habaki. This avoids the visual duplication of 600mm bays.
+      // p2 (far outer) and p5 (inner mid) are the 2 shared corner posts.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       maxLevelsRef.current = maxLevelsForCorners;
-      const cornerPlankMat = plankMatEff.clone();
-      cornerPlankMat.side = THREE.DoubleSide;
 
       for (let wi = 0; wi < walls.length; wi++) {
         const nextWi = (wi + 1) % walls.length;
@@ -1164,56 +1164,27 @@ export default function Scaffold3DView({
         const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
-        // 6-point L-shape at corner vertex V
-        const sA = standoffM + wA;     // outer offset along nA
-        const sB = standoffM + wB;     // outer offset along nB
-        const p1 = { x: vx + nA.nx * sA,                      z: vz + nA.nz * sA };                      // outer A
-        const p2 = { x: vx + nA.nx * sA + nB.nx * sB,         z: vz + nA.nz * sA + nB.nz * sB };         // far outer
-        const p3 = { x: vx + nB.nx * sB,                      z: vz + nB.nz * sB };                      // outer B
-        const p4 = { x: vx + nB.nx * standoffM,               z: vz + nB.nz * standoffM };               // inner B
-        const p5 = { x: vx + nA.nx * standoffM + nB.nx * standoffM, z: vz + nA.nz * standoffM + nB.nz * standoffM }; // inner mid
-        const p6 = { x: vx + nA.nx * standoffM,               z: vz + nA.nz * standoffM };               // inner A
-
-        const pts = [p1, p2, p3, p4, p5, p6];
+        const sA = standoffM + wA;
+        const sB = standoffM + wB;
+        const p1 = { x: vx + nA.nx * sA,                      z: vz + nA.nz * sA };
+        const p2 = { x: vx + nA.nx * sA + nB.nx * sB,         z: vz + nA.nz * sA + nB.nz * sB };
+        const p3 = { x: vx + nB.nx * sB,                      z: vz + nB.nz * sB };
+        const p4 = { x: vx + nB.nx * standoffM,               z: vz + nB.nz * standoffM };
+        const p5 = { x: vx + nA.nx * standoffM + nB.nx * standoffM, z: vz + nA.nz * standoffM + nB.nz * standoffM };
+        const p6 = { x: vx + nA.nx * standoffM,               z: vz + nA.nz * standoffM };
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // 6 edges of the L — all horizontal ties
-          for (let e = 0; e < 6; e++) {
-            const a = pts[e], b = pts[(e + 1) % 6];
-            addPipe(cornerGroup, a.x, y, a.z, b.x, y, b.z, yokojiMat, PIPE_R * 0.8);
-          }
-          // Width-direction ties at the inner intersection
+          // Perpendicular yokoji ties only (the wall-parallel edges p6↔p1 and p3↔p4
+          // are already built by each wall's own scaffold)
+          addPipe(cornerGroup, p1.x, y, p1.z, p2.x, y, p2.z, yokojiMat, PIPE_R * 0.8);
+          addPipe(cornerGroup, p2.x, y, p2.z, p3.x, y, p3.z, yokojiMat, PIPE_R * 0.8);
+          addPipe(cornerGroup, p4.x, y, p4.z, p5.x, y, p5.z, yokojiMat, PIPE_R * 0.8);
+          addPipe(cornerGroup, p5.x, y, p5.z, p6.x, y, p6.z, yokojiMat, PIPE_R * 0.8);
           addPipe(cornerGroup, p5.x, y, p5.z, p2.x, y, p2.z, yokojiMat, PIPE_R * 0.7);
 
-          // L-shaped plank
-          if (!isOpenPolygon) {
-            const cornerShape = new THREE.Shape();
-            cornerShape.moveTo(p1.x, p1.z);
-            cornerShape.lineTo(p2.x, p2.z);
-            cornerShape.lineTo(p3.x, p3.z);
-            cornerShape.lineTo(p4.x, p4.z);
-            cornerShape.lineTo(p5.x, p5.z);
-            cornerShape.lineTo(p6.x, p6.z);
-            cornerShape.closePath();
-            const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
-            const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
-            plankMesh.rotation.x = -Math.PI / 2;
-            plankMesh.position.y = y + 0.028;
-            plankMesh.castShadow = true;
-            plankMesh.receiveShadow = true;
-            cornerGroup.add(plankMesh);
-          }
-
-          // Habaki along outer L-edges (p1→p2→p3) and inner L-edges (p4→p5→p6)
-          const hY = y + 0.06;
-          addPipe(cornerGroup, p1.x, hY, p1.z, p2.x, hY, p2.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, p2.x, hY, p2.z, p3.x, hY, p3.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, p4.x, hY, p4.z, p5.x, hY, p5.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, p5.x, hY, p5.z, p6.x, hY, p6.z, habakiMatEff, PIPE_R * 0.5);
-
-          // Guard rails along outer edges (p1→p2 and p2→p3)
+          // Outer guard rails on perpendicular edges only
           addPipe(cornerGroup, p1.x, y + 0.9, p1.z, p2.x, y + 0.9, p2.z, tesuriMat, PIPE_R * 0.65);
           addPipe(cornerGroup, p2.x, y + 0.9, p2.z, p3.x, y + 0.9, p3.z, tesuriMat, PIPE_R * 0.65);
           addPipe(cornerGroup, p1.x, y + 0.45, p1.z, p2.x, y + 0.45, p2.z, tesuriMat, PIPE_R * 0.6);
@@ -1225,8 +1196,7 @@ export default function Scaffold3DView({
           }
         }
 
-        // Only p2 (far outer) and p5 (inner mid) are new corner posts.
-        // p1/p6 are reused from wall A; p3/p4 are reused from wall B.
+        // Corner posts: p2 (far outer) and p5 (inner mid)
         const totalPostH = maxLevelsForCorners * LEVEL_H;
         const cpH = 0.04, cpW = 0.25, cpD = 0.25;
         [p2, p5].forEach((p) => {
