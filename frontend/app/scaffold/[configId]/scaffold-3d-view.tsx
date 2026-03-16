@@ -1078,9 +1078,12 @@ export default function Scaffold3DView({
           }
         }
 
-        // Vertical posts at all 6 L-shape positions
+        // Eco pallets, jack bases, and vertical posts at all 6 L-shape positions
         const totalPostH = maxLevelsForCorners * LEVEL_H;
+        const cpH = 0.04, cpW = 0.25, cpD = 0.25;
         pts.forEach((p) => {
+          addBox(cornerGroup, p.x, GROUND_Y + cpH / 2, p.z, cpW, cpH, cpD, ecoPalletMat);
+          addPipe(cornerGroup, p.x, GROUND_Y, p.z, p.x, GROUND_Y + JACK_H, p.z, jackMatEff, PIPE_R * 0.95);
           addPipe(cornerGroup, p.x, GROUND_Y + JACK_H, p.z, p.x, GROUND_Y + JACK_H + totalPostH, p.z, postMat, PIPE_R);
         });
       }
