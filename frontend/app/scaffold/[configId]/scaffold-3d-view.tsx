@@ -59,7 +59,7 @@ const C = {
   plank:      0xf5b800,  // golden yellow — anchi planks + habaki
   tesuri:     0x4a90d9,  // soft blue — guard rails (distinct from posts)
   brace:      0xc0c8d0,  // slightly darker silver — braces (subtle contrast from posts)
-  wood:       0x7a5520,  // warm brown for base sleepers
+  ecoPallet:  0x2d2d2d,  // dark recycled plastic — eco pallet base
   ground:     0xe8eaed,
   bg:         0xdce4ec,  // soft sky-gray background
   grid:       0xd0d8e4,
@@ -548,7 +548,7 @@ export default function Scaffold3DView({
         roughness: rough,
       });
       const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
-      const woodMat = new THREE.MeshStandardMaterial({ color: C.wood, metalness: 0.05, roughness: 0.9 });
+      const ecoPalletMat = new THREE.MeshStandardMaterial({ color: C.ecoPallet, metalness: 0.15, roughness: 0.75 });
 
       // Simple materials only (no textures)
       const postMat = pipeMat;
@@ -648,12 +648,16 @@ export default function Scaffold3DView({
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
 
-        // ── Wooden base sleepers (foundation timbers) at ground level ─────
-        const sleeperH = 0.08;
-        const sleeperW = 0.2;
-        const sleeperLen = Math.max(0.4, totalLen);
-        for (const pz of [0, widthM / 2, widthM]) {
-          addBox(group, totalLen / 2, GROUND_Y + sleeperH / 2, pz, sleeperLen, sleeperH, sleeperW, woodMat);
+        // ── Eco pallets (エコプレット) at each post position ─────
+        const palletH = 0.04;
+        const palletW = 0.25;
+        const palletD = 0.25;
+        for (let pi = 0; pi < postX.length; pi++) {
+          const px = postX[pi];
+          const skipInnerPal = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+          for (const pz of isBracket ? [0] : (skipInnerPal ? [widthM] : [0, widthM])) {
+            addBox(group, px, GROUND_Y + palletH / 2, pz, palletW, palletH, palletD, ecoPalletMat);
+          }
         }
 
         // ── Jack bases: from ground up to JACK_H (scaffold base, not building floor) ──────────
