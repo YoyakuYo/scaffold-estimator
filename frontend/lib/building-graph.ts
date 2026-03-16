@@ -6,7 +6,7 @@
  * This layer feeds the existing rendering engine; it does not replace it.
  */
 
-import { applyContourExtraction } from './contour-extraction';
+import { applyContourExtraction, type ContourExtractionOptions } from './contour-extraction';
 
 export interface Vector3Like {
   x: number;
@@ -104,9 +104,13 @@ export function buildGraphFromFootprint(
 
   let mm = normalizeFootprintToMm(vertices, refLengthMm);
 
-  // Contour-following: orthogonal correction, scale from dimensions, ensure closed loop
+  // Skip orthogonal correction when coordinates are already in precise mm
+  // (e.g. from DXF parse or AI vision with scale). Snapping precise coordinates
+  // distorts the actual building shape and is the main cause of "shape changes".
+  const alreadyMm = !isLikelyFractionCoords(mm);
+  const contourOpts: ContourExtractionOptions = { skipOrthoCorrection: alreadyMm };
   const pts2d = mm.map((p) => ({ x: p.x, y: p.z }));
-  const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm);
+  const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm, contourOpts);
   mm = contourPts.map((p) => ({ x: p.x, z: p.y }));
 
   // Snap / dedupe: merge vertices that are effectively identical (vision output often repeats endpoints).

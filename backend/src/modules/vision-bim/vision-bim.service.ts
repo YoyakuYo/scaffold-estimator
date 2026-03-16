@@ -528,6 +528,11 @@ export class VisionBimService {
       const jsonStr = cleaned.slice(start, end + 1);
       const parsed = JSON.parse(jsonStr) as VisionFootprintResult;
 
+      this.logger.log(
+        `Vision BIM raw response: ${parsed.vertices?.length ?? 0} vertices, ` +
+        `height=${parsed.buildingHeightMm}mm, wallLengths=${JSON.stringify(parsed.wallLengthsMm ?? 'none')}`,
+      );
+
       if (!parsed.vertices || !Array.isArray(parsed.vertices) || parsed.vertices.length < 3) {
         throw new Error('Vision returned invalid footprint vertices');
       }
@@ -637,6 +642,11 @@ export class VisionBimService {
     const verts = parsed.vertices;
     if (!Array.isArray(verts) || verts.length < 5) return;
 
+    // Conservative: don't remove vertices from small polygons (≤6 vertices).
+    // These are typically intentional L/U/T shapes, not grid-tracing artifacts.
+    // Grid-tracing produces 8+ vertices; genuine shapes with 4-6 should be preserved.
+    const minVertices = Math.max(4, Math.min(verts.length - 2, 6));
+
     const isMm = 'x' in verts[0];
 
     // Normalise to {x, y} in whatever unit the AI used (mm or 0-1 fraction).
@@ -660,12 +670,12 @@ export class VisionBimService {
     if (pts.length < 4) return;
 
     // ── Pass 2: iteratively remove near-collinear vertices ───────────────────
-    // Threshold: sin(angle at B) < 0.13  ≈  deviation ≤ 7.5°.
-    // This catches vertices placed where structural grid lines cross a straight
-    // exterior wall, while preserving genuine diagonal corners (≥ 8°).
-    const SIN_THR = 0.13;
+    // Threshold: sin(angle at B) < 0.09 ≈ deviation ≤ 5°.
+    // More conservative than before (was 0.13 / 7.5°) to avoid removing valid
+    // corners of slightly non-orthogonal buildings.
+    const SIN_THR = 0.09;
     let changed = true;
-    while (changed && pts.length > 3) {
+    while (changed && pts.length > minVertices) {
       changed = false;
       for (let i = 0; i < pts.length; i++) {
         const a = pts[(i - 1 + pts.length) % pts.length];

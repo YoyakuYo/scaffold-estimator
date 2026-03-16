@@ -140,9 +140,9 @@ function buildPolygonVertices(
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
-  // ── 4 walls: Explicit rectangle with 90° corners and exact dimensions ──
-  // Avoids distortion from stored vertices; ensures correct depth (Z) vs width (X).
-  if (n === 4) {
+  // ── 4 walls: use stored vertices when available (preserves BIM AI shape);
+  //    fall back to axis-aligned rectangle only when no stored vertices exist ──
+  if (n === 4 && (!storedVertices || storedVertices.length < 4)) {
     const w0 = wallLenM(0);
     const w1 = wallLenM(1);
     return [
@@ -178,8 +178,8 @@ function buildPolygonVertices(
     return corrected;
   }
 
-  // ── Use stored vertices for non-rectangular shapes (n !== 4) ──
-  if (storedVertices && storedVertices.length >= n && n !== 4) {
+  // ── Use stored vertices (any wall count including 4 from BIM AI) ──
+  if (storedVertices && storedVertices.length >= n) {
     const raw = storedVertices.slice(0, n).map(normaliseVertex);
     const xs = raw.map(v => v.x);
     const zs = raw.map(v => v.z);
@@ -1030,10 +1030,13 @@ export default function Scaffold3DView({
       scene.add(cornerGroup);
       scene.add(cornerWidthBarsGroup);
 
-      // ── Corner filler planks (PATTANKO): close the gap so planks from adjacent sides meet seamlessly ─
+      // ── Corner filler planks (PATTANKO): 2 per corner per level (inner row + outer row).
+      //    At each corner the last plank of one wall meets the first plank of the next wall
+      //    at right angles (e.g. North vertical, East horizontal). The gap between them is
+      //    bridged by two pattanko planks — one near the building (inner) and one far (outer). ─
       const cornerPlanksGroup = new THREE.Group();
       const plankThick = 0.025;
-      const cornerPlankWidthM = 0.5; // depth of filler plank in the corner angle
+      const pattankoDepthM = 0.4;
       for (let ci = 0; ci < verts.length; ci++) {
         const nPrev = wallNormals[(ci - 1 + verts.length) % verts.length];
         const nCurr = wallNormals[ci];
@@ -1049,20 +1052,25 @@ export default function Scaffold3DView({
         const innerZ = vz + standoffM * bz;
         const outerX = vx + (standoffM + cornerWidthM) * bx;
         const outerZ = vz + (standoffM + cornerWidthM) * bz;
-        const midX = (innerX + outerX) / 2;
-        const midZ = (innerZ + outerZ) / 2;
         const bisectorAngleY = Math.atan2(bz, bx);
+        const pattankoLenM = cornerWidthM * 0.85;
+        // Two pattanko offsets: inner row (25%) and outer row (75%) along bisector
+        const offsets = [0.25, 0.75];
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H + plankThick / 2 + 0.015;
-          const cornerPlank = new THREE.Group();
-          const geo = new THREE.BoxGeometry(cornerWidthM, plankThick, cornerPlankWidthM);
-          const mesh = new THREE.Mesh(geo, plankMat);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          cornerPlank.add(mesh);
-          cornerPlank.position.set(midX, y, midZ);
-          cornerPlank.rotation.y = bisectorAngleY;
-          cornerPlanksGroup.add(cornerPlank);
+          for (const t of offsets) {
+            const px = innerX + (outerX - innerX) * t;
+            const pz = innerZ + (outerZ - innerZ) * t;
+            const cornerPlank = new THREE.Group();
+            const geo = new THREE.BoxGeometry(pattankoLenM, plankThick, pattankoDepthM);
+            const mesh = new THREE.Mesh(geo, plankMat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            cornerPlank.add(mesh);
+            cornerPlank.position.set(px, y, pz);
+            cornerPlank.rotation.y = bisectorAngleY;
+            cornerPlanksGroup.add(cornerPlank);
+          }
         }
       }
       scene.add(cornerPlanksGroup);

@@ -140,9 +140,14 @@ export function ensureClosedLoop(pts: Point2D[], tolMm: number = 1): Point2D[] {
   return [...pts, { x: first.x, y: first.y }];
 }
 
+export interface ContourExtractionOptions {
+  /** Skip orthogonal correction (useful when vertices are already in precise mm coordinates) */
+  skipOrthoCorrection?: boolean;
+}
+
 /**
  * Full contour extraction pipeline:
- * 1. Apply orthogonal correction (90° snap)
+ * 1. Apply orthogonal correction (90° snap) — unless mm coords are already precise
  * 2. Scale from wallLengthsMm if provided (single global scale)
  * 3. Rebuild from dimensions if lengths provided
  * 4. Ensure closed loop
@@ -150,12 +155,15 @@ export function ensureClosedLoop(pts: Point2D[], tolMm: number = 1): Point2D[] {
 export function applyContourExtraction(
   vertices: Point2D[],
   wallLengthsMm?: number[],
+  options?: ContourExtractionOptions,
 ): Point2D[] {
   if (vertices.length < 3) return vertices;
 
   let pts = [...vertices];
 
-  pts = applyOrthogonalCorrection(pts);
+  if (!options?.skipOrthoCorrection) {
+    pts = applyOrthogonalCorrection(pts);
+  }
 
   if (wallLengthsMm && wallLengthsMm.length === pts.length) {
     pts = rebuildFromDimensions(pts, wallLengthsMm);
