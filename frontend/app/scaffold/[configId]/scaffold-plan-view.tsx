@@ -19,7 +19,7 @@ const WALL_ACCENT = [
   { fill: '#e0e7ff', stroke: '#6366f1', text: '#3730a3' },
 ];
 
-const SCAFFOLD_STRIP_W = 12; // visual px width for scaffold strip
+const SCAFFOLD_STRIP_W = 14;
 const DIM_COLOR = '#6b7280';
 const DIM_TEXT = '#374151';
 
@@ -27,37 +27,52 @@ interface Props {
   result: any;
 }
 
+interface Edge {
+  x1: number; y1: number; x2: number; y2: number;
+  wallIdx: number; angle: number;
+}
+
 /**
- * Builds polygon from actual stored vertices (from perimeter tracer).
- * Vertices are in mm-space; we scale to SVG pixels.
- * Falls back to regular polygon approximation if no vertices stored.
+ * Compute signed area of a polygon — positive=CCW in math coords (CW in SVG).
+ * Used to determine winding and flip normals when needed.
+ */
+function signedArea(pts: { x: number; y: number }[]): number {
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  return area / 2;
+}
+
+/**
+ * Build polygon edges from walls.
+ * Handles 1-2 walls (open segments), 3+ walls (closed polygon).
+ * Uses stored polygon vertices when available, falls back to regular polygon.
  */
 function buildPolygonFromWalls(
   walls: WallCalculationResult[],
   scaleFactor: number,
   storedVertices?: Array<{ xFrac: number; yFrac: number }>,
-): { vertices: { x: number; y: number }[]; edges: { x1: number; y1: number; x2: number; y2: number; wallIdx: number; angle: number }[] } {
+): { vertices: { x: number; y: number }[]; edges: Edge[]; isClosed: boolean } {
   const n = walls.length;
-  if (n < 3) return { vertices: [], edges: [] };
+  if (n === 0) return { vertices: [], edges: [], isClosed: false };
 
   const vertices: { x: number; y: number }[] = [];
-  const edges: { x1: number; y1: number; x2: number; y2: number; wallIdx: number; angle: number }[] = [];
+  const edges: Edge[] = [];
 
-  // ── Use actual polygon vertices if available ──
-  if (storedVertices && storedVertices.length >= n) {
-    // storedVertices are in mm-space (xFrac/yFrac are actually mm coords)
-    // Find bounding box to determine proper scaling
+  // ── Use stored polygon vertices if available ──
+  if (storedVertices && storedVertices.length >= n && n >= 3) {
     const xs = storedVertices.map(v => v.xFrac);
     const ys = storedVertices.map(v => v.yFrac);
     const bbW = Math.max(...xs) - Math.min(...xs);
     const bbH = Math.max(...ys) - Math.min(...ys);
     const maxDim = Math.max(bbW, bbH, 1);
-    // Scale so the polygon fits in ~700px
     const sf = 700 / maxDim;
 
     for (let i = 0; i < n; i++) {
       const sv = storedVertices[i];
-      vertices.push({ x: sv.xFrac * sf, y: sv.yFrac * sf });
+      vertices.push({ x: (sv.xFrac ?? 0) * sf, y: (sv.yFrac ?? 0) * sf });
     }
 
     for (let i = 0; i < n; i++) {
@@ -69,29 +84,44 @@ function buildPolygonFromWalls(
       edges.push({ x1: v1.x, y1: v1.y, x2: v2.x, y2: v2.y, wallIdx: i, angle });
     }
 
-    return { vertices, edges };
+    return { vertices, edges, isClosed: true };
   }
 
-  // ── Fallback: regular polygon approximation ──
+  // ── 1-2 walls: draw as straight segments (open, not a polygon) ──
+  if (n < 3) {
+    let cx = 0, cy = 0;
+    let angle = 0;
+    for (let i = 0; i < n; i++) {
+      const lenPx = (walls[i].wallLengthMm ?? 1800) * scaleFactor;
+      vertices.push({ x: cx, y: cy });
+      const nx = cx + lenPx * Math.cos(angle);
+      const ny = cy + lenPx * Math.sin(angle);
+      edges.push({ x1: cx, y1: cy, x2: nx, y2: ny, wallIdx: i, angle });
+      cx = nx;
+      cy = ny;
+      if (n === 2 && i === 0) angle += Math.PI / 2;
+    }
+    vertices.push({ x: cx, y: cy });
+    return { vertices, edges, isClosed: false };
+  }
+
+  // ── 3+ walls: regular polygon approximation ──
   const exteriorAngle = (2 * Math.PI) / n;
   let angle = 0;
   let cx = 0, cy = 0;
 
   for (let i = 0; i < n; i++) {
-    const lenPx = (walls[i].wallLengthMm * scaleFactor);
+    const lenPx = (walls[i].wallLengthMm ?? 1800) * scaleFactor;
     vertices.push({ x: cx, y: cy });
-
     const nx = cx + lenPx * Math.cos(angle);
     const ny = cy + lenPx * Math.sin(angle);
-
     edges.push({ x1: cx, y1: cy, x2: nx, y2: ny, wallIdx: i, angle });
-
     cx = nx;
     cy = ny;
     angle += exteriorAngle;
   }
 
-  return { vertices, edges };
+  return { vertices, edges, isClosed: true };
 }
 
 export default function ScaffoldPlanView({ result }: Props) {
@@ -106,50 +136,57 @@ export default function ScaffoldPlanView({ result }: Props) {
     return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
   }
 
-  // ─── Build polygon ──────────────────────────────────────
   const storedVertices: Array<{ xFrac: number; yFrac: number }> | undefined =
     result?.polygonVertices;
 
-  const maxLen = Math.max(...walls.map(w => w.wallLengthMm));
-  const baseSf = 350 / maxLen; // scale so longest wall = ~350px
+  const maxLen = Math.max(...walls.map(w => w.wallLengthMm ?? 1800));
+  const baseSf = maxLen > 0 ? 350 / maxLen : 1;
   const sf = baseSf * scale;
 
-  const { vertices, edges } = useMemo(
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { vertices, edges, isClosed } = useMemo(
     () => buildPolygonFromWalls(walls, sf, storedVertices),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [walls, sf, storedVertices],
   );
 
-  // Calculate bounding box
+  // Determine normal flip: for closed polygons, ensure normals point outward.
+  // signedArea > 0 means CW in SVG coords → normals from (-dy, dx) point outward.
+  // signedArea < 0 → flip.
+  const normalSign = useMemo(() => {
+    if (!isClosed || vertices.length < 3) return 1;
+    return signedArea(vertices) > 0 ? 1 : -1;
+  }, [vertices, isClosed]);
+
+  // Bounding box — handle empty/degenerate cases
   const allPts = [...vertices, ...edges.map(e => ({ x: e.x2, y: e.y2 }))];
-  const minX = Math.min(...allPts.map(p => p.x));
-  const minY = Math.min(...allPts.map(p => p.y));
-  const maxX = Math.max(...allPts.map(p => p.x));
-  const maxY = Math.max(...allPts.map(p => p.y));
+  const minX = allPts.length > 0 ? Math.min(...allPts.map(p => p.x)) : 0;
+  const minY = allPts.length > 0 ? Math.min(...allPts.map(p => p.y)) : 0;
+  const maxX = allPts.length > 0 ? Math.max(...allPts.map(p => p.x)) : 400;
+  const maxY = allPts.length > 0 ? Math.max(...allPts.map(p => p.y)) : 300;
 
   const PAD = 120;
-  const SCAFFOLD_PAD = 40; // extra space for scaffold strip rendering
-  const svgW = (maxX - minX) + PAD * 2 + SCAFFOLD_PAD * 2;
-  const svgH = (maxY - minY) + PAD * 2 + SCAFFOLD_PAD * 2;
+  const SCAFFOLD_PAD = 50;
+  const svgW = Math.max(400, (maxX - minX) + PAD * 2 + SCAFFOLD_PAD * 2);
+  const svgH = Math.max(300, (maxY - minY) + PAD * 2 + SCAFFOLD_PAD * 2);
 
-  // Translate so polygon is centered
   const offsetX = PAD + SCAFFOLD_PAD - minX;
   const offsetY = PAD + SCAFFOLD_PAD - minY;
 
   // ─── Render scaffold strip along each edge ──────────────
-  const renderEdge = (edge: typeof edges[0], idx: number) => {
+  const renderEdge = (edge: Edge, idx: number) => {
     const col = WALL_ACCENT[idx % WALL_ACCENT.length];
     const wall = walls[edge.wallIdx];
+    if (!wall) return null;
+
     const dx = edge.x2 - edge.x1;
     const dy = edge.y2 - edge.y1;
     const len = Math.hypot(dx, dy);
     if (len < 1) return null;
 
-    // Normal vector (outward from polygon center)
-    const nx = -dy / len;
-    const ny = dx / len;
+    // Normal vector pointing OUTWARD from building
+    const nx = normalSign * (-dy / len);
+    const ny = normalSign * (dx / len);
 
-    // Scaffold strip: offset outward
     const stripOffset = SCAFFOLD_STRIP_W;
     const sx1 = edge.x1 + offsetX + nx * stripOffset;
     const sy1 = edge.y1 + offsetY + ny * stripOffset;
@@ -162,22 +199,20 @@ export default function ScaffoldPlanView({ result }: Props) {
     const ey2 = edge.y2 + offsetY;
 
     // Post positions along the edge
-    const spans = wall.spans;
+    const spans = wall.spans ?? [];
     const postPositions: number[] = [0];
     let accum = 0;
     for (const s of spans) { accum += s; postPositions.push(accum); }
-    const totalLen = accum;
+    const totalLen = accum || (wall.wallLengthMm ?? 1);
 
     // Edge midpoint for labels
     const midX = (ex1 + ex2) / 2;
     const midY = (ey1 + ey2) / 2;
-    const labelOffset = stripOffset + 18;
+    const labelOffset = stripOffset + 22;
     const labelX = midX + nx * labelOffset;
     const labelY = midY + ny * labelOffset;
 
-    // Angle for text rotation
     const textAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-    // Keep text readable (not upside down)
     const readableAngle = (textAngle > 90 || textAngle < -90) ? textAngle + 180 : textAngle;
 
     const sideLabel = locale === 'ja' ? (wall.sideJp || wall.side) : wall.side;
@@ -187,7 +222,7 @@ export default function ScaffoldPlanView({ result }: Props) {
         {/* Building wall edge */}
         <line
           x1={ex1} y1={ey1} x2={ex2} y2={ey2}
-          stroke="#94a3b8" strokeWidth={2}
+          stroke="#475569" strokeWidth={2.5}
         />
 
         {/* Scaffold strip (filled parallelogram) */}
@@ -196,8 +231,12 @@ export default function ScaffoldPlanView({ result }: Props) {
           fill={col.fill}
           stroke={col.stroke}
           strokeWidth={1.5}
-          opacity={0.6}
+          opacity={0.7}
         />
+
+        {/* Outer edge of scaffold strip */}
+        <line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+          stroke={col.stroke} strokeWidth={1.2} strokeDasharray="4,2" />
 
         {/* Post ticks */}
         {postPositions.map((pos, pi) => {
@@ -209,13 +248,14 @@ export default function ScaffoldPlanView({ result }: Props) {
           return (
             <line key={`post-${idx}-${pi}`}
               x1={px} y1={py} x2={px2} y2={py2}
-              stroke={col.stroke} strokeWidth={1.2} opacity={0.8}
+              stroke={col.stroke} strokeWidth={1.2} opacity={0.7}
             />
           );
         })}
 
-        {/* Span dimension labels (small, along the edge) */}
-        {spans.length <= 8 && spans.map((span, si) => {
+        {/* Span dimension labels */}
+        {spans.length > 0 && spans.length <= 10 && spans.map((span, si) => {
+          if (si >= postPositions.length - 1) return null;
           const t1 = totalLen > 0 ? postPositions[si] / totalLen : 0;
           const t2 = totalLen > 0 ? postPositions[si + 1] / totalLen : 0;
           const smx = ex1 + (ex2 - ex1) * ((t1 + t2) / 2);
@@ -223,7 +263,7 @@ export default function ScaffoldPlanView({ result }: Props) {
           const sLabelX = smx + nx * (stripOffset / 2);
           const sLabelY = smy + ny * (stripOffset / 2);
           const segPx = Math.hypot((ex2 - ex1) * (t2 - t1), (ey2 - ey1) * (t2 - t1));
-          if (segPx < 20) return null; // too small to label
+          if (segPx < 20) return null;
           return (
             <text key={`span-${idx}-${si}`}
               x={sLabelX} y={sLabelY}
@@ -240,23 +280,23 @@ export default function ScaffoldPlanView({ result }: Props) {
         <text
           x={labelX} y={labelY - 8}
           textAnchor="middle" dominantBaseline="central"
-          fontSize={11} fontWeight="bold" fill={col.text}
+          fontSize={12} fontWeight="bold" fill={col.text}
           transform={`rotate(${readableAngle}, ${labelX}, ${labelY - 8})`}
         >
           {sideLabel}
         </text>
         <text
-          x={labelX} y={labelY + 6}
+          x={labelX} y={labelY + 8}
           textAnchor="middle" dominantBaseline="central"
           fontSize={9} fill={DIM_COLOR}
-          transform={`rotate(${readableAngle}, ${labelX}, ${labelY + 6})`}
+          transform={`rotate(${readableAngle}, ${labelX}, ${labelY + 8})`}
         >
-          {wall.wallLengthMm.toLocaleString()}mm ({wall.totalSpans}sp)
+          {(wall.wallLengthMm ?? 0).toLocaleString()}mm ({wall.totalSpans ?? spans.length}sp)
         </text>
 
         {/* Stair indicators */}
-        {(wall.kaidanSpanIndices || []).map((spanIdx, si) => {
-          if (spanIdx >= spans.length) return null;
+        {(wall.kaidanSpanIndices || []).map((spanIdx: number, si: number) => {
+          if (spanIdx >= spans.length || spanIdx >= postPositions.length - 1) return null;
           const t1 = totalLen > 0 ? postPositions[spanIdx] / totalLen : 0;
           const t2 = totalLen > 0 ? postPositions[spanIdx + 1] / totalLen : 0;
           const stX = ex1 + (ex2 - ex1) * ((t1 + t2) / 2);
@@ -271,11 +311,11 @@ export default function ScaffoldPlanView({ result }: Props) {
           );
         })}
 
-        {/* Vertex label */}
-        <circle cx={ex1} cy={ey1} r={3} fill={col.stroke} />
-        <text x={ex1 - nx * 10} y={ey1 - ny * 10}
+        {/* Vertex markers */}
+        <circle cx={ex1} cy={ey1} r={3.5} fill={col.stroke} stroke="white" strokeWidth={1} />
+        <text x={ex1 - nx * 12} y={ey1 - ny * 12}
           textAnchor="middle" dominantBaseline="central"
-          fontSize={9} fontWeight="bold" fill="#374151"
+          fontSize={10} fontWeight="bold" fill="#374151"
         >
           {String.fromCharCode(65 + idx)}
         </text>
@@ -344,26 +384,26 @@ export default function ScaffoldPlanView({ result }: Props) {
             {t('viewer', 'planView')} — {walls.length} {t('viewer', 'walls')}
           </text>
 
-          {/* Building outline fill */}
-          {vertices.length >= 3 && (
+          {/* Building outline fill (closed polygons only) */}
+          {isClosed && vertices.length >= 3 && (
             <polygon
               points={vertices.map(v => `${v.x + offsetX},${v.y + offsetY}`).join(' ')}
-              fill="#f8fafc"
-              stroke="#cbd5e1"
+              fill="#f1f5f9"
+              stroke="#94a3b8"
               strokeWidth={2}
             />
           )}
 
           {/* Building label */}
-          {vertices.length >= 3 && (() => {
+          {isClosed && vertices.length >= 3 && (() => {
             const cx = vertices.reduce((s, v) => s + v.x, 0) / vertices.length + offsetX;
             const cy = vertices.reduce((s, v) => s + v.y, 0) / vertices.length + offsetY;
             return (
               <g>
-                <text x={cx} y={cy - 4} textAnchor="middle" fontSize={11} fill="#94a3b8" fontWeight="500">
+                <text x={cx} y={cy - 6} textAnchor="middle" fontSize={12} fill="#64748b" fontWeight="600">
                   {t('viewer', 'building')}
                 </text>
-                <text x={cx} y={cy + 12} textAnchor="middle" fontSize={9} fill="#cbd5e1">
+                <text x={cx} y={cy + 10} textAnchor="middle" fontSize={9} fill="#94a3b8">
                   {walls.length} edges · scaffold {scaffoldWidthMm}mm
                 </text>
               </g>
@@ -386,7 +426,6 @@ export default function ScaffoldPlanView({ result }: Props) {
                 </g>
               );
             })}
-            {/* Stair legend */}
             <g transform={`translate(${walls.length * 80}, 0)`}>
               <circle cx={4} cy={-2} r={4} fill="#047857" opacity={0.8} />
               <text x={12} y={1} fontSize={8} fill={DIM_TEXT}>
@@ -396,7 +435,7 @@ export default function ScaffoldPlanView({ result }: Props) {
           </g>
 
           {/* Compass */}
-          <g transform={`translate(${svgW - 35}, 40)`}>
+          <g transform={`translate(${svgW - 35}, 45)`}>
             <line x1={0} y1={-14} x2={0} y2={14} stroke="#9ca3af" strokeWidth={1} />
             <line x1={-14} y1={0} x2={14} y2={0} stroke="#9ca3af" strokeWidth={1} />
             <polygon points="0,-14 -4,-8 4,-8" fill="#374151" />
