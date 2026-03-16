@@ -1137,11 +1137,62 @@ export default function Scaffold3DView({
       }
       maxHeightRef.current = maxH;
 
-      // ── Corner: no separate L-shape. Each wall builds its own spans ──
-      // (including the 600mm end spans). The walls' end spans overlap at the
-      // corner naturally — matching the 2D plan view.
+      // ── Corner bridge planks (パッタンコ) ──
+      // Each wall builds its own spans (including 600mm end spans).
+      // The bridge is just a walkable plank connecting adjacent walls so
+      // workers can walk from one wall to the next. No extra posts, no extra bays.
+      const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       maxLevelsRef.current = maxLevelsForCorners;
+      const cornerPlankMat = plankMatEff.clone();
+      cornerPlankMat.side = THREE.DoubleSide;
+
+      for (let wi = 0; wi < walls.length; wi++) {
+        const nextWi = (wi + 1) % walls.length;
+        if (isOpenPolygon && nextWi <= wi) continue;
+
+        const nA = wallNormals[wi];
+        const nB = wallNormals[nextWi];
+        if (Math.hypot(nA.nx, nA.nz) < 0.001 || Math.hypot(nB.nx, nB.nz) < 0.001) continue;
+
+        const cornerVertIdx = (wi + 1) % verts.length;
+        const vx = verts[cornerVertIdx].x - cx;
+        const vz = verts[cornerVertIdx].z - cz;
+        const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const sA = standoffM + wA;
+        const sB = standoffM + wB;
+
+        // Wall A end face posts (already built by wall A)
+        const oA = { x: vx + nA.nx * sA, z: vz + nA.nz * sA };
+        const iA = { x: vx + nA.nx * standoffM, z: vz + nA.nz * standoffM };
+        // Wall B start face posts (already built by wall B)
+        const oB = { x: vx + nB.nx * sB, z: vz + nB.nz * sB };
+        const iB = { x: vx + nB.nx * standoffM, z: vz + nB.nz * standoffM };
+
+        for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
+          const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+
+          // Bridge plank: quadrilateral connecting both walls' end faces
+          const bridgeShape = new THREE.Shape();
+          bridgeShape.moveTo(oA.x, oA.z);
+          bridgeShape.lineTo(oB.x, oB.z);
+          bridgeShape.lineTo(iB.x, iB.z);
+          bridgeShape.lineTo(iA.x, iA.z);
+          bridgeShape.closePath();
+          const bridgeGeo = new THREE.ExtrudeGeometry(bridgeShape, { depth: 0.025, bevelEnabled: false });
+          const bridgeMesh = new THREE.Mesh(bridgeGeo, cornerPlankMat);
+          bridgeMesh.rotation.x = -Math.PI / 2;
+          bridgeMesh.position.y = y + 0.028;
+          bridgeMesh.castShadow = true;
+          cornerGroup.add(bridgeMesh);
+
+          // Outer guard rail along the bridge
+          addPipe(cornerGroup, oA.x, y + 0.9, oA.z, oB.x, y + 0.9, oB.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, oA.x, y + 0.45, oA.z, oB.x, y + 0.45, oB.z, tesuriMat, PIPE_R * 0.6);
+        }
+      }
+      scene.add(cornerGroup);
 
       // ── Building outline at ground level (not scaffold level); scaffold working levels are above this ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
