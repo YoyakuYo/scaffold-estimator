@@ -629,6 +629,65 @@ export default function Scaffold3DView({
         parent.add(mesh);
       }
 
+      // ── Text sprite (canvas-based 3D label) ─────────────
+      function makeTextSprite(text: string, opts?: { size?: number; color?: string; bg?: string }) {
+        const size = opts?.size ?? 48;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+        ctx.font = `bold ${size}px Arial`;
+        const tw = ctx.measureText(text).width;
+        canvas.width = Math.ceil(tw + 16);
+        canvas.height = Math.ceil(size * 1.4);
+        if (opts?.bg) {
+          ctx.fillStyle = opts.bg;
+          ctx.roundRect(0, 0, canvas.width, canvas.height, 4);
+          ctx.fill();
+        }
+        ctx.font = `bold ${size}px Arial`;
+        ctx.fillStyle = opts?.color ?? '#374151';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.minFilter = THREE.LinearFilter;
+        const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const sprite = new THREE.Sprite(spriteMat);
+        const aspect = canvas.width / canvas.height;
+        const h = 0.35;
+        sprite.scale.set(h * aspect, h, 1);
+        return sprite;
+      }
+
+      const dimLineMat = new THREE.LineBasicMaterial({ color: 0x6b7280, depthTest: false });
+
+      function addDimLine(parent: THREE.Object3D, p1: THREE.Vector3, p2: THREE.Vector3, label: string, tickSize = 0.12) {
+        const pts = [p1, p2];
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const line = new THREE.Line(geo, dimLineMat);
+        line.userData = { noClip: true };
+        parent.add(line);
+
+        const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
+        const perp = new THREE.Vector3(0, 1, 0);
+        if (Math.abs(dir.y) > 0.9) perp.set(1, 0, 0);
+        const tick = new THREE.Vector3().crossVectors(dir, perp).normalize().multiplyScalar(tickSize);
+
+        for (const p of [p1, p2]) {
+          const t1 = p.clone().add(tick);
+          const t2 = p.clone().sub(tick);
+          const tGeo = new THREE.BufferGeometry().setFromPoints([t1, t2]);
+          const tLine = new THREE.Line(tGeo, dimLineMat);
+          tLine.userData = { noClip: true };
+          parent.add(tLine);
+        }
+
+        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+        const sprite = makeTextSprite(label, { size: 40, color: '#374151', bg: 'rgba(255,255,255,0.85)' });
+        sprite.position.copy(mid);
+        sprite.userData = { noClip: true };
+        parent.add(sprite);
+      }
+
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // First span: 4 posts. Each next span: reuse 2 closest, add 2 new → N+1 positions, 2 posts per position.
@@ -997,6 +1056,57 @@ export default function Scaffold3DView({
         clickMesh.rotation.y = Math.atan2(dz, dx);
         (clickMesh as any).userData = { wallIndex: i };
         scene.add(clickMesh);
+
+        // ── Dimension lines (span sizes + height) ──
+        const dimGroup = new THREE.Group();
+        const dimOffset = standoffM + wallWidthM + 0.4;
+        const startX = v1.x - cx + nx * dimOffset;
+        const startZ = v1.z - cz + nz * dimOffset;
+        const endX = v2.x - cx + nx * dimOffset;
+        const endZ = v2.z - cz + nz * dimOffset;
+        const dimY = GROUND_Y - 0.15;
+
+        // Span dimension lines along wall length
+        const spans = wall.spans ?? [];
+        let accum = 0;
+        const wallLenM = edgeLen;
+        const totalSpanMm = spans.reduce((s: number, v: number) => s + v, 0) || 1;
+        for (let si = 0; si < spans.length; si++) {
+          const t1 = accum / totalSpanMm;
+          accum += spans[si];
+          const t2 = accum / totalSpanMm;
+          const p1 = new THREE.Vector3(
+            startX + (endX - startX) * t1, dimY,
+            startZ + (endZ - startZ) * t1,
+          );
+          const p2 = new THREE.Vector3(
+            startX + (endX - startX) * t2, dimY,
+            startZ + (endZ - startZ) * t2,
+          );
+          addDimLine(dimGroup, p1, p2, `${spans[si]}`, 0.08);
+        }
+
+        // Total length line (below span lines)
+        const totalDimY = dimY - 0.5;
+        addDimLine(
+          dimGroup,
+          new THREE.Vector3(startX, totalDimY, startZ),
+          new THREE.Vector3(endX, totalDimY, endZ),
+          `${(wall.wallLengthMm ?? 0).toLocaleString()}mm`,
+          0.1,
+        );
+
+        // Height line (vertical, at start of wall)
+        const hx = v1.x - cx + nx * dimOffset;
+        const hz = v1.z - cz + nz * dimOffset;
+        addDimLine(
+          dimGroup,
+          new THREE.Vector3(hx, GROUND_Y, hz),
+          new THREE.Vector3(hx, totalH, hz),
+          `${Math.round(totalH * 1000).toLocaleString()}mm`,
+          0.1,
+        );
+        scene.add(dimGroup);
 
         wallObjectsRef.current.push({
           root: wallRoot,
