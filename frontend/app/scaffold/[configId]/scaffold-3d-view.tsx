@@ -995,8 +995,8 @@ export default function Scaffold3DView({
       }
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // Clean rectangular patch at each corner vertex where two walls meet.
-      // 4 posts: inner-A, outer-A, outer-B, inner-B — forms a rectangle.
+      // L-shaped plank with 6 vertices — all edges parallel to wall directions, no diagonals.
+      // p1=outerA, p2=farOuter, p3=outerB, p4=innerB, p5=innerMid, p6=innerA
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
@@ -1017,28 +1017,38 @@ export default function Scaffold3DView({
         const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
-        // 4 corner posts — clean rectangle at the vertex
-        const pInA  = { x: vx + nA.nx * standoffM,          z: vz + nA.nz * standoffM };
-        const pOutA = { x: vx + nA.nx * (standoffM + wA),   z: vz + nA.nz * (standoffM + wA) };
-        const pOutB = { x: vx + nB.nx * (standoffM + wB),   z: vz + nB.nz * (standoffM + wB) };
-        const pInB  = { x: vx + nB.nx * standoffM,          z: vz + nB.nz * standoffM };
+        // 6-point L-shape at corner vertex V
+        const sA = standoffM + wA;     // outer offset along nA
+        const sB = standoffM + wB;     // outer offset along nB
+        const p1 = { x: vx + nA.nx * sA,                      z: vz + nA.nz * sA };                      // outer A
+        const p2 = { x: vx + nA.nx * sA + nB.nx * sB,         z: vz + nA.nz * sA + nB.nz * sB };         // far outer
+        const p3 = { x: vx + nB.nx * sB,                      z: vz + nB.nz * sB };                      // outer B
+        const p4 = { x: vx + nB.nx * standoffM,               z: vz + nB.nz * standoffM };               // inner B
+        const p5 = { x: vx + nA.nx * standoffM + nB.nx * standoffM, z: vz + nA.nz * standoffM + nB.nz * standoffM }; // inner mid
+        const p6 = { x: vx + nA.nx * standoffM,               z: vz + nA.nz * standoffM };               // inner A
+
+        const pts = [p1, p2, p3, p4, p5, p6];
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Horizontal ties forming the rectangle edges
-          addPipe(cornerGroup, pOutA.x, y, pOutA.z, pOutB.x, y, pOutB.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, pInA.x, y, pInA.z, pInB.x, y, pInB.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, pInA.x, y, pInA.z, pOutA.x, y, pOutA.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, pInB.x, y, pInB.z, pOutB.x, y, pOutB.z, yokojiMat, PIPE_R * 0.8);
+          // 6 edges of the L — all horizontal ties
+          for (let e = 0; e < 6; e++) {
+            const a = pts[e], b = pts[(e + 1) % 6];
+            addPipe(cornerGroup, a.x, y, a.z, b.x, y, b.z, yokojiMat, PIPE_R * 0.8);
+          }
+          // Width-direction ties at the inner intersection
+          addPipe(cornerGroup, p5.x, y, p5.z, p2.x, y, p2.z, yokojiMat, PIPE_R * 0.7);
 
-          // Plank — clean rectangle within the 4 posts
+          // L-shaped plank
           if (!isOpenPolygon) {
             const cornerShape = new THREE.Shape();
-            cornerShape.moveTo(pInA.x, pInA.z);
-            cornerShape.lineTo(pOutA.x, pOutA.z);
-            cornerShape.lineTo(pOutB.x, pOutB.z);
-            cornerShape.lineTo(pInB.x, pInB.z);
+            cornerShape.moveTo(p1.x, p1.z);
+            cornerShape.lineTo(p2.x, p2.z);
+            cornerShape.lineTo(p3.x, p3.z);
+            cornerShape.lineTo(p4.x, p4.z);
+            cornerShape.lineTo(p5.x, p5.z);
+            cornerShape.lineTo(p6.x, p6.z);
             cornerShape.closePath();
             const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
             const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
@@ -1049,23 +1059,28 @@ export default function Scaffold3DView({
             cornerGroup.add(plankMesh);
           }
 
-          // Habaki along rectangle edges
+          // Habaki along outer L-edges (p1→p2→p3) and inner L-edges (p4→p5→p6)
           const hY = y + 0.06;
-          addPipe(cornerGroup, pOutA.x, hY, pOutA.z, pOutB.x, hY, pOutB.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, pInA.x, hY, pInA.z, pInB.x, hY, pInB.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, p1.x, hY, p1.z, p2.x, hY, p2.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, p2.x, hY, p2.z, p3.x, hY, p3.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, p4.x, hY, p4.z, p5.x, hY, p5.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, p5.x, hY, p5.z, p6.x, hY, p6.z, habakiMatEff, PIPE_R * 0.5);
 
-          // Guard rails along outer edges
-          addPipe(cornerGroup, pOutA.x, y + 0.9, pOutA.z, pOutB.x, y + 0.9, pOutB.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, pOutA.x, y + 0.45, pOutA.z, pOutB.x, y + 0.45, pOutB.z, tesuriMat, PIPE_R * 0.6);
+          // Guard rails along outer edges (p1→p2 and p2→p3)
+          addPipe(cornerGroup, p1.x, y + 0.9, p1.z, p2.x, y + 0.9, p2.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, p2.x, y + 0.9, p2.z, p3.x, y + 0.9, p3.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, p1.x, y + 0.45, p1.z, p2.x, y + 0.45, p2.z, tesuriMat, PIPE_R * 0.6);
+          addPipe(cornerGroup, p2.x, y + 0.45, p2.z, p3.x, y + 0.45, p3.z, tesuriMat, PIPE_R * 0.6);
 
           if (lv === maxLevelsForCorners && topGuardM > 0) {
-            addPipe(cornerGroup, pOutA.x, y + topGuardM, pOutA.z, pOutB.x, y + topGuardM, pOutB.z, topGuardMat, PIPE_R * 0.65);
+            addPipe(cornerGroup, p1.x, y + topGuardM, p1.z, p2.x, y + topGuardM, p2.z, topGuardMat, PIPE_R * 0.65);
+            addPipe(cornerGroup, p2.x, y + topGuardM, p2.z, p3.x, y + topGuardM, p3.z, topGuardMat, PIPE_R * 0.65);
           }
         }
 
-        // Corner posts (vertical) at all 4 positions
+        // Vertical posts at all 6 L-shape positions
         const totalPostH = maxLevelsForCorners * LEVEL_H;
-        [pInA, pOutA, pOutB, pInB].forEach((p) => {
+        pts.forEach((p) => {
           addPipe(cornerGroup, p.x, GROUND_Y + JACK_H, p.z, p.x, GROUND_Y + JACK_H + totalPostH, p.z, postMat, PIPE_R);
         });
       }
