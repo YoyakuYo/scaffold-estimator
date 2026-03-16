@@ -19,9 +19,6 @@ const DIMENSION_OFFSET = 28;
 const FRAME_WIDTH_PX = 14;
 const FRAME_SPLAY_PX = 5;
 const FRAME_BOTTOM_RATIO = 0.194;
-const DEPTH_DX = 14;
-const DEPTH_DY = -10;
-const BACK_OPACITY = 0.5;
 
 // ─── Colors (clean technical drawing for estimation/quotation) ────
 const COL = {
@@ -41,8 +38,6 @@ const COL = {
   grid: '#f1f5f9',
   topGuard: '#6d28d9',  // 上部手摺 — violet
   frame: '#0f172a',     // 建枠 — same as post (remove emphasis)
-  ecoPallet: '#2d2d2d', // エコプレット — dark recycled plastic
-  stairRail: '#065f46', // カイダンレール — dark teal
 };
 
 // Per-wall accent colors (cycle for many walls)
@@ -124,20 +119,18 @@ export default function Scaffold2DView({ result }: Props) {
   const PAD_TOP = 50;
   const PAD_BOTTOM = 80;
 
-  const svgW = wallData.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT + DEPTH_DX;
+  const svgW = wallData.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT;
   const svgH = wallData.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM;
 
   const x = (mm: number) => PAD_LEFT + mm * scale;
   const y = (mm: number) => PAD_TOP + (wallData.totalHeightMm - mm) * scale;
 
-  // ─── Render wall (architectural isometric-style with front/back rows) ──
+  // ─── Render wall ────────────────────────────────────────
   const renderWall = () => {
     const { spans, levels, totalLengthMm, postXPositions, stairPositions } = wallData;
     const elements: JSX.Element[] = [];
-    const dx = DEPTH_DX;
-    const dy2 = DEPTH_DY;
 
-    // Grid
+    // Grid (subtle, for technical clarity)
     const gridStep = 1000;
     for (let gx = 0; gx <= totalLengthMm; gx += gridStep) {
       elements.push(
@@ -158,374 +151,234 @@ export default function Scaffold2DView({ result }: Props) {
         stroke="#94a3b8" strokeWidth={2} strokeDasharray="6,3" />
     );
 
-    // ── Eco pallet / アルスピーダー base beam ──
-    // Back beam
-    elements.push(
-      <line key="eco-back" x1={x(0) + dx} y1={y(0) + dy2 + 8} x2={x(totalLengthMm) + dx} y2={y(0) + dy2 + 8}
-        stroke={COL.jackBase} strokeWidth={4} opacity={BACK_OPACITY} />
-    );
-    // Front beam
-    elements.push(
-      <line key="eco-front" x1={x(0)} y1={y(0) + 8} x2={x(totalLengthMm)} y2={y(0) + 8}
-        stroke={COL.jackBase} strokeWidth={4} />
-    );
-    // Depth connecting lines at ends of beam
-    [0, totalLengthMm].forEach((px, i) => {
-      elements.push(
-        <line key={`eco-depth-${i}`} x1={x(px)} y1={y(0) + 8} x2={x(px) + dx} y2={y(0) + dy2 + 8}
-          stroke={COL.jackBase} strokeWidth={1.5} />
-      );
-    });
-
-    // ── Jack Bases — back row ──
-    postXPositions.forEach((px, i) => {
-      elements.push(
-        <g key={`jb-back-${i}`} opacity={BACK_OPACITY}>
-          <line x1={x(px) + dx} y1={y(0) + dy2} x2={x(px) + dx} y2={y(JACK_BASE_H) + dy2}
-            stroke={COL.jackBase} strokeWidth={2.5} />
-          <line x1={x(px) + dx - 5} y1={y(0) + dy2 + 2} x2={x(px) + dx + 5} y2={y(0) + dy2 + 2}
-            stroke={COL.jackBase} strokeWidth={2} />
-        </g>
-      );
-    });
-    // ── Jack Bases — front row ──
+    // Jack Bases
     postXPositions.forEach((px, i) => {
       elements.push(
         <g key={`jb-${i}`}>
-          <line x1={x(px)} y1={y(0)} x2={x(px)} y2={y(JACK_BASE_H)}
-            stroke={COL.jackBase} strokeWidth={2.5} />
           <polygon
-            points={`${x(px)},${y(0)} ${x(px) - 7},${y(0) + 10} ${x(px) + 7},${y(0) + 10}`}
-            fill={COL.jackBase} stroke={COL.jackBase} strokeWidth={1} />
+            points={`${x(px)},${y(0)} ${x(px) - 8},${y(0) + 12} ${x(px) + 8},${y(0) + 12}`}
+            fill={COL.jackBase} stroke={COL.jackBase} strokeWidth={1}
+          />
+          <line x1={x(px)} y1={y(0)} x2={x(px)} y2={y(JACK_BASE_H)}
+            stroke={COL.jackBase} strokeWidth={2} strokeDasharray="4,2" />
         </g>
       );
     });
-    // Jack depth connectors at ground level
-    postXPositions.forEach((px, i) => {
-      elements.push(
-        <line key={`jb-depth-${i}`} x1={x(px)} y1={y(0)} x2={x(px) + dx} y2={y(0) + dy2}
-          stroke={COL.jackBase} strokeWidth={1} opacity={0.6} />
-      );
-    });
 
-    // ── Base Yokoji (根がらみ) ──
+    // Base Yokoji
     spans.forEach((span, si) => {
       const xStart = postXPositions[si];
       elements.push(
-        <line key={`by-back-${si}`} x1={x(xStart) + dx} y1={y(JACK_BASE_H) + dy2} x2={x(xStart + span) + dx} y2={y(JACK_BASE_H) + dy2}
-          stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" opacity={BACK_OPACITY} />,
         <line key={`by-${si}`} x1={x(xStart)} y1={y(JACK_BASE_H)} x2={x(xStart + span)} y2={y(JACK_BASE_H)}
-          stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" />,
+          stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" />
       );
     });
 
-    // ════════════════════════════════════════════════════════════════
-    // Per-Level: draw back row → depth connectors → front row
-    // ════════════════════════════════════════════════════════════════
+    // Per-Level Content
     Array.from({ length: levels }).forEach((_, lvl) => {
-      const bY = JACK_BASE_H + lvl * LEVEL_H;
-      const tY = bY + LEVEL_H;
+      const baseY = JACK_BASE_H + lvl * LEVEL_H;
+      const topY = baseY + LEVEL_H;
 
       // Level label
       elements.push(
-        <text key={`lvl-${lvl}`} x={x(0) - 18} y={y(tY) + 4}
-          textAnchor="end" fontSize={10} fill={COL.dimText}>L{lvl + 1}</text>
+        <text key={`lvl-${lvl}`} x={x(0) - 15} y={y(topY) + 4}
+          textAnchor="end" fontSize={10} fill={COL.dimText}>
+          L{lvl + 1}
+        </text>
       );
 
-      // ── BACK ROW posts ──
+      // Posts (both kusabi & wakugumi: simple single vertical line — no extra emphasis)
       postXPositions.forEach((px, pi) => {
         elements.push(
-          <line key={`post-b-${lvl}-${pi}`}
-            x1={x(px) + dx} y1={y(bY) + dy2} x2={x(px) + dx} y2={y(tY) + dy2}
-            stroke={COL.post} strokeWidth={POST_STROKE - 1} opacity={BACK_OPACITY} />
+          <line
+            key={`post-${lvl}-${pi}`}
+            x1={x(px)}
+            y1={y(baseY)}
+            x2={x(px)}
+            y2={y(topY)}
+            stroke={COL.post}
+            strokeWidth={POST_STROKE}
+          />
         );
       });
 
-      // ── BACK ROW spans (braces, tesuri, planks) ──
-      spans.forEach((span, si) => {
-        const sx = postXPositions[si];
-        const ex = postXPositions[si + 1];
-        const isStairSpan = stairPositions.includes(si);
-        if (isStairSpan) return;
-
-        // Back brace
-        elements.push(
-          <line key={`br-b1-${lvl}-${si}`}
-            x1={x(sx) + dx} y1={y(bY) + dy2} x2={x(ex) + dx} y2={y(tY) + dy2}
-            stroke={COL.brace} strokeWidth={BRACE_STROKE - 0.8} opacity={BACK_OPACITY} />,
-          <line key={`br-b2-${lvl}-${si}`}
-            x1={x(sx) + dx} y1={y(tY) + dy2} x2={x(ex) + dx} y2={y(bY) + dy2}
-            stroke={COL.brace} strokeWidth={BRACE_STROKE - 0.8} opacity={BACK_OPACITY} />,
-        );
-
-        // Back tesuri / shitasan
-        if (isWakugumi) {
-          elements.push(
-            <line key={`sh-b-${lvl}-${si}`}
-              x1={x(sx) + dx} y1={y(bY + 50) + dy2} x2={x(ex) + dx} y2={y(bY + 50) + dy2}
-              stroke={COL.shitasan} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
-          );
-        } else {
-          elements.push(
-            <line key={`ts-b1-${lvl}-${si}`}
-              x1={x(sx) + dx} y1={y(bY + LEVEL_H * 0.45) + dy2} x2={x(ex) + dx} y2={y(bY + LEVEL_H * 0.45) + dy2}
-              stroke={COL.tesuri} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
-            <line key={`ts-b2-${lvl}-${si}`}
-              x1={x(sx) + dx} y1={y(bY + LEVEL_H * 0.9) + dy2} x2={x(ex) + dx} y2={y(bY + LEVEL_H * 0.9) + dy2}
-              stroke={COL.tesuri} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
-          );
-        }
-      });
-
-      // ── DEPTH CONNECTORS at each post position at level top ──
-      postXPositions.forEach((px, pi) => {
-        elements.push(
-          <line key={`dc-${lvl}-${pi}`}
-            x1={x(px)} y1={y(tY)} x2={x(px) + dx} y2={y(tY) + dy2}
-            stroke={COL.post} strokeWidth={1.5} opacity={0.55} />,
-        );
-      });
-
-      // ── PLANKS as parallelogram (front edge → depth → back edge) ──
-      spans.forEach((span, si) => {
-        const sx = postXPositions[si];
-        const ex = postXPositions[si + 1];
-        const isStairSpan = stairPositions.includes(si);
-        if (isStairSpan) return;
-
-        const pH = PLANK_H_PX;
-        const fx1 = x(sx) + 2;
-        const fx2 = x(ex) - 2;
-        const fyt = y(tY) - pH / 2;
-        const fyb = y(tY) + pH / 2;
-
-        // Parallelogram: front-top-left, front-top-right, back-top-right, back-top-left
-        elements.push(
-          <polygon key={`plank-${lvl}-${si}`}
-            points={`${fx1},${fyt} ${fx2},${fyt} ${fx2 + dx},${fyt + dy2} ${fx1 + dx},${fyt + dy2}`}
-            fill={COL.plank} opacity={0.25} stroke={COL.plank} strokeWidth={0.5} />,
-        );
-        // Front edge (main plank strip)
-        elements.push(
-          <rect key={`plank-f-${lvl}-${si}`}
-            x={fx1} y={fyt} width={fx2 - fx1} height={pH}
-            fill={COL.plank} opacity={0.6} rx={1} />,
-        );
-        // Habaki front
-        elements.push(
-          <line key={`habaki-${lvl}-${si}`}
-            x1={fx1} y1={fyb + 2} x2={fx2} y2={fyb + 2}
-            stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.45} />,
-        );
-      });
-
-      // ── FRONT ROW posts ──
-      postXPositions.forEach((px, pi) => {
-        elements.push(
-          <line key={`post-${lvl}-${pi}`}
-            x1={x(px)} y1={y(bY)} x2={x(px)} y2={y(tY)}
-            stroke={COL.post} strokeWidth={POST_STROKE} />,
-        );
-      });
-
-      // ── FRONT ROW spans ──
+      // Per span
       spans.forEach((span, si) => {
         const sx = postXPositions[si];
         const ex = postXPositions[si + 1];
         const isStairSpan = stairPositions.includes(si);
 
         if (isStairSpan) {
-          // Stair back stringer
-          elements.push(
-            <line key={`stair-b-${lvl}-${si}`}
-              x1={x(sx + span * 0.06) + dx} y1={y(bY) + dy2}
-              x2={x(ex - span * 0.06) + dx} y2={y(tY) + dy2}
-              stroke={COL.stair} strokeWidth={2} opacity={BACK_OPACITY} />,
-          );
-          // Stair front stringer
+          // Stair
           elements.push(
             <line key={`stair-${lvl}-${si}`}
-              x1={x(sx + span * 0.06)} y1={y(bY)}
-              x2={x(ex - span * 0.06)} y2={y(tY)}
-              stroke={COL.stair} strokeWidth={2.5} />,
+              x1={x(sx + span * 0.04)} y1={y(baseY)}
+              x2={x(ex - span * 0.04)} y2={y(topY)}
+              stroke={COL.stair} strokeWidth={2.5} />
           );
-          // Step treads (parallelogram from front to back)
-          Array.from({ length: 7 }).forEach((_, st) => {
-            const t = (st + 1) / 8;
-            const stepXmm = sx + span * 0.06 + (span * 0.88) * t;
-            const stepYmm = bY + LEVEL_H * t;
-            const halfW = span * 0.06;
+          Array.from({ length: 8 }).forEach((_, st) => {
+            const t = (st + 1) / 9;
+            const stepXmm = sx + span * 0.04 + (span * 0.92) * t;
+            const stepYmm = baseY + LEVEL_H * t;
+            const treadHalf = span * 0.07;
             elements.push(
-              <line key={`step-b-${lvl}-${si}-${st}`}
-                x1={x(stepXmm - halfW) + dx} y1={y(stepYmm) + dy2}
-                x2={x(stepXmm + halfW) + dx} y2={y(stepYmm) + dy2}
-                stroke={COL.stair} strokeWidth={1.2} opacity={BACK_OPACITY} />,
               <line key={`step-${lvl}-${si}-${st}`}
-                x1={x(stepXmm - halfW)} y1={y(stepYmm)}
-                x2={x(stepXmm + halfW)} y2={y(stepYmm)}
-                stroke={COL.stair} strokeWidth={1.8} />,
+                x1={x(stepXmm - treadHalf)} y1={y(stepYmm)}
+                x2={x(stepXmm + treadHalf)} y2={y(stepYmm)}
+                stroke={COL.stair} strokeWidth={1.8} />
             );
           });
-          // Stair handrail (カイダンレール)
-          elements.push(
-            <line key={`stair-rail-${lvl}-${si}`}
-              x1={x(ex - span * 0.06)} y1={y(bY + LEVEL_H * 0.55)}
-              x2={x(ex)} y2={y(tY)}
-              stroke={COL.stairRail} strokeWidth={1.8} strokeDasharray="6,3" />,
-          );
-          // Tesuri / shitasan on stair spans
           if (!isWakugumi) {
+            // Kusabi: tesuri on stair spans
             elements.push(
-              <line key={`ts-s1-${lvl}-${si}`}
-                x1={x(sx)} y1={y(bY + LEVEL_H * 0.45)} x2={x(ex)} y2={y(bY + LEVEL_H * 0.45)}
+              <line key={`tesuri-s1-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
+                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.45)}
                 stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
-              <line key={`ts-s2-${lvl}-${si}`}
-                x1={x(sx)} y1={y(bY + LEVEL_H * 0.9)} x2={x(ex)} y2={y(bY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
+              <line key={`tesuri-s2-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
+                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
             );
           } else {
+            // Wakugumi: shitasan (bottom horizontal) on stair spans
             elements.push(
-              <line key={`sh-s-${lvl}-${si}`}
-                x1={x(sx)} y1={y(bY + 50)} x2={x(ex)} y2={y(bY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />,
+              <line key={`shitasan-s-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + 50)}
+                x2={x(ex)} y2={y(baseY + 50)}
+                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
             );
           }
         } else {
-          // Front brace (X)
+          // Brace (X pattern)
           elements.push(
-            <line key={`br-1-${lvl}-${si}`}
-              x1={x(sx)} y1={y(bY)} x2={x(ex)} y2={y(tY)}
+            <line key={`brace-1-${lvl}-${si}`}
+              x1={x(sx)} y1={y(baseY)} x2={x(ex)} y2={y(topY)}
               stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
-            <line key={`br-2-${lvl}-${si}`}
-              x1={x(sx)} y1={y(tY)} x2={x(ex)} y2={y(bY)}
-              stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
+            <line key={`brace-2-${lvl}-${si}`}
+              x1={x(sx)} y1={y(topY)} x2={x(ex)} y2={y(baseY)}
+              stroke={COL.brace} strokeWidth={BRACE_STROKE} />
           );
 
-          // Front tesuri / shitasan
           if (isWakugumi) {
+            // Wakugumi: 下桟 (Shitasan) — bottom horizontal only, no tesuri
             elements.push(
-              <line key={`sh-${lvl}-${si}`}
-                x1={x(sx)} y1={y(bY + 50)} x2={x(ex)} y2={y(bY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />,
+              <line key={`shitasan-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + 50)}
+                x2={x(ex)} y2={y(baseY + 50)}
+                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
             );
           } else {
+            // Kusabi: Tesuri (inner face horizontal bars)
             elements.push(
-              <line key={`ts-1-${lvl}-${si}`}
-                x1={x(sx)} y1={y(bY + LEVEL_H * 0.45)} x2={x(ex)} y2={y(bY + LEVEL_H * 0.45)}
+              <line key={`tesuri-1-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
+                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.45)}
                 stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
-              <line key={`ts-2-${lvl}-${si}`}
-                x1={x(sx)} y1={y(bY + LEVEL_H * 0.9)} x2={x(ex)} y2={y(bY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
+              <line key={`tesuri-2-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
+                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
             );
           }
+
+          // Plank
+          elements.push(
+            <rect key={`plank-${lvl}-${si}`}
+              x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
+              width={(ex - sx) * scale - 4} height={PLANK_H_PX}
+              fill={COL.plank} opacity={0.7} rx={1} />
+          );
+          // Habaki
+          elements.push(
+            <line key={`habaki-${lvl}-${si}`}
+              x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
+              x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
+              stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
+          );
         }
       });
 
-      // Width yokoji connectors (front row tick)
+      // Width yokoji
       postXPositions.forEach((px, pi) => {
         elements.push(
           <line key={`wyk-${lvl}-${pi}`}
-            x1={x(px) - 4} y1={y(tY)} x2={x(px) + 4} y2={y(tY)}
-            stroke={COL.yokoji} strokeWidth={2.5} />,
+            x1={x(px) - 4} y1={y(topY)} x2={x(px) + 4} y2={y(topY)}
+            stroke={COL.yokoji} strokeWidth={2.5} />
         );
       });
     });
 
-    // ═══════════ Top Guard ═══════════
-    const gBase = JACK_BASE_H + levels * LEVEL_H;
-    const gTop = gBase + topGuardMm;
-
-    // Back row
+    // Top Guard Posts
     postXPositions.forEach((px, pi) => {
-      elements.push(
-        <line key={`tg-b-${pi}`}
-          x1={x(px) + dx} y1={y(gBase) + dy2} x2={x(px) + dx} y2={y(gTop) + dy2}
-          stroke={COL.topGuard} strokeWidth={POST_STROKE - 1} strokeDasharray="5,3" opacity={BACK_OPACITY} />,
-      );
-    });
-    spans.forEach((_, si) => {
-      const sx = postXPositions[si];
-      const ex = postXPositions[si + 1];
-      elements.push(
-        <line key={`tgr-b-${si}`}
-          x1={x(sx) + dx} y1={y(gTop) + dy2} x2={x(ex) + dx} y2={y(gTop) + dy2}
-          stroke={COL.topGuard} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
-      );
-    });
-
-    // Depth connectors at top guard
-    postXPositions.forEach((px, pi) => {
-      elements.push(
-        <line key={`tg-dc-${pi}`}
-          x1={x(px)} y1={y(gTop)} x2={x(px) + dx} y2={y(gTop) + dy2}
-          stroke={COL.topGuard} strokeWidth={1.2} opacity={0.5} />,
-      );
-    });
-
-    // Front row
-    postXPositions.forEach((px, pi) => {
+      const guardBase = JACK_BASE_H + levels * LEVEL_H;
+      const guardTop = guardBase + topGuardMm;
       elements.push(
         <line key={`tg-${pi}`}
-          x1={x(px)} y1={y(gBase)} x2={x(px)} y2={y(gTop)}
-          stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />,
+          x1={x(px)} y1={y(guardBase)} x2={x(px)} y2={y(guardTop)}
+          stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />
       );
     });
-    spans.forEach((_, si) => {
+
+    // Top guard horizontal rail
+    spans.forEach((span, si) => {
+      const guardTop = JACK_BASE_H + levels * LEVEL_H + topGuardMm;
       const sx = postXPositions[si];
       const ex = postXPositions[si + 1];
       elements.push(
         <line key={`tgr-${si}`}
-          x1={x(sx)} y1={y(gTop)} x2={x(ex)} y2={y(gTop)}
-          stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />,
+          x1={x(sx)} y1={y(guardTop)} x2={x(ex)} y2={y(guardTop)}
+          stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />
       );
     });
 
-    // End stopper (端部) — wakugumi only
+    // End stopper (端部) — wakugumi only, at wall ends
     if (isWakugumi) {
       Array.from({ length: levels }).forEach((_, lvl) => {
-        const bY = JACK_BASE_H + lvl * LEVEL_H;
-        const tY = bY + LEVEL_H;
+        const baseY = JACK_BASE_H + lvl * LEVEL_H;
+        const topY = baseY + LEVEL_H;
         [0, totalLengthMm].forEach((px, ei) => {
           elements.push(
-            <line key={`es-${lvl}-${ei}`}
-              x1={x(px)} y1={y(bY)} x2={x(px)} y2={y(tY)}
-              stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />,
+            <line key={`endstopper-${lvl}-${ei}`}
+              x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
+              stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />
           );
         });
       });
     }
 
-    // ═══════════ Dimensions ═══════════
-    // Span dimensions
+    // Span dimension lines
     spans.forEach((span, si) => {
       const sx = postXPositions[si];
       const ex = postXPositions[si + 1];
-      const dimY = y(0) + DIMENSION_OFFSET + 14;
+      const dy = y(0) + DIMENSION_OFFSET + 12;
       elements.push(
         <g key={`dim-${si}`}>
-          <line x1={x(sx)} y1={dimY} x2={x(ex)} y2={dimY} stroke={COL.dim} strokeWidth={0.8} />
-          <line x1={x(sx)} y1={dimY - 4} x2={x(sx)} y2={dimY + 4} stroke={COL.dim} strokeWidth={0.8} />
-          <line x1={x(ex)} y1={dimY - 4} x2={x(ex)} y2={dimY + 4} stroke={COL.dim} strokeWidth={0.8} />
-          <text x={(x(sx) + x(ex)) / 2} y={dimY - 5} textAnchor="middle" fontSize={9} fill={COL.dimText}>{span}</text>
-        </g>,
+          <line x1={x(sx)} y1={dy} x2={x(ex)} y2={dy} stroke={COL.dim} strokeWidth={0.8} />
+          <line x1={x(sx)} y1={dy - 4} x2={x(sx)} y2={dy + 4} stroke={COL.dim} strokeWidth={0.8} />
+          <line x1={x(ex)} y1={dy - 4} x2={x(ex)} y2={dy + 4} stroke={COL.dim} strokeWidth={0.8} />
+          <text x={(x(sx) + x(ex)) / 2} y={dy - 5} textAnchor="middle" fontSize={9} fill={COL.dimText}>
+            {span}
+          </text>
+        </g>
       );
     });
 
-    // Total length
-    const totalDimY = y(0) + DIMENSION_OFFSET + 34;
+    // Total wall length dimension
+    const dy = y(0) + DIMENSION_OFFSET + 32;
     elements.push(
       <g key="dim-total">
-        <line x1={x(0)} y1={totalDimY} x2={x(totalLengthMm)} y2={totalDimY} stroke={COL.dim} strokeWidth={1} />
-        <line x1={x(0)} y1={totalDimY - 5} x2={x(0)} y2={totalDimY + 5} stroke={COL.dim} strokeWidth={1} />
-        <line x1={x(totalLengthMm)} y1={totalDimY - 5} x2={x(totalLengthMm)} y2={totalDimY + 5} stroke={COL.dim} strokeWidth={1} />
-        <text x={(x(0) + x(totalLengthMm)) / 2} y={totalDimY - 6} textAnchor="middle" fontSize={11} fontWeight="bold" fill={COL.dimText}>
+        <line x1={x(0)} y1={dy} x2={x(totalLengthMm)} y2={dy} stroke={COL.dim} strokeWidth={1} />
+        <line x1={x(0)} y1={dy - 5} x2={x(0)} y2={dy + 5} stroke={COL.dim} strokeWidth={1} />
+        <line x1={x(totalLengthMm)} y1={dy - 5} x2={x(totalLengthMm)} y2={dy + 5} stroke={COL.dim} strokeWidth={1} />
+        <text x={(x(0) + x(totalLengthMm)) / 2} y={dy - 6} textAnchor="middle" fontSize={11} fontWeight="bold" fill={COL.dimText}>
           {totalLengthMm.toLocaleString()}mm
         </text>
-      </g>,
+      </g>
     );
 
-    // Height dimension (left)
-    const hDx = PAD_LEFT - 50;
+    // Height dimension (left side)
+    const hDx = PAD_LEFT - 45;
     elements.push(
       <g key="dim-height">
         <line x1={hDx} y1={y(0)} x2={hDx} y2={y(wallData.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
@@ -536,7 +389,7 @@ export default function Scaffold2DView({ result }: Props) {
           transform={`rotate(-90, ${hDx - 6}, ${(y(0) + y(wallData.totalHeightMm)) / 2})`}>
           {wallData.totalHeightMm.toLocaleString()}mm
         </text>
-      </g>,
+      </g>
     );
 
     return elements;
