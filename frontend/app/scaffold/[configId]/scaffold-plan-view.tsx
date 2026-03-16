@@ -50,10 +50,19 @@ function signedArea(pts: { x: number; y: number }[]): number {
  * Handles 1-2 walls (open segments), 3+ walls (closed polygon).
  * Uses stored polygon vertices when available, falls back to regular polygon.
  */
+function readVertex(v: any): { x: number; y: number } {
+  const rawX = v?.xFrac ?? v?.x ?? 0;
+  const rawY = v?.yFrac ?? v?.y ?? 0;
+  return {
+    x: typeof rawX === 'number' && isFinite(rawX) ? rawX : 0,
+    y: typeof rawY === 'number' && isFinite(rawY) ? rawY : 0,
+  };
+}
+
 function buildPolygonFromWalls(
   walls: WallCalculationResult[],
   scaleFactor: number,
-  storedVertices?: Array<{ xFrac: number; yFrac: number }>,
+  storedVertices?: Array<Record<string, any>>,
 ): { vertices: { x: number; y: number }[]; edges: Edge[]; isClosed: boolean } {
   const n = walls.length;
   if (n === 0) return { vertices: [], edges: [], isClosed: false };
@@ -63,28 +72,36 @@ function buildPolygonFromWalls(
 
   // ── Use stored polygon vertices if available ──
   if (storedVertices && storedVertices.length >= n && n >= 3) {
-    const xs = storedVertices.map(v => v.xFrac);
-    const ys = storedVertices.map(v => v.yFrac);
+    const parsed = storedVertices.map(readVertex);
+    const xs = parsed.map(v => v.x);
+    const ys = parsed.map(v => v.y);
     const bbW = Math.max(...xs) - Math.min(...xs);
     const bbH = Math.max(...ys) - Math.min(...ys);
-    const maxDim = Math.max(bbW, bbH, 1);
-    const sf = 700 / maxDim;
+    const maxDim = Math.max(bbW, bbH);
 
-    for (let i = 0; i < n; i++) {
-      const sv = storedVertices[i];
-      vertices.push({ x: (sv.xFrac ?? 0) * sf, y: (sv.yFrac ?? 0) * sf });
+    // If all vertices collapse to a single point, fall through to regular polygon
+    if (!isFinite(maxDim) || maxDim < 1) {
+      // fall through
+    } else {
+      const sf = 700 / maxDim;
+      const offX = Math.min(...xs);
+      const offY = Math.min(...ys);
+
+      for (let i = 0; i < n; i++) {
+        vertices.push({ x: (parsed[i].x - offX) * sf, y: (parsed[i].y - offY) * sf });
+      }
+
+      for (let i = 0; i < n; i++) {
+        const v1 = vertices[i];
+        const v2 = vertices[(i + 1) % n];
+        const dx = v2.x - v1.x;
+        const dy = v2.y - v1.y;
+        const angle = Math.atan2(dy, dx);
+        edges.push({ x1: v1.x, y1: v1.y, x2: v2.x, y2: v2.y, wallIdx: i, angle });
+      }
+
+      return { vertices, edges, isClosed: true };
     }
-
-    for (let i = 0; i < n; i++) {
-      const v1 = vertices[i];
-      const v2 = vertices[(i + 1) % n];
-      const dx = v2.x - v1.x;
-      const dy = v2.y - v1.y;
-      const angle = Math.atan2(dy, dx);
-      edges.push({ x1: v1.x, y1: v1.y, x2: v2.x, y2: v2.y, wallIdx: i, angle });
-    }
-
-    return { vertices, edges, isClosed: true };
   }
 
   // ── 1-2 walls: draw as straight segments (open, not a polygon) ──
@@ -136,8 +153,8 @@ export default function ScaffoldPlanView({ result }: Props) {
     return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
   }
 
-  const storedVertices: Array<{ xFrac: number; yFrac: number }> | undefined =
-    result?.polygonVertices;
+  const storedVertices: Array<Record<string, any>> | undefined =
+    Array.isArray(result?.polygonVertices) ? result.polygonVertices : undefined;
 
   const maxLen = Math.max(...walls.map(w => w.wallLengthMm ?? 1800));
   const baseSf = maxLen > 0 ? 350 / maxLen : 1;
@@ -154,7 +171,7 @@ export default function ScaffoldPlanView({ result }: Props) {
   // signedArea < 0 → flip.
   const normalSign = useMemo(() => {
     if (!isClosed || vertices.length < 3) return 1;
-    return signedArea(vertices) > 0 ? 1 : -1;
+    return signedArea(vertices) > 0 ? -1 : 1;
   }, [vertices, isClosed]);
 
   // Bounding box — handle empty/degenerate cases
