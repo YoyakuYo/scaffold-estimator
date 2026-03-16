@@ -51,12 +51,14 @@ const C_TECH = {
 };
 /** Buragetto (bracket) sections — always blue for visual verification */
 const C_BRACKET = 0x2563eb;
-// Default scaffold palette — matches industry reference:
-//   structural (posts/braces/rails/habaki): light galvanised steel, blue-tinted silver
-//   planks (anchi only): bright golden-yellow
+// Default scaffold palette — clean 2-tone:
+//   posts/pipes/structural: bright silver-white (galvanised steel)
+//   planks + habaki: golden yellow
 const C = {
-  structural: 0xb8c8dc,  // light silver-blue — galvanised steel pipe (posts, braces, tesuri, yokoji, habaki, frame)
-  plank:      0xf5b800,  // bright golden-yellow — anchi planks only
+  post:       0xe8ecf0,  // bright silver-white — posts, jacks, yokoji, top guard, braces
+  plank:      0xf5b800,  // golden yellow — anchi planks + habaki
+  tesuri:     0x4a90d9,  // soft blue — guard rails (distinct from posts)
+  brace:      0xc0c8d0,  // slightly darker silver — braces (subtle contrast from posts)
   wood:       0x7a5520,  // warm brown for base sleepers
   ground:     0xe8eaed,
   bg:         0xdce4ec,  // soft sky-gray background
@@ -498,19 +500,18 @@ export default function Scaffold3DView({
       const plankRough = isTech ? rough : 0.65;
 
       // ── Shared materials ───
-      // Default mode: ALL structural elements share one light silver-blue colour.
+      // Default mode: silver-white posts, golden-yellow planks+habaki, soft blue rails.
       // Technical mode: distinct colour per component type (see C_TECH).
       const pipeMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.post : C.structural,
+        color: isTech ? C_TECH.post : C.post,
         metalness: metal,
         roughness: rough,
       });
       const pipeDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : C.structural,
+        color: isTech ? C_TECH.brace : C.brace,
         metalness: metal,
         roughness: rough,
       });
-      // Planks: warm wood/tan in default; bright yellow in technical quotation mode.
       const plankMat = new THREE.MeshStandardMaterial({
         color: isTech ? C_TECH.plank : C.plank,
         metalness: plankMetal,
@@ -531,17 +532,18 @@ export default function Scaffold3DView({
         return spanPlankMats[closest] ?? plankMat;
       };
       const jackMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.jack : C.structural,
+        color: isTech ? C_TECH.jack : C.post,
         metalness: metal,
         roughness: rough,
       });
+      // Habaki uses golden yellow (same as planks) in default mode
       const habakiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.habaki : C.structural,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.habaki : C.plank,
+        metalness: plankMetal,
+        roughness: plankRough,
       });
       const stairMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.stair : C.structural,
+        color: isTech ? C_TECH.stair : C.post,
         metalness: metal,
         roughness: rough,
       });
@@ -552,9 +554,8 @@ export default function Scaffold3DView({
       const postMat = pipeMat;
       const jackMatEff = jackMat;
       const plankMatEff = plankMat;
-      // Tesuri (guard rails) — force bright blue and dedicated material so they are always clearly visible.
       const tesuriMat = new THREE.MeshStandardMaterial({
-        color: C_TECH.brace, // use the same vivid blue as braces
+        color: isTech ? C_TECH.brace : C.tesuri,
         metalness: metal,
         roughness: rough,
       });
