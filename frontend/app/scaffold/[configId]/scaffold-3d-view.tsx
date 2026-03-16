@@ -56,7 +56,7 @@ const C_BRACKET = 0x2563eb;
 //   planks + habaki: golden yellow
 const C = {
   post:       0xe8ecf0,  // bright silver-white — posts, jacks, yokoji, top guard, braces
-  plank:      0xd94040,  // red — anchi planks (distinct from pipes/rails)
+  plank:      0xf5b800,  // golden yellow — anchi planks + habaki
   tesuri:     0x4a90d9,  // soft blue — guard rails (distinct from posts)
   brace:      0xc0c8d0,  // slightly darker silver — braces (subtle contrast from posts)
   ecoPallet:  0x2d2d2d,  // dark recycled plastic — eco pallet base
@@ -74,13 +74,13 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank colour (red in default; distinct in technical mode)
+// Span size (mm) → plank colour (golden yellow in default; distinct in technical mode)
 const SPAN_COLORS: Record<number, number> = {
-  600: 0xd94040,
-  900: 0xd94040,
-  1200: 0xd94040,
-  1500: 0xd94040,
-  1800: 0xd94040,
+  600: 0xf5b800,
+  900: 0xf5b800,
+  1200: 0xf5b800,
+  1500: 0xf5b800,
+  1800: 0xf5b800,
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -576,7 +576,11 @@ export default function Scaffold3DView({
         metalness: metal,
         roughness: rough,
       });
-      const yokojiMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.yokoji, metalness: metal, roughness: rough }) : pipeMat;
+      const yokojiMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.yokoji : 0xc03030,
+        metalness: metal,
+        roughness: rough,
+      });
       const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : pipeMat;
       const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
       const braceMat = pipeDarkMat;
