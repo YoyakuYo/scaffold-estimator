@@ -140,17 +140,34 @@ function buildPolygonVertices(
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
-  // ── 4 walls: use stored vertices when available (preserves BIM AI shape);
-  //    fall back to axis-aligned rectangle only when no stored vertices exist ──
-  if (n === 4 && (!storedVertices || storedVertices.length < 4)) {
-    const w0 = wallLenM(0);
-    const w1 = wallLenM(1);
-    return [
-      { x: 0, z: 0 },
-      { x: w0, z: 0 },
-      { x: w0, z: w1 },
-      { x: 0, z: w1 },
-    ];
+  // ── 4 walls: try stored vertices first (preserves BIM AI non-rectangular shape);
+  //    fall back to axis-aligned rectangle when stored vertices are absent or degenerate ──
+  if (n === 4) {
+    const rect = () => {
+      const w0 = wallLenM(0);
+      const w1 = wallLenM(1);
+      return [
+        { x: 0, z: 0 },
+        { x: w0, z: 0 },
+        { x: w0, z: w1 },
+        { x: 0, z: w1 },
+      ];
+    };
+    if (!storedVertices || storedVertices.length < 4) return rect();
+    // Validate stored vertices form a non-degenerate polygon before using them
+    const raw4 = storedVertices.slice(0, 4).map(normaliseVertex);
+    const xs4 = raw4.map(v => v.x);
+    const zs4 = raw4.map(v => v.z);
+    const spread4 = Math.max(
+      Math.max(...xs4) - Math.min(...xs4),
+      Math.max(...zs4) - Math.min(...zs4),
+    );
+    // If all stored vertices are degenerate (zero spread / all same point),
+    // or contain non-finite values, use the simple rectangle instead.
+    if (spread4 < 0.001 || !raw4.every(v => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+      return rect();
+    }
+    // Non-degenerate stored vertices — fall through to generic handler below
   }
 
   // ── 6 walls: Irregular hexagon — rebuild from stored vertices + wall lengths, closed loop ──
@@ -825,9 +842,15 @@ export default function Scaffold3DView({
       // ══════════════════════════════════════════════════════
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices ?? (result as any)?.polygonVertices;
-      const verts = buildPolygonVertices(walls, storedVerts);
-      const vertsOk =
+      let verts = buildPolygonVertices(walls, storedVerts);
+      let vertsOk =
         verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+      // Safety net: if stored vertices produced invalid geometry, retry without them
+      if (!vertsOk && storedVerts && storedVerts.length > 0) {
+        verts = buildPolygonVertices(walls, undefined);
+        vertsOk =
+          verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+      }
       if (!vertsOk) {
         setError(
           walls.length === 0
@@ -1349,7 +1372,9 @@ export default function Scaffold3DView({
 
   // Corner spaces: angle (degrees) and opening distance (m) per corner for overlay
   const cornerData = useMemo(() => {
-    const verts = buildPolygonVertices(walls, result?.polygonVertices);
+    let verts = buildPolygonVertices(walls, result?.polygonVertices);
+    const ok = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+    if (!ok) verts = buildPolygonVertices(walls, undefined);
     if (verts.length < 2) return { count: 0, angles: [] as number[], openings: [] as number[] };
     const angles: number[] = [];
     const openings: number[] = [];
