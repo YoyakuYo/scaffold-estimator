@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -598,43 +598,6 @@ export default function Scaffold3DView({
         parent.add(mesh);
       }
 
-      function makeTextSprite(text: string, options?: { bg?: string; fg?: string; scale?: number }) {
-        const bg = options?.bg ?? 'rgba(15, 23, 42, 0.80)';
-        const fg = options?.fg ?? '#ffffff';
-        const scale = options?.scale ?? 1;
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-
-        const fontSize = 42;
-        ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-        const padX = 22;
-        const padY = 14;
-        const metrics = ctx.measureText(text);
-        const w = Math.ceil(metrics.width + padX * 2);
-        const h = Math.ceil(fontSize + padY * 2);
-        canvas.width = w;
-        canvas.height = h;
-        ctx.font = `600 ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-
-        // background
-        ctx.fillStyle = bg;
-        ctx.fillRect(0, 0, w, h);
-        // text
-        ctx.fillStyle = fg;
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, padX, h / 2);
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-        const sprite = new THREE.Sprite(mat);
-        const base = 1.2 * scale;
-        sprite.scale.set(base * (w / h), base, 1);
-        sprite.renderOrder = 999;
-        return sprite;
-      }
-
       function addBox(
         parent: THREE.Object3D,
         px: number, py: number, pz: number,
@@ -998,23 +961,6 @@ export default function Scaffold3DView({
         const edgeLine = new THREE.Line(edgeGeo, edgeMat);
         scene.add(edgeLine);
 
-        // ── Dimension labels (length + height) — same as 2D: scaffold height = levels×LEVEL_H + top guard + jack ────────────
-        const midXw = (v1.x + v2.x) / 2 - cx + nx * (standoffM + wallWidthM * 0.55);
-        const midZw = (v1.z + v2.z) / 2 - cz + nz * (standoffM + wallWidthM * 0.55);
-        const wallLenMm = wall.wallLengthMm ?? Math.round(edgeLen * 1000);
-        const levelsForH = wall.levelCalc?.fullLevels ?? 0;
-        const scaffoldHeightM = GROUND_Y + JACK_H + levelsForH * LEVEL_H + topGuardM;
-        const lenLabel = makeTextSprite(`L ${(wallLenMm / 1000).toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
-        const hLabel = makeTextSprite(`H ${scaffoldHeightM.toFixed(3)} m`, { bg: 'rgba(255,255,255,0.85)', fg: '#111827', scale: 0.95 });
-        if (lenLabel) {
-          lenLabel.position.set(midXw, 0.65, midZw);
-          scene.add(lenLabel);
-        }
-        if (hLabel) {
-          hLabel.position.set(midXw, Math.max(totalH * 0.65, 2.2), midZw);
-          scene.add(hLabel);
-        }
-
         // Invisible hit area to allow clicking each wall segment. Use ~85% of edge length.
         const clickBoxLen = Math.max(edgeLen * 0.85, 0.3);
         const clickGeo = new THREE.BoxGeometry(clickBoxLen, Math.max(totalH, 2), Math.max(wallWidthM * 0.35, 0.35));
@@ -1118,46 +1064,6 @@ export default function Scaffold3DView({
         }
       }
       scene.add(cornerGroup);
-
-      // ── Corner space/distance: angle (degrees) and opening distance (m), with 3D indicator ─
-      // Iterate over walls (safe for open polygons like L-shape)
-      for (let wi = 0; wi < walls.length; wi++) {
-        const nextWi = (wi + 1) % walls.length;
-        if (isOpenPolygon && nextWi <= wi) continue;
-        const cornerVertIdx = (wi + 1) % verts.length;
-        const prev = verts[wi];
-        const curr = verts[cornerVertIdx];
-        const next = verts[(cornerVertIdx + 1) % verts.length];
-        const ax = curr.x - prev.x;
-        const az = curr.z - prev.z;
-        const bx = next.x - curr.x;
-        const bz = next.z - curr.z;
-        const la = Math.hypot(ax, az) || 1e-6;
-        const lb = Math.hypot(bx, bz) || 1e-6;
-        const axn = ax / la;
-        const azn = az / la;
-        const bxn = bx / lb;
-        const bzn = bz / lb;
-        const cosTheta = Math.max(-1, Math.min(1, -(axn * bxn + azn * bzn)));
-        const angleRad = Math.acos(cosTheta);
-        const angleDeg = (angleRad * 180) / Math.PI;
-        const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const cornerWidthM = Math.max(wA, wB);
-        const cornerOpeningM = 2 * cornerWidthM * Math.tan(angleRad / 2);
-        const labelY = Math.min(2.5, Math.max(1.2, maxH * 0.35));
-        const lx = curr.x - cx;
-        const lz = curr.z - cz;
-        const cornerLabel = makeTextSprite(`${angleDeg.toFixed(0)}°  ${cornerOpeningM.toFixed(2)} m`, {
-          bg: 'rgba(30, 58, 138, 0.88)',
-          fg: '#e0e7ff',
-          scale: 0.85,
-        });
-        if (cornerLabel) {
-          cornerLabel.position.set(lx, labelY, lz);
-          scene.add(cornerLabel);
-        }
-      }
 
       // ── Building outline at ground level (not scaffold level); scaffold working levels are above this ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
@@ -1378,53 +1284,6 @@ export default function Scaffold3DView({
     applyWallVisibility(viewMode, activeWallIdx);
     if (viewMode === 'wall') focusCameraOnWall(activeWallIdx);
   }, [viewMode, activeWallIdx]);
-
-  // Derived totals — use same scaffold height as 2D (levels × level height + top guard + jack)
-  const totalLengthM = walls.reduce((s, w) => s + (w.wallLengthMm ?? 0), 0) / 1000;
-  const isWakugumiResult = result?.scaffoldType === 'wakugumi';
-  const LEVEL_H_M = isWakugumiResult ? (result?.frameSizeMm ?? 1700) / 1000 : LEVEL_H_KUSABI;
-  const topGuardMForTotal = (result?.topGuardHeightMm ?? 900) / 1000;
-  const JACK_H_M = 0.3;
-  const totalHeightM =
-    walls.length > 0
-      ? Math.max(
-          ...walls.map(
-            (w) =>
-              JACK_H_M +
-              (w.levelCalc?.fullLevels ?? 0) * LEVEL_H_M +
-              topGuardMForTotal,
-          ),
-        )
-      : 0;
-
-  // Corner spaces: angle (degrees) and opening distance (m) per corner for overlay
-  const cornerData = useMemo(() => {
-    let verts = buildPolygonVertices(walls, result?.polygonVertices);
-    const ok = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-    if (!ok) verts = buildPolygonVertices(walls, undefined);
-    if (verts.length < 2) return { count: 0, angles: [] as number[], openings: [] as number[] };
-    const angles: number[] = [];
-    const openings: number[] = [];
-    for (let ci = 0; ci < verts.length; ci++) {
-      const prev = verts[(ci - 1 + verts.length) % verts.length];
-      const curr = verts[ci];
-      const next = verts[(ci + 1) % verts.length];
-      const ax = curr.x - prev.x;
-      const az = curr.z - prev.z;
-      const bx = next.x - curr.x;
-      const bz = next.z - curr.z;
-      const la = Math.hypot(ax, az) || 1e-6;
-      const lb = Math.hypot(bx, bz) || 1e-6;
-      const cosTheta = Math.max(-1, Math.min(1, -((ax * bx + az * bz) / (la * lb))));
-      const angleRad = Math.acos(cosTheta);
-      angles.push((angleRad * 180) / Math.PI);
-      const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-      const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-      const cornerWidthM = Math.max(wPrev, wCurr);
-      openings.push(2 * cornerWidthM * Math.tan(angleRad / 2));
-    }
-    return { count: verts.length, angles, openings };
-  }, [walls, result?.polygonVertices, result?.scaffoldWidthMm]);
 
   if (walls.length === 0) {
     return (
@@ -1702,25 +1561,6 @@ export default function Scaffold3DView({
               <Loader2 className="h-8 w-8 animate-spin text-slate-500 mx-auto mb-2" />
               <p className="text-slate-600 text-sm">Loading 3D scaffold view...</p>
             </div>
-          </div>
-        )}
-        {ready && (
-          <div className="absolute bottom-3 right-3 z-10 pointer-events-none select-none bg-slate-900/85 text-white rounded-lg shadow-lg px-3 py-2 text-xs font-mono leading-5">
-            <div className="font-semibold text-slate-300 mb-0.5">全体寸法</div>
-            <div>周長　<span className="font-bold text-white">{totalLengthM.toFixed(3)} m</span></div>
-            <div>高さ　<span className="font-bold text-white">{totalHeightM.toFixed(3)} m</span></div>
-            {cornerData.count > 0 && (
-              <div className="mt-1 pt-1 border-t border-slate-600/60">
-                <div className="font-semibold text-slate-300 mb-0.5">隅（コーナー）</div>
-                <div>角数　<span className="font-bold text-white">{cornerData.count}</span></div>
-                {cornerData.angles.length > 0 && (
-                  <div>角度　<span className="font-bold text-white">{Math.min(...cornerData.angles).toFixed(0)}° ～ {Math.max(...cornerData.angles).toFixed(0)}°</span></div>
-                )}
-                {cornerData.openings.length > 0 && (
-                  <div>開口　<span className="font-bold text-white">{(Math.min(...cornerData.openings) * 1000).toFixed(0)} ～ {(Math.max(...cornerData.openings) * 1000).toFixed(0)} mm</span></div>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
