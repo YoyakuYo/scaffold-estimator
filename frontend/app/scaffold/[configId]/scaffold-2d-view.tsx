@@ -19,6 +19,9 @@ const DIMENSION_OFFSET = 28;
 const FRAME_WIDTH_PX = 14;
 const FRAME_SPLAY_PX = 5;
 const FRAME_BOTTOM_RATIO = 0.194;
+const DEPTH_DX = 5;
+const DEPTH_DY = -4;
+const BACK_OPACITY = 0.35;
 
 // ─── Colors (clean technical drawing for estimation/quotation) ────
 const COL = {
@@ -38,6 +41,8 @@ const COL = {
   grid: '#f1f5f9',
   topGuard: '#6d28d9',  // 上部手摺 — violet
   frame: '#0f172a',     // 建枠 — same as post (remove emphasis)
+  ecoPallet: '#2d2d2d', // エコプレット — dark recycled plastic
+  stairRail: '#065f46', // カイダンレール — dark teal
 };
 
 // Per-wall accent colors (cycle for many walls)
@@ -151,7 +156,28 @@ export default function Scaffold2DView({ result }: Props) {
         stroke="#94a3b8" strokeWidth={2} strokeDasharray="6,3" />
     );
 
-    // Jack Bases
+    // Eco pallet base beam (アルスピーダー) — horizontal beam connecting all jack bases
+    const baseBeamY = y(0) + 6;
+    elements.push(
+      <line key="base-beam-back" x1={x(0) + DEPTH_DX - 4} y1={baseBeamY + DEPTH_DY} x2={x(totalLengthMm) + DEPTH_DX + 4} y2={baseBeamY + DEPTH_DY}
+        stroke={COL.jackBase} strokeWidth={3} opacity={BACK_OPACITY} />,
+      <line key="base-beam-front" x1={x(0) - 4} y1={baseBeamY} x2={x(totalLengthMm) + 4} y2={baseBeamY}
+        stroke={COL.jackBase} strokeWidth={3} />,
+    );
+
+    // Jack Bases — back row first, then front row
+    postXPositions.forEach((px, i) => {
+      elements.push(
+        <g key={`jb-back-${i}`} opacity={BACK_OPACITY}>
+          <polygon
+            points={`${x(px) + DEPTH_DX},${y(0) + DEPTH_DY} ${x(px) - 6 + DEPTH_DX},${y(0) + 10 + DEPTH_DY} ${x(px) + 6 + DEPTH_DX},${y(0) + 10 + DEPTH_DY}`}
+            fill={COL.jackBase} stroke={COL.jackBase} strokeWidth={1}
+          />
+          <line x1={x(px) + DEPTH_DX} y1={y(0) + DEPTH_DY} x2={x(px) + DEPTH_DX} y2={y(JACK_BASE_H) + DEPTH_DY}
+            stroke={COL.jackBase} strokeWidth={2} strokeDasharray="4,2" />
+        </g>
+      );
+    });
     postXPositions.forEach((px, i) => {
       elements.push(
         <g key={`jb-${i}`}>
@@ -169,12 +195,94 @@ export default function Scaffold2DView({ result }: Props) {
     spans.forEach((span, si) => {
       const xStart = postXPositions[si];
       elements.push(
+        <line key={`by-back-${si}`} x1={x(xStart) + DEPTH_DX} y1={y(JACK_BASE_H) + DEPTH_DY} x2={x(xStart + span) + DEPTH_DX} y2={y(JACK_BASE_H) + DEPTH_DY}
+          stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" opacity={BACK_OPACITY} />
+      );
+    });
+    spans.forEach((span, si) => {
+      const xStart = postXPositions[si];
+      elements.push(
         <line key={`by-${si}`} x1={x(xStart)} y1={y(JACK_BASE_H)} x2={x(xStart + span)} y2={y(JACK_BASE_H)}
           stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" />
       );
     });
 
-    // Per-Level Content
+    // ── Back row (drawn first, offset + translucent) then front row on top ──
+
+    // Per-Level Content — BACK ROW
+    Array.from({ length: levels }).forEach((_, lvl) => {
+      const baseY = JACK_BASE_H + lvl * LEVEL_H;
+      const topY = baseY + LEVEL_H;
+
+      // Back-row posts
+      postXPositions.forEach((px, pi) => {
+        elements.push(
+          <line key={`post-back-${lvl}-${pi}`}
+            x1={x(px) + DEPTH_DX} y1={y(baseY) + DEPTH_DY}
+            x2={x(px) + DEPTH_DX} y2={y(topY) + DEPTH_DY}
+            stroke={COL.post} strokeWidth={POST_STROKE - 1} opacity={BACK_OPACITY} />
+        );
+      });
+
+      // Back-row per span
+      spans.forEach((span, si) => {
+        const sx = postXPositions[si];
+        const ex = postXPositions[si + 1];
+        const isStairSpan = stairPositions.includes(si);
+
+        if (!isStairSpan) {
+          // Back-row brace
+          elements.push(
+            <line key={`brace-back-1-${lvl}-${si}`}
+              x1={x(sx) + DEPTH_DX} y1={y(baseY) + DEPTH_DY} x2={x(ex) + DEPTH_DX} y2={y(topY) + DEPTH_DY}
+              stroke={COL.brace} strokeWidth={BRACE_STROKE - 0.5} opacity={BACK_OPACITY} />,
+            <line key={`brace-back-2-${lvl}-${si}`}
+              x1={x(sx) + DEPTH_DX} y1={y(topY) + DEPTH_DY} x2={x(ex) + DEPTH_DX} y2={y(baseY) + DEPTH_DY}
+              stroke={COL.brace} strokeWidth={BRACE_STROKE - 0.5} opacity={BACK_OPACITY} />,
+          );
+
+          // Back-row tesuri / shitasan
+          if (isWakugumi) {
+            elements.push(
+              <line key={`shitasan-back-${lvl}-${si}`}
+                x1={x(sx) + DEPTH_DX} y1={y(baseY + 50) + DEPTH_DY}
+                x2={x(ex) + DEPTH_DX} y2={y(baseY + 50) + DEPTH_DY}
+                stroke={COL.shitasan} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
+            );
+          } else {
+            elements.push(
+              <line key={`tesuri-back-1-${lvl}-${si}`}
+                x1={x(sx) + DEPTH_DX} y1={y(baseY + LEVEL_H * 0.45) + DEPTH_DY}
+                x2={x(ex) + DEPTH_DX} y2={y(baseY + LEVEL_H * 0.45) + DEPTH_DY}
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
+              <line key={`tesuri-back-2-${lvl}-${si}`}
+                x1={x(sx) + DEPTH_DX} y1={y(baseY + LEVEL_H * 0.9) + DEPTH_DY}
+                x2={x(ex) + DEPTH_DX} y2={y(baseY + LEVEL_H * 0.9) + DEPTH_DY}
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
+            );
+          }
+
+          // Back-row plank (thin line showing back edge)
+          elements.push(
+            <rect key={`plank-back-${lvl}-${si}`}
+              x={x(sx) + 2 + DEPTH_DX} y={y(topY) - PLANK_H_PX / 2 + DEPTH_DY}
+              width={(ex - sx) * scale - 4} height={PLANK_H_PX - 2}
+              fill={COL.plank} opacity={BACK_OPACITY * 0.7} rx={1} />,
+          );
+        }
+      });
+
+      // Back-row width yokoji
+      postXPositions.forEach((px, pi) => {
+        elements.push(
+          <line key={`wyk-back-${lvl}-${pi}`}
+            x1={x(px) - 3 + DEPTH_DX} y1={y(topY) + DEPTH_DY} x2={x(px) + 3 + DEPTH_DX} y2={y(topY) + DEPTH_DY}
+            stroke={COL.yokoji} strokeWidth={2} opacity={BACK_OPACITY} />,
+        );
+      });
+    });
+
+    // Per-Level Content — FRONT ROW
     Array.from({ length: levels }).forEach((_, lvl) => {
       const baseY = JACK_BASE_H + lvl * LEVEL_H;
       const topY = baseY + LEVEL_H;
@@ -187,35 +295,34 @@ export default function Scaffold2DView({ result }: Props) {
         </text>
       );
 
-      // Posts (both kusabi & wakugumi: simple single vertical line — no extra emphasis)
+      // Front-row posts
       postXPositions.forEach((px, pi) => {
         elements.push(
-          <line
-            key={`post-${lvl}-${pi}`}
-            x1={x(px)}
-            y1={y(baseY)}
-            x2={x(px)}
-            y2={y(topY)}
-            stroke={COL.post}
-            strokeWidth={POST_STROKE}
-          />
+          <line key={`post-${lvl}-${pi}`}
+            x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
+            stroke={COL.post} strokeWidth={POST_STROKE} />
         );
       });
 
-      // Per span
+      // Front-row per span
       spans.forEach((span, si) => {
         const sx = postXPositions[si];
         const ex = postXPositions[si + 1];
         const isStairSpan = stairPositions.includes(si);
 
         if (isStairSpan) {
-          // Stair
+          // Stair stringers (front + back)
           elements.push(
+            <line key={`stair-back-${lvl}-${si}`}
+              x1={x(sx + span * 0.04) + DEPTH_DX} y1={y(baseY) + DEPTH_DY}
+              x2={x(ex - span * 0.04) + DEPTH_DX} y2={y(topY) + DEPTH_DY}
+              stroke={COL.stair} strokeWidth={2} opacity={BACK_OPACITY} />,
             <line key={`stair-${lvl}-${si}`}
               x1={x(sx + span * 0.04)} y1={y(baseY)}
               x2={x(ex - span * 0.04)} y2={y(topY)}
-              stroke={COL.stair} strokeWidth={2.5} />
+              stroke={COL.stair} strokeWidth={2.5} />,
           );
+          // Step treads
           Array.from({ length: 8 }).forEach((_, st) => {
             const t = (st + 1) / 9;
             const stepXmm = sx + span * 0.04 + (span * 0.92) * t;
@@ -225,11 +332,17 @@ export default function Scaffold2DView({ result }: Props) {
               <line key={`step-${lvl}-${si}-${st}`}
                 x1={x(stepXmm - treadHalf)} y1={y(stepYmm)}
                 x2={x(stepXmm + treadHalf)} y2={y(stepYmm)}
-                stroke={COL.stair} strokeWidth={1.8} />
+                stroke={COL.stair} strokeWidth={1.8} />,
             );
           });
+          // Stair handrail (カイダンレール) — angled rail alongside stringer
+          elements.push(
+            <line key={`stair-rail-${lvl}-${si}`}
+              x1={x(sx + span * 0.04)} y1={y(baseY + LEVEL_H * 0.5)}
+              x2={x(ex - span * 0.04)} y2={y(topY + LEVEL_H * 0.5)}
+              stroke={COL.stair} strokeWidth={1.5} strokeDasharray="5,3" />,
+          );
           if (!isWakugumi) {
-            // Kusabi: tesuri on stair spans
             elements.push(
               <line key={`tesuri-s1-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
@@ -238,38 +351,35 @@ export default function Scaffold2DView({ result }: Props) {
               <line key={`tesuri-s2-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
                 x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
             );
           } else {
-            // Wakugumi: shitasan (bottom horizontal) on stair spans
             elements.push(
               <line key={`shitasan-s-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + 50)}
                 x2={x(ex)} y2={y(baseY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
+                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />,
             );
           }
         } else {
-          // Brace (X pattern)
+          // Brace (X pattern) — front row
           elements.push(
             <line key={`brace-1-${lvl}-${si}`}
               x1={x(sx)} y1={y(baseY)} x2={x(ex)} y2={y(topY)}
               stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
             <line key={`brace-2-${lvl}-${si}`}
               x1={x(sx)} y1={y(topY)} x2={x(ex)} y2={y(baseY)}
-              stroke={COL.brace} strokeWidth={BRACE_STROKE} />
+              stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
           );
 
           if (isWakugumi) {
-            // Wakugumi: 下桟 (Shitasan) — bottom horizontal only, no tesuri
             elements.push(
               <line key={`shitasan-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + 50)}
                 x2={x(ex)} y2={y(baseY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
+                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />,
             );
           } else {
-            // Kusabi: Tesuri (inner face horizontal bars)
             elements.push(
               <line key={`tesuri-1-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
@@ -278,49 +388,70 @@ export default function Scaffold2DView({ result }: Props) {
               <line key={`tesuri-2-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
                 x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
             );
           }
 
-          // Plank
+          // Plank — front row (back row was already drawn)
           elements.push(
             <rect key={`plank-${lvl}-${si}`}
               x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
               width={(ex - sx) * scale - 4} height={PLANK_H_PX}
-              fill={COL.plank} opacity={0.7} rx={1} />
+              fill={COL.plank} opacity={0.7} rx={1} />,
           );
           // Habaki
           elements.push(
             <line key={`habaki-${lvl}-${si}`}
               x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
               x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
-              stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
+              stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />,
           );
         }
       });
 
-      // Width yokoji
+      // Width yokoji — front row
       postXPositions.forEach((px, pi) => {
         elements.push(
           <line key={`wyk-${lvl}-${pi}`}
             x1={x(px) - 4} y1={y(topY)} x2={x(px) + 4} y2={y(topY)}
-            stroke={COL.yokoji} strokeWidth={2.5} />
+            stroke={COL.yokoji} strokeWidth={2.5} />,
         );
       });
     });
 
-    // Top Guard Posts
+    // Top Guard Posts — back row
+    postXPositions.forEach((px, pi) => {
+      const guardBase = JACK_BASE_H + levels * LEVEL_H;
+      const guardTop = guardBase + topGuardMm;
+      elements.push(
+        <line key={`tg-back-${pi}`}
+          x1={x(px) + DEPTH_DX} y1={y(guardBase) + DEPTH_DY} x2={x(px) + DEPTH_DX} y2={y(guardTop) + DEPTH_DY}
+          stroke={COL.topGuard} strokeWidth={POST_STROKE - 1} strokeDasharray="5,3" opacity={BACK_OPACITY} />,
+      );
+    });
+    // Top Guard Posts — front row
     postXPositions.forEach((px, pi) => {
       const guardBase = JACK_BASE_H + levels * LEVEL_H;
       const guardTop = guardBase + topGuardMm;
       elements.push(
         <line key={`tg-${pi}`}
           x1={x(px)} y1={y(guardBase)} x2={x(px)} y2={y(guardTop)}
-          stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />
+          stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />,
       );
     });
 
-    // Top guard horizontal rail
+    // Top guard horizontal rail — back row
+    spans.forEach((span, si) => {
+      const guardTop = JACK_BASE_H + levels * LEVEL_H + topGuardMm;
+      const sx = postXPositions[si];
+      const ex = postXPositions[si + 1];
+      elements.push(
+        <line key={`tgr-back-${si}`}
+          x1={x(sx) + DEPTH_DX} y1={y(guardTop) + DEPTH_DY} x2={x(ex) + DEPTH_DX} y2={y(guardTop) + DEPTH_DY}
+          stroke={COL.topGuard} strokeWidth={TESURI_STROKE - 0.5} opacity={BACK_OPACITY} />,
+      );
+    });
+    // Top guard horizontal rail — front row
     spans.forEach((span, si) => {
       const guardTop = JACK_BASE_H + levels * LEVEL_H + topGuardMm;
       const sx = postXPositions[si];
@@ -328,7 +459,7 @@ export default function Scaffold2DView({ result }: Props) {
       elements.push(
         <line key={`tgr-${si}`}
           x1={x(sx)} y1={y(guardTop)} x2={x(ex)} y2={y(guardTop)}
-          stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />
+          stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />,
       );
     });
 
@@ -341,7 +472,7 @@ export default function Scaffold2DView({ result }: Props) {
           elements.push(
             <line key={`endstopper-${lvl}-${ei}`}
               x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
-              stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />
+              stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />,
           );
         });
       });
