@@ -1025,13 +1025,14 @@ export default function Scaffold3DView({
       }
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // No pattanko/hex plank. Previous wall's last two posts (inner + outer) and current
-      // wall's first two posts define the corner. We only add connecting bars so the two
-      // walls are joined: inner→inner and outer→outer at each level, plus habaki and
-      // guard rails along the outer edge.
+      // Matches the CAD corner detail: planks fill the corner gap, connecting bars tie
+      // inner↔inner and outer↔outer, habaki on all 4 edges, guard rails on outer edges.
+      // Wall posts already exist at corner positions (pi, po, ciPt, co) from wall building.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
+      const cornerPlankMat = plankMatEff.clone();
+      cornerPlankMat.side = THREE.DoubleSide;
 
       for (let ci = 0; ci < verts.length; ci++) {
         const nPrev = wallNormals[(ci - 1 + verts.length) % verts.length];
@@ -1043,30 +1044,84 @@ export default function Scaffold3DView({
         const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
-        // 4 scaffold row endpoints: prev wall end (pi, po) and curr wall start (ciPt, co)
         const pi = { x: vx + nPrev.nx * standoffM, z: vz + nPrev.nz * standoffM };
         const po = { x: vx + nPrev.nx * (standoffM + wPrev), z: vz + nPrev.nz * (standoffM + wPrev) };
         const ciPt = { x: vx + nCurr.nx * standoffM, z: vz + nCurr.nz * standoffM };
         const co = { x: vx + nCurr.nx * (standoffM + wCurr), z: vz + nCurr.nz * (standoffM + wCurr) };
 
+        const cornerPostH = maxLevelsForCorners * LEVEL_H;
+
+        // Sleepers (foundation timbers) under corner area
+        const sleeperCX = (pi.x + po.x + ciPt.x + co.x) / 4;
+        const sleeperCZ = (pi.z + po.z + ciPt.z + co.z) / 4;
+        const sleeperSpanX = Math.max(Math.abs(po.x - ciPt.x), Math.abs(co.x - pi.x));
+        const sleeperSpanZ = Math.max(Math.abs(po.z - ciPt.z), Math.abs(co.z - pi.z));
+        const sleeperDim = Math.max(sleeperSpanX, sleeperSpanZ, 0.4);
+        addBox(cornerGroup, sleeperCX, GROUND_Y + 0.04, sleeperCZ, sleeperDim, 0.08, 0.2, woodMat);
+
+        // Jack bases + vertical posts at all 4 corner positions
+        for (const p of [pi, po, ciPt, co]) {
+          addPipe(cornerGroup, p.x, GROUND_Y, p.z, p.x, GROUND_Y + JACK_H, p.z, jackMatEff, PIPE_R * 0.95);
+          addRealisticPost(THREE, cornerGroup, p.x, GROUND_Y + JACK_H, p.z, cornerPostH, postMat);
+        }
+
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Connecting bars: prev wall end ↔ curr wall start (inner and outer)
+          // Connecting bars: inner↔inner and outer↔outer (span direction bridging)
           addPipe(cornerGroup, pi.x, y, pi.z, ciPt.x, y, ciPt.z, yokojiMat, PIPE_R * 0.8);
           addPipe(cornerGroup, po.x, y, po.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
 
-          // Habaki (toe boards) along outer edge at corner
-          const hY = y + 0.06;
-          addPipe(cornerGroup, po.x, hY, po.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
+          // Width bars: inner↔outer at each wall end (depth direction bridging)
+          addPipe(cornerGroup, pi.x, y, pi.z, po.x, y, po.z, yokojiMat, PIPE_R * 0.8);
+          addPipe(cornerGroup, ciPt.x, y, ciPt.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
 
-          // Guard rails along outer corner edge
+          // Corner plank (布板) — walking surface filling the quadrilateral pi→po→co→ciPt
+          const cornerShape = new THREE.Shape();
+          cornerShape.moveTo(pi.x, pi.z);
+          cornerShape.lineTo(po.x, po.z);
+          cornerShape.lineTo(co.x, co.z);
+          cornerShape.lineTo(ciPt.x, ciPt.z);
+          cornerShape.closePath();
+          const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
+          const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
+          plankMesh.rotation.x = -Math.PI / 2;
+          plankMesh.position.y = y + 0.028;
+          plankMesh.castShadow = true;
+          plankMesh.receiveShadow = true;
+          cornerGroup.add(plankMesh);
+
+          // Habaki (toe boards) along all 4 edges of corner
+          const hY = y + 0.06;
+          addPipe(cornerGroup, pi.x, hY, pi.z, ciPt.x, hY, ciPt.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, po.x, hY, po.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, pi.x, hY, pi.z, po.x, hY, po.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, ciPt.x, hY, ciPt.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
+
+          // Guard rails along both outer edges at corner
           addPipe(cornerGroup, po.x, y + 0.9, po.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
           addPipe(cornerGroup, po.x, y + 0.45, po.z, co.x, y + 0.45, co.z, tesuriMat, PIPE_R * 0.6);
+          addPipe(cornerGroup, pi.x, y + 0.9, pi.z, po.x, y + 0.9, po.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, pi.x, y + 0.45, pi.z, po.x, y + 0.45, po.z, tesuriMat, PIPE_R * 0.6);
+          addPipe(cornerGroup, ciPt.x, y + 0.9, ciPt.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, ciPt.x, y + 0.45, ciPt.z, co.x, y + 0.45, co.z, tesuriMat, PIPE_R * 0.6);
 
-          // Top guard rail along outer edge at highest level
+          // X-braces on exposed corner faces (prev wall side: pi↔po, curr wall side: ciPt↔co)
+          const braceBot = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
+          const braceTop = y - 0.18;
+          addPipe(cornerGroup, pi.x, braceBot, pi.z, po.x, braceTop, po.z, braceMat, PIPE_R * 0.7);
+          addPipe(cornerGroup, pi.x, braceTop, pi.z, po.x, braceBot, po.z, braceMat, PIPE_R * 0.7);
+          addPipe(cornerGroup, ciPt.x, braceBot, ciPt.z, co.x, braceTop, co.z, braceMat, PIPE_R * 0.7);
+          addPipe(cornerGroup, ciPt.x, braceTop, ciPt.z, co.x, braceBot, co.z, braceMat, PIPE_R * 0.7);
+
+          // Top guard rail + extension posts at highest level
           if (lv === maxLevelsForCorners && topGuardM > 0) {
+            for (const p of [pi, po, ciPt, co]) {
+              addPipe(cornerGroup, p.x, y, p.z, p.x, y + topGuardM, p.z, topGuardMat, PIPE_R * 0.7);
+            }
             addPipe(cornerGroup, po.x, y + topGuardM, po.z, co.x, y + topGuardM, co.z, topGuardMat, PIPE_R * 0.65);
+            addPipe(cornerGroup, pi.x, y + topGuardM, pi.z, po.x, y + topGuardM, po.z, topGuardMat, PIPE_R * 0.65);
+            addPipe(cornerGroup, ciPt.x, y + topGuardM, ciPt.z, co.x, y + topGuardM, co.z, topGuardMat, PIPE_R * 0.65);
           }
         }
       }
