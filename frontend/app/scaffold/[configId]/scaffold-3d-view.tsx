@@ -74,13 +74,13 @@ const WALL_COLORS_HEX = [
   0xf97316, 0x6366f1,
 ];
 
-// Span size (mm) → plank colour (golden yellow in default; distinct in technical mode)
+// Span size (mm) → distinct plank + habaki colour per span length
 const SPAN_COLORS: Record<number, number> = {
-  600: 0xf5b800,
-  900: 0xf5b800,
-  1200: 0xf5b800,
-  1500: 0xf5b800,
-  1800: 0xf5b800,
+  600: 0x3b82f6,   // blue
+  900: 0x10b981,   // green
+  1200: 0xf59e0b,  // amber
+  1500: 0xef4444,  // red
+  1800: 0x8b5cf6,  // purple
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
 
@@ -535,11 +535,18 @@ export default function Scaffold3DView({
         roughness: plankRough,
       });
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
+      const spanHabakiMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
+        const spanColor = isTech ? C_TECH.plank : (SPAN_COLORS[span] ?? C.plank);
         spanPlankMats[span] = new THREE.MeshStandardMaterial({
-          color: isTech ? C_TECH.plank : C.plank,
+          color: spanColor,
           metalness: plankMetal,
           roughness: plankRough,
+        });
+        spanHabakiMats[span] = new THREE.MeshStandardMaterial({
+          color: spanColor,
+          metalness: plankMetal + 0.1,
+          roughness: plankRough - 0.05,
         });
       }
       const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
@@ -548,12 +555,17 @@ export default function Scaffold3DView({
         );
         return spanPlankMats[closest] ?? plankMat;
       };
+      const getHabakiMat = (spanMm: number): THREE.MeshStandardMaterial => {
+        const closest = STANDARD_SPANS.reduce((a, b) =>
+          Math.abs(a - spanMm) <= Math.abs(b - spanMm) ? a : b
+        );
+        return spanHabakiMats[closest] ?? habakiMat;
+      };
       const jackMat = new THREE.MeshStandardMaterial({
         color: isTech ? C_TECH.jack : C.post,
         metalness: metal,
         roughness: rough,
       });
-      // Habaki uses golden yellow (same as planks) in default mode
       const habakiMat = new THREE.MeshStandardMaterial({
         color: isTech ? C_TECH.habaki : C.plank,
         metalness: plankMetal,
@@ -824,18 +836,19 @@ export default function Scaffold3DView({
             addPipe(group, x1, railTop, 0, x2, railTop, 0, tesuriMat, PIPE_R * 0.65);
             addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
 
-            // Plank / Anchi
+            // Plank / Anchi — color-coded by span size
             const spanMm = spans[i];
             const plankColorMat = getPlankMat(spanMm);
+            const habakiColorMat = getHabakiMat(spanMm);
             if (!isStairSpan) {
               addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanM - 0.04, widthM * 0.9, plankColorMat);
-              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, habakiMatEff);
-              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, habakiMatEff);
+              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, habakiColorMat);
+              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, habakiColorMat);
             }
 
-            // Habaki / Toe boards
-            addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanM - 0.04, habakiMatEff);
-            addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
+            // Habaki / Toe boards — same color as span plank
+            addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanM - 0.04, habakiColorMat);
+            addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiColorMat);
           }
 
           // Top guard posts + top rail (最上段)
