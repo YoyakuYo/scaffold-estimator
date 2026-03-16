@@ -1053,47 +1053,73 @@ export default function Scaffold3DView({
       scene.add(cornerGroup);
       scene.add(cornerWidthBarsGroup);
 
-      // ── Corner filler planks (PATTANKO): 2 per corner per level (inner row + outer row).
-      //    At each corner the last plank of one wall meets the first plank of the next wall
-      //    at right angles (e.g. North vertical, East horizontal). The gap between them is
-      //    bridged by two pattanko planks — one near the building (inner) and one far (outer). ─
+      // ── Corner filler planks (PATTANKO): 2 per corner per level.
+      //    At each corner the previous wall's last span extends ~300mm past the corner
+      //    (overrun). The pattanko fills the L-shaped gap where the two walls meet:
+      //      Pattanko 1: runs along the PREVIOUS wall direction, at the current wall's scaffold depth
+      //      Pattanko 2: runs along the CURRENT wall direction, at the previous wall's scaffold depth
+      //    This matches real kusabi construction: planks aligned with wall directions, not diagonally.
       const cornerPlanksGroup = new THREE.Group();
       const plankThick = 0.025;
-      const pattankoDepthM = 0.4;
+      const overrunM = 0.3;
       for (let ci = 0; ci < verts.length; ci++) {
-        const nPrev = wallNormals[(ci - 1 + verts.length) % verts.length];
+        const prevIdx = (ci - 1 + verts.length) % verts.length;
+        const nextIdx = (ci + 1) % verts.length;
+
+        // Previous wall direction (the wall that ENDS at this corner)
+        const prevDx = verts[ci].x - verts[prevIdx].x;
+        const prevDz = verts[ci].z - verts[prevIdx].z;
+        const prevLen = Math.hypot(prevDx, prevDz) || 1e-6;
+        const pdx = prevDx / prevLen;
+        const pdz = prevDz / prevLen;
+
+        // Current wall direction (the wall that STARTS at this corner)
+        const currDx = verts[nextIdx].x - verts[ci].x;
+        const currDz = verts[nextIdx].z - verts[ci].z;
+        const currLen = Math.hypot(currDx, currDz) || 1e-6;
+        const cdx = currDx / currLen;
+        const cdz = currDz / currLen;
+
+        const nPrev = wallNormals[prevIdx];
         const nCurr = wallNormals[ci];
-        const bisectorLen = Math.hypot(nPrev.nx + nCurr.nx, nPrev.nz + nCurr.nz) || 1e-6;
-        const bx = (nPrev.nx + nCurr.nx) / bisectorLen;
-        const bz = (nPrev.nz + nCurr.nz) / bisectorLen;
-        const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wPrev = (walls[prevIdx]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const cornerWidthM = Math.max(wPrev, wCurr);
+
         const vx = verts[ci].x - cx;
         const vz = verts[ci].z - cz;
-        const innerX = vx + standoffM * bx;
-        const innerZ = vz + standoffM * bz;
-        const outerX = vx + (standoffM + cornerWidthM) * bx;
-        const outerZ = vz + (standoffM + cornerWidthM) * bz;
-        const bisectorAngleY = Math.atan2(bz, bx);
-        const pattankoLenM = cornerWidthM * 0.85;
-        // Two pattanko offsets: inner row (25%) and outer row (75%) along bisector
-        const offsets = [0.25, 0.75];
+
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H + plankThick / 2 + 0.015;
-          for (const t of offsets) {
-            const px = innerX + (outerX - innerX) * t;
-            const pz = innerZ + (outerZ - innerZ) * t;
-            const cornerPlank = new THREE.Group();
-            const geo = new THREE.BoxGeometry(pattankoLenM, plankThick, pattankoDepthM);
-            const mesh = new THREE.Mesh(geo, plankMat);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            cornerPlank.add(mesh);
-            cornerPlank.position.set(px, y, pz);
-            cornerPlank.rotation.y = bisectorAngleY;
-            cornerPlanksGroup.add(cornerPlank);
-          }
+
+          // Pattanko 1: along prev wall direction, at current wall's scaffold centerline.
+          // Sits between the previous wall's last outer post and the corner post.
+          const p1x = vx + nCurr.nx * (standoffM + wCurr / 2) + pdx * overrunM / 2;
+          const p1z = vz + nCurr.nz * (standoffM + wCurr / 2) + pdz * overrunM / 2;
+          const p1Angle = Math.atan2(pdz, pdx);
+          const p1 = new THREE.Group();
+          const p1Geo = new THREE.BoxGeometry(overrunM, plankThick, wCurr * 0.9);
+          const p1Mesh = new THREE.Mesh(p1Geo, plankMat);
+          p1Mesh.castShadow = true;
+          p1Mesh.receiveShadow = true;
+          p1.add(p1Mesh);
+          p1.position.set(p1x, y, p1z);
+          p1.rotation.y = p1Angle;
+          cornerPlanksGroup.add(p1);
+
+          // Pattanko 2: along curr wall direction, at previous wall's scaffold centerline.
+          // Sits between the current wall's first post and the corner post.
+          const p2x = vx + nPrev.nx * (standoffM + wPrev / 2) + cdx * overrunM / 2;
+          const p2z = vz + nPrev.nz * (standoffM + wPrev / 2) + cdz * overrunM / 2;
+          const p2Angle = Math.atan2(cdz, cdx);
+          const p2 = new THREE.Group();
+          const p2Geo = new THREE.BoxGeometry(overrunM, plankThick, wPrev * 0.9);
+          const p2Mesh = new THREE.Mesh(p2Geo, plankMat);
+          p2Mesh.castShadow = true;
+          p2Mesh.receiveShadow = true;
+          p2.add(p2Mesh);
+          p2.position.set(p2x, y, p2z);
+          p2.rotation.y = p2Angle;
+          cornerPlanksGroup.add(p2);
         }
       }
       scene.add(cornerPlanksGroup);
