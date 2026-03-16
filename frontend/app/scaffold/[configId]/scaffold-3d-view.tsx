@@ -657,6 +657,8 @@ export default function Scaffold3DView({
         wall: WallCalculationResult,
         group: THREE.Group,
         maxSpans?: number,
+        skipInnerAtStart?: boolean,
+        skipInnerAtEnd?: boolean,
       ): { runLenM: number } {
         const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
         const isBracket = wall.layoutMode === 'bracket';
@@ -692,19 +694,23 @@ export default function Scaffold3DView({
         }
 
         // ── Jack bases: from ground up to JACK_H (scaffold base, not building floor) ──────────
-        // Bracket mode: only outer row (z=0); double_post: both rows
-        for (const px of postX) {
-          for (const pz of isBracket ? [0] : [0, widthM]) {
+        // At corner ends, skip inner post (z=0) so only outer row extends to the corner.
+        // This creates the asymmetric post count matching the CAD detail (e.g. 2 inner, 3 outer).
+        for (let pi = 0; pi < postX.length; pi++) {
+          const px = postX[pi];
+          const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+          for (const pz of isBracket ? [0] : (skipInner ? [widthM] : [0, widthM])) {
             addPipe(group, px, GROUND_Y, pz, px, GROUND_Y + JACK_H, pz, jackMatEff, PIPE_R * 0.95);
           }
         }
 
-        // ── Vertical posts: from top of jack to top of scaffold (above ground, not at floor level) ─────
-        // Bracket mode: only outer posts (z=0); inner posts deleted
+        // ── Vertical posts: from top of jack to top of scaffold ─────
         const postBaseY = GROUND_Y + JACK_H;
         const postHeightFromGround = totalPostH;
-        for (const px of postX) {
-          for (const pz of isBracket ? [0] : [0, widthM]) {
+        for (let pi = 0; pi < postX.length; pi++) {
+          const px = postX[pi];
+          const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+          for (const pz of isBracket ? [0] : (skipInner ? [widthM] : [0, widthM])) {
             addRealisticPost(THREE, group, px, postBaseY, pz, postHeightFromGround, postMat);
           }
         }
@@ -734,8 +740,11 @@ export default function Scaffold3DView({
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
           // Width yokoji (horizontal bars along scaffold depth)
-          // Bracket mode: only outer row; add Buragetto bars (Blue) from wall toward outer post
-          for (const px of postX) {
+          // Skip at corner positions where inner post is absent — corner code handles bridging.
+          for (let pi = 0; pi < postX.length; pi++) {
+            const px = postX[pi];
+            const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+            if (skipInner) continue;
             if (isBracket) {
               addPipe(group, px, y, widthM, px, y, 0, bracketMat, PIPE_R * 0.8);
             } else {
@@ -781,10 +790,13 @@ export default function Scaffold3DView({
             addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiMatEff);
           }
 
-          // Top guard posts + top rail (最上段) — both faces for double_post; outer only for bracket
+          // Top guard posts + top rail (最上段)
           if (lv === levelsToBuild && topGuardM > 0) {
             for (const pz of isBracket ? [0] : [0, widthM]) {
-              for (const px of postX) {
+              for (let pi = 0; pi < postX.length; pi++) {
+                const px = postX[pi];
+                const skipInner = !isBracket && pz === 0 && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+                if (skipInner) continue;
                 addPipe(group, px, y, pz, px, y + topGuardM, pz, topGuardMat, PIPE_R * 0.7);
               }
               for (let i = 0; i < spans.length; i++) {
@@ -882,6 +894,9 @@ export default function Scaffold3DView({
         : 350;
       const standoffM = standoffMm / 1000;
 
+      // Open polygon (L-shape): walls.length < verts.length; endpoints don't share corners
+      const isOpenPolygon = walls.length < verts.length;
+
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
@@ -909,11 +924,14 @@ export default function Scaffold3DView({
         }
         wallNormals.push({ nx, nz });
 
-        // Build scaffold in local space (along X, depth along Z). Each wall independent — no corner joint.
+        // Determine which ends are corners (shared vertex with another wall)
+        const isStartCorner = !isOpenPolygon || i > 0;
+        const isEndCorner = !isOpenPolygon || i < walls.length - 1;
+
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        const { runLenM } = buildWallScaffold(wall, group, spanCaps[i]);
+        const { runLenM } = buildWallScaffold(wall, group, spanCaps[i], isStartCorner, isEndCorner);
 
         // Scale wall to exactly match the polygon edge so corners close (one continuous polygon).
         // Each wall must end exactly at the next vertex so there is no gap or overlap at corners.
@@ -1025,58 +1043,49 @@ export default function Scaffold3DView({
       }
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // Matches the CAD corner detail: planks fill the corner gap, connecting bars tie
-      // inner↔inner and outer↔outer, habaki on all 4 edges, guard rails on outer edges.
-      // Wall posts already exist at corner positions (pi, po, ciPt, co) from wall building.
+      // No artificial corner posts. Each wall's outer row (z=widthM) extends to the corner
+      // vertex; inner row (z=0) stops one position before. The corner code only adds:
+      // connecting bars (つなぎ材), planks (布板), habaki, and guard rails to bridge the gap.
+      // Iterate over WALLS (not vertices) to safely handle open polygons (L-shape).
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       const cornerPlankMat = plankMatEff.clone();
       cornerPlankMat.side = THREE.DoubleSide;
 
-      for (let ci = 0; ci < verts.length; ci++) {
-        const nPrev = wallNormals[(ci - 1 + verts.length) % verts.length];
-        const nCurr = wallNormals[ci];
-        if (Math.hypot(nPrev.nx, nPrev.nz) < 0.001 || Math.hypot(nCurr.nx, nCurr.nz) < 0.001) continue;
+      for (let wi = 0; wi < walls.length; wi++) {
+        const nextWi = (wi + 1) % walls.length;
+        if (isOpenPolygon && nextWi <= wi) continue;
 
-        const vx = verts[ci].x - cx;
-        const vz = verts[ci].z - cz;
-        const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const nA = wallNormals[wi];
+        const nB = wallNormals[nextWi];
+        if (Math.hypot(nA.nx, nA.nz) < 0.001 || Math.hypot(nB.nx, nB.nz) < 0.001) continue;
 
-        const pi = { x: vx + nPrev.nx * standoffM, z: vz + nPrev.nz * standoffM };
-        const po = { x: vx + nPrev.nx * (standoffM + wPrev), z: vz + nPrev.nz * (standoffM + wPrev) };
-        const ciPt = { x: vx + nCurr.nx * standoffM, z: vz + nCurr.nz * standoffM };
-        const co = { x: vx + nCurr.nx * (standoffM + wCurr), z: vz + nCurr.nz * (standoffM + wCurr) };
+        const cornerVertIdx = (wi + 1) % verts.length;
+        const vx = verts[cornerVertIdx].x - cx;
+        const vz = verts[cornerVertIdx].z - cz;
+        const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
-        const cornerPostH = maxLevelsForCorners * LEVEL_H;
-
-        // Sleepers (foundation timbers) under corner area
-        const sleeperCX = (pi.x + po.x + ciPt.x + co.x) / 4;
-        const sleeperCZ = (pi.z + po.z + ciPt.z + co.z) / 4;
-        const sleeperSpanX = Math.max(Math.abs(po.x - ciPt.x), Math.abs(co.x - pi.x));
-        const sleeperSpanZ = Math.max(Math.abs(po.z - ciPt.z), Math.abs(co.z - pi.z));
-        const sleeperDim = Math.max(sleeperSpanX, sleeperSpanZ, 0.4);
-        addBox(cornerGroup, sleeperCX, GROUND_Y + 0.04, sleeperCZ, sleeperDim, 0.08, 0.2, woodMat);
-
-        // Jack bases + vertical posts at all 4 corner positions
-        for (const p of [pi, po, ciPt, co]) {
-          addPipe(cornerGroup, p.x, GROUND_Y, p.z, p.x, GROUND_Y + JACK_H, p.z, jackMatEff, PIPE_R * 0.95);
-          addRealisticPost(THREE, cornerGroup, p.x, GROUND_Y + JACK_H, p.z, cornerPostH, postMat);
-        }
+        // 4 scaffold row endpoints at the corner vertex:
+        // Wall A (prev) end: pi=inner, po=outer; Wall B (next) start: ciPt=inner, co=outer
+        const pi = { x: vx + nA.nx * standoffM, z: vz + nA.nz * standoffM };
+        const po = { x: vx + nA.nx * (standoffM + wA), z: vz + nA.nz * (standoffM + wA) };
+        const ciPt = { x: vx + nB.nx * standoffM, z: vz + nB.nz * standoffM };
+        const co = { x: vx + nB.nx * (standoffM + wB), z: vz + nB.nz * (standoffM + wB) };
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Connecting bars: inner↔inner and outer↔outer (span direction bridging)
+          // Connecting bars (つなぎ材): inner↔inner and outer↔outer
           addPipe(cornerGroup, pi.x, y, pi.z, ciPt.x, y, ciPt.z, yokojiMat, PIPE_R * 0.8);
           addPipe(cornerGroup, po.x, y, po.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
 
-          // Width bars: inner↔outer at each wall end (depth direction bridging)
+          // Width bars: inner↔outer at each wall end (depth bridging)
           addPipe(cornerGroup, pi.x, y, pi.z, po.x, y, po.z, yokojiMat, PIPE_R * 0.8);
           addPipe(cornerGroup, ciPt.x, y, ciPt.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
 
-          // Corner plank (布板) — walking surface filling the quadrilateral pi→po→co→ciPt
+          // Corner plank (布板) — walking surface filling the quadrilateral
           const cornerShape = new THREE.Shape();
           cornerShape.moveTo(pi.x, pi.z);
           cornerShape.lineTo(po.x, po.z);
@@ -1091,47 +1100,34 @@ export default function Scaffold3DView({
           plankMesh.receiveShadow = true;
           cornerGroup.add(plankMesh);
 
-          // Habaki (toe boards) along all 4 edges of corner
+          // Habaki (toe boards) along all 4 edges
           const hY = y + 0.06;
           addPipe(cornerGroup, pi.x, hY, pi.z, ciPt.x, hY, ciPt.z, habakiMatEff, PIPE_R * 0.5);
           addPipe(cornerGroup, po.x, hY, po.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
           addPipe(cornerGroup, pi.x, hY, pi.z, po.x, hY, po.z, habakiMatEff, PIPE_R * 0.5);
           addPipe(cornerGroup, ciPt.x, hY, ciPt.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
 
-          // Guard rails along both outer edges at corner
+          // Guard rails along outer edges at corner
           addPipe(cornerGroup, po.x, y + 0.9, po.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
           addPipe(cornerGroup, po.x, y + 0.45, po.z, co.x, y + 0.45, co.z, tesuriMat, PIPE_R * 0.6);
-          addPipe(cornerGroup, pi.x, y + 0.9, pi.z, po.x, y + 0.9, po.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, pi.x, y + 0.45, pi.z, po.x, y + 0.45, po.z, tesuriMat, PIPE_R * 0.6);
-          addPipe(cornerGroup, ciPt.x, y + 0.9, ciPt.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, ciPt.x, y + 0.45, ciPt.z, co.x, y + 0.45, co.z, tesuriMat, PIPE_R * 0.6);
 
-          // X-braces on exposed corner faces (prev wall side: pi↔po, curr wall side: ciPt↔co)
-          const braceBot = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
-          const braceTop = y - 0.18;
-          addPipe(cornerGroup, pi.x, braceBot, pi.z, po.x, braceTop, po.z, braceMat, PIPE_R * 0.7);
-          addPipe(cornerGroup, pi.x, braceTop, pi.z, po.x, braceBot, po.z, braceMat, PIPE_R * 0.7);
-          addPipe(cornerGroup, ciPt.x, braceBot, ciPt.z, co.x, braceTop, co.z, braceMat, PIPE_R * 0.7);
-          addPipe(cornerGroup, ciPt.x, braceTop, ciPt.z, co.x, braceBot, co.z, braceMat, PIPE_R * 0.7);
-
-          // Top guard rail + extension posts at highest level
+          // Top guard rail at highest level
           if (lv === maxLevelsForCorners && topGuardM > 0) {
-            for (const p of [pi, po, ciPt, co]) {
-              addPipe(cornerGroup, p.x, y, p.z, p.x, y + topGuardM, p.z, topGuardMat, PIPE_R * 0.7);
-            }
             addPipe(cornerGroup, po.x, y + topGuardM, po.z, co.x, y + topGuardM, co.z, topGuardMat, PIPE_R * 0.65);
-            addPipe(cornerGroup, pi.x, y + topGuardM, pi.z, po.x, y + topGuardM, po.z, topGuardMat, PIPE_R * 0.65);
-            addPipe(cornerGroup, ciPt.x, y + topGuardM, ciPt.z, co.x, y + topGuardM, co.z, topGuardMat, PIPE_R * 0.65);
           }
         }
       }
       scene.add(cornerGroup);
 
       // ── Corner space/distance: angle (degrees) and opening distance (m), with 3D indicator ─
-      for (let ci = 0; ci < verts.length; ci++) {
-        const prev = verts[(ci - 1 + verts.length) % verts.length];
-        const curr = verts[ci];
-        const next = verts[(ci + 1) % verts.length];
+      // Iterate over walls (safe for open polygons like L-shape)
+      for (let wi = 0; wi < walls.length; wi++) {
+        const nextWi = (wi + 1) % walls.length;
+        if (isOpenPolygon && nextWi <= wi) continue;
+        const cornerVertIdx = (wi + 1) % verts.length;
+        const prev = verts[wi];
+        const curr = verts[cornerVertIdx];
+        const next = verts[(cornerVertIdx + 1) % verts.length];
         const ax = curr.x - prev.x;
         const az = curr.z - prev.z;
         const bx = next.x - curr.x;
@@ -1145,9 +1141,9 @@ export default function Scaffold3DView({
         const cosTheta = Math.max(-1, Math.min(1, -(axn * bxn + azn * bzn)));
         const angleRad = Math.acos(cosTheta);
         const angleDeg = (angleRad * 180) / Math.PI;
-        const wPrev = (walls[(ci - 1 + walls.length) % walls.length]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const wCurr = (walls[ci]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const cornerWidthM = Math.max(wPrev, wCurr);
+        const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const cornerWidthM = Math.max(wA, wB);
         const cornerOpeningM = 2 * cornerWidthM * Math.tan(angleRad / 2);
         const labelY = Math.min(2.5, Math.max(1.2, maxH * 0.35));
         const lx = curr.x - cx;
