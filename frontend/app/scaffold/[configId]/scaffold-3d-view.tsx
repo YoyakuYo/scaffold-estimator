@@ -1043,10 +1043,10 @@ export default function Scaffold3DView({
       }
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // No artificial corner posts. Each wall's outer row (z=widthM) extends to the corner
-      // vertex; inner row (z=0) stops one position before. The corner code only adds:
-      // connecting bars (つなぎ材), planks (布板), habaki, and guard rails to bridge the gap.
-      // Iterate over WALLS (not vertices) to safely handle open polygons (L-shape).
+      // No artificial corner posts. Each wall's outer row extends to the corner vertex; the
+      // building-side row stops one position before. Closed polygons can use a filled corner
+      // patch, but open L-shapes should stay visually simple so the vertical leg still reads
+      // as a single span instead of an extra bay created by the corner filler.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
@@ -1077,35 +1077,35 @@ export default function Scaffold3DView({
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Connecting bars (つなぎ材): inner↔inner and outer↔outer
-          addPipe(cornerGroup, pi.x, y, pi.z, ciPt.x, y, ciPt.z, yokojiMat, PIPE_R * 0.8);
+          // Keep the visible outer tie on all corners so the outside line stays continuous.
           addPipe(cornerGroup, po.x, y, po.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
 
-          // Width bars: inner↔outer at each wall end (depth bridging)
-          addPipe(cornerGroup, pi.x, y, pi.z, po.x, y, po.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, ciPt.x, y, ciPt.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
-
-          // Corner plank (布板) — walking surface filling the quadrilateral
-          const cornerShape = new THREE.Shape();
-          cornerShape.moveTo(pi.x, pi.z);
-          cornerShape.lineTo(po.x, po.z);
-          cornerShape.lineTo(co.x, co.z);
-          cornerShape.lineTo(ciPt.x, ciPt.z);
-          cornerShape.closePath();
-          const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
-          const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
-          plankMesh.rotation.x = -Math.PI / 2;
-          plankMesh.position.y = y + 0.028;
-          plankMesh.castShadow = true;
-          plankMesh.receiveShadow = true;
-          cornerGroup.add(plankMesh);
-
-          // Habaki (toe boards) along all 4 edges
           const hY = y + 0.06;
-          addPipe(cornerGroup, pi.x, hY, pi.z, ciPt.x, hY, ciPt.z, habakiMatEff, PIPE_R * 0.5);
           addPipe(cornerGroup, po.x, hY, po.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, pi.x, hY, pi.z, po.x, hY, po.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, ciPt.x, hY, ciPt.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
+
+          if (!isOpenPolygon) {
+            addPipe(cornerGroup, pi.x, y, pi.z, ciPt.x, y, ciPt.z, yokojiMat, PIPE_R * 0.8);
+            addPipe(cornerGroup, pi.x, y, pi.z, po.x, y, po.z, yokojiMat, PIPE_R * 0.8);
+            addPipe(cornerGroup, ciPt.x, y, ciPt.z, co.x, y, co.z, yokojiMat, PIPE_R * 0.8);
+
+            const cornerShape = new THREE.Shape();
+            cornerShape.moveTo(pi.x, pi.z);
+            cornerShape.lineTo(po.x, po.z);
+            cornerShape.lineTo(co.x, co.z);
+            cornerShape.lineTo(ciPt.x, ciPt.z);
+            cornerShape.closePath();
+            const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
+            const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
+            plankMesh.rotation.x = -Math.PI / 2;
+            plankMesh.position.y = y + 0.028;
+            plankMesh.castShadow = true;
+            plankMesh.receiveShadow = true;
+            cornerGroup.add(plankMesh);
+
+            addPipe(cornerGroup, pi.x, hY, pi.z, ciPt.x, hY, ciPt.z, habakiMatEff, PIPE_R * 0.5);
+            addPipe(cornerGroup, pi.x, hY, pi.z, po.x, hY, po.z, habakiMatEff, PIPE_R * 0.5);
+            addPipe(cornerGroup, ciPt.x, hY, ciPt.z, co.x, hY, co.z, habakiMatEff, PIPE_R * 0.5);
+          }
 
           // Guard rails along outer edges at corner
           addPipe(cornerGroup, po.x, y + 0.9, po.z, co.x, y + 0.9, co.z, tesuriMat, PIPE_R * 0.65);
@@ -1162,13 +1162,15 @@ export default function Scaffold3DView({
       // ── Building outline at ground level (not scaffold level); scaffold working levels are above this ─
       const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
       const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, GROUND_Y + 0.01, v.z - cz));
-      outlinePts.push(outlinePts[0].clone()); // close the loop
+      if (!isOpenPolygon) {
+        outlinePts.push(outlinePts[0].clone()); // close the loop for closed perimeters only
+      }
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
       const outlineLine = new THREE.Line(outlineGeo, outlineMat);
       scene.add(outlineLine);
 
-      // Building fill (semi-transparent)
-      if (verts.length >= 3) {
+      // Building fill (semi-transparent) for closed perimeters only.
+      if (!isOpenPolygon && verts.length >= 3) {
         const shape = new THREE.Shape();
         shape.moveTo(verts[0].x - cx, verts[0].z - cz);
         for (let i = 1; i < verts.length; i++) {
