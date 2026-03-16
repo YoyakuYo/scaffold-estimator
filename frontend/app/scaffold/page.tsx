@@ -59,6 +59,7 @@ interface WallState {
   enabled: boolean;
   lengthMm: number;
   heightMm: number;
+  scaffoldWidthMm?: number;
   stairAccessCount: number;
   kaidanCount: number;
   kaidanOffsets: number[];
@@ -336,6 +337,7 @@ function ScaffoldPageContent() {
           enabled: w.enabled !== false,
           lengthMm,
           heightMm: w.wallHeightMm ?? buildingH,
+          scaffoldWidthMm: (w as any).scaffoldWidthMm ?? undefined,
           stairAccessCount: w.stairAccessCount ?? 0,
           kaidanCount: 0,
           kaidanOffsets: [],
@@ -462,6 +464,7 @@ function ScaffoldPageContent() {
         ...(w.isMultiSegment && w.segments.length > 0
           ? { isMultiSegment: true, segments: w.segments }
           : {}),
+        ...(w.scaffoldWidthMm != null && { scaffoldWidthMm: w.scaffoldWidthMm }),
     }));
 
     if (enabledWalls.length === 0) {
@@ -1356,6 +1359,28 @@ function ScaffoldPageContent() {
                         <span className="text-xs text-gray-400 min-w-[50px]">
                           {wall.heightMm > 0 ? `${(wall.heightMm / 1000).toFixed(1)}m` : ''}
                         </span>
+                    </div>
+                  </div>
+
+                  {/* Per-wall Scaffold Width */}
+                  <div className="flex-1 min-w-[160px]">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'scaffoldWidth') || '足場幅'}</label>
+                      <select
+                        value={wall.scaffoldWidthMm ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          updateWall(i, { scaffoldWidthMm: v ? Number(v) : undefined });
+                        }}
+                        disabled={!wall.enabled}
+                        className="w-28 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      >
+                        <option value="">{scaffoldWidthMm}mm ▸</option>
+                        {(scaffoldType === 'kusabi' ? [600, 900, 1200] : [600, 900, 1200]).map((w) => (
+                          <option key={w} value={w}>{w}mm</option>
+                        ))}
+                      </select>
+                      <span className="text-xs text-gray-400">{wall.scaffoldWidthMm ? '' : 'global'}</span>
                     </div>
                   </div>
                 </div>

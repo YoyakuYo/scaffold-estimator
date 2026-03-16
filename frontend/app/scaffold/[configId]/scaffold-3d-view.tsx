@@ -355,6 +355,20 @@ export default function Scaffold3DView({
   const [activeWallIdx, setActiveWallIdx] = useState<number>(0);
   const [selectedComponent, setSelectedComponent] = useState<{ nameJp: string; description: string } | null>(null);
   const [technicalMode, setTechnicalMode] = useState(technicalQuotationMode ?? false);
+  // 4D construction animation
+  const [animLevel, setAnimLevel] = useState<number>(-1); // -1 = show all
+  const [animPlaying, setAnimPlaying] = useState(false);
+  const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Section cut
+  const [sectionCutY, setSectionCutY] = useState<number>(-1); // -1 = disabled
+  const clippingPlaneRef = useRef<any>(null);
+  // Color coding
+  const [colorCoding, setColorCoding] = useState(false);
+  // Hover tooltip
+  const [hoverInfo, setHoverInfo] = useState<{ x: number; y: number; name: string } | null>(null);
+  // Scene info refs (set inside useEffect, read by UI)
+  const maxLevelsRef = useRef(1);
+  const maxHeightRef = useRef(5);
   const wallObjectsRef = useRef<Array<{ root: any; label: any; edge: any }>>([]);
   const wallFocusRef = useRef<Array<{ x: number; y: number; z: number }>>([]);
   const clickTargetsRef = useRef<any[]>([]);
@@ -463,6 +477,9 @@ export default function Scaffold3DView({
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.05;
+      renderer.localClippingEnabled = true;
+      const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 100);
+      clippingPlaneRef.current = clipPlane;
       if ('outputColorSpace' in renderer) {
         (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
       }
@@ -993,6 +1010,7 @@ export default function Scaffold3DView({
         });
         clickTargetsRef.current.push(clickMesh);
       }
+      maxHeightRef.current = maxH;
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
       // L-shaped plank with 6 vertices — all edges parallel to wall directions, no diagonals.
@@ -1000,6 +1018,7 @@ export default function Scaffold3DView({
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
+      maxLevelsRef.current = maxLevelsForCorners;
       const cornerPlankMat = plankMatEff.clone();
       cornerPlankMat.side = THREE.DoubleSide;
 
@@ -1123,6 +1142,7 @@ export default function Scaffold3DView({
       groundPlane.rotation.x = -Math.PI / 2;
       groundPlane.position.y = GROUND_Y - 0.03;
       groundPlane.receiveShadow = true;
+      groundPlane.userData = { noClip: true, isGround: true };
       scene.add(groundPlane);
       const gridDivisions = Math.min(40, Math.max(10, Math.floor(groundSize / 5)));
       const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xd0d4d8, 0xd8dce0);
@@ -1309,6 +1329,72 @@ export default function Scaffold3DView({
     applyWallVisibility(viewMode, activeWallIdx);
     if (viewMode === 'wall') focusCameraOnWall(activeWallIdx);
   }, [viewMode, activeWallIdx]);
+
+  // ── Section cut: move clipping plane when slider changes ──
+  useEffect(() => {
+    const cp = clippingPlaneRef.current;
+    if (!cp) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (sectionCutY < 0) {
+      scene.traverse((obj: any) => {
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m: any) => { if (m.clippingPlanes) m.clippingPlanes = []; });
+        }
+      });
+    } else {
+      cp.constant = sectionCutY;
+      scene.traverse((obj: any) => {
+        if (obj.material && !obj.userData?.noClip) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m: any) => { m.clippingPlanes = [cp]; });
+        }
+      });
+    }
+  }, [sectionCutY]);
+
+  // ── 4D animation: show/hide objects by level ──
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const LEVEL_H_VAL = 1.8;
+    const JACK_H_VAL = 0.3;
+    if (animLevel < 0) {
+      scene.traverse((obj: any) => { obj.visible = true; });
+      return;
+    }
+    const cutoffY = JACK_H_VAL + (animLevel + 1) * LEVEL_H_VAL;
+    scene.traverse((obj: any) => {
+      if (!obj.isMesh && !obj.isLine) return;
+      if (obj.userData?.noClip || obj.userData?.isGround) return;
+      const worldY = obj.getWorldPosition?.(obj.position.clone?.() ?? { x: 0, y: 0, z: 0 })?.y ?? obj.position?.y ?? 0;
+      obj.visible = worldY <= cutoffY + 0.5;
+    });
+  }, [animLevel]);
+
+  // ── 4D play timer ──
+  useEffect(() => {
+    if (!animPlaying) {
+      if (animTimerRef.current) clearInterval(animTimerRef.current);
+      animTimerRef.current = null;
+      return;
+    }
+    const max = maxLevelsRef.current;
+    animTimerRef.current = setInterval(() => {
+      setAnimLevel((prev) => {
+        const next = prev + 1;
+        if (next > max) {
+          setAnimPlaying(false);
+          return -1;
+        }
+        return next;
+      });
+    }, 800);
+    return () => {
+      if (animTimerRef.current) clearInterval(animTimerRef.current);
+    };
+  }, [animPlaying]);
 
   if (walls.length === 0) {
     return (
@@ -1552,6 +1638,65 @@ export default function Scaffold3DView({
             <FileCode className="h-3.5 w-3.5" /> {exporting === 'obj' ? '...' : 'OBJ'}
           </button>
         </div>
+
+        {/* ── 4D Construction Animation + Section Cut + Color Coding ── */}
+        {ready && (
+          <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
+            {/* 4D Animation */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">4D</span>
+              <button
+                onClick={() => {
+                  if (animPlaying) { setAnimPlaying(false); return; }
+                  setAnimLevel(0);
+                  setAnimPlaying(true);
+                }}
+                className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                  animPlaying ? 'bg-red-600 text-white border-red-600' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                }`}
+              >
+                {animPlaying ? '⏸ Pause' : '▶ Build'}
+              </button>
+              <input
+                type="range" min={-1} max={maxLevelsRef.current}
+                value={animLevel}
+                onChange={(e) => { setAnimPlaying(false); setAnimLevel(Number(e.target.value)); }}
+                className="flex-1 min-w-[120px] max-w-[300px] h-1.5 accent-indigo-600"
+                title={animLevel < 0 ? 'All levels' : `Level ${animLevel}`}
+              />
+              <span className="text-xs text-gray-600 min-w-[60px]">
+                {animLevel < 0 ? 'All' : `Lv ${animLevel}/${maxLevelsRef.current}`}
+              </span>
+              {animLevel >= 0 && (
+                <button onClick={() => setAnimLevel(-1)} className="text-xs text-gray-500 hover:text-gray-700 underline">Reset</button>
+              )}
+            </div>
+
+            {/* Section Cut */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Section</span>
+              <button
+                onClick={() => setSectionCutY(sectionCutY < 0 ? maxHeightRef.current * 0.5 : -1)}
+                className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                  sectionCutY >= 0 ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {sectionCutY >= 0 ? '✂ Cut ON' : '✂ Cut'}
+              </button>
+              {sectionCutY >= 0 && (
+                <>
+                  <input
+                    type="range" min={0.3} max={maxHeightRef.current + 1} step={0.1}
+                    value={sectionCutY}
+                    onChange={(e) => setSectionCutY(Number(e.target.value))}
+                    className="flex-1 min-w-[120px] max-w-[300px] h-1.5 accent-amber-600"
+                  />
+                  <span className="text-xs text-gray-600 min-w-[50px]">{sectionCutY.toFixed(1)}m</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {simplified && ready && (
         <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2">
