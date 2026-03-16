@@ -253,6 +253,12 @@ export const CALC_RULES = {
    */
 };
 
+// ─── Corner alignment constants (足場コーナー詳細図) ─────────────
+/** Last two posts extend this far past the building corner (mm). */
+export const CORNER_OVERRUN_MM = 300;
+/** One full span at corner from (corner + overrun) to shared post (mm). */
+export const CORNER_SPAN_MM = 600;
+
 // ─── Span Fitting Algorithm ──────────────────────────────────
 /**
  * Given a wall length, find the optimal combination of standard spans
@@ -273,6 +279,28 @@ export function fitSpansToWallLength(
 ): number[] {
   const maxOverrunMm = options?.northWall ? 600 : 300;
   return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
+}
+
+/**
+ * Span fitting for walls that meet at corners (closed polygon).
+ * Per 足場コーナー詳細図: last two posts extend CORNER_OVERRUN_MM (300mm) past
+ * the building corner; then one span of CORNER_SPAN_MM (600mm) to the shared post;
+ * the next wall reuses that post as the start of its first span.
+ * So: first span = CORNER_SPAN_MM, last span = CORNER_SPAN_MM, run = wallLength + CORNER_OVERRUN_MM.
+ * Returns [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM] with middle filling (wallLength - 2*CORNER_SPAN_MM - CORNER_OVERRUN_MM)?
+ * Run = wallLength + 300 => sum = wallLength + 300. First 600 + last 600 = 1200, so middle = wallLength + 300 - 1200 = wallLength - 900.
+ */
+export function fitSpansToWallLengthWithCorner(
+  wallLengthMm: number,
+): number[] {
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [CORNER_SPAN_MM, CORNER_SPAN_MM];
+  const middleMm = wallLengthMm - (2 * CORNER_SPAN_MM + CORNER_OVERRUN_MM); // wallLength - 900
+  if (middleMm <= 0) {
+    // Short wall: still use first and last 600mm corner spans
+    return [CORNER_SPAN_MM, CORNER_SPAN_MM];
+  }
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, SPAN_SIZES, 0); // no overrun in middle
+  return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
 }
 
 function fitSpansToWallLengthWithOverrun(

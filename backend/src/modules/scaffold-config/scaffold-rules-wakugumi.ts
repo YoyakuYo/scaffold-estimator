@@ -159,6 +159,12 @@ export const WAKUGUMI_CALC_RULES = {
    */
 };
 
+// ─── Corner alignment (足場コーナー詳細図) ─────────────────────
+/** Last two posts extend this far past the building corner (mm). */
+export const WAKUGUMI_CORNER_OVERRUN_MM = 300;
+/** Smallest span = corner span at turn (mm). */
+export const WAKUGUMI_CORNER_SPAN_MM = 610;
+
 // ─── Span Fitting Algorithm ─────────────────────────────────
 /**
  * Given a wall length, find the optimal combination of standard spans
@@ -177,6 +183,25 @@ export function fitSpansToWallLengthWakugumi(
 ): number[] {
   const maxOverrunMm = options?.northWall ? 600 : 300;
   return fitSpansToWallLengthWithOverrun(wallLengthMm, WAKUGUMI_SPAN_SIZES, maxOverrunMm);
+}
+
+/**
+ * Span fitting for walls that meet at corners (closed polygon).
+ * Same logic as kusabi: 300mm overrun past corner, then corner span to shared post;
+ * first and last span = WAKUGUMI_CORNER_SPAN_MM (610mm), run = wallLength + 300.
+ */
+export function fitSpansToWallLengthWithCornerWakugumi(
+  wallLengthMm: number,
+): number[] {
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
+    return [WAKUGUMI_CORNER_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+  }
+  const middleMm = wallLengthMm - (2 * WAKUGUMI_CORNER_SPAN_MM + WAKUGUMI_CORNER_OVERRUN_MM);
+  if (middleMm <= 0) {
+    return [WAKUGUMI_CORNER_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+  }
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, WAKUGUMI_SPAN_SIZES, 0);
+  return [WAKUGUMI_CORNER_SPAN_MM, ...middleSpans, WAKUGUMI_CORNER_SPAN_MM];
 }
 
 function fitSpansToWallLengthWithOverrun(

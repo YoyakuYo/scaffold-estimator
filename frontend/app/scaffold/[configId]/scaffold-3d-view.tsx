@@ -900,10 +900,12 @@ export default function Scaffold3DView({
         wallRoot.add(group);
         const { runLenM } = buildWallScaffold(wall, group, spanCaps[i], isStartCorner, isEndCorner);
 
-        // Scale wall to exactly match the polygon edge so corners close (one continuous polygon).
-        // Each wall must end exactly at the next vertex so there is no gap or overlap at corners.
+        // Scale/place wall run. Per 足場コーナー詳細図: when wall ends at a corner, last two posts
+        // extend 300mm past the building corner, then 600mm span to shared post.
+        const useCornerExtension = walls.length >= 2 && !isOpenPolygon && isEndCorner;
+        const cornerOverrunM = 0.3; // 300mm past building corner
         const baseLen = Math.max(runLenM, 1e-6);
-        const desiredLen = edgeLen;
+        const desiredLen = useCornerExtension ? edgeLen + cornerOverrunM : edgeLen;
         const rawScale = desiredLen / baseLen;
         const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
@@ -993,15 +995,16 @@ export default function Scaffold3DView({
       }
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // No artificial corner posts. Each wall's outer row extends to the corner vertex; the
-      // building-side row stops one position before. Closed polygons can use a filled corner
-      // patch, but open L-shapes should stay visually simple so the vertical leg still reads
-      // as a single span instead of an extra bay created by the corner filler.
+      // Last two posts extend 300mm past building corner; then 600mm span to shared post.
+      // Shared post = corner + 900mm along wall A (reused as start of wall B).
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       const cornerPlankMat = plankMatEff.clone();
       cornerPlankMat.side = THREE.DoubleSide;
+      const useCornerLogic = walls.length >= 2 && !isOpenPolygon;
+      const cornerOverrunM = 0.3;
+      const cornerSpanM = 0.6; // 600mm to shared post
 
       for (let wi = 0; wi < walls.length; wi++) {
         const nextWi = (wi + 1) % walls.length;
@@ -1017,12 +1020,25 @@ export default function Scaffold3DView({
         const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
         const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
-        // 4 scaffold row endpoints at the corner vertex:
-        // Wall A (prev) end: pi=inner, po=outer; Wall B (next) start: ciPt=inner, co=outer
-        const pi = { x: vx + nA.nx * standoffM, z: vz + nA.nz * standoffM };
-        const po = { x: vx + nA.nx * (standoffM + wA), z: vz + nA.nz * (standoffM + wA) };
-        const ciPt = { x: vx + nB.nx * standoffM, z: vz + nB.nz * standoffM };
-        const co = { x: vx + nB.nx * (standoffM + wB), z: vz + nB.nz * (standoffM + wB) };
+        // End of wall A = corner + 300mm; shared post = corner + 900mm (along wall A direction)
+        const prevIdx = (cornerVertIdx - 1 + verts.length) % verts.length;
+        const prevX = verts[prevIdx].x - cx;
+        const prevZ = verts[prevIdx].z - cz;
+        const dxA = vx - prevX;
+        const dzA = vz - prevZ;
+        const lenA = Math.hypot(dxA, dzA) || 1;
+        const eAx = dxA / lenA;
+        const eAz = dzA / lenA;
+        const endOfWallAX = useCornerLogic ? vx + cornerOverrunM * eAx : vx;
+        const endOfWallAZ = useCornerLogic ? vz + cornerOverrunM * eAz : vz;
+        const sharedPostX = useCornerLogic ? vx + (cornerOverrunM + cornerSpanM) * eAx : vx;
+        const sharedPostZ = useCornerLogic ? vz + (cornerOverrunM + cornerSpanM) * eAz : vz;
+
+        // 4 scaffold row endpoints: Wall A end at (endOfWallA), Wall B start at (sharedPost)
+        const pi = { x: endOfWallAX + nA.nx * standoffM, z: endOfWallAZ + nA.nz * standoffM };
+        const po = { x: endOfWallAX + nA.nx * (standoffM + wA), z: endOfWallAZ + nA.nz * (standoffM + wA) };
+        const ciPt = { x: sharedPostX + nB.nx * standoffM, z: sharedPostZ + nB.nz * standoffM };
+        const co = { x: sharedPostX + nB.nx * (standoffM + wB), z: sharedPostZ + nB.nz * (standoffM + wB) };
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;

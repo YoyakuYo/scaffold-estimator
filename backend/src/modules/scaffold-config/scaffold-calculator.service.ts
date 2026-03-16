@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   fitSpansToWallLength,
+  fitSpansToWallLengthWithCorner,
   calculateLevels,
   NUNO_SIZES,
   ANCHI_LAYOUT_BY_WIDTH,
@@ -215,8 +216,11 @@ export class ScaffoldCalculatorService {
     complexityMultiplier: number = 1.0,
     wallIndex: number = 0,
   ): WallCalculationResult {
-    // Step 1: Fit spans to wall length (North = index 0 may overrun last span up to 600mm)
-    const spans = fitSpansToWallLength(wall.wallLengthMm, { northWall: wallIndex === 0 });
+    // Step 1: Fit spans. Use corner logic (300mm overrun, 600mm corner span) when multiple walls (closed polygon).
+    const useCornerLogic = input.walls.length >= 2;
+    const spans = useCornerLogic
+      ? fitSpansToWallLengthWithCorner(wall.wallLengthMm)
+      : fitSpansToWallLength(wall.wallLengthMm, { northWall: wallIndex === 0 });
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
     const L = levelCalc.fullLevels;

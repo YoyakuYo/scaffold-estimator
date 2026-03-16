@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   fitSpansToWallLengthWakugumi,
+  fitSpansToWallLengthWithCornerWakugumi,
   calculateLevelsWakugumi,
   WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH,
   WAKUGUMI_CALC_RULES,
@@ -141,7 +142,10 @@ export class ScaffoldCalculatorWakugumiService {
     topGuardHeight: number,
     wallIndex: number = 0,
   ): WallCalculationResult {
-    const spans = fitSpansToWallLengthWakugumi(wall.wallLengthMm, { northWall: wallIndex === 0 });
+    const useCornerLogic = input.walls.length >= 2;
+    const spans = useCornerLogic
+      ? fitSpansToWallLengthWithCornerWakugumi(wall.wallLengthMm)
+      : fitSpansToWallLengthWakugumi(wall.wallLengthMm, { northWall: wallIndex === 0 });
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;
