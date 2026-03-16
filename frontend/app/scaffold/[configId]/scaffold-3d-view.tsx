@@ -1078,10 +1078,11 @@ export default function Scaffold3DView({
           }
         }
 
-        // Eco pallets, jack bases, and vertical posts at all 6 L-shape positions
+        // Only p2 (far outer) and p5 (inner mid) are new corner posts.
+        // p1/p6 are reused from wall A; p3/p4 are reused from wall B.
         const totalPostH = maxLevelsForCorners * LEVEL_H;
         const cpH = 0.04, cpW = 0.25, cpD = 0.25;
-        pts.forEach((p) => {
+        [p2, p5].forEach((p) => {
           addBox(cornerGroup, p.x, GROUND_Y + cpH / 2, p.z, cpW, cpH, cpD, ecoPalletMat);
           addPipe(cornerGroup, p.x, GROUND_Y, p.z, p.x, GROUND_Y + JACK_H, p.z, jackMatEff, PIPE_R * 0.95);
           addPipe(cornerGroup, p.x, GROUND_Y + JACK_H, p.z, p.x, GROUND_Y + JACK_H + totalPostH, p.z, postMat, PIPE_R);
