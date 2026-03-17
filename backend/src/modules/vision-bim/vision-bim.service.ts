@@ -205,7 +205,16 @@ export class VisionBimService {
     if (buffer.length < 4) return false;
     if (buffer[0] === 0xff && buffer[1] === 0xd8) return true;
     if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e) return true;
+    if (buffer.length >= 12 && buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return true;
+    if (buffer.length >= 4 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return true;
     return false;
+  }
+
+  private detectImageMediaType(buffer: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' {
+    if (buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg';
+    if (buffer.length >= 12 && buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+    if (buffer.length >= 4 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return 'image/gif';
+    return 'image/png';
   }
 
   private looksLikeIfc(buffer: Buffer): boolean {
@@ -480,8 +489,7 @@ export class VisionBimService {
       const client = new Anthropic.default({ apiKey });
 
       const base64 = buffer.toString('base64');
-      const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
-      const mediaType = isJpeg ? 'image/jpeg' : 'image/png';
+      const mediaType = this.detectImageMediaType(buffer);
 
       // Use env override or a current vision-capable model (claude-3-5-sonnet-20241022 was retired)
       const model =
