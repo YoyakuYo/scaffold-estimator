@@ -717,10 +717,19 @@ export default function Scaffold3DView({
         maxSpans?: number,
         skipInnerAtStart?: boolean,
         skipInnerAtEnd?: boolean,
-      ): { runLenM: number } {
+        dropLeadingCorner600?: boolean,
+      ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[] } {
         const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
         const isBracket = wall.layoutMode === 'bracket';
-        const allSpans: number[] = wall.spans;
+        const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
+          ? wall.spans
+          : [Math.max(600, Number(wall.wallLengthMm) || 600)];
+        const trimmedSpans = (
+          dropLeadingCorner600 &&
+          baseSpans.length > 1 &&
+          Math.abs(baseSpans[0] - 600) <= 1
+        ) ? baseSpans.slice(1) : baseSpans;
+        const allSpans: number[] = trimmedSpans.length > 0 ? trimmedSpans : baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
           : allSpans;
@@ -912,7 +921,7 @@ export default function Scaffold3DView({
           } // end for stairSpanIdx
         }
 
-        return { runLenM: totalLen };
+        return { runLenM: totalLen, postX, widthM, spansMm: spans };
       }
 
       // ══════════════════════════════════════════════════════
@@ -949,8 +958,13 @@ export default function Scaffold3DView({
       let maxH = 0;
       let maxExtent = 0;
 
-      // Store per-wall outward normals so we can build corner connectors afterwards
-      const wallNormals: Array<{ nx: number; nz: number }> = [];
+      // Keep rendered wall geometry metadata so corner connectors can snap to real posts.
+      const wallRenderInfos: Array<{
+        root: any;
+        postX: number[];
+        widthM: number;
+        spansMm: number[];
+      }> = [];
 
       // Standoff: distance from building wall to nearest posts (250–500mm) so scaffold can breathe
       const standoffMm = Number.isFinite(result?.wallStandoffMm) && result.wallStandoffMm >= 250 && result.wallStandoffMm <= 500
@@ -971,7 +985,7 @@ export default function Scaffold3DView({
         const dx = v2.x - v1.x;
         const dz = v2.z - v1.z;
         const edgeLen = Math.hypot(dx, dz);
-        if (edgeLen < 0.001) { wallNormals.push({ nx: 0, nz: 0 }); continue; }
+        if (edgeLen < 0.001) continue;
 
         // Normal pointing outward (away from polygon center)
         let nx = -dz / edgeLen;
@@ -986,16 +1000,23 @@ export default function Scaffold3DView({
           nx = -nx;
           nz = -nz;
         }
-        wallNormals.push({ nx, nz });
 
-        // Determine if wall end is a corner (shared vertex with another wall)
+        // Determine if wall start/end are corners (shared vertex with adjacent walls)
+        const isStartCorner = !isOpenPolygon || i > 0;
         const isEndCorner = !isOpenPolygon || i < walls.length - 1;
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
         // Keep full inner/outer rows at wall ends; corner joining is handled explicitly below.
-        const { runLenM } = buildWallScaffold(wall, group, spanCaps[i], false, false);
+        const { runLenM, postX, widthM, spansMm } = buildWallScaffold(
+          wall,
+          group,
+          spanCaps[i],
+          false,
+          false,
+          isStartCorner,
+        );
 
         // Scale/place wall run. Per 足場コーナー詳細図:
         // wall end extends 300mm past corner, then one 600mm span (total +900mm).
@@ -1040,6 +1061,7 @@ export default function Scaffold3DView({
 
         wallRoot.applyMatrix4(matrix);
         scene.add(wallRoot);
+        wallRenderInfos[i] = { root: wallRoot, postX, widthM, spansMm };
 
         // Track extents
         const levels = wall.levelCalc.fullLevels;
@@ -1088,7 +1110,7 @@ export default function Scaffold3DView({
         const dimY = GROUND_Y - 0.15;
 
         // Span dimension lines along wall length
-        const spans = wall.spans ?? [];
+        const spans = spansMm ?? wall.spans ?? [];
         let accum = 0;
         const wallLenM = edgeLen;
         const totalSpanMm = spans.reduce((s: number, v: number) => s + v, 0) || 1;
@@ -1153,57 +1175,40 @@ export default function Scaffold3DView({
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       maxLevelsRef.current = maxLevelsForCorners;
+      const toWorldXZ = (root: any, x: number, z: number) => {
+        const p = root.localToWorld(new THREE.Vector3(x, 0, z));
+        return { x: p.x, z: p.z };
+      };
 
       for (let wi = 0; wi < walls.length; wi++) {
         const nextWi = (wi + 1) % walls.length;
         if (isOpenPolygon && nextWi <= wi) continue;
 
-        const nA = wallNormals[wi];
-        if (Math.hypot(nA.nx, nA.nz) < 0.001) continue;
+        const infoA = wallRenderInfos[wi];
+        const infoB = wallRenderInfos[nextWi];
+        if (!infoA || !infoB) continue;
+        if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
 
-        const cornerVertIdx = (wi + 1) % verts.length;
-        const nextCornerVertIdx = (cornerVertIdx + 1) % verts.length;
+        // Reuse the actual last two inner posts from wall A (matches rendered geometry exactly).
+        const aLast = infoA.postX.length - 1;
+        const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
+        const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
 
-        const vPrev = verts[wi];
-        const vCorner = verts[cornerVertIdx];
-        const vNext = verts[nextCornerVertIdx];
-
-        const dAx = vCorner.x - vPrev.x;
-        const dAz = vCorner.z - vPrev.z;
-        const lenA = Math.hypot(dAx, dAz);
-        const dBx = vNext.x - vCorner.x;
-        const dBz = vNext.z - vCorner.z;
-        const lenB = Math.hypot(dBx, dBz);
-        if (lenA < 0.001 || lenB < 0.001) continue;
-
-        // Wall directions at corner: A enters corner, B leaves corner
-        const tAx = dAx / lenA;
-        const tAz = dAz / lenA;
-        const tBx = dBx / lenB;
-        const tBz = dBz / lenB;
-
-        // Reused inner posts on wall A at +300mm and +900mm from building corner
-        const baseInnerAx = (vCorner.x - cx) + nA.nx * standoffM;
-        const baseInnerAz = (vCorner.z - cz) + nA.nz * standoffM;
-        const r1 = {
-          x: baseInnerAx + tAx * CORNER_OVERRUN_M,
-          z: baseInnerAz + tAz * CORNER_OVERRUN_M,
-        };
-        const r2 = {
-          x: baseInnerAx + tAx * (CORNER_OVERRUN_M + CORNER_TURN_SPAN_M),
-          z: baseInnerAz + tAz * (CORNER_OVERRUN_M + CORNER_TURN_SPAN_M),
-        };
-
-        // East/next-wall first span should follow that wall's span setting (e.g. 1800),
-        // not the fixed 600mm corner span used on source wall A.
-        const nextWallFirstSpanM = Math.max(
-          0.6,
-          ((walls[nextWi]?.spans?.[0] ?? 1800) / 1000),
-        );
-
-        // Direct turn: one bar from each reused post into wall B direction
-        const t1 = { x: r1.x + tBx * nextWallFirstSpanM, z: r1.z + tBz * nextWallFirstSpanM };
-        const t2 = { x: r2.x + tBx * nextWallFirstSpanM, z: r2.z + tBz * nextWallFirstSpanM };
+        // Connect into wall B's first rendered span endpoint.
+        // If wall B had a leading corner 600, it was trimmed during wall build, so this becomes 1800 (etc).
+        const bFirstIdx = Math.min(1, infoB.postX.length - 1);
+        let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
+        let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
+        // Keep left/right pairing stable and avoid crossing connectors.
+        const matchDirect =
+          Math.hypot(r1.x - t1.x, r1.z - t1.z) + Math.hypot(r2.x - t2.x, r2.z - t2.z);
+        const matchCross =
+          Math.hypot(r1.x - t2.x, r1.z - t2.z) + Math.hypot(r2.x - t1.x, r2.z - t1.z);
+        if (matchCross < matchDirect) {
+          const tmp = t1;
+          t1 = t2;
+          t2 = tmp;
+        }
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
@@ -1219,16 +1224,6 @@ export default function Scaffold3DView({
           const hY = y + 0.06;
           addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
         }
-
-        // Ensure all connector endpoints land on visible posts.
-        // r1/r2 are the reused pair (from wall A by rule); t1/t2 are the turned pair.
-        const totalPostH = maxLevelsForCorners * LEVEL_H;
-        const cpH = 0.04, cpW = 0.25, cpD = 0.25;
-        [r1, r2, t1, t2].forEach((p) => {
-          addBox(cornerGroup, p.x, GROUND_Y + cpH / 2, p.z, cpW, cpH, cpD, ecoPalletMat);
-          addPipe(cornerGroup, p.x, GROUND_Y, p.z, p.x, GROUND_Y + JACK_H, p.z, jackMatEff, PIPE_R * 0.95);
-          addPipe(cornerGroup, p.x, GROUND_Y + JACK_H, p.z, p.x, GROUND_Y + JACK_H + totalPostH, p.z, postMat, PIPE_R);
-        });
       }
       scene.add(cornerGroup);
 
