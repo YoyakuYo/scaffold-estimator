@@ -154,6 +154,12 @@ export class CreateScaffoldConfigDto {
   @IsDateString()
   rentalEndDate?: string;
 
+  /** Optional: Number of corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not counted. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pattankoCornerCount?: number;
+
   /** Optional: Building outline polygon (for reference, not used in calculation) */
   @IsOptional()
   @IsArray()

@@ -77,6 +77,37 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
+/** Count corners that need pattanko (non-L-shaped, i.e. angle not ~90°). Same threshold as 3D view: |cos| >= 0.35. */
+function countPattankoCorners(vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>): number {
+  const n = vertices.length;
+  if (n < 3) return 0;
+  const COS_L_SHAPED_MAX = 0.35;
+  let count = 0;
+  for (let j = 0; j < n; j++) {
+    const prev = (j - 1 + n) % n;
+    const next = (j + 1) % n;
+    const vPrev = vertices[prev];
+    const vJ = vertices[j];
+    const vNext = vertices[next];
+    const xPrev = (vPrev?.x ?? vPrev?.xFrac) ?? 0;
+    const yPrev = (vPrev?.y ?? vPrev?.yFrac) ?? 0;
+    const xJ = (vJ?.x ?? vJ?.xFrac) ?? 0;
+    const yJ = (vJ?.y ?? vJ?.yFrac) ?? 0;
+    const xNext = (vNext?.x ?? vNext?.xFrac) ?? 0;
+    const yNext = (vNext?.y ?? vNext?.yFrac) ?? 0;
+    const dxPrev = xJ - xPrev;
+    const dyPrev = yJ - yPrev;
+    const dxNext = xNext - xJ;
+    const dyNext = yNext - yJ;
+    const lenPrev = Math.hypot(dxPrev, dyPrev);
+    const lenNext = Math.hypot(dxNext, dyNext);
+    if (lenPrev < 1e-9 || lenNext < 1e-9) continue;
+    const cosAngle = (dxPrev * dxNext + dyPrev * dyNext) / (lenPrev * lenNext);
+    if (Math.abs(cosAngle) >= COS_L_SHAPED_MAX) count++;
+  }
+  return count;
+}
+
 /** Fix likely mis-read: leading digit dropped on plan (e.g. 3.593 m → 33.593 m, 1.3 m → 31.3 m). */
 function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefined {
   if (!Array.isArray(lengths) || lengths.length < 2) return lengths;
@@ -511,6 +542,7 @@ function ScaffoldPageContent() {
       }),
       ...(polygonVertices.length >= 3 && {
         buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
+        pattankoCornerCount: countPattankoCorners(polygonVertices),
       }),
     };
     calculateMutation.mutate({ dto, configId: editConfigId });
@@ -547,6 +579,7 @@ function ScaffoldPageContent() {
       walls: wallInputs,
       scaffoldWidthMm: qConfig.scaffoldWidthMm,
       buildingOutline,
+      pattankoCornerCount: countPattankoCorners(vertices),
       ...(qConfig.scaffoldType === 'kusabi' && {
         preferredMainTatejiMm: qConfig.preferredMainTatejiMm,
         topGuardHeightMm: qConfig.topGuardHeightMm,
@@ -994,7 +1027,12 @@ function ScaffoldPageContent() {
                       if (!aiBimPreview) return;
                       setAiBimConfirming(true);
                       try {
-                        const data = await scaffoldConfigsApi.createAndCalculate(aiBimPreview.dto);
+                        const outline = aiBimPreview.buildingOutline;
+                        const dto = {
+                          ...aiBimPreview.dto,
+                          pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
+                        };
+                        const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
                       } catch (err: any) {
                         setAiBimError(err?.message ?? 'Failed to create scaffold');

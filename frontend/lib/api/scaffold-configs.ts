@@ -48,6 +48,8 @@ export interface CreateScaffoldConfigDto {
   rentalType?: 'weekly' | 'monthly' | 'custom';
   rentalStartDate?: string;
   rentalEndDate?: string;
+  /** Optional: Number of corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not counted. */
+  pattankoCornerCount?: number;
   /** Optional: Building outline polygon (for complex shapes) */
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
   /** Optional: Detected balconies / AC areas / pillars from vision (for Buragetto / clearance) */

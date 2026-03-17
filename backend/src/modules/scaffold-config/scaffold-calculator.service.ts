@@ -54,6 +54,8 @@ export interface ScaffoldCalculationInput {
   preferredMainTatejiMm: number;   // 1800, 2700, 3600
   topGuardHeightMm: number;        // 900, 1350, 1800
   anchiWidthMm?: number;           // override anchi width (auto from scaffoldWidth if omitted)
+  /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
+  pattankoCornerCount?: number;
 }
 
 export interface CalculatedComponent {
@@ -175,9 +177,9 @@ export class ScaffoldCalculatorService {
     // Get max levels across all walls for summary
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
-    // PATTANKO (パッタンコ): small filler plank at each corner, 2 per corner per level (not per-wall; total only)
-    const numCorners = wallResults.length;
-    const pattankoQty = numCorners * 2 * maxLevels;
+    // PATTANKO (パッタンコ): only at non-L-shaped corners (2 per corner per level). When pattankoCornerCount omitted, do not add.
+    const pattankoCornerCount = input.pattankoCornerCount ?? 0;
+    const pattankoQty = pattankoCornerCount * 2 * maxLevels;
     if (pattankoQty > 0) {
       summary.push({
         type: 'pattanko',

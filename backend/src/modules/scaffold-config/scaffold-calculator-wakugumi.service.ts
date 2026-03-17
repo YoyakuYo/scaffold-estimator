@@ -43,6 +43,8 @@ export interface WakugumiCalculationInput {
   habakiCountPerSpan: number;      // 1 or 2
   endStopperType: 'nuno' | 'frame';
   topGuardHeightMm?: number;       // optional, default 900
+  /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
+  pattankoCornerCount?: number;
 }
 
 function getSideLabel(side: string): string {
@@ -100,9 +102,9 @@ export class ScaffoldCalculatorWakugumiService {
     const summary = this.aggregateComponents(wallResults);
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
-    // PATTANKO (パッタンコ): small filler plank at each corner, 2 per corner per level
-    const numCorners = wallResults.length;
-    const pattankoQty = numCorners * 2 * maxLevels;
+    // PATTANKO (パッタンコ): only at non-L-shaped corners (2 per corner per level). When pattankoCornerCount omitted, do not add.
+    const pattankoCornerCount = input.pattankoCornerCount ?? 0;
+    const pattankoQty = pattankoCornerCount * 2 * maxLevels;
     if (pattankoQty > 0) {
       summary.push({
         type: 'pattanko',

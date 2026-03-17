@@ -158,6 +158,7 @@ export class ScaffoldConfigService {
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         endStopperType: dto.endStopperType || 'nuno',
         topGuardHeightMm: dto.topGuardHeightMm || 900,
+        pattankoCornerCount: dto.pattankoCornerCount,
       });
     } else {
       result = this.calculatorService.calculate({
@@ -166,6 +167,7 @@ export class ScaffoldConfigService {
         scaffoldWidthMm: dto.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
         topGuardHeightMm: dto.topGuardHeightMm || 900,
+        pattankoCornerCount: dto.pattankoCornerCount,
       });
     }
 
@@ -336,6 +338,7 @@ export class ScaffoldConfigService {
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         endStopperType: dto.endStopperType || 'nuno',
         topGuardHeightMm: dto.topGuardHeightMm || 900,
+        pattankoCornerCount: dto.pattankoCornerCount,
       });
     } else {
       result = this.calculatorService.calculate({
@@ -344,6 +347,7 @@ export class ScaffoldConfigService {
         scaffoldWidthMm: dto.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
         topGuardHeightMm: dto.topGuardHeightMm || 900,
+        pattankoCornerCount: dto.pattankoCornerCount,
       });
     }
     const calculationResult = {
