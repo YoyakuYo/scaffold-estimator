@@ -718,7 +718,7 @@ export default function Scaffold3DView({
         skipInnerAtStart?: boolean,
         skipInnerAtEnd?: boolean,
         dropLeadingCorner600?: boolean,
-      ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[] } {
+      ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
         const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
         const isBracket = wall.layoutMode === 'bracket';
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
@@ -737,6 +737,11 @@ export default function Scaffold3DView({
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
+        // When reusing corner posts from previous wall, do not create a duplicate start post pair.
+        // The first visible/new post of this wall becomes position index 1.
+        const reuseStartFromPrevCorner = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
+        const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
+        const startSpanIdx = reuseStartFromPrevCorner ? 1 : 0;
         // IMPORTANT (corner alignment):
         // Do NOT force the last post to exactly wallLengthMm.
         // A small overrun (≈200–300mm) is allowed/preferred to keep corners tight for pattanko.
@@ -757,6 +762,7 @@ export default function Scaffold3DView({
         const palletW = 0.25;
         const palletD = 0.25;
         for (let pi = 0; pi < postX.length; pi++) {
+          if (pi < startPostIdx) continue;
           const px = postX[pi];
           const skipInnerPal = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
           for (const pz of isBracket ? [0] : (skipInnerPal ? [widthM] : [0, widthM])) {
@@ -768,6 +774,7 @@ export default function Scaffold3DView({
         // At corner ends, skip inner post (z=0) so only outer row extends to the corner.
         // This creates the asymmetric post count matching the CAD detail (e.g. 2 inner, 3 outer).
         for (let pi = 0; pi < postX.length; pi++) {
+          if (pi < startPostIdx) continue;
           const px = postX[pi];
           const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
           for (const pz of isBracket ? [0] : (skipInner ? [widthM] : [0, widthM])) {
@@ -779,6 +786,7 @@ export default function Scaffold3DView({
         const postBaseY = GROUND_Y + JACK_H;
         const postHeightFromGround = totalPostH;
         for (let pi = 0; pi < postX.length; pi++) {
+          if (pi < startPostIdx) continue;
           const px = postX[pi];
           const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
           for (const pz of isBracket ? [0] : (skipInner ? [widthM] : [0, widthM])) {
@@ -814,6 +822,7 @@ export default function Scaffold3DView({
           // Skip at corner positions where inner post is absent — corner code handles bridging.
           const yokojiOverhang = 0.06;
           for (let pi = 0; pi < postX.length; pi++) {
+            if (pi < startPostIdx) continue;
             const px = postX[pi];
             const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
             if (skipInner) continue;
@@ -827,7 +836,7 @@ export default function Scaffold3DView({
             addRealisticNunoBar(THREE, group, cornerInnerPostX, y, 0, totalLen, 0, yokojiMat);
           }
 
-          for (let i = 0; i < spans.length; i++) {
+          for (let i = startSpanIdx; i < spans.length; i++) {
             const x1 = postX[i];
             const x2 = postX[i + 1];
             const spanM = spans[i] / 1000;
@@ -867,12 +876,13 @@ export default function Scaffold3DView({
           if (lv === levelsToBuild && topGuardM > 0) {
             for (const pz of isBracket ? [0] : [0, widthM]) {
               for (let pi = 0; pi < postX.length; pi++) {
+                if (pi < startPostIdx) continue;
                 const px = postX[pi];
                 const skipInner = !isBracket && pz === 0 && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
                 if (skipInner) continue;
                 addPipe(group, px, y, pz, px, y + topGuardM, pz, topGuardMat, PIPE_R * 0.7);
               }
-              for (let i = 0; i < spans.length; i++) {
+              for (let i = startSpanIdx; i < spans.length; i++) {
                 const x1 = postX[i];
                 const x2 = postX[i + 1];
                 addPipe(group, x1, y + topGuardM, pz, x2, y + topGuardM, pz, topGuardMat, PIPE_R * 0.65);
@@ -888,7 +898,7 @@ export default function Scaffold3DView({
         for (let lv = 1; lv <= levelsToBuild; lv++) {
           if (uniqueStairPos.length === 0) continue;
           for (const stairSpanIdx of uniqueStairPos) {
-          if (stairSpanIdx >= spans.length) continue;
+          if (stairSpanIdx < startSpanIdx || stairSpanIdx >= spans.length) continue;
           const sx1 = postX[stairSpanIdx];
           const sx2 = postX[stairSpanIdx + 1];
 
@@ -921,7 +931,7 @@ export default function Scaffold3DView({
           } // end for stairSpanIdx
         }
 
-        return { runLenM: totalLen, postX, widthM, spansMm: spans };
+        return { runLenM: totalLen, postX, widthM, spansMm: spans, startPostIdx };
       }
 
       // ══════════════════════════════════════════════════════
@@ -964,6 +974,7 @@ export default function Scaffold3DView({
         postX: number[];
         widthM: number;
         spansMm: number[];
+        startPostIdx: number;
       }> = [];
 
       // Standoff: distance from building wall to nearest posts (250–500mm) so scaffold can breathe
@@ -1009,7 +1020,7 @@ export default function Scaffold3DView({
         const group = new THREE.Group();
         wallRoot.add(group);
         // Keep full inner/outer rows at wall ends; corner joining is handled explicitly below.
-        const { runLenM, postX, widthM, spansMm } = buildWallScaffold(
+        const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
           spanCaps[i],
@@ -1061,7 +1072,7 @@ export default function Scaffold3DView({
 
         wallRoot.applyMatrix4(matrix);
         scene.add(wallRoot);
-        wallRenderInfos[i] = { root: wallRoot, postX, widthM, spansMm };
+        wallRenderInfos[i] = { root: wallRoot, postX, widthM, spansMm, startPostIdx };
 
         // Track extents
         const levels = wall.levelCalc.fullLevels;
@@ -1196,7 +1207,7 @@ export default function Scaffold3DView({
 
         // Connect into wall B's first rendered span endpoint.
         // If wall B had a leading corner 600, it was trimmed during wall build, so this becomes 1800 (etc).
-        const bFirstIdx = Math.min(1, infoB.postX.length - 1);
+        const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
         let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
         let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
         // Keep left/right pairing stable and avoid crossing connectors.
