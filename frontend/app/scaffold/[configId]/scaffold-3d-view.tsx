@@ -1026,7 +1026,9 @@ export default function Scaffold3DView({
           nz = -nz;
         }
 
-        // Determine if wall start/end are corners (shared vertex with adjacent walls)
+        // Determine if wall start/end are corners (shared vertex with adjacent walls).
+        // For any closed polygon (triangle, rectangle, pentagon, irregular n-gon), every wall
+        // has both corners; corner rule (300+600 / 300 overrun) applies at every vertex.
         const isStartCorner = !isOpenPolygon || i > 0;
         const isEndCorner = !isOpenPolygon || i < walls.length - 1;
 
