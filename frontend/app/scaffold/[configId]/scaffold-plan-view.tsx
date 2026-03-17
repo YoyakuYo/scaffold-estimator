@@ -222,17 +222,18 @@ export default function ScaffoldPlanView({ result }: Props) {
     for (const s of spans) { accum += s; postPositions.push(accum); }
     const totalLen = accum || (wall.wallLengthMm ?? 1);
 
-    // Edge midpoint for labels
+    // Edge midpoint for labels (stay on the side for all edges)
     const midX = (ex1 + ex2) / 2;
     const midY = (ey1 + ey2) / 2;
     const textAngle = Math.atan2(dy, dx) * 180 / Math.PI;
     const readableAngle = (textAngle > 90 || textAngle < -90) ? textAngle + 180 : textAngle;
     const isVerticalEdge = Math.abs(Math.abs(textAngle) - 90) < 20;
-    const labelOffset = stripOffset + 22;
-    // For vertical edges (East/West): put label at TOP of edge, horizontal (like North/South)
-    const topOfEdgeY = Math.min(ey1, ey2);
+    // Push vertical edge labels further out so they clear the span numbers
+    const labelOffset = isVerticalEdge ? stripOffset + 38 : stripOffset + 22;
     const labelX = midX + nx * labelOffset;
-    const labelY = isVerticalEdge ? topOfEdgeY : midY + ny * labelOffset;
+    const labelY = midY + ny * labelOffset;
+    // On vertical edges, separate kanji from measurement (like N/S) so they don't overlap
+    const labelGap = isVerticalEdge ? 22 : 8;
 
     const sideLabel = locale === 'ja' ? (wall.sideJp || wall.side) : wall.side;
 
@@ -295,27 +296,27 @@ export default function ScaffoldPlanView({ result }: Props) {
           );
         })}
 
-        {/* Wall label — for vertical edges (East/West) put at top of edge, horizontal like North/South */}
+        {/* Wall label — on the side; for East/West separate kanji from measurement so they don't overlap */}
         <text
           x={labelX}
-          y={isVerticalEdge ? labelY - 14 : labelY - 8}
+          y={labelY - labelGap}
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={12}
           fontWeight="bold"
           fill={col.text}
-          transform={isVerticalEdge ? undefined : `rotate(${readableAngle}, ${labelX}, ${labelY - 8})`}
+          transform={`rotate(${readableAngle}, ${labelX}, ${labelY - labelGap})`}
         >
           {sideLabel}
         </text>
         <text
           x={labelX}
-          y={isVerticalEdge ? labelY - 2 : labelY + 8}
+          y={labelY + labelGap}
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={9}
           fill={DIM_COLOR}
-          transform={isVerticalEdge ? undefined : `rotate(${readableAngle}, ${labelX}, ${labelY + 8})`}
+          transform={`rotate(${readableAngle}, ${labelX}, ${labelY + labelGap})`}
         >
           {(wall.wallLengthMm ?? 0).toLocaleString()}mm ({wall.totalSpans ?? spans.length}sp)
         </text>
