@@ -190,19 +190,43 @@ export default function Scaffold2DView({ result }: Props) {
         </text>
       );
 
-      // Posts (both kusabi & wakugumi: simple single vertical line — no extra emphasis)
+      // Posts / Frames
       postXPositions.forEach((px, pi) => {
-        elements.push(
-          <line
-            key={`post-${lvl}-${pi}`}
-            x1={x(px)}
-            y1={y(baseY)}
-            x2={x(px)}
-            y2={y(topY)}
-            stroke={COL.post}
-            strokeWidth={POST_STROKE}
-          />
-        );
+        if (isWakugumi) {
+          // Wakugumi: draw gate-shaped frame (門型) — two legs with a top crossbar
+          const halfW = FRAME_WIDTH_PX / 2;
+          const splay = FRAME_SPLAY_PX;
+          const topLX = x(px) - halfW;
+          const topRX = x(px) + halfW;
+          const btmLX = x(px) - halfW - splay;
+          const btmRX = x(px) + halfW + splay;
+          elements.push(
+            <g key={`frame-${lvl}-${pi}`}>
+              {/* Left leg */}
+              <line x1={topLX} y1={y(topY)} x2={btmLX} y2={y(baseY)}
+                stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
+              {/* Right leg */}
+              <line x1={topRX} y1={y(topY)} x2={btmRX} y2={y(baseY)}
+                stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
+              {/* Top crossbar */}
+              <line x1={topLX} y1={y(topY)} x2={topRX} y2={y(topY)}
+                stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
+            </g>
+          );
+        } else {
+          // Kusabi: single vertical post line
+          elements.push(
+            <line
+              key={`post-${lvl}-${pi}`}
+              x1={x(px)}
+              y1={y(baseY)}
+              x2={x(px)}
+              y2={y(topY)}
+              stroke={COL.post}
+              strokeWidth={POST_STROKE}
+            />
+          );
+        }
       });
 
       // Per span

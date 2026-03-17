@@ -875,19 +875,40 @@ export default function Scaffold3DView({
             const midX = (x1 + x2) / 2;
             const isStairSpan = uniqueStairPos.includes(i);
 
-            // Braces (ブレス) — inner face (z=widthM) for double_post; outer face (z=0) for bracket
-            const braceZ = isBracket ? 0 : widthM;
+            // Braces (ブレス)
+            // Kusabi: OUTER face only (z=widthM for double_post, z=0 for bracket)
+            // Wakugumi: BOTH faces (front z=0 + back z=widthM)
             const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
             const braceTopY = y - 0.18;
-            addPipe(group, x1, braceBottomY, braceZ, x2, braceTopY, braceZ, braceMat, PIPE_R * 0.75);
-            addPipe(group, x1, braceTopY, braceZ, x2, braceBottomY, braceZ, braceMat, PIPE_R * 0.75);
+            if (isWakugumi && !isBracket) {
+              for (const bz of [0, widthM]) {
+                addPipe(group, x1, braceBottomY, bz, x2, braceTopY, bz, braceMat, PIPE_R * 0.75);
+                addPipe(group, x1, braceTopY, bz, x2, braceBottomY, bz, braceMat, PIPE_R * 0.75);
+              }
+            } else {
+              const braceZ = isBracket ? 0 : widthM;
+              addPipe(group, x1, braceBottomY, braceZ, x2, braceTopY, braceZ, braceMat, PIPE_R * 0.75);
+              addPipe(group, x1, braceTopY, braceZ, x2, braceBottomY, braceZ, braceMat, PIPE_R * 0.75);
+            }
 
-            // Guard rails (手摺/布材) — outer face only (z=0), 2 rails per span per level.
-            // Use fixed heights for consistency (0.90m and 0.45m above platform).
-            const railTop = y + 0.9;
-            const railMid = y + 0.45;
-            addPipe(group, x1, railTop, 0, x2, railTop, 0, tesuriMat, PIPE_R * 0.65);
-            addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
+            // Horizontal bars — type-dependent:
+            // Kusabi: 手摺 (tesuri) — 2 rails at 0.45m and 0.9m above platform, outer face (z=0)
+            // Wakugumi: 下桟 (shitasan) — 1 bottom bar near platform, BOTH faces
+            if (isWakugumi) {
+              const shitasanY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
+              if (!isBracket) {
+                for (const sz of [0, widthM]) {
+                  addPipe(group, x1, shitasanY, sz, x2, shitasanY, sz, shitasanMat, PIPE_R * 0.6);
+                }
+              } else {
+                addPipe(group, x1, shitasanY, 0, x2, shitasanY, 0, shitasanMat, PIPE_R * 0.6);
+              }
+            } else {
+              const railTop = y + 0.9;
+              const railMid = y + 0.45;
+              addPipe(group, x1, railTop, 0, x2, railTop, 0, tesuriMat, PIPE_R * 0.65);
+              addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
+            }
 
             // Plank / Anchi — rule: show plank if not a stair span, OR 600mm extended bay (stair span still has plank)
             const spanMm = spans[i];
