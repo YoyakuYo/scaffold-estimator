@@ -110,8 +110,11 @@ export default function Scaffold2DView({ result }: Props) {
       }
     }
 
-    return { wall, spans, levels, totalLengthMm, totalHeightMm, postXPositions, stairPositions };
-  }, [wall, topGuardMm]);
+    const widthMm = wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
+    const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && (stairPositions.length > 0));
+
+    return { wall, spans, levels, totalLengthMm, totalHeightMm, postXPositions, stairPositions, needsExtendedBay };
+  }, [wall, topGuardMm, result]);
 
   // ─── SVG dimensions ─────────────────────────────────────
   const PAD_LEFT = 100;
@@ -127,7 +130,7 @@ export default function Scaffold2DView({ result }: Props) {
 
   // ─── Render wall ────────────────────────────────────────
   const renderWall = () => {
-    const { spans, levels, totalLengthMm, postXPositions, stairPositions } = wallData;
+    const { spans, levels, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wallData;
     const elements: JSX.Element[] = [];
 
     // Grid (subtle, for technical clarity)
@@ -247,6 +250,21 @@ export default function Scaffold2DView({ result }: Props) {
                 x1={x(sx)} y1={y(baseY + 50)}
                 x2={x(ex)} y2={y(baseY + 50)}
                 stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
+            );
+          }
+          // 600mm extended bay: plank remains at stair span (rule: needsExtendedBay)
+          if (needsExtendedBay) {
+            elements.push(
+              <rect key={`plank-eb-${lvl}-${si}`}
+                x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
+                width={(ex - sx) * scale - 4} height={PLANK_H_PX}
+                fill={COL.plank} opacity={0.7} rx={1} />
+            );
+            elements.push(
+              <line key={`habaki-eb-${lvl}-${si}`}
+                x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
+                x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
+                stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
             );
           }
         } else {

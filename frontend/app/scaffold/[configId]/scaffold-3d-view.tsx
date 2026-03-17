@@ -39,6 +39,13 @@ const CORNER_TURN_SPAN_M = 0.6;
 const WALL_TO_INNER_POSTS_MM = 300;
 /** Spans (planks) can overrun toward the wall by this amount (m). */
 const SPAN_OVERRUN_TO_WALL_M = 0.3;
+
+/** Anchi (plank) layout by scaffold width — matches backend ANCHI_LAYOUT_BY_WIDTH. */
+const ANCHI_LAYOUT_BY_WIDTH: Record<number, { full: number; half: number; fullWidthMm: number; halfWidthMm?: number }> = {
+  600:  { full: 1, half: 0, fullWidthMm: 500 },
+  900:  { full: 1, half: 1, fullWidthMm: 500, halfWidthMm: 240 },
+  1200: { full: 2, half: 0, fullWidthMm: 500 },
+};
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
 
@@ -770,6 +777,11 @@ export default function Scaffold3DView({
         const cornerInnerPostX = null as number | null;
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
+        const widthMm = wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
+        const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && kaidanSpanIndices.length > 0);
+        const anchiLayout = ANCHI_LAYOUT_BY_WIDTH[widthMm] ?? ANCHI_LAYOUT_BY_WIDTH[600];
+        const isWakugumi = result?.scaffoldType === 'wakugumi';
+        const habakiCountPerSpan = result?.habakiCountPerSpan ?? 2;
 
         // ── Eco pallets (エコプレット) at each post position ─────
         const palletH = 0.04;
@@ -877,21 +889,36 @@ export default function Scaffold3DView({
             addPipe(group, x1, railTop, 0, x2, railTop, 0, tesuriMat, PIPE_R * 0.65);
             addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
 
-            // Plank / Anchi — color-coded by span size
+            // Plank / Anchi — rule: show plank if not a stair span, OR 600mm extended bay (stair span still has plank)
             const spanMm = spans[i];
             const plankColorMat = getPlankMat(spanMm);
             const habakiColorMat = getHabakiMat(spanMm);
-            if (!isStairSpan) {
-              const plankDepthM = widthM + SPAN_OVERRUN_TO_WALL_M;
-              const plankMidZ = plankDepthM / 2;
-              addRealisticPlank(THREE, group, midX, y + 0.015, plankMidZ, spanDeckLen, plankDepthM, plankColorMat);
-              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanDeckLen, habakiColorMat);
-              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanDeckLen, habakiColorMat);
+            const showPlankHere = !isStairSpan || needsExtendedBay;
+            if (showPlankHere) {
+              // Draw individual anchi boards by width: 600→1 full (500mm), 900→1 full + 1 half (240mm), 1200→2 full (500mm each)
+              let zFront = 0;
+              for (let f = 0; f < anchiLayout.full; f++) {
+                const depthM = anchiLayout.fullWidthMm / 1000;
+                const midZ = zFront + depthM / 2;
+                addRealisticPlank(THREE, group, midX, y + 0.015, midZ, spanDeckLen, depthM, plankColorMat);
+                addRealisticHabaki(THREE, group, midX, y + 0.015, zFront + 0.02, spanDeckLen, habakiColorMat);
+                addRealisticHabaki(THREE, group, midX, y + 0.015, zFront + depthM - 0.02, spanDeckLen, habakiColorMat);
+                zFront += depthM;
+              }
+              if (anchiLayout.half > 0 && anchiLayout.halfWidthMm != null) {
+                const halfDepthM = anchiLayout.halfWidthMm / 1000;
+                const midZ = zFront + halfDepthM / 2;
+                addRealisticPlank(THREE, group, midX, y + 0.015, midZ, spanDeckLen, halfDepthM, plankColorMat);
+                addRealisticHabaki(THREE, group, midX, y + 0.015, zFront + 0.02, spanDeckLen, habakiColorMat);
+                addRealisticHabaki(THREE, group, midX, y + 0.015, zFront + halfDepthM - 0.02, spanDeckLen, habakiColorMat);
+              }
             }
 
-            // Habaki / Toe boards — same color as span plank
-            addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanDeckLen, habakiColorMat);
-            addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanDeckLen, habakiColorMat);
+            // Habaki / Toe boards at outer (z=0) and inner (z=widthM). Wakugumi: 1 or 2 per span from result.
+            const drawHabakiFront = true;
+            const drawHabakiBack = isWakugumi ? habakiCountPerSpan >= 2 : true;
+            if (drawHabakiFront) addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanDeckLen, habakiColorMat);
+            if (drawHabakiBack) addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanDeckLen, habakiColorMat);
           }
 
           // Top guard posts + top rail (最上段)
