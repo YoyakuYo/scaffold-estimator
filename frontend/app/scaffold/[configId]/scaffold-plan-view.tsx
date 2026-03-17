@@ -225,12 +225,13 @@ export default function ScaffoldPlanView({ result }: Props) {
     // Edge midpoint for labels
     const midX = (ex1 + ex2) / 2;
     const midY = (ey1 + ey2) / 2;
-    const labelOffset = stripOffset + 22;
-    const labelX = midX + nx * labelOffset;
-    const labelY = midY + ny * labelOffset;
-
     const textAngle = Math.atan2(dy, dx) * 180 / Math.PI;
     const readableAngle = (textAngle > 90 || textAngle < -90) ? textAngle + 180 : textAngle;
+    // For vertical edges (East/West), push label further out so 東面/西面 don't overlap span lengths
+    const isVerticalEdge = Math.abs(Math.abs(textAngle) - 90) < 20;
+    const labelOffset = isVerticalEdge ? stripOffset + 42 : stripOffset + 22;
+    const labelX = midX + nx * labelOffset;
+    const labelY = midY + ny * labelOffset;
 
     const sideLabel = locale === 'ja' ? (wall.sideJp || wall.side) : wall.side;
 
@@ -293,20 +294,20 @@ export default function ScaffoldPlanView({ result }: Props) {
           );
         })}
 
-        {/* Wall label */}
+        {/* Wall label — extra spacing for vertical edges so 東面/西面 don't overlap length */}
         <text
-          x={labelX} y={labelY - 8}
+          x={labelX} y={labelY - (isVerticalEdge ? 14 : 8)}
           textAnchor="middle" dominantBaseline="central"
           fontSize={12} fontWeight="bold" fill={col.text}
-          transform={`rotate(${readableAngle}, ${labelX}, ${labelY - 8})`}
+          transform={`rotate(${readableAngle}, ${labelX}, ${labelY - (isVerticalEdge ? 14 : 8)})`}
         >
           {sideLabel}
         </text>
         <text
-          x={labelX} y={labelY + 8}
+          x={labelX} y={labelY + (isVerticalEdge ? 14 : 8)}
           textAnchor="middle" dominantBaseline="central"
           fontSize={9} fill={DIM_COLOR}
-          transform={`rotate(${readableAngle}, ${labelX}, ${labelY + 8})`}
+          transform={`rotate(${readableAngle}, ${labelX}, ${labelY + (isVerticalEdge ? 14 : 8)})`}
         >
           {(wall.wallLengthMm ?? 0).toLocaleString()}mm ({wall.totalSpans ?? spans.length}sp)
         </text>
