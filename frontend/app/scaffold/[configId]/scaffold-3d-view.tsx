@@ -29,6 +29,9 @@ const PIPE_SEG = 10;
 const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
+// Corner detail rule: 300mm overrun + 600mm turn span
+const CORNER_OVERRUN_M = 0.3;
+const CORNER_TURN_SPAN_M = 0.6;
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
 
@@ -985,21 +988,21 @@ export default function Scaffold3DView({
         }
         wallNormals.push({ nx, nz });
 
-        // Determine which ends are corners (shared vertex with another wall)
-        const isStartCorner = !isOpenPolygon || i > 0;
+        // Determine if wall end is a corner (shared vertex with another wall)
         const isEndCorner = !isOpenPolygon || i < walls.length - 1;
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        const { runLenM } = buildWallScaffold(wall, group, spanCaps[i], isStartCorner, isEndCorner);
+        // Keep full inner/outer rows at wall ends; corner joining is handled explicitly below.
+        const { runLenM } = buildWallScaffold(wall, group, spanCaps[i], false, false);
 
-        // Scale/place wall run. Per 足場コーナー詳細図: when wall ends at a corner, last two posts
-        // extend 300mm past the building corner, then 600mm span to shared post.
+        // Scale/place wall run. Per 足場コーナー詳細図:
+        // wall end extends 300mm past corner, then one 600mm span (total +900mm).
         const useCornerExtension = walls.length >= 2 && !isOpenPolygon && isEndCorner;
-        const cornerOverrunM = 0.3; // 300mm past building corner
+        const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
         const baseLen = Math.max(runLenM, 1e-6);
-        const desiredLen = useCornerExtension ? edgeLen + cornerOverrunM : edgeLen;
+        const desiredLen = useCornerExtension ? edgeLen + cornerExtensionM : edgeLen;
         const rawScale = desiredLen / baseLen;
         const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
@@ -1141,8 +1144,11 @@ export default function Scaffold3DView({
       maxHeightRef.current = maxH;
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // L-shaped plank with 6 vertices — all edges parallel to wall directions, no diagonals.
-      // p1=outerA, p2=farOuter, p3=outerB, p4=innerB, p5=innerMid, p6=innerA
+      // Rule:
+      //   1) 300mm overrun from corner on wall A inner row
+      //   2) then 600mm corner span on wall A inner row
+      //   3) reuse those two inner posts and connect each directly into wall B
+      // This creates the direct one-to-one bars the user requested.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
@@ -1155,47 +1161,63 @@ export default function Scaffold3DView({
         if (isOpenPolygon && nextWi <= wi) continue;
 
         const nA = wallNormals[wi];
-        const nB = wallNormals[nextWi];
-        if (Math.hypot(nA.nx, nA.nz) < 0.001 || Math.hypot(nB.nx, nB.nz) < 0.001) continue;
+        if (Math.hypot(nA.nx, nA.nz) < 0.001) continue;
 
         const cornerVertIdx = (wi + 1) % verts.length;
-        const vx = verts[cornerVertIdx].x - cx;
-        const vz = verts[cornerVertIdx].z - cz;
-        const wA = (walls[wi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const wB = (walls[nextWi]?.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const nextCornerVertIdx = (cornerVertIdx + 1) % verts.length;
 
-        // 6-point L-shape at corner vertex V
-        const sA = standoffM + wA;     // outer offset along nA
-        const sB = standoffM + wB;     // outer offset along nB
-        const p1 = { x: vx + nA.nx * sA,                      z: vz + nA.nz * sA };                      // outer A
-        const p2 = { x: vx + nA.nx * sA + nB.nx * sB,         z: vz + nA.nz * sA + nB.nz * sB };         // far outer
-        const p3 = { x: vx + nB.nx * sB,                      z: vz + nB.nz * sB };                      // outer B
-        const p4 = { x: vx + nB.nx * standoffM,               z: vz + nB.nz * standoffM };               // inner B
-        const p5 = { x: vx + nA.nx * standoffM + nB.nx * standoffM, z: vz + nA.nz * standoffM + nB.nz * standoffM }; // inner mid
-        const p6 = { x: vx + nA.nx * standoffM,               z: vz + nA.nz * standoffM };               // inner A
+        const vPrev = verts[wi];
+        const vCorner = verts[cornerVertIdx];
+        const vNext = verts[nextCornerVertIdx];
 
-        const pts = [p1, p2, p3, p4, p5, p6];
+        const dAx = vCorner.x - vPrev.x;
+        const dAz = vCorner.z - vPrev.z;
+        const lenA = Math.hypot(dAx, dAz);
+        const dBx = vNext.x - vCorner.x;
+        const dBz = vNext.z - vCorner.z;
+        const lenB = Math.hypot(dBx, dBz);
+        if (lenA < 0.001 || lenB < 0.001) continue;
+
+        // Wall directions at corner: A enters corner, B leaves corner
+        const tAx = dAx / lenA;
+        const tAz = dAz / lenA;
+        const tBx = dBx / lenB;
+        const tBz = dBz / lenB;
+
+        // Reused inner posts on wall A at +300mm and +900mm from building corner
+        const baseInnerAx = (vCorner.x - cx) + nA.nx * standoffM;
+        const baseInnerAz = (vCorner.z - cz) + nA.nz * standoffM;
+        const r1 = {
+          x: baseInnerAx + tAx * CORNER_OVERRUN_M,
+          z: baseInnerAz + tAz * CORNER_OVERRUN_M,
+        };
+        const r2 = {
+          x: baseInnerAx + tAx * (CORNER_OVERRUN_M + CORNER_TURN_SPAN_M),
+          z: baseInnerAz + tAz * (CORNER_OVERRUN_M + CORNER_TURN_SPAN_M),
+        };
+
+        // Direct turn: one bar from each reused post into wall B direction
+        const t1 = { x: r1.x + tBx * CORNER_TURN_SPAN_M, z: r1.z + tBz * CORNER_TURN_SPAN_M };
+        const t2 = { x: r2.x + tBx * CORNER_TURN_SPAN_M, z: r2.z + tBz * CORNER_TURN_SPAN_M };
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // 6 edges of the L — all horizontal ties
-          for (let e = 0; e < 6; e++) {
-            const a = pts[e], b = pts[(e + 1) % 6];
-            addPipe(cornerGroup, a.x, y, a.z, b.x, y, b.z, yokojiMat, PIPE_R * 0.8);
-          }
-          // Width-direction ties at the inner intersection
-          addPipe(cornerGroup, p5.x, y, p5.z, p2.x, y, p2.z, yokojiMat, PIPE_R * 0.7);
+          // Direct one-to-one connectors (requested): each reused inner post -> one turned post
+          addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+          addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
 
-          // L-shaped plank
+          // Keep 600 span pair visible on both rows
+          addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
+          addPipe(cornerGroup, t1.x, y, t1.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.8);
+
+          // Simple corner deck patch (rectangular)
           if (!isOpenPolygon) {
             const cornerShape = new THREE.Shape();
-            cornerShape.moveTo(p1.x, p1.z);
-            cornerShape.lineTo(p2.x, p2.z);
-            cornerShape.lineTo(p3.x, p3.z);
-            cornerShape.lineTo(p4.x, p4.z);
-            cornerShape.lineTo(p5.x, p5.z);
-            cornerShape.lineTo(p6.x, p6.z);
+            cornerShape.moveTo(r1.x, r1.z);
+            cornerShape.lineTo(r2.x, r2.z);
+            cornerShape.lineTo(t2.x, t2.z);
+            cornerShape.lineTo(t1.x, t1.z);
             cornerShape.closePath();
             const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
             const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
@@ -1206,30 +1228,25 @@ export default function Scaffold3DView({
             cornerGroup.add(plankMesh);
           }
 
-          // Habaki along outer L-edges (p1→p2→p3) and inner L-edges (p4→p5→p6)
+          // Habaki along reused pair and turned pair
           const hY = y + 0.06;
-          addPipe(cornerGroup, p1.x, hY, p1.z, p2.x, hY, p2.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, p2.x, hY, p2.z, p3.x, hY, p3.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, p4.x, hY, p4.z, p5.x, hY, p5.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, p5.x, hY, p5.z, p6.x, hY, p6.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
+          addPipe(cornerGroup, t1.x, hY, t1.z, t2.x, hY, t2.z, habakiMatEff, PIPE_R * 0.5);
 
-          // Guard rails along outer edges (p1→p2 and p2→p3)
-          addPipe(cornerGroup, p1.x, y + 0.9, p1.z, p2.x, y + 0.9, p2.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, p2.x, y + 0.9, p2.z, p3.x, y + 0.9, p3.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, p1.x, y + 0.45, p1.z, p2.x, y + 0.45, p2.z, tesuriMat, PIPE_R * 0.6);
-          addPipe(cornerGroup, p2.x, y + 0.45, p2.z, p3.x, y + 0.45, p3.z, tesuriMat, PIPE_R * 0.6);
+          // Guard rails along the turned side
+          addPipe(cornerGroup, t1.x, y + 0.9, t1.z, t2.x, y + 0.9, t2.z, tesuriMat, PIPE_R * 0.65);
+          addPipe(cornerGroup, t1.x, y + 0.45, t1.z, t2.x, y + 0.45, t2.z, tesuriMat, PIPE_R * 0.6);
 
           if (lv === maxLevelsForCorners && topGuardM > 0) {
-            addPipe(cornerGroup, p1.x, y + topGuardM, p1.z, p2.x, y + topGuardM, p2.z, topGuardMat, PIPE_R * 0.65);
-            addPipe(cornerGroup, p2.x, y + topGuardM, p2.z, p3.x, y + topGuardM, p3.z, topGuardMat, PIPE_R * 0.65);
+            addPipe(cornerGroup, t1.x, y + topGuardM, t1.z, t2.x, y + topGuardM, t2.z, topGuardMat, PIPE_R * 0.65);
           }
         }
 
-        // Only p2 (far outer) and p5 (inner mid) are new corner posts.
-        // p1/p6 are reused from wall A; p3/p4 are reused from wall B.
+        // Ensure all connector endpoints land on visible posts.
+        // r1/r2 are the reused pair (from wall A by rule); t1/t2 are the turned pair.
         const totalPostH = maxLevelsForCorners * LEVEL_H;
         const cpH = 0.04, cpW = 0.25, cpD = 0.25;
-        [p2, p5].forEach((p) => {
+        [r1, r2, t1, t2].forEach((p) => {
           addBox(cornerGroup, p.x, GROUND_Y + cpH / 2, p.z, cpW, cpH, cpD, ecoPalletMat);
           addPipe(cornerGroup, p.x, GROUND_Y, p.z, p.x, GROUND_Y + JACK_H, p.z, jackMatEff, PIPE_R * 0.95);
           addPipe(cornerGroup, p.x, GROUND_Y + JACK_H, p.z, p.x, GROUND_Y + JACK_H + totalPostH, p.z, postMat, PIPE_R);
