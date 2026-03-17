@@ -560,7 +560,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                         className="rounded border border-gray-300 px-2 py-1 text-xs"
                       >
                         <option value="">{scaffoldWidthMm}mm</option>
-                        {[600, 900, 1200].map((w) => (
+                        {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
                           <option key={w} value={w}>{w}mm</option>
                         ))}
                       </select>

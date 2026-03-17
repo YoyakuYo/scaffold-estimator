@@ -800,7 +800,7 @@ function ScaffoldPageContent() {
                                   className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
                                 >
                                   <option value="">{aiBimPreview.dto.scaffoldWidthMm}mm</option>
-                                  {[600, 900, 1200].map((wmm) => (
+                                  {[600, 900, 1200].filter((wmm) => wmm !== aiBimPreview.dto.scaffoldWidthMm).map((wmm) => (
                                     <option key={wmm} value={wmm}>{wmm}mm</option>
                                   ))}
                                 </select>
@@ -1337,7 +1337,7 @@ function ScaffoldPageContent() {
                       className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     >
                       <option value="">{scaffoldWidthMm}mm</option>
-                      {[600, 900, 1200].map((w) => (
+                      {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
                         <option key={w} value={w}>{w}mm</option>
                       ))}
                     </select>
