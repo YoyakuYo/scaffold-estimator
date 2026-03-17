@@ -778,7 +778,9 @@ export default function Scaffold3DView({
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
         const widthMm = wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
-        const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && kaidanSpanIndices.length > 0);
+        const stairCount = wall.stairAccessCount || 0;
+        const hasAnyStairs = kaidanSpanIndices.length > 0 || stairCount > 0;
+        const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && hasAnyStairs);
         const anchiLayout = ANCHI_LAYOUT_BY_WIDTH[widthMm] ?? ANCHI_LAYOUT_BY_WIDTH[600];
         const isWakugumi = result?.scaffoldType === 'wakugumi';
         const habakiCountPerSpan = result?.habakiCountPerSpan ?? 2;
@@ -822,7 +824,6 @@ export default function Scaffold3DView({
         // Base yokoji (根がらみ) removed — no yokoji on ground base in 3D view.
 
         // ── Stair positions ────────────────────────────
-        const stairCount = wall.stairAccessCount || 0;
         let uniqueStairPos: number[] = [];
         if (kaidanSpanIndices.length > 0) {
           uniqueStairPos = kaidanSpanIndices;

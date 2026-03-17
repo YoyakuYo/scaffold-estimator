@@ -112,30 +112,36 @@ function ScaffoldResultPage() {
     const levelH = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800;
     const levels = Math.max(1, Math.floor((config.buildingHeightMm ?? 3000) / levelH));
     const topGuardMm = result.topGuardHeightMm ?? 900;
+    const scaffoldWidthMm = config.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900;
     const minimalWalls: WallCalculationResult[] = config.walls
       .filter((w) => w.enabled !== false)
-      .map((w) => ({
-        side: w.side,
-        sideJp: w.side,
-        wallLengthMm: w.wallLengthMm,
-        spans: [1800],
-        totalSpans: 1,
-        postPositions: 2,
-        stairAccessCount: w.stairAccessCount ?? 0,
-        components: [],
-        scaffoldWidthMm: config.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900,
-        layoutMode: 'double_post' as const,
-        levelCalc: {
-          fullLevels: levels,
-          jackBaseAdjustmentMm: 0,
-          topPlankHeightMm: levels * levelH,
-          topGuardHeightMm: topGuardMm,
-          totalScaffoldHeightMm: levels * levelH + topGuardMm,
-          mainPostsPerLine: 2,
-          mainPostHeightMm: levelH,
-          topGuardPostHeightMm: topGuardMm,
-        },
-      }));
+      .map((w) => {
+        const stairAccessCount = w.stairAccessCount ?? 0;
+        const needsExtBay = scaffoldWidthMm <= 600 && stairAccessCount > 0;
+        return {
+          side: w.side,
+          sideJp: w.side,
+          wallLengthMm: w.wallLengthMm,
+          spans: [1800],
+          totalSpans: 1,
+          postPositions: 2,
+          stairAccessCount,
+          needsExtendedBay: needsExtBay,
+          components: [],
+          scaffoldWidthMm,
+          layoutMode: 'double_post' as const,
+          levelCalc: {
+            fullLevels: levels,
+            jackBaseAdjustmentMm: 0,
+            topPlankHeightMm: levels * levelH,
+            topGuardHeightMm: topGuardMm,
+            totalScaffoldHeightMm: levels * levelH + topGuardMm,
+            mainPostsPerLine: 2,
+            mainPostHeightMm: levelH,
+            topGuardPostHeightMm: topGuardMm,
+          },
+        };
+      });
     return { ...result, walls: minimalWalls };
   }, [result, config]);
 
