@@ -11,11 +11,16 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 import { VisionBimService, VisionFootprintResult } from './vision-bim.service';
+import { SupabaseService } from '../supabase/supabase.service';
+import { v4 as uuid } from 'uuid';
 
 @Controller('vision-bim')
 @UseGuards(JwtAuthGuard, SubscriptionActiveGuard)
 export class VisionBimController {
-  constructor(private readonly visionBim: VisionBimService) {}
+  constructor(
+    private readonly visionBim: VisionBimService,
+    private readonly supabase: SupabaseService,
+  ) {}
 
   /**
    * POST /vision-bim/analyze
@@ -64,7 +69,26 @@ export class VisionBimController {
       throw new BadRequestException('Only .ifc files are accepted on this endpoint');
     }
     try {
-      return await this.visionBim.processIfc(buffer);
+      const result = await this.visionBim.processIfc(buffer);
+
+      // Store IFC file in Supabase storage for frontend 3D rendering
+      try {
+        const client = this.supabase.getClient();
+        const storagePath = `ifc-uploads/${uuid()}.ifc`;
+        const { error: uploadError } = await client.storage
+          .from('drawings')
+          .upload(storagePath, buffer, { contentType: 'application/octet-stream', upsert: true });
+        if (!uploadError) {
+          const { data: urlData } = client.storage.from('drawings').getPublicUrl(storagePath);
+          if (urlData?.publicUrl) {
+            result.ifcFileUrl = urlData.publicUrl;
+          }
+        }
+      } catch {
+        // Storage upload is best-effort; don't fail the whole request
+      }
+
+      return result;
     } catch (err: any) {
       throw new BadRequestException(err?.message || 'IFC processing failed');
     }

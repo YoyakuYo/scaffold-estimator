@@ -33,11 +33,15 @@ export interface BuildingEdge {
 }
 
 export interface ObstacleInput {
-  type: 'balcony' | 'ac' | 'pillar';
+  type: 'balcony' | 'ac' | 'pillar' | 'door';
   vertices?: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
   /** For pillars: center (mm or xFrac/yFrac) and radius in mm */
   center?: { x?: number; y?: number; xFrac?: number; yFrac?: number };
   radiusMm?: number;
+  /** For doors: which wall edge, position along wall, opening width */
+  wallIndex?: number;
+  positionMm?: number;
+  widthMm?: number;
 }
 
 export interface SideConfig {

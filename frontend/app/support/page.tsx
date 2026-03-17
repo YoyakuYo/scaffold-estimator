@@ -58,17 +58,18 @@ export default function SupportPage() {
     if (data?.conversation) markReadMutation.mutate();
   }, [data?.conversation?.id]);
 
-  const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
+  const t = (en: string, ja: string, fr?: string) =>
+    locale === 'ja' ? ja : locale === 'fr' ? (fr ?? en) : en;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-6">
           <MessageSquare className="h-7 w-7 text-blue-600" />
-          {t('Contact Support', 'サポートに連絡')}
+          {t('Contact Support', 'サポートに連絡', 'Contacter l\'assistance')}
         </h1>
         <p className="text-gray-500 mb-6">
-          {t('Send a message to the platform administrator. You will receive a reply here.', '管理者にメッセージを送信できます。返信はこの画面に表示されます。')}
+          {t('Send a message to the platform administrator. You will receive a reply here.', '管理者にメッセージを送信できます。返信はこの画面に表示されます。', 'Envoyez un message à l\'administrateur. Vous recevrez une réponse ici.')}
         </p>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col" style={{ minHeight: '400px' }}>
@@ -97,11 +98,11 @@ export default function SupportPage() {
                       }`}
                     >
                       <p className="text-sm font-medium opacity-80">
-                        {isMe ? t('You', 'あなた') : t('Support', 'サポート')}
+                        {isMe ? t('You', 'あなた', 'Vous') : t('Support', 'サポート', 'Assistance')}
                       </p>
                       <p className="whitespace-pre-wrap">{msg.body}</p>
                       <p className="text-xs opacity-70 mt-1">
-                        {new Date(msg.createdAt).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US')}
+                        {new Date(msg.createdAt).toLocaleString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US')}
                       </p>
                     </div>
                   </div>
@@ -130,7 +131,7 @@ export default function SupportPage() {
                 ) : (
                   <Send className="h-5 w-5" />
                 )}
-                {t('Send', '送信')}
+                {t('Send', '送信', 'Envoyer')}
               </button>
             </div>
           </form>

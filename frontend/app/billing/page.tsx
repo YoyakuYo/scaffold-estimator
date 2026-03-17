@@ -8,7 +8,8 @@ import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield }
 
 export default function BillingPage() {
   const { locale } = useI18n();
-  const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
+  const t = (en: string, ja: string, fr?: string) =>
+    locale === 'ja' ? ja : locale === 'fr' ? (fr ?? en) : en;
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -52,12 +53,13 @@ export default function BillingPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
             <Shield className="h-14 w-14 text-amber-600 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-amber-900 mb-2">
-              {t('Platform owner', 'プラットフォーム管理者')}
+              {t('Platform owner', 'プラットフォーム管理者', 'Propriétaire de la plateforme')}
             </h1>
             <p className="text-amber-800">
               {t(
                 'You are not required to subscribe. Your role is to manage the platform and verify user subscriptions.',
                 'ご自身のアカウントでサブスクリプションは不要です。ユーザーの契約・支払いを管理する役割です。',
+                'Vous n\'avez pas besoin de souscrire. Votre rôle est de gérer la plateforme et les abonnements utilisateurs.',
               )}
             </p>
           </div>
@@ -92,9 +94,9 @@ export default function BillingPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">{t('Billing', '請求')}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('Billing', '請求', 'Facturation')}</h1>
           <p className="text-gray-500 mt-1">
-            {t('Manage your subscription and trial access', 'サブスクリプションとトライアルの管理')}
+            {t('Manage your subscription and trial access', 'サブスクリプションとトライアルの管理', 'Gérez votre abonnement et l\'accès d\'essai')}
           </p>
         </div>
 
@@ -112,12 +114,12 @@ export default function BillingPage() {
               {subscription.hasAccess ? (
                 <>
                   <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="text-green-700 font-medium">{t('Access enabled', '利用可能')}</span>
+                  <span className="text-green-700 font-medium">{t('Access enabled', '利用可能', 'Accès activé')}</span>
                 </>
               ) : (
                 <>
                   <AlertTriangle className="h-5 w-5 text-red-600" />
-                  <span className="text-red-700 font-medium">{t('Access disabled', '利用停止')}</span>
+                  <span className="text-red-700 font-medium">{t('Access disabled', '利用停止', 'Accès désactivé')}</span>
                 </>
               )}
             </div>
@@ -128,12 +130,13 @@ export default function BillingPage() {
               <CalendarDays className="h-5 w-5 text-amber-700 mt-0.5" />
               <div>
                 <p className="font-semibold text-amber-900">
-                  {t('Free trial in progress', '無料トライアル中')}
+                  {t('Free trial in progress', '無料トライアル中', 'Essai gratuit en cours')}
                 </p>
                 <p className="text-amber-800 text-sm">
                   {t(
                     `${subscription.trialDaysRemaining} day(s) remaining out of ${subscription.trialLengthDays} days.`,
                     `${subscription.trialLengthDays}日中、残り${subscription.trialDaysRemaining}日です。`,
+                    `${subscription.trialDaysRemaining} jour(s) restant(s) sur ${subscription.trialLengthDays} jours.`,
                   )}
                 </p>
               </div>
@@ -142,9 +145,9 @@ export default function BillingPage() {
 
           {subscription.currentPeriodEnd && (
             <p className="text-sm text-gray-600 mt-4">
-              {t('Current period ends on:', '現在の期間終了日:')}{' '}
+              {t('Current period ends on:', '現在の期間終了日:', 'Fin de la période actuelle :')}{' '}
               {new Date(subscription.currentPeriodEnd).toLocaleDateString(
-                locale === 'ja' ? 'ja-JP' : 'en-US',
+                locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US',
               )}
             </p>
           )}
@@ -165,7 +168,7 @@ export default function BillingPage() {
               ) : (
                 <CreditCard className="h-4 w-4" />
               )}
-              {t('Start Paid Plan', '有料プランを開始')}
+              {t('Start Paid Plan', '有料プランを開始', 'Démarrer un forfait payant')}
             </button>
             {isActive && (
               <button
@@ -178,7 +181,7 @@ export default function BillingPage() {
                 ) : (
                   <CreditCard className="h-4 w-4" />
                 )}
-                {t('Open Billing Portal', '請求ポータルを開く')}
+                {t('Open Billing Portal', '請求ポータルを開く', 'Ouvrir le portail de facturation')}
               </button>
             )}
           </div>
@@ -187,6 +190,7 @@ export default function BillingPage() {
               {t(
                 'Stripe is not configured yet. Ask the platform admin to set Stripe environment variables.',
                 'Stripeが未設定です。管理者に環境変数の設定を依頼してください。',
+                'Stripe n\'est pas encore configuré. Demandez à l\'administrateur de définir les variables d\'environnement Stripe.',
               )}
             </p>
           )}

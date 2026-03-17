@@ -559,7 +559,7 @@ function ScaffoldPageContent() {
     }
     if (side.startsWith('edge-')) {
       const edgeNum = parseInt(side.replace('edge-', ''), 10) + 1;
-      return locale === 'ja' ? `辺${edgeNum}` : `Edge ${edgeNum}`;
+      return t('result', 'edgeLabelPrefix') + edgeNum;
     }
     return side;
   };
@@ -576,10 +576,11 @@ function ScaffoldPageContent() {
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
-    /** Detected balconies / AC areas / pillars from vision (for display and Buragetto). */
+    ifcFileUrl?: string;
     obstacles?: Array<
       | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
       | { type: 'pillar'; center: { x: number; y: number } | { xFrac: number; yFrac: number }; radiusMm: number }
+      | { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number }
     >;
     dto: CreateScaffoldConfigDto;
   } | null>(null);
@@ -989,6 +990,7 @@ function ScaffoldPageContent() {
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
+                      ifcFileUrl: footprint.ifcFileUrl,
                       obstacles,
                       dto,
                     });
@@ -1160,17 +1162,22 @@ function ScaffoldPageContent() {
                   </div>
                   {aiBimPreview.obstacles && aiBimPreview.obstacles.length > 0 && (
                     <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                      <span className="text-xs font-medium text-slate-600 block mb-1">検出した障害物（ブラケット検討用）</span>
+                      <span className="text-xs font-medium text-slate-600 block mb-1">{t('result', 'obstaclesDetected')}</span>
                       <p className="text-sm text-slate-800">
-                        バルコニー {aiBimPreview.obstacles.filter((o) => o.type === 'balcony').length} 箇所
+                        {aiBimPreview.obstacles.some((o) => o.type === 'balcony') && (
+                          <>{t('result', 'balconyCount')} {aiBimPreview.obstacles.filter((o) => o.type === 'balcony').length} {t('result', 'placesUnit')}</>
+                        )}
                         {aiBimPreview.obstacles.some((o) => o.type === 'ac') && (
-                          <> · 室外機・AC {aiBimPreview.obstacles.filter((o) => o.type === 'ac').length} 箇所</>
+                          <> · {t('result', 'acCount')} {aiBimPreview.obstacles.filter((o) => o.type === 'ac').length} {t('result', 'placesUnit')}</>
                         )}
                         {aiBimPreview.obstacles.some((o) => o.type === 'pillar') && (
-                          <> · 柱 {aiBimPreview.obstacles.filter((o) => o.type === 'pillar').length} 箇所</>
+                          <> · {t('result', 'pillarCount')} {aiBimPreview.obstacles.filter((o) => o.type === 'pillar').length} {t('result', 'placesUnit')}</>
+                        )}
+                        {aiBimPreview.obstacles.some((o) => o.type === 'door') && (
+                          <> · {t('result', 'doorCount')} {aiBimPreview.obstacles.filter((o) => o.type === 'door').length} {t('result', 'placesUnit')} → {t('result', 'doorBeamNote')}</>
                         )}
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">クリアランス不足時は当該区間を単管＋ブラケット（ブラgetto）で提案します。</p>
+                      <p className="text-xs text-slate-500 mt-1">{t('result', 'obstacleNote')}</p>
                     </div>
                   )}
                   <BuildingPreviewPanel
@@ -1213,8 +1220,8 @@ function ScaffoldPageContent() {
                             }}
                             className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500"
                           >
-                            <option value="kusabi">くさび式足場</option>
-                            <option value="wakugumi">枠組足場</option>
+                            <option value="kusabi">{t('scaffold', 'kusabiType')}</option>
+                            <option value="wakugumi">{t('scaffold', 'wakugumiType')}</option>
                           </select>
                         </div>
                         {/* Width */}
@@ -1298,6 +1305,7 @@ function ScaffoldPageContent() {
                         const dto = {
                           ...aiBimPreview.dto,
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
+                          ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);

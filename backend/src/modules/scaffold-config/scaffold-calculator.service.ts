@@ -45,6 +45,8 @@ export interface WallCalculationInput {
   scaffoldWidthMm?: number;
   /** Buragetto: 'bracket' = single-pole + bracket when obstacle clearance < width+200mm. */
   layoutMode?: 'double_post' | 'bracket';
+  /** Door openings on this wall — each gets a 梁枠 (hariwaku / beam frame) at ground level. */
+  doorOpenings?: Array<{ positionMm: number; widthMm: number }>;
 }
 
 export interface ScaffoldCalculationInput {
@@ -88,6 +90,17 @@ export interface WallCalculationResult {
   scaffoldWidthMm?: number;
   /** Buragetto layout: bracket = single-pole when obstacle too close. */
   layoutMode?: 'double_post' | 'bracket';
+  /** Door openings with resolved span indices for 3D rendering + BOM. */
+  doorOpenings?: Array<{
+    positionMm: number;
+    widthMm: number;
+    /** Start span index of the opening (0-based). */
+    startSpanIndex: number;
+    /** Number of spans the opening covers. */
+    spanCount: number;
+    /** Hariwaku size: total mm of the beam frame. */
+    hariwakuSizeMm: number;
+  }>;
 }
 
 export interface ScaffoldCalculationResult {
@@ -567,6 +580,53 @@ export class ScaffoldCalculatorService {
       });
     }
 
+    // ─── 12. 梁枠 (Hariwaku / Beam Frame) — door openings ──────
+    const resolvedDoors: WallCalculationResult['doorOpenings'] = [];
+    if (wall.doorOpenings && wall.doorOpenings.length > 0) {
+      const cumulativePos: number[] = [0];
+      let accum = 0;
+      for (const s of spans) { accum += s; cumulativePos.push(accum); }
+
+      for (const door of wall.doorOpenings) {
+        const doorStart = door.positionMm - door.widthMm / 2;
+        const doorEnd = door.positionMm + door.widthMm / 2;
+        let startIdx = 0;
+        let endIdx = 0;
+        for (let si = 0; si < spans.length; si++) {
+          if (cumulativePos[si] <= doorStart) startIdx = si;
+          if (cumulativePos[si + 1] >= doorEnd) { endIdx = si; break; }
+          endIdx = si;
+        }
+        const spanCount = Math.max(2, endIdx - startIdx + 1);
+        let hariwakuMm = 0;
+        for (let si = startIdx; si < startIdx + spanCount && si < spans.length; si++) {
+          hariwakuMm += spans[si];
+        }
+
+        resolvedDoors.push({
+          positionMm: door.positionMm,
+          widthMm: door.widthMm,
+          startSpanIndex: startIdx,
+          spanCount,
+          hariwakuSizeMm: hariwakuMm,
+        });
+
+        sortOrder++;
+        components.push({
+          type: 'hariwaku',
+          category: '梁枠',
+          categoryEn: 'Beam Frame',
+          name: `Beam Frame (Hariwaku) ${spanCount} span`,
+          nameJp: `梁枠 ${spanCount}スパン`,
+          sizeSpec: `${hariwakuMm}mm (${spanCount}スパン)`,
+          unit: '基',
+          quantity: 1,
+          sortOrder,
+          materialCode: `HARIWAKU-${spanCount}SPAN`,
+        });
+      }
+    }
+
     // Apply pattern-based complexity multiplier to all quantities
     if (complexityMultiplier !== 1.0) {
       for (const comp of components) {
@@ -589,6 +649,7 @@ export class ScaffoldCalculatorService {
       components,
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
+      doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
     };
   }
 

@@ -235,7 +235,8 @@ export default function ScaffoldPlanView({ result }: Props) {
     // On vertical edges, separate kanji from measurement (like N/S) so they don't overlap
     const labelGap = isVerticalEdge ? 22 : 8;
 
-    const sideLabel = locale === 'ja' ? (wall.sideJp || wall.side) : wall.side;
+    const sideKey = (wall.side?.toLowerCase?.() || wall.side) as 'north' | 'south' | 'east' | 'west';
+    const sideLabel = sideKey && ['north', 'south', 'east', 'west'].includes(sideKey) ? t('sides', sideKey) : (wall.sideJp || wall.side);
 
     return (
       <g key={`edge-${idx}`}>
@@ -357,10 +358,11 @@ export default function ScaffoldPlanView({ result }: Props) {
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const win = window.open('', '_blank');
+    const printTitle = t('viewer', 'planPrintTitle');
     if (win) {
       win.document.write(`
         <!DOCTYPE html>
-        <html><head><title>Plan View — 平面図</title>
+        <html><head><title>${printTitle}</title>
         <style>
           body { margin: 0; display: flex; justify-content: center; align-items: flex-start; }
           img { max-width: 100%; height: auto; }
@@ -379,13 +381,13 @@ export default function ScaffoldPlanView({ result }: Props) {
       {/* Toolbar */}
       <div className="p-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
         <div className="text-sm font-medium text-gray-600">
-          {t('viewer', 'planView')} — {walls.map(w => w.sideJp).join('・')} ({walls.length} {t('viewer', 'walls')})
+          {t('viewer', 'planView')} — {walls.map(w => (w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase()) ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west') : w.sideJp)).join(' · ')} ({walls.length} {t('viewer', 'walls')})
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setScale(s => Math.min(s * 1.25, 3))} className="p-1.5 rounded hover:bg-gray-200" title="Zoom In">
+          <button onClick={() => setScale(s => Math.min(s * 1.25, 3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomIn')}>
             <ZoomIn className="h-4 w-4 text-gray-600" />
           </button>
-          <button onClick={() => setScale(s => Math.max(s / 1.25, 0.3))} className="p-1.5 rounded hover:bg-gray-200" title="Zoom Out">
+          <button onClick={() => setScale(s => Math.max(s / 1.25, 0.3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomOut')}>
             <ZoomOut className="h-4 w-4 text-gray-600" />
           </button>
           <button onClick={handlePrint}
@@ -498,7 +500,7 @@ export default function ScaffoldPlanView({ result }: Props) {
                 <g key={w.side} transform={`translate(${i * 80}, 0)`}>
                   <rect x={0} y={-6} width={12} height={8} fill={col.fill} stroke={col.stroke} strokeWidth={1} rx={1} />
                   <text x={16} y={1} fontSize={8} fill={DIM_TEXT}>
-                    {w.sideJp}
+                    {w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase()) ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west') : w.sideJp}
                   </text>
                 </g>
               );
@@ -506,7 +508,7 @@ export default function ScaffoldPlanView({ result }: Props) {
             <g transform={`translate(${walls.length * 80}, 0)`}>
               <circle cx={4} cy={-2} r={4} fill="#047857" opacity={0.8} />
               <text x={12} y={1} fontSize={8} fill={DIM_TEXT}>
-                {locale === 'ja' ? '階段' : 'Stairs'}
+                {t('result', 'legendStair')}
               </text>
             </g>
           </g>

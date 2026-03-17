@@ -31,6 +31,8 @@ export interface VisionFootprintResult {
   wallLengthsFromDimText?: boolean;
   /** Number of floors detected in the image (for height estimation from 3D views). */
   floorCount?: number;
+  /** URL to the stored IFC file for frontend 3D rendering (set by controller after storage upload). */
+  ifcFileUrl?: string;
   /**
    * Optional obstacles / special areas that affect scaffold layout (clearance, Buragetto).
    * Balconies and AC (outdoor unit) areas reduce clearance and may trigger single-pole + bracket layout.
@@ -48,6 +50,15 @@ export interface VisionFootprintResult {
         center: { x: number; y: number } | { xFrac: number; yFrac: number };
         /** Radius in mm (or fraction of ref length). */
         radiusMm: number;
+      }
+    | {
+        type: 'door';
+        /** Which wall edge index (0-based) the door is on. */
+        wallIndex?: number;
+        /** Position along the wall in mm from the wall start. */
+        positionMm?: number;
+        /** Door opening width in mm (default ~1800). */
+        widthMm?: number;
       }
   >;
 }
@@ -84,11 +95,12 @@ Optional fields (read from dimension lines and annotations):
 - groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
 - floorCount: number of visible floors/stories (count them). Use for height estimation when no explicit height is given.
-- obstacles: optional array of special areas that affect scaffold clearance (for Buragetto / bracket layout).
+- obstacles: optional array of special areas that affect scaffold clearance and layout.
   Balconies/AC: { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] } — closed polygon in same units as vertices.
   Pillars/columns: { "type": "pillar", "center": { x, y } or { xFrac, yFrac }, "radiusMm": number } — circular or square columns near the perimeter.
+  Doors/entrances: { "type": "door", "wallIndex": number, "positionMm": number, "widthMm": number } — ground-level openings that need a 梁枠 (beam frame / hariwaku) in the scaffold. wallIndex = which wall edge (0-based), positionMm = distance along that wall from start, widthMm = opening width (typically 1800-5500mm).
   When a scaffold path (600/900/1200mm from wall) would intersect a pillar, the system switches to Single-Pole + Buragetto (bracket) layout.
-  Balconies: protruding floor areas. AC: outdoor unit areas. Pillars: 柱, コラム, circular or square structural columns at building corners or along walls.
+  Balconies: protruding floor areas. AC: outdoor unit areas. Pillars: 柱, コラム, circular or square structural columns at building corners or along walls. Doors: entrances, exits, loading bays, garage openings at ground level.
   Omit obstacles if none are clearly visible or labeled.
 
 ═══ 3D BIM RENDERS / ISOMETRIC / PERSPECTIVE VIEWS (CRITICAL) ═══
@@ -516,7 +528,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint (e.g. a rectangle for a rectangular building, an L for an L-shaped building). Count floors and estimate height as floors × 3000–4000mm. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, or pillars/columns (柱, コラム) near the perimeter, add obstacles: type "balcony"/"ac" with vertices, or type "pillar" with center and radiusMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint (e.g. a rectangle for a rectangular building, an L for an L-shaped building). Count floors and estimate height as floors × 3000–4000mm. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
               },
             ],
           },
@@ -626,18 +638,27 @@ export class VisionBimService {
       if (typeof parsed.frameSizeMm !== 'number' || ![1700, 1800, 1900].includes(parsed.frameSizeMm)) {
         parsed.frameSizeMm = undefined;
       }
-      // Normalize optional obstacles (balcony / AC areas / pillars)
+      // Normalize optional obstacles (balcony / AC areas / pillars / doors)
       if (Array.isArray(parsed.obstacles) && parsed.obstacles.length > 0) {
         parsed.obstacles = parsed.obstacles
           .filter(
             (o: any) =>
               o &&
               (((o.type === 'balcony' || o.type === 'ac') && Array.isArray(o.vertices) && o.vertices.length >= 3) ||
-                (o.type === 'pillar' && o.center && typeof o.radiusMm === 'number' && o.radiusMm > 0)),
+                (o.type === 'pillar' && o.center && typeof o.radiusMm === 'number' && o.radiusMm > 0) ||
+                (o.type === 'door')),
           )
           .map((o: any) => {
             if (o.type === 'pillar') {
               return { type: 'pillar' as const, center: o.center, radiusMm: o.radiusMm };
+            }
+            if (o.type === 'door') {
+              return {
+                type: 'door' as const,
+                wallIndex: typeof o.wallIndex === 'number' ? o.wallIndex : undefined,
+                positionMm: typeof o.positionMm === 'number' ? o.positionMm : undefined,
+                widthMm: typeof o.widthMm === 'number' && o.widthMm > 0 ? o.widthMm : 1800,
+              };
             }
             return {
               type: o.type as 'balcony' | 'ac',

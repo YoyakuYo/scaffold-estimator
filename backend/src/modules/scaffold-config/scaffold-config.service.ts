@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { CalculatedQuantity } from './calculated-quantity.entity';
 import { ScaffoldMaterial } from './scaffold-material.entity';
-import { ScaffoldCalculatorService, ScaffoldCalculationResult } from './scaffold-calculator.service';
+import { ScaffoldCalculatorService, ScaffoldCalculationResult, WallCalculationInput } from './scaffold-calculator.service';
 import { ScaffoldCalculatorWakugumiService } from './scaffold-calculator-wakugumi.service';
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { ALL_RULES } from './scaffold-rules';
@@ -50,7 +50,7 @@ export class ScaffoldConfigService {
     this.logger.log(`Creating ${scaffoldType} scaffold config (mode: ${dto.mode})`);
 
     // ── Step 1: Build walls with optional per-wall width from parametric pipeline ──
-    let wallsToCalculate = dto.walls.map((w, idx) => ({
+    let wallsToCalculate: WallCalculationInput[] = dto.walls.map((w) => ({
       side: w.side,
       wallLengthMm: w.wallLengthMm,
       wallHeightMm: w.wallHeightMm,
@@ -78,12 +78,13 @@ export class ScaffoldConfigService {
         }
       }
       const refMm = 10000;
+      const spatialObs = (dto.obstacles ?? []).filter((o) => o.type !== 'door');
       const parametric = runParametricPipeline(
         dto.buildingOutline!,
-        (dto.obstacles ?? []).map((o) =>
+        spatialObs.map((o) =>
           o.type === 'pillar' && 'center' in o && 'radiusMm' in o
             ? { type: 'pillar' as const, center: o.center, radiusMm: o.radiusMm }
-            : { type: o.type as 'balcony' | 'ac', vertices: o.vertices },
+            : { type: o.type as 'balcony' | 'ac', vertices: (o as any).vertices },
         ),
         widthBySide,
         refMm,
@@ -107,8 +108,21 @@ export class ScaffoldConfigService {
       }
     }
 
-    // NOTE: Removed polygon-to-walls conversion logic.
-    // Walls are now passed directly from frontend as ordered segments from perimeter editor.
+    // Inject door openings from obstacles into wall inputs
+    if (dto.obstacles && dto.obstacles.length > 0) {
+      const doorObs = dto.obstacles.filter((o): o is { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number } => o.type === 'door');
+      for (const door of doorObs) {
+        const wi = door.wallIndex ?? 0;
+        if (wi >= 0 && wi < wallsToCalculate.length) {
+          const wall = wallsToCalculate[wi];
+          if (!wall.doorOpenings) wall.doorOpenings = [];
+          wall.doorOpenings.push({
+            positionMm: door.positionMm ?? Math.round(wall.wallLengthMm / 2),
+            widthMm: door.widthMm ?? 1800,
+          });
+        }
+      }
+    }
 
     const client = this.supabase.getClient();
     const configIns = mapPayloadToSnake<Record<string, unknown>>({
@@ -178,6 +192,7 @@ export class ScaffoldConfigService {
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
+      ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
     };
     await client
       .from('scaffold_configurations')
@@ -242,7 +257,7 @@ export class ScaffoldConfigService {
     const scaffoldType = dto.scaffoldType || config.scaffoldType || 'kusabi';
     this.logger.log(`Updating and recalculating ${scaffoldType} config ${configId}`);
 
-    let wallsToCalculate = dto.walls.map((w, idx) => ({
+    let wallsToCalculate: WallCalculationInput[] = dto.walls.map((w) => ({
       side: w.side,
       wallLengthMm: w.wallLengthMm,
       wallHeightMm: w.wallHeightMm,
@@ -269,12 +284,13 @@ export class ScaffoldConfigService {
         }
       }
       const refMm = 10000;
+      const spatialObs = (dto.obstacles ?? []).filter((o) => o.type !== 'door');
       const parametric = runParametricPipeline(
         dto.buildingOutline!,
-        (dto.obstacles ?? []).map((o) =>
+        spatialObs.map((o) =>
           o.type === 'pillar' && 'center' in o && 'radiusMm' in o
             ? { type: 'pillar' as const, center: o.center, radiusMm: o.radiusMm }
-            : { type: o.type as 'balcony' | 'ac', vertices: o.vertices },
+            : { type: o.type as 'balcony' | 'ac', vertices: (o as any).vertices },
         ),
         widthBySide,
         refMm,
@@ -295,6 +311,22 @@ export class ScaffoldConfigService {
           outerBefore: t.outerBefore,
           outerAfter: t.outerAfter,
         }));
+      }
+    }
+
+    // Inject door openings from obstacles into wall inputs (update path)
+    if (dto.obstacles && dto.obstacles.length > 0) {
+      const doorObs = dto.obstacles.filter((o): o is { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number } => o.type === 'door');
+      for (const door of doorObs) {
+        const wi = door.wallIndex ?? 0;
+        if (wi >= 0 && wi < wallsToCalculate.length) {
+          const wall = wallsToCalculate[wi] as any;
+          if (!wall.doorOpenings) wall.doorOpenings = [];
+          wall.doorOpenings.push({
+            positionMm: door.positionMm ?? Math.round(wall.wallLengthMm / 2),
+            widthMm: door.widthMm ?? 1800,
+          });
+        }
       }
     }
 
@@ -356,6 +388,7 @@ export class ScaffoldConfigService {
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
+      ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);

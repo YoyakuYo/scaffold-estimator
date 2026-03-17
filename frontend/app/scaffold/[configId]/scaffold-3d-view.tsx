@@ -911,11 +911,23 @@ export default function Scaffold3DView({
               addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
             }
 
+            // Door opening: skip planks/habaki at ground level for door spans
+            const doorSpanIndices = new Set<number>();
+            if (wall.doorOpenings) {
+              for (const door of wall.doorOpenings) {
+                for (let di = 0; di < door.spanCount; di++) {
+                  doorSpanIndices.add(door.startSpanIndex + di);
+                }
+              }
+            }
+            const isDoorSpan = doorSpanIndices.has(i) && lv === 1;
+
             // Plank / Anchi — rule: show plank if not a stair span, OR 600mm extended bay (stair span still has plank)
+            // Skip planks at ground level for door openings
             const spanMm = spans[i];
             const plankColorMat = getPlankMat(spanMm);
             const habakiColorMat = getHabakiMat(spanMm);
-            const showPlankHere = !isStairSpan || needsExtendedBay;
+            const showPlankHere = (!isStairSpan || needsExtendedBay) && !isDoorSpan;
             if (showPlankHere) {
               // Draw individual anchi boards by width: 600→1 full (500mm), 900→1 full + 1 half (240mm), 1200→2 full (500mm each)
               let zFront = 0;
@@ -937,10 +949,13 @@ export default function Scaffold3DView({
             }
 
             // Habaki / Toe boards at outer (z=0) and inner (z=widthM). Wakugumi: 1 or 2 per span from result.
-            const drawHabakiFront = true;
-            const drawHabakiBack = isWakugumi ? habakiCountPerSpan >= 2 : true;
-            if (drawHabakiFront) addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanDeckLen, habakiColorMat);
-            if (drawHabakiBack) addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanDeckLen, habakiColorMat);
+            // Skip habaki at ground level for door openings
+            if (!isDoorSpan) {
+              const drawHabakiFront = true;
+              const drawHabakiBack = isWakugumi ? habakiCountPerSpan >= 2 : true;
+              if (drawHabakiFront) addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanDeckLen, habakiColorMat);
+              if (drawHabakiBack) addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanDeckLen, habakiColorMat);
+            }
           }
 
           // Top guard posts + top rail (最上段)
@@ -1041,6 +1056,49 @@ export default function Scaffold3DView({
           }
 
           } // end for stairSpanIdx
+        }
+
+        // ── Hariwaku (梁枠 / beam frame) at door openings ──────
+        if (wall.doorOpenings && wall.doorOpenings.length > 0) {
+          const hariwakuColor = 0xef4444;
+          const hariwakuMat = new THREE.MeshStandardMaterial({ color: hariwakuColor, metalness: 0.4, roughness: 0.5 });
+          const groundLevelY = GROUND_Y + JACK_H + LEVEL_H;
+
+          for (const door of wall.doorOpenings) {
+            const si = door.startSpanIndex;
+            if (si < 0 || si + door.spanCount > spans.length) continue;
+            const x1 = postX[si] ?? 0;
+            const x2 = postX[si + door.spanCount] ?? postX[postX.length - 1];
+            const doorLen = x2 - x1;
+            if (doorLen <= 0) continue;
+
+            // Top chord (beam at level 1 top)
+            addPipe(group, x1, groundLevelY - 0.02, 0, x2, groundLevelY - 0.02, 0, hariwakuMat, PIPE_R * 1.2);
+            addPipe(group, x1, groundLevelY - 0.02, widthM, x2, groundLevelY - 0.02, widthM, hariwakuMat, PIPE_R * 1.2);
+
+            // Bottom chord
+            const bottomY = groundLevelY - 0.35;
+            addPipe(group, x1, bottomY, 0, x2, bottomY, 0, hariwakuMat, PIPE_R * 0.9);
+            addPipe(group, x1, bottomY, widthM, x2, bottomY, widthM, hariwakuMat, PIPE_R * 0.9);
+
+            // Diagonal truss members (X pattern per span in the door opening)
+            for (let di = 0; di < door.spanCount; di++) {
+              const sx1 = postX[si + di] ?? x1;
+              const sx2 = postX[si + di + 1] ?? x2;
+              for (const tz of [0, widthM]) {
+                addPipe(group, sx1, groundLevelY - 0.02, tz, sx2, bottomY, tz, hariwakuMat, PIPE_R * 0.7);
+                addPipe(group, sx1, bottomY, tz, sx2, groundLevelY - 0.02, tz, hariwakuMat, PIPE_R * 0.7);
+              }
+            }
+
+            // Vertical web members at intermediate posts
+            for (let di = 1; di < door.spanCount; di++) {
+              const px = postX[si + di] ?? x1;
+              for (const tz of [0, widthM]) {
+                addPipe(group, px, bottomY, tz, px, groundLevelY - 0.02, tz, hariwakuMat, PIPE_R * 0.7);
+              }
+            }
+          }
         }
 
         return { runLenM: totalLen, postX, widthM, spansMm: spans, startPostIdx };
@@ -1424,7 +1482,7 @@ export default function Scaffold3DView({
       const outlineLine = new THREE.Line(outlineGeo, outlineMat);
       scene.add(outlineLine);
 
-      // Building fill — visible solid mass so scaffold reads as wrapping a real building
+      // Building fill — procedural building with floor slabs, window grids, and edges
       if (!isOpenPolygon && verts.length >= 3) {
         const shape = new THREE.Shape();
         shape.moveTo(verts[0].x - cx, verts[0].z - cz);
@@ -1435,14 +1493,91 @@ export default function Scaffold3DView({
         const buildingH = Math.max(maxH * 0.85, 2);
         const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
         const buildingMat = new THREE.MeshStandardMaterial({
-          color: 0xe8e0d8, metalness: 0, roughness: 0.85,
-          transparent: true, opacity: 0.45, side: THREE.DoubleSide,
+          color: 0xd5cfc7, metalness: 0.05, roughness: 0.8,
+          transparent: true, opacity: 0.55, side: THREE.DoubleSide,
         });
         const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
         buildingMesh.rotation.x = -Math.PI / 2;
         buildingMesh.position.y = GROUND_Y + 0.02;
         buildingMesh.userData = { noClip: true };
         scene.add(buildingMesh);
+
+        // Building edges
+        const buildingEdgesGeo = new THREE.EdgesGeometry(buildingGeo);
+        const buildingEdges = new THREE.LineSegments(buildingEdgesGeo, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
+        buildingEdges.rotation.x = -Math.PI / 2;
+        buildingEdges.position.y = GROUND_Y + 0.02;
+        buildingEdges.userData = { noClip: true };
+        scene.add(buildingEdges);
+
+        // Floor slab lines on building perimeter
+        const floorH = 3.0;
+        const centeredVerts = verts.map(v => ({ x: v.x - cx, z: v.z - cz }));
+        for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
+          const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, GROUND_Y + 0.02 + floorY, v.z));
+          floorPts.push(floorPts[0].clone());
+          const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
+          const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0x8b95a3, transparent: true, opacity: 0.6 }));
+          floorLine.userData = { noClip: true };
+          scene.add(floorLine);
+        }
+
+        // Window pattern on each facade
+        const windowMat = new THREE.MeshStandardMaterial({
+          color: 0x7cb8d4, metalness: 0.3, roughness: 0.4,
+          transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+        });
+        const windowSillMat = new THREE.MeshStandardMaterial({
+          color: 0x4a5568, metalness: 0.2, roughness: 0.6,
+          transparent: true, opacity: 0.5,
+        });
+        const nFloors = Math.max(1, Math.floor(buildingH / floorH));
+        const windowH = floorH * 0.45;
+        const windowBottomOffset = floorH * 0.3;
+
+        for (let ei = 0; ei < centeredVerts.length; ei++) {
+          const v1 = centeredVerts[ei];
+          const v2 = centeredVerts[(ei + 1) % centeredVerts.length];
+          const edgeDx = v2.x - v1.x;
+          const edgeDz = v2.z - v1.z;
+          const edgeLen = Math.hypot(edgeDx, edgeDz);
+          if (edgeLen < 2) continue;
+
+          const normalX = -edgeDz / edgeLen;
+          const normalZ = edgeDx / edgeLen;
+          const windowSpacing = Math.max(1.5, Math.min(3, edgeLen / Math.max(1, Math.round(edgeLen / 2.5))));
+          const nWindows = Math.max(1, Math.floor((edgeLen - 1) / windowSpacing));
+          const windowW = windowSpacing * 0.55;
+          const startOffset = (edgeLen - (nWindows - 1) * windowSpacing) / 2;
+
+          for (let fi = 0; fi < nFloors; fi++) {
+            const floorBase = GROUND_Y + 0.03 + fi * floorH;
+            const wBot = floorBase + windowBottomOffset;
+            const wMid = wBot + windowH / 2;
+
+            for (let wi = 0; wi < nWindows; wi++) {
+              const t = (startOffset + wi * windowSpacing) / edgeLen;
+              const wx = v1.x + edgeDx * t + normalX * 0.01;
+              const wz = v1.z + edgeDz * t + normalZ * 0.01;
+
+              const windowGeo = new THREE.PlaneGeometry(windowW, windowH);
+              const windowMesh = new THREE.Mesh(windowGeo, windowMat);
+              windowMesh.position.set(wx, wMid, wz);
+              const angle = Math.atan2(normalX, normalZ);
+              windowMesh.rotation.y = angle;
+              windowMesh.userData = { noClip: true };
+              scene.add(windowMesh);
+
+              // Sill (bottom bar)
+              const sillGeo = new THREE.PlaneGeometry(windowW + 0.08, 0.06);
+              const sillMesh = new THREE.Mesh(sillGeo, windowSillMat);
+              sillMesh.position.set(wx, wBot - 0.01, wz);
+              sillMesh.rotation.y = angle;
+              sillMesh.userData = { noClip: true };
+              scene.add(sillMesh);
+            }
+          }
+        }
       }
 
       // ── Ground plane (clean light grey slab, subtle grid) ──────
@@ -1605,6 +1740,94 @@ export default function Scaffold3DView({
       }
       animate();
       setReady(true);
+
+      // ── IFC Model Loading (when ifcFileUrl is available) ──
+      const ifcFileUrl = result?.ifcFileUrl;
+      if (ifcFileUrl && typeof ifcFileUrl === 'string') {
+        (async () => {
+          try {
+            const { parseIfcToMeshes } = await import('@/lib/ifc-loader');
+            const response = await fetch(ifcFileUrl);
+            if (!response.ok) return;
+            const arrayBuffer = await response.arrayBuffer();
+            const meshes = await parseIfcToMeshes(arrayBuffer);
+            if (disposed || meshes.length === 0) return;
+
+            const ifcGroup = new THREE.Group();
+            ifcGroup.userData = { noClip: true, isIfcModel: true };
+
+            // Compute IFC model bounding box for alignment
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+
+            for (const mesh of meshes) {
+              const stride = 6;
+              const count = mesh.vertices.length / stride;
+              for (let vi = 0; vi < count; vi++) {
+                const x = mesh.vertices[vi * stride];
+                const y = mesh.vertices[vi * stride + 1];
+                const z = mesh.vertices[vi * stride + 2];
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
+                if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+              }
+            }
+
+            const ifcSizeX = maxX - minX;
+            const ifcSizeY = maxY - minY;
+            const ifcSizeZ = maxZ - minZ;
+            const ifcCenterX = (minX + maxX) / 2;
+            const ifcCenterZ = (minZ + maxZ) / 2;
+
+            // Scale IFC model to match scaffold building size
+            const buildingExtentX = Math.max(...verts.map(v => v.x - cx)) - Math.min(...verts.map(v => v.x - cx));
+            const buildingExtentZ = Math.max(...verts.map(v => v.z - cz)) - Math.min(...verts.map(v => v.z - cz));
+            const scaleX = ifcSizeX > 0.01 ? buildingExtentX / ifcSizeX : 1;
+            const scaleZ = ifcSizeZ > 0.01 ? buildingExtentZ / ifcSizeZ : 1;
+            const uniformScale = Math.min(scaleX, scaleZ);
+            const scaleY = ifcSizeY > 0.01 ? maxH / ifcSizeY : uniformScale;
+
+            for (const meshData of meshes) {
+              const stride = 6;
+              const vertCount = meshData.vertices.length / stride;
+              const positions = new Float32Array(vertCount * 3);
+              const normals = new Float32Array(vertCount * 3);
+
+              for (let vi = 0; vi < vertCount; vi++) {
+                positions[vi * 3]     = (meshData.vertices[vi * stride] - ifcCenterX) * uniformScale;
+                positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - minY) * scaleY + GROUND_Y;
+                positions[vi * 3 + 2] = (meshData.vertices[vi * stride + 2] - ifcCenterZ) * uniformScale;
+                normals[vi * 3]     = meshData.vertices[vi * stride + 3];
+                normals[vi * 3 + 1] = meshData.vertices[vi * stride + 4];
+                normals[vi * 3 + 2] = meshData.vertices[vi * stride + 5];
+              }
+
+              const geo = new THREE.BufferGeometry();
+              geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+              geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+              geo.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+
+              const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(meshData.color.r, meshData.color.g, meshData.color.b),
+                transparent: meshData.color.a < 0.99,
+                opacity: Math.max(0.3, meshData.color.a),
+                side: THREE.DoubleSide,
+                metalness: 0.1,
+                roughness: 0.7,
+              });
+
+              const m = new THREE.Mesh(geo, mat);
+              m.userData = { noClip: true };
+              ifcGroup.add(m);
+            }
+
+            scene.add(ifcGroup);
+          } catch (e) {
+            console.warn('IFC model load failed (non-critical):', e);
+          }
+        })();
+      }
 
       // ── Cleanup ──────────────────────────────────────
       return () => {

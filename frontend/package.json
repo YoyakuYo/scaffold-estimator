@@ -33,6 +33,7 @@
     "tailwind-merge": "^2.2.0",
     "three": "^0.160.0",
     "three-stdlib": "^2.36.1",
+    "web-ifc": "^0.0.57",
     "zod": "^3.22.4",
     "zustand": "^4.4.7"
   },
@@ -43,6 +44,7 @@
     "@types/react-dom": "^18.2.18",
     "@types/three": "^0.160.0",
     "autoprefixer": "^10.4.17",
+    "copy-webpack-plugin": "^14.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.1.6",
     "postcss": "^8.4.33",

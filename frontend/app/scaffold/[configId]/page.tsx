@@ -251,12 +251,12 @@ function ScaffoldResultPage() {
                 {t('result', 'title')}
                 {result.scaffoldType === 'wakugumi' && (
                   <span className="ml-2 text-sm font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                    枠組足場
+                    {t('result', 'scaffoldTypeWakugumiShort')}
                   </span>
                 )}
                 {(!result.scaffoldType || result.scaffoldType === 'kusabi') && (
                   <span className="ml-2 text-sm font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                    くさび式
+                    {t('result', 'scaffoldTypeKusabiShort')}
                   </span>
                 )}
               </h1>
@@ -276,7 +276,7 @@ function ScaffoldResultPage() {
               className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg transition-colors shadow"
             >
               <Download className="h-4 w-4" />
-              Download BOM (CSV)
+              {t('result', 'downloadBomCsv')}
             </button>
             <button
               onClick={handleExcelDownload}
@@ -324,7 +324,7 @@ function ScaffoldResultPage() {
               <SummaryCard
                 icon={<Ruler className="h-5 w-5" />}
                 label={t('result', 'habakiCount')}
-                value={`${result.habakiCountPerSpan}${result.habakiCountPerSpan === 1 ? '枚 (片面)' : '枚 (両面)'}`}
+                value={`${result.habakiCountPerSpan}${result.habakiCountPerSpan === 1 ? t('result', 'habakiSingle') : t('result', 'habakiDouble')}`}
               />
             </>
           ) : (
@@ -347,13 +347,13 @@ function ScaffoldResultPage() {
         <div className="mb-3 text-xs text-gray-500 flex items-center gap-2">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200">
             <ShieldCheck className="h-3.5 w-3.5 text-gray-600" />
-            {result.scaffoldType === 'wakugumi' ? '枠組足場' : 'くさび式足場'}
+            {result.scaffoldType === 'wakugumi' ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort')}
           </span>
           <span>
-            幅 {result.scaffoldWidthMm}mm
+            {t('result', 'specWidth')} {result.scaffoldWidthMm}mm
             {result.scaffoldType === 'wakugumi'
-              ? result.frameSizeMm != null && ` · 建枠 ${result.frameSizeMm}mm`
-              : result.preferredMainTatejiMm != null && ` · 主支柱 ${result.preferredMainTatejiMm}mm`}
+              ? result.frameSizeMm != null && ` · ${t('result', 'specFrame')} ${result.frameSizeMm}mm`
+              : result.preferredMainTatejiMm != null && ` · ${t('result', 'specMainPost')} ${result.preferredMainTatejiMm}mm`}
           </span>
         </div>
 
@@ -466,9 +466,9 @@ function ScaffoldResultPage() {
                 const ac = obs.filter((o) => o.type === 'ac').length;
                 return (
                   <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50">
-                    <span className="text-xs font-medium text-slate-600 block mb-1">検出した障害物（ブラケット検討用）</span>
+                    <span className="text-xs font-medium text-slate-600 block mb-1">{t('result', 'obstaclesDetected')}</span>
                     <p className="text-sm text-slate-800">
-                      バルコニー {bal} 箇所{ac > 0 ? ` · 室外機・AC ${ac} 箇所` : ''}
+                      {t('result', 'balconyCount')} {bal} {t('result', 'placesUnit')}{ac > 0 ? ` · ${t('result', 'acCount')} ${ac} ${t('result', 'placesUnit')}` : ''}
                     </p>
                   </div>
                 );
@@ -781,7 +781,9 @@ function PerSideBreakdown({ result }: { result: any }) {
   return (
     <div className="space-y-6">
       {walls.map((wall, idx) => {
-        const wallLabel = locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1));
+        const wallLabel = (wall.side && ['north', 'south', 'east', 'west'].includes(String(wall.side).toLowerCase()))
+          ? t('sides', String(wall.side).toLowerCase() as 'north' | 'south' | 'east' | 'west')
+          : (wall.sideJp || wall.side);
         const componentsByCategory: Record<string, CalculatedComponent[]> = {};
         for (const comp of wall.components) {
           const cat = locale === 'ja' ? (comp.category || '他') : (comp.categoryEn || comp.category || 'Other');

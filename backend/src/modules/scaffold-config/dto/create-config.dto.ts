@@ -178,5 +178,15 @@ export class CreateScaffoldConfigDto {
         center: { x?: number; y?: number; xFrac?: number; yFrac?: number };
         radiusMm: number;
       }
+    | {
+        type: 'door';
+        wallIndex?: number;
+        positionMm?: number;
+        widthMm?: number;
+      }
   >;
+
+  /** Optional: URL to stored IFC file for 3D rendering in frontend */
+  @IsOptional()
+  ifcFileUrl?: string;
 }

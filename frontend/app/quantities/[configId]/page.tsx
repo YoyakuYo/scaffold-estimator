@@ -110,7 +110,7 @@ export default function QuantitiesPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{t('quantities', 'title')}</h1>
               <p className="text-sm text-gray-500">
-                くさび式足場 • {t('quantities', 'buildingHeight')}: {config.buildingHeightMm?.toLocaleString()}mm
+                {config?.scaffoldType === 'wakugumi' ? t('scaffold', 'wakugumiType') : t('scaffold', 'kusabiType')} • {t('quantities', 'buildingHeight')}: {config.buildingHeightMm?.toLocaleString()}mm
                 • {t('quantities', 'scaffoldWidth')}: {config.scaffoldWidthMm}mm
               </p>
             </div>

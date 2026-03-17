@@ -19,6 +19,8 @@ export interface VisionFootprintResult {
   wallLengthsFromDimText?: boolean;
   /** Number of floors detected (for height estimation from 3D views). */
   floorCount?: number;
+  /** URL to the stored IFC file for frontend 3D rendering. */
+  ifcFileUrl?: string;
   /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */
   obstacles?: Array<
     | {
@@ -29,6 +31,12 @@ export interface VisionFootprintResult {
         type: 'pillar';
         center: { x: number; y: number } | { xFrac: number; yFrac: number };
         radiusMm: number;
+      }
+    | {
+        type: 'door';
+        wallIndex?: number;
+        positionMm?: number;
+        widthMm?: number;
       }
   >;
 }

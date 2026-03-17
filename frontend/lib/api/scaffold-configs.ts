@@ -63,7 +63,15 @@ export interface CreateScaffoldConfigDto {
         center: { x: number; y: number } | { xFrac: number; yFrac: number };
         radiusMm: number;
       }
+    | {
+        type: 'door';
+        wallIndex?: number;
+        positionMm?: number;
+        widthMm?: number;
+      }
   >;
+  /** Optional: URL to stored IFC file for frontend 3D rendering */
+  ifcFileUrl?: string;
   /** Optional: Extracted dimensions (for scaling polygon edges) */
   extractedDimensions?: {
     walls: {
@@ -134,6 +142,14 @@ export interface WallCalculationResult {
   scaffoldWidthMm?: number;
   /** Buragetto layout: bracket = single-pole when obstacle too close. */
   layoutMode?: 'double_post' | 'bracket';
+  /** Door openings with resolved span indices for hariwaku rendering. */
+  doorOpenings?: Array<{
+    positionMm: number;
+    widthMm: number;
+    startSpanIndex: number;
+    spanCount: number;
+    hariwakuSizeMm: number;
+  }>;
   levelCalc: {
     fullLevels: number;
     jackBaseAdjustmentMm: number;
