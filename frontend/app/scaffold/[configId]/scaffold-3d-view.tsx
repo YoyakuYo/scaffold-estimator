@@ -738,6 +738,11 @@ export default function Scaffold3DView({
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
+        // When wall starts at a corner: first span overruns 300mm so 1800 plank can fill gap to last 600 span.
+        const hasStartOverrun = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
+        if (hasStartOverrun) {
+          for (let j = 0; j < postX.length; j++) postX[j] -= CORNER_OVERRUN_M;
+        }
         // When reusing corner posts from previous wall, do not create a duplicate start post pair.
         // Still draw the first span (e.g. 1800) plank from the wall so the plank is never removed.
         const reuseStartFromPrevCorner = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
@@ -746,7 +751,9 @@ export default function Scaffold3DView({
         // IMPORTANT (corner alignment):
         // Do NOT force the last post to exactly wallLengthMm.
         // A small overrun (≈200–300mm) is allowed/preferred to keep corners tight for pattanko.
-        const totalLen = postX.length > 1 ? postX[postX.length - 1] : Math.max(wall.wallLengthMm, 600) / 1000;
+        const totalLen = postX.length > 1
+          ? (postX[postX.length - 1] - postX[0])
+          : Math.max(wall.wallLengthMm, 600) / 1000;
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = levels;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
@@ -1039,10 +1046,14 @@ export default function Scaffold3DView({
 
         // Scale/place wall run. Per 足場コーナー詳細図:
         // wall end extends 300mm past corner, then one 600mm span (total +900mm).
+        // Wall start at corner: first span overruns 300mm so 1800 can go beyond wall and fill gap.
         const useCornerExtension = walls.length >= 2 && !isOpenPolygon && isEndCorner;
+        const useStartCornerExtension = walls.length >= 2 && !isOpenPolygon && isStartCorner;
         const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
         const baseLen = Math.max(runLenM, 1e-6);
-        const desiredLen = useCornerExtension ? edgeLen + cornerExtensionM : edgeLen;
+        let desiredLen = edgeLen;
+        if (useCornerExtension) desiredLen += cornerExtensionM;
+        if (useStartCornerExtension) desiredLen += CORNER_OVERRUN_M;
         const rawScale = desiredLen / baseLen;
         const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
