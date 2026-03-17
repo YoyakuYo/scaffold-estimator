@@ -15,11 +15,7 @@ import {
   addRealisticHabaki,
   addBasePlate,
   addCoupler,
-  createMetalTextures,
-  createWoodTextures,
-  createConcreteTexture,
-  createEnvironmentCubemap,
-  createSkyGradientTexture,
+  BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
 
 /**
@@ -65,21 +61,15 @@ const C_TECH = {
 };
 /** Buragetto (bracket) sections — always blue for visual verification */
 const C_BRACKET = 0x2563eb;
-// Yellow-gold for planks/habaki (high contrast, reads clearly; avoids blurry look)
-const PLANK_HABAKI_GOLD = 0xe8b030;
-
-// Default scaffold palette — clean 2-tone:
-//   posts/pipes/structural: bright silver-white (galvanised steel)
-//   planks + habaki: yellow-gold
+// Professional BIM palette — matches EK Scaffold Design tender renderings
 const C = {
-  post:       0xe8ecf0,  // bright silver-white — posts, jacks, yokoji, top guard, braces
-  plank:      PLANK_HABAKI_GOLD,  // yellow-gold — anchi planks + habaki
-  tesuri:     0x4a90d9,  // soft blue — guard rails (distinct from posts)
-  brace:      0xc0c8d0,  // slightly darker silver — braces (subtle contrast from posts)
-  ecoPallet:  0x2d2d2d,  // dark recycled plastic — eco pallet base
-  ground:     0xe8eaed,
-  bg:         0xdce4ec,  // soft sky-gray background
-  grid:       0xd0d8e4,
+  post:       BIM_COLORS.pipe,
+  plank:      BIM_COLORS.plank,
+  tesuri:     BIM_COLORS.tesuri,
+  brace:      BIM_COLORS.pipeDark,
+  ecoPallet:  BIM_COLORS.ecoPallet,
+  ground:     BIM_COLORS.ground,
+  bg:         0xf0f0f0,
   ambient:    0xffffff,
   dirLight:   0xffffff,
 };
@@ -470,13 +460,9 @@ export default function Scaffold3DView({
       const w = canvasContainer.clientWidth;
       const h = canvasContainer.clientHeight;
 
-      // ── Scene ──────────────────────────────────────────
+      // ── Scene (clean white BIM-style background, no fog) ──
       const scene = new THREE.Scene();
-      const skyBgTexture = createSkyGradientTexture(THREE);
-      scene.background = skyBgTexture;
-      const envCubemap = createEnvironmentCubemap(THREE);
-      scene.environment = envCubemap;
-      scene.fog = new THREE.FogExp2(0x7a8490, 0.012);
+      scene.background = new THREE.Color(0xf0f0f0);
       sceneRef.current = scene;
       wallObjectsRef.current = [];
       wallFocusRef.current = [];
@@ -495,7 +481,7 @@ export default function Scaffold3DView({
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.78;
+      renderer.toneMappingExposure = 1.1;
       renderer.localClippingEnabled = true;
       const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 100);
       clippingPlaneRef.current = clipPlane;
@@ -505,91 +491,62 @@ export default function Scaffold3DView({
       canvasElement = renderer.domElement;
       canvasContainer.appendChild(canvasElement as unknown as Node);
 
-      // ── Lights (reduced so scaffold reads clearly against darker background) ─────────
-      const ambientLight = new THREE.AmbientLight(0xe8ecf0, 0.48);
+      // ── Lights (clean BIM studio lighting — bright, even, good shadows) ─────────
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0x8a98a8, 0x4a5a6a, 0.35);
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xb0b0b0, 0.45);
       scene.add(hemiLight);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
-      dirLight.position.set(18, 22, 12);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(18, 25, 14);
       dirLight.castShadow = true;
       dirLight.shadow.mapSize.width = 2048;
       dirLight.shadow.mapSize.height = 2048;
-      dirLight.shadow.bias = -0.0001;
+      dirLight.shadow.bias = -0.0002;
       scene.add(dirLight);
 
-      const fillLight = new THREE.DirectionalLight(0xb0c0d0, 0.28);
-      fillLight.position.set(-14, 8, -10);
+      const fillLight = new THREE.DirectionalLight(0xd0d8e0, 0.4);
+      fillLight.position.set(-14, 10, -10);
       scene.add(fillLight);
 
-      const rimLight = new THREE.DirectionalLight(0xc8d4e0, 0.22);
-      rimLight.position.set(-8, 15, 15);
+      const rimLight = new THREE.DirectionalLight(0xe8e8e8, 0.25);
+      rimLight.position.set(-8, 18, 15);
       scene.add(rimLight);
 
       const isTech = technicalMode;
-      const metalTex = !isTech ? createMetalTextures(THREE) : null;
-      const woodTex = !isTech ? createWoodTextures(THREE) : null;
-      const concreteTex = createConcreteTexture(THREE);
 
-      const metal = isTech ? 0.45 : 0.85;
-      const rough  = isTech ? 0.5  : 0.18;
-      const plankMetal = isTech ? 0.45 : 0.02;
-      const plankRough = isTech ? 0.5 : 0.75;
+      // BIM-quality material properties: clean, smooth, no texture maps
+      const metal = isTech ? 0.45 : 0.55;
+      const rough = isTech ? 0.5 : 0.35;
+      const plankMetal = isTech ? 0.45 : 0.05;
+      const plankRough = isTech ? 0.5 : 0.65;
 
-      const applyMetal = (mat: THREE.MeshStandardMaterial) => {
-        if (!metalTex) return;
-        mat.map = metalTex.map;
-        mat.normalMap = metalTex.normalMap;
-        mat.roughnessMap = metalTex.roughnessMap;
-        mat.envMapIntensity = 0.7;
-      };
-      const applyMetalNormal = (mat: THREE.MeshStandardMaterial) => {
-        if (!metalTex) return;
-        mat.normalMap = metalTex.normalMap;
-        mat.envMapIntensity = 0.5;
-      };
-      const applyWood = (mat: THREE.MeshStandardMaterial) => {
-        if (!woodTex) return;
-        mat.map = woodTex.map;
-        mat.normalMap = woodTex.normalMap;
-      };
-      const applyWoodNormal = (mat: THREE.MeshStandardMaterial) => {
-        if (!woodTex) return;
-        mat.normalMap = woodTex.normalMap;
-        mat.normalScale = new THREE.Vector2(0.4, 0.4);
-      };
-
-      // ── Shared materials (darker metals so scaffold is visible against background) ───
+      // ── Shared materials (clean BIM style — no texture noise) ───
       const pipeMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.post : (metalTex ? 0xb8c0c8 : C.post),
+        color: isTech ? C_TECH.post : BIM_COLORS.pipe,
         metalness: metal, roughness: rough,
       });
-      applyMetal(pipeMat);
-
       const pipeDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : (metalTex ? 0x989ca4 : C.brace),
+        color: isTech ? C_TECH.brace : BIM_COLORS.pipeDark,
         metalness: metal, roughness: rough + 0.05,
       });
-      applyMetal(pipeDarkMat);
-
       const plankMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.plank : (woodTex ? PLANK_HABAKI_GOLD : C.plank),
+        color: isTech ? C_TECH.plank : BIM_COLORS.plank,
         metalness: plankMetal, roughness: plankRough,
       });
-      applyWood(plankMat);
 
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       const spanHabakiMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
-        const spanColor = isTech ? C_TECH.plank : PLANK_HABAKI_GOLD;
-        const pM = new THREE.MeshStandardMaterial({ color: spanColor, metalness: plankMetal, roughness: plankRough });
-        applyWoodNormal(pM);
-        spanPlankMats[span] = pM;
-        const hM = new THREE.MeshStandardMaterial({ color: spanColor, metalness: plankMetal + 0.1, roughness: plankRough - 0.05 });
-        applyWoodNormal(hM);
-        spanHabakiMats[span] = hM;
+        const spanColor = isTech ? C_TECH.plank : BIM_COLORS.plank;
+        spanPlankMats[span] = new THREE.MeshStandardMaterial({
+          color: spanColor, metalness: plankMetal, roughness: plankRough,
+        });
+        spanHabakiMats[span] = new THREE.MeshStandardMaterial({
+          color: isTech ? C_TECH.habaki : BIM_COLORS.habaki,
+          metalness: plankMetal + 0.05, roughness: plankRough - 0.05,
+        });
       }
       const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
         const closest = STANDARD_SPANS.reduce((a, b) =>
@@ -605,44 +562,36 @@ export default function Scaffold3DView({
       };
 
       const jackMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.jack : (metalTex ? 0x9098a0 : C.post),
+        color: isTech ? C_TECH.jack : BIM_COLORS.jack,
         metalness: metal, roughness: rough + 0.1,
       });
-      applyMetal(jackMat);
-
       const habakiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.habaki : (woodTex ? PLANK_HABAKI_GOLD : C.plank),
+        color: isTech ? C_TECH.habaki : BIM_COLORS.habaki,
         metalness: plankMetal, roughness: plankRough,
       });
-      applyWood(habakiMat);
-
       const stairMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.stair : (metalTex ? 0xb0b8c0 : C.post),
+        color: isTech ? C_TECH.stair : BIM_COLORS.stair,
         metalness: metal, roughness: rough,
       });
-      applyMetal(stairMat);
-
       const groundMat = new THREE.MeshStandardMaterial({
-        color: 0xa8a49c, metalness: 0, roughness: 0.92, map: concreteTex.map,
+        color: BIM_COLORS.ground, metalness: 0, roughness: 0.88,
       });
-      const ecoPalletMat = new THREE.MeshStandardMaterial({ color: C.ecoPallet, metalness: 0.15, roughness: 0.75 });
+      const ecoPalletMat = new THREE.MeshStandardMaterial({
+        color: BIM_COLORS.ecoPallet, metalness: 0.15, roughness: 0.75,
+      });
 
       const postMat = pipeMat;
       const jackMatEff = jackMat;
       const plankMatEff = plankMat;
 
       const tesuriMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : C.tesuri,
+        color: isTech ? C_TECH.brace : BIM_COLORS.tesuri,
         metalness: metal, roughness: rough,
       });
-      applyMetalNormal(tesuriMat);
-
       const yokojiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.yokoji : 0xe53e3e,
-        metalness: isTech ? 0.45 : 0.55, roughness: isTech ? 0.5 : 0.35,
+        color: isTech ? C_TECH.yokoji : BIM_COLORS.yokoji,
+        metalness: isTech ? 0.45 : metal, roughness: isTech ? 0.5 : rough,
       });
-      applyMetalNormal(yokojiMat);
-
       const topGuardMat = isTech
         ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough })
         : pipeMat;
@@ -653,21 +602,15 @@ export default function Scaffold3DView({
       const habakiMatEff = habakiMat;
 
       const couplerMat = new THREE.MeshStandardMaterial({
-        color: isTech ? 0x555555 : (metalTex ? 0x788088 : 0x888888),
-        metalness: metal + 0.05, roughness: rough + 0.1,
+        color: isTech ? 0x555555 : BIM_COLORS.coupler,
+        metalness: metal + 0.1, roughness: rough + 0.1,
       });
-      applyMetalNormal(couplerMat);
-
       const basePlateMat = new THREE.MeshStandardMaterial({
-        color: metalTex ? 0x889098 : 0x777777,
-        metalness: metal, roughness: rough + 0.15,
+        color: BIM_COLORS.basePlate, metalness: 0.2, roughness: 0.6,
       });
-      applyMetal(basePlateMat);
-
       const bracketMat = new THREE.MeshStandardMaterial({
         color: C_BRACKET, metalness: metal, roughness: rough,
       });
-      applyMetalNormal(bracketMat);
 
       const topGuardM = result.topGuardHeightMm / 1000;
       const scaffoldType: 'kusabi' | 'wakugumi' = result.scaffoldType || 'kusabi';
@@ -1381,17 +1324,17 @@ export default function Scaffold3DView({
       }
       scene.add(cornerGroup);
 
-      // ── Building outline at ground level (not scaffold level); scaffold working levels are above this ─
-      const outlineMat = new THREE.LineBasicMaterial({ color: 0x9ca3af, linewidth: 2 });
+      // ── Building outline at ground level ─────────────────
+      const outlineMat = new THREE.LineBasicMaterial({ color: 0x7a8090, linewidth: 2 });
       const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, GROUND_Y + 0.01, v.z - cz));
       if (!isOpenPolygon) {
-        outlinePts.push(outlinePts[0].clone()); // close the loop for closed perimeters only
+        outlinePts.push(outlinePts[0].clone());
       }
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
       const outlineLine = new THREE.Line(outlineGeo, outlineMat);
       scene.add(outlineLine);
 
-      // Building fill (semi-transparent) for closed perimeters only.
+      // Building fill — visible solid mass so scaffold reads as wrapping a real building
       if (!isOpenPolygon && verts.length >= 3) {
         const shape = new THREE.Shape();
         shape.moveTo(verts[0].x - cx, verts[0].z - cz);
@@ -1399,15 +1342,20 @@ export default function Scaffold3DView({
           shape.lineTo(verts[i].x - cx, verts[i].z - cz);
         }
         shape.closePath();
-        const shapeGeo = new THREE.ShapeGeometry(shape);
-        const shapeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
-        const shapeMesh = new THREE.Mesh(shapeGeo, shapeMat);
-        shapeMesh.rotation.x = -Math.PI / 2;
-        shapeMesh.position.y = GROUND_Y + 0.02;
-        scene.add(shapeMesh);
+        const buildingH = Math.max(maxH * 0.85, 2);
+        const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
+        const buildingMat = new THREE.MeshStandardMaterial({
+          color: 0xe8e0d8, metalness: 0, roughness: 0.85,
+          transparent: true, opacity: 0.45, side: THREE.DoubleSide,
+        });
+        const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
+        buildingMesh.rotation.x = -Math.PI / 2;
+        buildingMesh.position.y = GROUND_Y + 0.02;
+        buildingMesh.userData = { noClip: true };
+        scene.add(buildingMesh);
       }
 
-      // ── Ground plane (concrete textured) with subtle grid ──────
+      // ── Ground plane (clean light grey slab, subtle grid) ──────
       const groundSize = Math.max(maxExtent * 4 + 20, 100);
       const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
       const groundPlane = new THREE.Mesh(groundGeo, groundMat);
@@ -1417,9 +1365,9 @@ export default function Scaffold3DView({
       groundPlane.userData = { noClip: true, isGround: true };
       scene.add(groundPlane);
       const gridDivisions = Math.min(40, Math.max(10, Math.floor(groundSize / 5)));
-      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0x6a7078, 0x7a8088);
+      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xc8c8c8, 0xd4d4d4);
       gridHelper.position.y = GROUND_Y - 0.02;
-      (gridHelper.material as THREE.Material).opacity = 0.2;
+      (gridHelper.material as THREE.Material).opacity = 0.3;
       (gridHelper.material as THREE.Material).transparent = true;
       gridHelper.userData = { noClip: true, isGround: true };
       scene.add(gridHelper);
@@ -1705,7 +1653,7 @@ export default function Scaffold3DView({
     if (!wrapperRef.current) return;
     setExporting('pdf');
     try {
-      const canvas = await html2canvas(wrapperRef.current, { backgroundColor: '#eef3f8', useCORS: true });
+      const canvas = await html2canvas(wrapperRef.current, { backgroundColor: '#f0f0f0', useCORS: true });
       const imageBase64 = canvas.toDataURL('image/png').split(',')[1];
       const blob = await scaffoldConfigsApi.export3DPdf(configId, imageBase64);
       triggerDownload(blob, `scaffold_3d_${configId.slice(0, 8)}.pdf`);
@@ -1998,7 +1946,7 @@ export default function Scaffold3DView({
         )}
         <div ref={canvasContainerRef} style={{ position: 'absolute', inset: 0 }} />
         {!ready && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ background: '#eef3f8', zIndex: 10 }}>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ background: '#f0f0f0', zIndex: 10 }}>
             <div className="text-center">
               <Loader2 className="h-8 w-8 animate-spin text-slate-500 mx-auto mb-2" />
               <p className="text-slate-600 text-sm">Loading 3D scaffold view...</p>
