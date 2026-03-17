@@ -32,6 +32,10 @@ const JACK_H = 0.3;
 // Corner detail base rule on source wall: 300mm overrun + 600mm corner span
 const CORNER_OVERRUN_M = 0.3;
 const CORNER_TURN_SPAN_M = 0.6;
+/** Offset from building wall to inner posts (always 300mm). */
+const WALL_TO_INNER_POSTS_MM = 300;
+/** Spans (planks) can overrun toward the wall by this amount (m). */
+const SPAN_OVERRUN_TO_WALL_M = 0.3;
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
 
@@ -876,7 +880,9 @@ export default function Scaffold3DView({
             const plankColorMat = getPlankMat(spanMm);
             const habakiColorMat = getHabakiMat(spanMm);
             if (!isStairSpan) {
-              addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanDeckLen, widthM * 0.9, plankColorMat);
+              const plankDepthM = widthM + SPAN_OVERRUN_TO_WALL_M;
+              const plankMidZ = plankDepthM / 2;
+              addRealisticPlank(THREE, group, midX, y + 0.015, plankMidZ, spanDeckLen, plankDepthM, plankColorMat);
               addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanDeckLen, habakiColorMat);
               addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanDeckLen, habakiColorMat);
             }
@@ -991,10 +997,8 @@ export default function Scaffold3DView({
         startPostIdx: number;
       }> = [];
 
-      // Standoff: distance from building wall to nearest posts (250–500mm) so scaffold can breathe
-      const standoffMm = Number.isFinite(result?.wallStandoffMm) && result.wallStandoffMm >= 250 && result.wallStandoffMm <= 500
-        ? result.wallStandoffMm
-        : 350;
+      // Offset from building wall to inner posts is always 300mm
+      const standoffMm = WALL_TO_INNER_POSTS_MM;
       const standoffM = standoffMm / 1000;
 
       // Open polygon (L-shape): walls.length < verts.length; endpoints don't share corners

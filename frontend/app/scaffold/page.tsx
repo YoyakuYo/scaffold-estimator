@@ -1287,6 +1287,9 @@ function ScaffoldPageContent() {
           </div>
 
           <div className="space-y-3">
+            <p className="text-sm font-medium text-gray-700">
+              {t('scaffold', 'perSideSection') || '各辺：足場幅・階段'}
+            </p>
             {walls.map((wall, i) => (
               <div
                 key={wall.side}
@@ -1307,6 +1310,38 @@ function ScaffoldPageContent() {
                     />
                     <span className="font-semibold text-gray-800">{wallLabel(wall.side)}</span>
                   </label>
+
+                  {/* Per side: scaffold width & stairs (足場幅・階段) */}
+                  <div className="flex items-center gap-2 min-w-[100px]">
+                    <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'scaffoldWidth') || '足場幅'}</label>
+                    <select
+                      value={wall.scaffoldWidthMm ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        updateWall(i, { scaffoldWidthMm: v ? Number(v) : undefined });
+                      }}
+                      disabled={!wall.enabled}
+                      className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      <option value="">{scaffoldWidthMm}mm</option>
+                      {[600, 900, 1200].map((w) => (
+                        <option key={w} value={w}>{w}mm</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 min-w-[100px]">
+                    <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'stairsPerSide') || '階段'}</label>
+                    <select
+                      value={wall.stairAccessCount ?? 0}
+                      onChange={(e) => updateWall(i, { stairAccessCount: Number(e.target.value) || 0 })}
+                      disabled={!wall.enabled}
+                      className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      {[0, 1, 2, 3, 4].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
 
                   {/* Wall Length */}
                     <div className="flex-1 min-w-[180px]">
@@ -1362,27 +1397,9 @@ function ScaffoldPageContent() {
                     </div>
                   </div>
 
-                  {/* Per-wall Scaffold Width */}
-                  <div className="flex-1 min-w-[160px]">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'scaffoldWidth') || '足場幅'}</label>
-                      <select
-                        value={wall.scaffoldWidthMm ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          updateWall(i, { scaffoldWidthMm: v ? Number(v) : undefined });
-                        }}
-                        disabled={!wall.enabled}
-                        className="w-28 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                      >
-                        <option value="">{scaffoldWidthMm}mm ▸</option>
-                        {(scaffoldType === 'kusabi' ? [600, 900, 1200] : [600, 900, 1200]).map((w) => (
-                          <option key={w} value={w}>{w}mm</option>
-                        ))}
-                      </select>
-                      <span className="text-xs text-gray-400">{wall.scaffoldWidthMm ? '' : 'global'}</span>
-                    </div>
-                  </div>
+                  <span className="text-xs text-gray-400 self-center">
+                    {wall.scaffoldWidthMm ? '' : `幅=${scaffoldWidthMm}mm`}
+                  </span>
                 </div>
 
                 {/* Multi-Segment Wall Editor */}

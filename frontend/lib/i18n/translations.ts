@@ -172,6 +172,8 @@ export const translations = {
     structureTypeConcrete: { ja: 'RC造', en: 'Reinforced Concrete (RC造)' },
     structureTypeHint: { ja: '難易度: 改修工事(高) → S造(中) → RC造(低)', en: 'Difficulty: Renovation(High) → Steel(Med) → RC(Low)' },
     scaffoldWidth: { ja: '足場幅 (mm)', en: 'Scaffold Width (mm)' },
+    perSideSection: { ja: '各辺：足場幅・階段', en: 'Per side: scaffold width & stairs' },
+    stairsPerSide: { ja: '階段', en: 'Stairs' },
     postSize: { ja: '支柱サイズ', en: 'Post Size' },
     topGuard: { ja: '上部支柱 (ガード)', en: 'Top Guard Post' },
     wallConfig: { ja: '壁面設定', en: 'Wall Configuration' },
