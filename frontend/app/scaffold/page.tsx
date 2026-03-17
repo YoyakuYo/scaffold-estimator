@@ -221,16 +221,19 @@ function deriveWallsFromClosedFootprint(
   const buildingHeightMm = config.buildingHeightMm;
   const kaidanPerSide = config.kaidanPerSide ?? {};
 
+  const scaffoldWidthPerSide = config.scaffoldWidthPerSide ?? {};
   return Array.from({ length: n }, (_, i) => {
     const next = (i + 1) % n;
     const lengthMm = Math.round(distMm(vertices[i], vertices[next]));
     const label = sides[i]?.label ?? `edge-${i}`;
     const stairAccessCount = kaidanPerSide[label]?.enabled ? kaidanPerSide[label].count : 0;
+    const scaffoldWidthMm = scaffoldWidthPerSide[label] ?? config.scaffoldWidthMm;
     return {
       side: label,
       wallLengthMm: lengthMm,
       wallHeightMm: buildingHeightMm,
       stairAccessCount,
+      scaffoldWidthMm,
       kaidanCount: 0,
       kaidanOffsets: [],
     };
@@ -733,14 +736,27 @@ function ScaffoldPageContent() {
                 <div className="border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
                   <h3 className="text-sm font-semibold text-gray-800">抽出結果の確認</h3>
                   <div>
-                    <span className="text-xs font-medium text-gray-500">建物高さ</span>
-                    <p className="text-lg font-semibold text-gray-900">
-                      {aiBimPreview.buildingHeightMm.toLocaleString()} mm
-                      {aiBimPreview.buildingHeightMm >= 1000 && (
-                        <span className="text-sm font-normal text-gray-600 ml-1">
-                          ({(aiBimPreview.buildingHeightMm / 1000).toFixed(3)} m)
-                        </span>
-                      )}
+                    <label className="block text-xs font-medium text-gray-500 mb-1">建物高さ (mm)</label>
+                    <input
+                      type="number"
+                      value={aiBimPreview.buildingHeightMm}
+                      onChange={(e) => {
+                        const h = Math.max(1000, Number(e.target.value) || 1000);
+                        setAiBimPreview({
+                          ...aiBimPreview,
+                          buildingHeightMm: h,
+                          dto: {
+                            ...aiBimPreview.dto,
+                            walls: aiBimPreview.walls.map((w) => ({ ...w, wallHeightMm: h })),
+                          },
+                        });
+                      }}
+                      min={1000}
+                      step={100}
+                      className="w-full max-w-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-violet-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {(aiBimPreview.buildingHeightMm / 1000).toFixed(1)} m
                     </p>
                   </div>
                   <div>
@@ -757,7 +773,8 @@ function ScaffoldPageContent() {
                           <tr className="bg-gray-100 border-b border-gray-200">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">壁面</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (mm)</th>
-                            <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (m)</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">足場幅</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">階段数</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -765,7 +782,64 @@ function ScaffoldPageContent() {
                             <tr key={w.side} className="border-b border-gray-100 last:border-0">
                               <td className="py-2 px-3 text-gray-800">壁面 {i + 1}</td>
                               <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
-                              <td className="py-2 px-3 text-right font-mono text-gray-500">{(w.wallLengthMm / 1000).toFixed(3)}</td>
+                              <td className="py-2 px-3 text-right">
+                                <select
+                                  value={w.scaffoldWidthMm ?? ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    const widthMm = v ? Number(v) : undefined;
+                                    const newWalls = aiBimPreview.walls.map((wall, j) =>
+                                      j === i ? { ...wall, scaffoldWidthMm: widthMm } : wall,
+                                    );
+                                    setAiBimPreview({
+                                      ...aiBimPreview,
+                                      walls: newWalls,
+                                      dto: { ...aiBimPreview.dto, walls: newWalls },
+                                    });
+                                  }}
+                                  className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
+                                >
+                                  <option value="">{aiBimPreview.dto.scaffoldWidthMm}mm</option>
+                                  {[600, 900, 1200].map((wmm) => (
+                                    <option key={wmm} value={wmm}>{wmm}mm</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <select
+                                  value={w.stairAccessCount ?? 0}
+                                  onChange={(e) => {
+                                    const count = Number(e.target.value) || 0;
+                                    const len = w.wallLengthMm;
+                                    const newOffsets: number[] =
+                                      count === 0
+                                        ? []
+                                        : Array.from({ length: count }, (_, j) =>
+                                            Math.round((len / (count + 1)) * (j + 1) / 100) * 100,
+                                          );
+                                    const newWalls = aiBimPreview.walls.map((wall, j) =>
+                                      j === i
+                                        ? {
+                                            ...wall,
+                                            stairAccessCount: count,
+                                            kaidanCount: count,
+                                            kaidanOffsets: newOffsets,
+                                          }
+                                        : wall,
+                                    );
+                                    setAiBimPreview({
+                                      ...aiBimPreview,
+                                      walls: newWalls,
+                                      dto: { ...aiBimPreview.dto, walls: newWalls },
+                                    });
+                                  }}
+                                  className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
+                                >
+                                  {[0, 1, 2, 3, 4].map((n) => (
+                                    <option key={n} value={n}>{n}</option>
+                                  ))}
+                                </select>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -775,9 +849,7 @@ function ScaffoldPageContent() {
                             <td className="py-2 px-3 text-right font-mono font-semibold text-gray-800">
                               {aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0).toLocaleString()}
                             </td>
-                            <td className="py-2 px-3 text-right font-mono font-semibold text-gray-600">
-                              {(aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0) / 1000).toFixed(3)}
-                            </td>
+                            <td colSpan={2} />
                           </tr>
                         </tfoot>
                       </table>
@@ -914,65 +986,6 @@ function ScaffoldPageContent() {
                     </div>
 
                     {/* Stairs per wall */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-500">階段数（壁面ごと）</span>
-                      </div>
-                      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="text-left py-2 px-3 font-medium text-gray-700">壁面</th>
-                              <th className="text-right py-2 px-3 font-medium text-gray-700">階段数</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {aiBimPreview.walls.map((w, i) => (
-                              <tr key={w.side} className="border-b border-gray-100 last:border-0">
-                                <td className="py-2 px-3 text-gray-800">壁面 {i + 1}</td>
-                                <td className="py-2 px-3 text-right">
-                                  <select
-                                    value={w.stairAccessCount ?? 0}
-                                    onChange={(e) => {
-                                      const count = Number(e.target.value) || 0;
-                                      const len = w.wallLengthMm;
-                                      const newOffsets: number[] =
-                                        count === 0
-                                          ? []
-                                          : Array.from({ length: count }, (_, j) =>
-                                              Math.round((len / (count + 1)) * (j + 1) / 100) * 100,
-                                            );
-                                      const newWalls = aiBimPreview.walls.map((wall, j) =>
-                                        j === i
-                                          ? {
-                                              ...wall,
-                                              stairAccessCount: count,
-                                              kaidanCount: count,
-                                              kaidanOffsets: newOffsets,
-                                            }
-                                          : wall,
-                                      );
-                                      setAiBimPreview({
-                                        ...aiBimPreview,
-                                        walls: newWalls,
-                                        dto: { ...aiBimPreview.dto, walls: newWalls },
-                                      });
-                                    }}
-                                    className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
-                                  >
-                                    {[0, 1, 2, 3, 4].map((n) => (
-                                      <option key={n} value={n}>
-                                        {n}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
                   </div>
                   <button
                     type="button"

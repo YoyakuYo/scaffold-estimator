@@ -594,6 +594,7 @@ export const translations = {
     endStopperNuno: { ja: '布材タイプ', en: 'Nuno Bar Type' },
     endStopperFrame: { ja: '枠タイプ', en: 'Frame Type' },
     stairAccess: { ja: '階段配置', en: 'Stair Access' },
+    perSideWidthStairs: { ja: '各辺：足場幅・階段', en: 'Per side: scaffold width & stairs' },
     stairUnits: { ja: '台数', en: 'Units' },
     summaryTitle: { ja: '設定概要', en: 'Configuration Summary' },
     shapeLabel: { ja: '形状', en: 'Shape' },
