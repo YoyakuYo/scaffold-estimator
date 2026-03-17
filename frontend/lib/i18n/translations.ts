@@ -302,6 +302,9 @@ export const translations = {
     totalComponents: { ja: '部材種類', en: 'Component Types' },
     totalParts: { ja: '部品合計', en: 'Total Parts' },
     wallsActive: { ja: '有効壁面', en: 'Active Walls' },
+    scanShare: { ja: '共有・スキャン', en: 'Scan / Share' },
+    scanToOpen: { ja: 'スマホでスキャンして同じ結果を開く', en: 'Scan to open this result on another device' },
+    scanClose: { ja: '閉じる', en: 'Close' },
   },
 
   // ─── Quotations List Page ───────────────────────────────────────

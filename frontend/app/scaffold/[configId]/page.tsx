@@ -29,7 +29,9 @@ import {
   ClipboardCheck,
   Download,
   Plus,
+  QrCode,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
 import ScaffoldPlanView from './scaffold-plan-view';
 
@@ -75,6 +77,7 @@ function ScaffoldResultPage() {
   const { t } = useI18n();
   const configId = params.configId as string;
   const isAiBim = searchParams.get('aiBim') === '1';
+  const [showScanModal, setShowScanModal] = useState(false);
 
   // Support ?tab=3d, ?tab=2d from external links
   const initialTab = (searchParams.get('tab') as TabView) || 'table';
@@ -255,6 +258,13 @@ function ScaffoldResultPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowScanModal(true)}
+              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors border border-gray-300"
+            >
+              <QrCode className="h-4 w-4" />
+              {t('result', 'scanShare')}
+            </button>
             <button
               onClick={handleBomCsvDownload}
               className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg transition-colors shadow"
@@ -520,6 +530,35 @@ function ScaffoldResultPage() {
             </div>
           </div>
         </div>
+
+        {/* Scan / Share modal — QR code to open this result on another device */}
+        {showScanModal && typeof window !== 'undefined' && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowScanModal(false)}
+          >
+            <div
+              className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 flex flex-col items-center gap-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900">{t('result', 'scanShare')}</h3>
+              <p className="text-sm text-gray-500 text-center">{t('result', 'scanToOpen')}</p>
+              <div className="p-3 bg-white rounded-lg border border-gray-200">
+                <QRCodeSVG
+                  value={`${window.location.origin}${window.location.pathname}${window.location.search}`}
+                  size={200}
+                  level="M"
+                />
+              </div>
+              <button
+                onClick={() => setShowScanModal(false)}
+                className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium"
+              >
+                {t('result', 'scanClose')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

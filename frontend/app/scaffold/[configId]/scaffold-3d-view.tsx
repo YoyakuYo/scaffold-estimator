@@ -13,6 +13,13 @@ import {
   addRealisticPlank,
   addRealisticNunoBar,
   addRealisticHabaki,
+  addBasePlate,
+  addCoupler,
+  createMetalTextures,
+  createWoodTextures,
+  createConcreteTexture,
+  createEnvironmentCubemap,
+  createSkyGradientTexture,
 } from '@/lib/scaffold-3d-components';
 
 /**
@@ -462,9 +469,11 @@ export default function Scaffold3DView({
 
       // ── Scene ──────────────────────────────────────────
       const scene = new THREE.Scene();
-      // Plain light gray background (clean, uncluttered look)
-      scene.background = new THREE.Color(C.bg);
-      // No fog — keep view clear and clean
+      const skyBgTexture = createSkyGradientTexture(THREE);
+      scene.background = skyBgTexture;
+      const envCubemap = createEnvironmentCubemap(THREE);
+      scene.environment = envCubemap;
+      scene.fog = new THREE.FogExp2(0xdce4ec, 0.008);
       sceneRef.current = scene;
       wallObjectsRef.current = [];
       wallFocusRef.current = [];
@@ -517,44 +526,67 @@ export default function Scaffold3DView({
       scene.add(rimLight);
 
       const isTech = technicalMode;
-      // Default: high metalness → shiny galvanised-steel look (light catches on pipes, matching reference)
-      const metal = isTech ? 0.45 : 0.75;
-      const rough  = isTech ? 0.5  : 0.25;
-      const plankMetal = isTech ? metal : 0.08;
-      const plankRough = isTech ? rough : 0.65;
+      const metalTex = !isTech ? createMetalTextures(THREE) : null;
+      const woodTex = !isTech ? createWoodTextures(THREE) : null;
+      const concreteTex = createConcreteTexture(THREE);
+
+      const metal = isTech ? 0.45 : 0.85;
+      const rough  = isTech ? 0.5  : 0.18;
+      const plankMetal = isTech ? 0.45 : 0.02;
+      const plankRough = isTech ? 0.5 : 0.75;
+
+      const applyMetal = (mat: THREE.MeshStandardMaterial) => {
+        if (!metalTex) return;
+        mat.map = metalTex.map;
+        mat.normalMap = metalTex.normalMap;
+        mat.roughnessMap = metalTex.roughnessMap;
+        mat.envMapIntensity = 1.2;
+      };
+      const applyMetalNormal = (mat: THREE.MeshStandardMaterial) => {
+        if (!metalTex) return;
+        mat.normalMap = metalTex.normalMap;
+        mat.envMapIntensity = 0.8;
+      };
+      const applyWood = (mat: THREE.MeshStandardMaterial) => {
+        if (!woodTex) return;
+        mat.map = woodTex.map;
+        mat.normalMap = woodTex.normalMap;
+      };
+      const applyWoodNormal = (mat: THREE.MeshStandardMaterial) => {
+        if (!woodTex) return;
+        mat.normalMap = woodTex.normalMap;
+        mat.normalScale = new THREE.Vector2(0.4, 0.4);
+      };
 
       // ── Shared materials ───
-      // Default mode: silver-white posts, golden-yellow planks+habaki, soft blue rails.
-      // Technical mode: distinct colour per component type (see C_TECH).
       const pipeMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.post : C.post,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.post : (metalTex ? 0xffffff : C.post),
+        metalness: metal, roughness: rough,
       });
+      applyMetal(pipeMat);
+
       const pipeDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : C.brace,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.brace : (metalTex ? 0xe0e0e0 : C.brace),
+        metalness: metal, roughness: rough + 0.05,
       });
+      applyMetal(pipeDarkMat);
+
       const plankMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.plank : C.plank,
-        metalness: plankMetal,
-        roughness: plankRough,
+        color: isTech ? C_TECH.plank : (woodTex ? 0xffffff : C.plank),
+        metalness: plankMetal, roughness: plankRough,
       });
+      applyWood(plankMat);
+
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       const spanHabakiMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
         const spanColor = isTech ? C_TECH.plank : (SPAN_COLORS[span] ?? C.plank);
-        spanPlankMats[span] = new THREE.MeshStandardMaterial({
-          color: spanColor,
-          metalness: plankMetal,
-          roughness: plankRough,
-        });
-        spanHabakiMats[span] = new THREE.MeshStandardMaterial({
-          color: spanColor,
-          metalness: plankMetal + 0.1,
-          roughness: plankRough - 0.05,
-        });
+        const pM = new THREE.MeshStandardMaterial({ color: spanColor, metalness: plankMetal, roughness: plankRough });
+        applyWoodNormal(pM);
+        spanPlankMats[span] = pM;
+        const hM = new THREE.MeshStandardMaterial({ color: spanColor, metalness: plankMetal + 0.1, roughness: plankRough - 0.05 });
+        applyWoodNormal(hM);
+        spanHabakiMats[span] = hM;
       }
       const getPlankMat = (spanMm: number): THREE.MeshStandardMaterial => {
         const closest = STANDARD_SPANS.reduce((a, b) =>
@@ -568,47 +600,71 @@ export default function Scaffold3DView({
         );
         return spanHabakiMats[closest] ?? habakiMat;
       };
+
       const jackMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.jack : C.post,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.jack : (metalTex ? 0xd0d0d0 : C.post),
+        metalness: metal, roughness: rough + 0.1,
       });
+      applyMetal(jackMat);
+
       const habakiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.habaki : C.plank,
-        metalness: plankMetal,
-        roughness: plankRough,
+        color: isTech ? C_TECH.habaki : (woodTex ? 0xffffff : C.plank),
+        metalness: plankMetal, roughness: plankRough,
       });
+      applyWood(habakiMat);
+
       const stairMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.stair : C.post,
-        metalness: metal,
-        roughness: rough,
+        color: isTech ? C_TECH.stair : (metalTex ? 0xffffff : C.post),
+        metalness: metal, roughness: rough,
       });
-      const groundMat = new THREE.MeshStandardMaterial({ color: C.ground, metalness: 0, roughness: 0.95 });
+      applyMetal(stairMat);
+
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, metalness: 0, roughness: 0.92, map: concreteTex.map,
+      });
       const ecoPalletMat = new THREE.MeshStandardMaterial({ color: C.ecoPallet, metalness: 0.15, roughness: 0.75 });
 
-      // Simple materials only (no textures)
       const postMat = pipeMat;
       const jackMatEff = jackMat;
       const plankMatEff = plankMat;
+
       const tesuriMat = new THREE.MeshStandardMaterial({
         color: isTech ? C_TECH.brace : C.tesuri,
-        metalness: metal,
-        roughness: rough,
+        metalness: metal, roughness: rough,
       });
+      applyMetalNormal(tesuriMat);
+
       const yokojiMat = new THREE.MeshStandardMaterial({
         color: isTech ? C_TECH.yokoji : 0xe53e3e,
-        metalness: 0.1,
-        roughness: 0.6,
+        metalness: isTech ? 0.45 : 0.55, roughness: isTech ? 0.5 : 0.35,
       });
-      const topGuardMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough }) : pipeMat;
-      const shitasanMat = isTech ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough }) : pipeMat;
+      applyMetalNormal(yokojiMat);
+
+      const topGuardMat = isTech
+        ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough })
+        : pipeMat;
+      const shitasanMat = isTech
+        ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough })
+        : pipeMat;
       const braceMat = pipeDarkMat;
       const habakiMatEff = habakiMat;
-      const bracketMat = new THREE.MeshStandardMaterial({
-        color: C_BRACKET,
-        metalness: metal,
-        roughness: rough,
+
+      const couplerMat = new THREE.MeshStandardMaterial({
+        color: isTech ? 0x555555 : (metalTex ? 0xb0b0b0 : 0x888888),
+        metalness: metal + 0.05, roughness: rough + 0.1,
       });
+      applyMetalNormal(couplerMat);
+
+      const basePlateMat = new THREE.MeshStandardMaterial({
+        color: metalTex ? 0xd0d0d0 : 0x999999,
+        metalness: metal, roughness: rough + 0.15,
+      });
+      applyMetal(basePlateMat);
+
+      const bracketMat = new THREE.MeshStandardMaterial({
+        color: C_BRACKET, metalness: metal, roughness: rough,
+      });
+      applyMetalNormal(bracketMat);
 
       const topGuardM = result.topGuardHeightMm / 1000;
       const scaffoldType: 'kusabi' | 'wakugumi' = result.scaffoldType || 'kusabi';
@@ -782,14 +838,13 @@ export default function Scaffold3DView({
           }
         }
 
-        // ── Jack bases: from ground up to JACK_H (scaffold base, not building floor) ──────────
-        // At corner ends, skip inner post (z=0) so only outer row extends to the corner.
-        // This creates the asymmetric post count matching the CAD detail (e.g. 2 inner, 3 outer).
+        // ── Base plates + Jack bases ──────────────────────────
         for (let pi = 0; pi < postX.length; pi++) {
           if (pi < startPostIdx) continue;
           const px = postX[pi];
           const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
           for (const pz of isBracket ? [0] : (skipInner ? [widthM] : [0, widthM])) {
+            addBasePlate(THREE, group, px, GROUND_Y, pz, basePlateMat);
             addPipe(group, px, GROUND_Y, pz, px, GROUND_Y + JACK_H, pz, jackMatEff, PIPE_R * 0.95);
           }
         }
@@ -830,8 +885,7 @@ export default function Scaffold3DView({
         for (let lv = 1; lv <= levelsToBuild; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Width yokoji (horizontal bars along scaffold depth)
-          // Skip at corner positions where inner post is absent — corner code handles bridging.
+          // Width yokoji (horizontal bars along scaffold depth) + coupler hints
           const yokojiOverhang = 0.06;
           for (let pi = 0; pi < postX.length; pi++) {
             if (pi < startPostIdx) continue;
@@ -842,6 +896,8 @@ export default function Scaffold3DView({
               addPipe(group, px, y, widthM, px, y, 0, bracketMat, PIPE_R * 0.8);
             } else {
               addPipe(group, px, y - 0.02, -yokojiOverhang, px, y - 0.02, widthM + yokojiOverhang, yokojiMat, PIPE_R * 1.1);
+              addCoupler(THREE, group, px, y, 0, couplerMat);
+              addCoupler(THREE, group, px, y, widthM, couplerMat);
             }
           }
           if (cornerInnerPostX != null && !isBracket) {
@@ -1348,7 +1404,7 @@ export default function Scaffold3DView({
         scene.add(shapeMesh);
       }
 
-      // ── Ground plane with faint grid (clean look) ──────
+      // ── Ground plane (concrete textured) with subtle grid ──────
       const groundSize = Math.max(maxExtent * 4 + 20, 100);
       const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
       const groundPlane = new THREE.Mesh(groundGeo, groundMat);
@@ -1358,11 +1414,11 @@ export default function Scaffold3DView({
       groundPlane.userData = { noClip: true, isGround: true };
       scene.add(groundPlane);
       const gridDivisions = Math.min(40, Math.max(10, Math.floor(groundSize / 5)));
-      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xd0d4d8, 0xd8dce0);
-      gridHelper.rotation.x = -Math.PI / 2;
+      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xc4c8cc, 0xd0d4d8);
       gridHelper.position.y = GROUND_Y - 0.02;
-      (gridHelper.material as THREE.Material).opacity = 0.4;
+      (gridHelper.material as THREE.Material).opacity = 0.25;
       (gridHelper.material as THREE.Material).transparent = true;
+      gridHelper.userData = { noClip: true, isGround: true };
       scene.add(gridHelper);
 
       // ── Camera: center on building, maintain true proportions (no stretch) ───────
