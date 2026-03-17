@@ -23,7 +23,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved === 'en' || saved === 'ja') {
+      if (saved === 'en' || saved === 'ja' || saved === 'fr') {
         setLocaleState(saved);
       }
     } catch {
@@ -45,7 +45,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       const sectionObj = translations[section];
       const entry = sectionObj[key] as Record<Locale, string> | undefined;
       if (!entry) return `[${String(section)}.${String(key)}]`;
-      return entry[locale] ?? entry['ja'] ?? `[${String(section)}.${String(key)}]`;
+      const rec = entry as Record<Locale, string>;
+      return rec[locale] ?? rec['en'] ?? rec['ja'] ?? `[${String(section)}.${String(key)}]`;
     },
     [locale],
   );

@@ -15,13 +15,17 @@ export function Navigation() {
   const { locale, setLocale, t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const localeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMobileOpen(false);
+      const target = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) setMobileOpen(false);
+      if (localeMenuRef.current && !localeMenuRef.current.contains(target)) setLocaleMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -41,9 +45,7 @@ export function Navigation() {
     authApi.logout();
   };
 
-  const toggleLocale = () => {
-    setLocale(locale === 'ja' ? 'en' : 'ja');
-  };
+  const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
 
   const navItems = [
     { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
@@ -112,14 +114,33 @@ export function Navigation() {
                 >
                   <User className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  onClick={toggleLocale}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-                  title={locale === 'ja' ? 'Switch to English' : '日本語に切り替え'}
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{locale === 'ja' ? 'EN' : 'JP'}</span>
-                </button>
+                <div className="relative" ref={localeMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setLocaleMenuOpen((o) => !o)}
+                    className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                    title="Language / Langue"
+                    aria-expanded={localeMenuOpen}
+                    aria-haspopup="true"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{localeLabels[locale]}</span>
+                  </button>
+                  {localeMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 py-1 w-28 rounded-md bg-slate-800 border border-slate-700 shadow-lg z-50">
+                      {(['ja', 'en', 'fr'] as const).map((loc) => (
+                        <button
+                          key={loc}
+                          type="button"
+                          onClick={() => { setLocale(loc); setLocaleMenuOpen(false); }}
+                          className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors ${locale === loc ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+                        >
+                          {localeLabels[loc]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="w-px h-5 bg-slate-700 mx-1 hidden sm:block" />
                 <button
                   onClick={handleLogout}
