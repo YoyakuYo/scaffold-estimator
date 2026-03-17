@@ -19,13 +19,13 @@ export class VisionBimController {
 
   /**
    * POST /vision-bim/analyze
-   * Accepts image (PNG, JPEG, etc.), DXF, DWG, JWW, or PDF. Returns structured footprint JSON.
+   * Accepts image, DXF, DWG, JWW, IFC, or PDF. Returns structured footprint JSON.
    */
   @Post('analyze')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { fileSize: 50 * 1024 * 1024 },
     }),
   )
   async analyze(
@@ -39,6 +39,34 @@ export class VisionBimController {
       return await this.visionBim.processFile(buffer, filename);
     } catch (err: any) {
       throw new BadRequestException(err?.message || 'File processing failed');
+    }
+  }
+
+  /**
+   * POST /vision-bim/from-ifc
+   * Dedicated IFC (BIM) endpoint — accepts .ifc files up to 50 MB.
+   */
+  @Post('from-ifc')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
+  async fromIfc(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<VisionFootprintResult> {
+    if (!file) throw new BadRequestException('No file uploaded');
+    const buffer = (file as any).buffer as Buffer | undefined;
+    if (!buffer?.length) throw new BadRequestException('File has no content');
+    const ext = file.originalname?.toLowerCase()?.endsWith('.ifc');
+    if (!ext) {
+      throw new BadRequestException('Only .ifc files are accepted on this endpoint');
+    }
+    try {
+      return await this.visionBim.processIfc(buffer);
+    } catch (err: any) {
+      throw new BadRequestException(err?.message || 'IFC processing failed');
     }
   }
 }

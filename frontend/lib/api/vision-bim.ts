@@ -39,7 +39,19 @@ export const visionBimApi = {
     const response = await apiClient.post<VisionFootprintResult>(
       '/vision-bim/analyze',
       form,
-      { timeout: 120000 }, // 2 min — vision + optional DXF parsing can be slow
+      { timeout: 120000 },
+    );
+    return response.data;
+  },
+
+  /** Upload IFC (BIM) file; returns footprint JSON extracted from 3D geometry. */
+  fromIfc: async (file: File): Promise<VisionFootprintResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post<VisionFootprintResult>(
+      '/vision-bim/from-ifc',
+      form,
+      { timeout: 120000 },
     );
     return response.data;
   },

@@ -664,25 +664,28 @@ function ScaffoldPageContent() {
             <p className="text-sm text-gray-600 mb-6">
               {aiBimPreview
                 ? '抽出結果を確認し、問題なければ「確認して足場モデルを作成」を押してください。'
-                : '写真・青写真・DXF/CAD図面をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
+                : '写真・青写真・DXF/CAD図面・IFC（BIM）をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
             </p>
             {!aiBimPreview && (
             <>
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">クリックまたはドラッグでファイルをアップロード</span>
-              <span className="text-xs text-gray-500">PNG, JPEG, DXF, DWG, JWW, PDF (max 10MB). DWG/JWWはDXFにエクスポート推奨</span>
+              <span className="text-xs text-gray-500">PNG, JPEG, DXF, DWG, JWW, IFC（BIM）, PDF (max 50MB). DWG/JWWはDXFにエクスポート推奨</span>
               <input
                 type="file"
                 className="hidden"
-                accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.dxf,.dwg,.jww,.pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,application/dxf,application/pdf"
+                accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.dxf,.dwg,.jww,.ifc,.pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,application/dxf,application/pdf"
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   setAiBimError(null);
                   setAiBimUploading(true);
                   try {
-                    const raw = await visionBimApi.analyze(file);
+                    const isIfc = file.name.toLowerCase().endsWith('.ifc');
+                    const raw = isIfc
+                      ? await visionBimApi.fromIfc(file)
+                      : await visionBimApi.analyze(file);
                     const footprint = raw as VisionFootprintResult;
                     const obstacles = footprint.obstacles;
                     const manager = scaffoldManagerRef.current!;

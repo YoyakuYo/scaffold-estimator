@@ -54,6 +54,7 @@ export interface VisionFootprintResult {
 const CAD_EXTENSIONS = ['.dxf', '.dwg', '.jww'];
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const PDF_EXTENSIONS = ['.pdf'];
+const IFC_EXTENSIONS = ['.ifc'];
 
 const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, or photo) and extract the building exterior footprint, dimensions, and scaffold hints.
 
@@ -164,6 +165,10 @@ export class VisionBimService {
     if (isDxf) {
       return this.processDxf(buffer);
     }
+    const isIfc = IFC_EXTENSIONS.includes(ext) || this.looksLikeIfc(buffer);
+    if (isIfc) {
+      return this.processIfc(buffer);
+    }
     if (isPdf) {
       this.logger.log('PDF upload: export as PNG/JPEG for vision analysis, or upload DXF for CAD plans');
       return this.getFallbackFootprint();
@@ -186,6 +191,12 @@ export class VisionBimService {
     if (buffer[0] === 0xff && buffer[1] === 0xd8) return true;
     if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e) return true;
     return false;
+  }
+
+  private looksLikeIfc(buffer: Buffer): boolean {
+    if (buffer.length < 20) return false;
+    const head = buffer.slice(0, 100).toString('utf8');
+    return head.includes('ISO-10303-21') || head.includes('HEADER;');
   }
 
   /**
@@ -726,6 +737,104 @@ export class VisionBimService {
       // to different edges — clear so the caller recomputes from vertex distances.
       parsed.wallLengthsMm = undefined;
       parsed.wallLengthsFromDimText = undefined;
+    }
+  }
+
+  /**
+   * Parse IFC (BIM) buffer using web-ifc and extract an axis-aligned bounding box
+   * as a rectangular building footprint + height.
+   */
+  async processIfc(buffer: Buffer): Promise<VisionFootprintResult> {
+    let ifcApi: any = null;
+    let modelID = -1;
+    try {
+      const WebIFC = await import('web-ifc');
+      ifcApi = new WebIFC.IfcAPI();
+      await ifcApi.Init();
+      modelID = ifcApi.OpenModel(new Uint8Array(buffer));
+      if (modelID < 0) {
+        throw new Error('IFC ファイルを開けませんでした / Failed to open IFC model');
+      }
+
+      let minX = Infinity, minY = Infinity, minZ = Infinity;
+      let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      let vertexCount = 0;
+
+      ifcApi.StreamAllMeshes(modelID, (mesh: any) => {
+        const numGeoms = mesh.geometries.size();
+        for (let gi = 0; gi < numGeoms; gi++) {
+          const placedGeom = mesh.geometries.get(gi);
+          const geom = ifcApi.GetGeometry(modelID, placedGeom.geometryExpressID);
+          const vData = ifcApi.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+          const tf = placedGeom.flatTransformation;
+
+          const stride = 6;
+          for (let vi = 0; vi < vData.length; vi += stride) {
+            const ox = vData[vi];
+            const oy = vData[vi + 1];
+            const oz = vData[vi + 2];
+            const tx = tf[0] * ox + tf[4] * oy + tf[8] * oz + tf[12];
+            const ty = tf[1] * ox + tf[5] * oy + tf[9] * oz + tf[13];
+            const tz = tf[2] * ox + tf[6] * oy + tf[10] * oz + tf[14];
+            minX = Math.min(minX, tx); maxX = Math.max(maxX, tx);
+            minY = Math.min(minY, ty); maxY = Math.max(maxY, ty);
+            minZ = Math.min(minZ, tz); maxZ = Math.max(maxZ, tz);
+            vertexCount++;
+          }
+          geom.delete();
+        }
+      });
+
+      if (vertexCount === 0 || minX === Infinity) {
+        throw new Error('IFC にジオメトリが見つかりません / No geometry found in IFC');
+      }
+
+      const spanX = maxX - minX;
+      const spanY = maxY - minY;
+      const spanZ = maxZ - minZ;
+      const maxSpan = Math.max(spanX, spanY, spanZ);
+      const toMm = maxSpan < 500 ? 1000 : 1;
+
+      const buildingHeightMm = Math.max(1000, Math.round(spanZ * toMm));
+
+      const x0 = Math.round(minX * toMm);
+      const y0 = Math.round(minY * toMm);
+      const x1 = Math.round(maxX * toMm);
+      const y1 = Math.round(maxY * toMm);
+
+      const vertices = [
+        { x: x0, y: y0 },
+        { x: x1, y: y0 },
+        { x: x1, y: y1 },
+        { x: x0, y: y1 },
+      ];
+
+      const wX = Math.round(spanX * toMm);
+      const wY = Math.round(spanY * toMm);
+      const wallLengthsMm = [wX, wY, wX, wY];
+
+      this.logger.log(
+        `IFC processed: ${vertexCount} vertices, bbox ${spanX.toFixed(1)}×${spanY.toFixed(1)}×${spanZ.toFixed(1)}, ` +
+        `toMm=${toMm}, height=${buildingHeightMm}mm, walls=${wallLengthsMm.join('/')}mm`,
+      );
+
+      return {
+        vertices,
+        buildingHeightMm,
+        wallLengthsMm,
+        wallLengthsFromDimText: true,
+        confidence: 0.9,
+      };
+    } catch (err) {
+      const msg = (err as Error)?.message || String(err);
+      this.logger.error('IFC processing failed', msg);
+      throw new Error(`IFC processing failed: ${msg}`);
+    } finally {
+      try {
+        if (ifcApi && modelID >= 0 && ifcApi.IsModelOpen(modelID)) {
+          ifcApi.CloseModel(modelID);
+        }
+      } catch { /* ignore cleanup errors */ }
     }
   }
 
