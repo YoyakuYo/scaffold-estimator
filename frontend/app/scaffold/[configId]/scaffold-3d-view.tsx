@@ -1000,6 +1000,42 @@ export default function Scaffold3DView({
       // Open polygon (L-shape): walls.length < verts.length; endpoints don't share corners
       const isOpenPolygon = walls.length < verts.length;
 
+      // L-shaped corner: ~90° turn. Full corner rule (300+600, overrun, walkable deck) only for these.
+      // Non-L-shaped corners use pattanko (small filler planks) instead.
+      const COS_L_SHAPED_MAX = 0.35; // |cos| < 0.35 => angle between ~70° and ~110°
+      const isLShapedAtStart: boolean[] = [];
+      const isLShapedAtEnd: boolean[] = [];
+      for (let i = 0; i < walls.length; i++) {
+        isLShapedAtStart.push(false);
+        isLShapedAtEnd.push(false);
+      }
+      if (walls.length >= 2 && verts.length >= 3) {
+        // Closed polygon: every vertex j is a corner; use modulo for prev/next.
+        // Open polygon (e.g. 2 walls, 3 verts): only vertex 1 is the corner between wall 0 and 1.
+        const nV = verts.length;
+        const nW = walls.length;
+        const vertexIndices = !isOpenPolygon
+          ? Array.from({ length: nV }, (_, j) => j)
+          : [1];
+        for (const j of vertexIndices) {
+          const prev = (j - 1 + nV) % nV;
+          const next = (j + 1) % nV;
+          const dxPrev = verts[j].x - verts[prev].x;
+          const dzPrev = verts[j].z - verts[prev].z;
+          const dxNext = verts[next].x - verts[j].x;
+          const dzNext = verts[next].z - verts[j].z;
+          const lenPrev = Math.hypot(dxPrev, dzPrev);
+          const lenNext = Math.hypot(dxNext, dzNext);
+          if (lenPrev < 1e-6 || lenNext < 1e-6) continue;
+          const cosAngle = (dxPrev * dxNext + dzPrev * dzNext) / (lenPrev * lenNext);
+          const isL = Math.abs(cosAngle) < COS_L_SHAPED_MAX;
+          const wallEnd = !isOpenPolygon ? (j - 1 + nW) % nW : j - 1;
+          const wallStart = !isOpenPolygon ? j % nW : j;
+          if (wallEnd >= 0 && wallEnd < nW) isLShapedAtEnd[wallEnd] = isL;
+          if (wallStart >= 0 && wallStart < nW) isLShapedAtStart[wallStart] = isL;
+        }
+      }
+
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
@@ -1027,30 +1063,31 @@ export default function Scaffold3DView({
         }
 
         // Determine if wall start/end are corners (shared vertex with adjacent walls).
-        // For any closed polygon (triangle, rectangle, pentagon, irregular n-gon), every wall
-        // has both corners; corner rule (300+600 / 300 overrun) applies at every vertex.
+        // Full corner rule (300+600 / 300 overrun) only for L-shaped (~90°) corners; else use pattanko.
         const isStartCorner = !isOpenPolygon || i > 0;
         const isEndCorner = !isOpenPolygon || i < walls.length - 1;
+        const isStartLShaped = isStartCorner && (isLShapedAtStart[i] ?? false);
+        const isEndLShaped = isEndCorner && (isLShapedAtEnd[i] ?? false);
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        // Keep full inner/outer rows at wall ends; corner joining is handled explicitly below.
+        // L-shaped only: trim leading 600 and flush deck at corner end; non-L uses pattanko.
         const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
           spanCaps[i],
           false,
           false,
-          isStartCorner,
-          isEndCorner,
+          isStartLShaped,
+          isEndLShaped,
         );
 
-        // Scale/place wall run. Per 足場コーナー詳細図:
+        // Scale/place wall run. Per 足場コーナー詳細図 (L-shaped only):
         // wall end extends 300mm past corner, then one 600mm span (total +900mm).
-        // Wall start at corner: first span overruns 300mm so 1800 can go beyond wall and fill gap.
-        const useCornerExtension = walls.length >= 2 && !isOpenPolygon && isEndCorner;
-        const useStartCornerExtension = walls.length >= 2 && !isOpenPolygon && isStartCorner;
+        // Wall start at L-corner: first span overruns 300mm so 1800 can go beyond wall and fill gap.
+        const useCornerExtension = walls.length >= 2 && !isOpenPolygon && isEndLShaped;
+        const useStartCornerExtension = walls.length >= 2 && !isOpenPolygon && isStartLShaped;
         const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
         const baseLen = Math.max(runLenM, 1e-6);
         let desiredLen = edgeLen;
@@ -1223,13 +1260,14 @@ export default function Scaffold3DView({
         if (!infoA || !infoB) continue;
         if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
 
+        const isLShaped = isLShapedAtEnd[wi] ?? false;
+
         // Reuse the actual last two inner posts from wall A (matches rendered geometry exactly).
         const aLast = infoA.postX.length - 1;
         const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
         const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
 
         // Connect into wall B's first rendered span endpoint.
-        // If wall B had a leading corner 600, it was trimmed during wall build, so this becomes 1800 (etc).
         const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
         let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
         let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
@@ -1247,32 +1285,35 @@ export default function Scaffold3DView({
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          // Direct one-to-one connectors (requested): each reused inner post -> one turned post
-          addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
-          addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
-
-          // Keep source-wall 600 span pair visible (north side in the discussed example)
-          addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
-
-          // Walkable turned first span (e.g. 1800): extend beyond wall from reused corner posts.
-          // Draw even for open polygon selections where only subset of walls is shown.
-          const firstSpanDeck = new THREE.Shape();
-          firstSpanDeck.moveTo(r1.x, r1.z);
-          firstSpanDeck.lineTo(t1.x, t1.z);
-          firstSpanDeck.lineTo(t2.x, t2.z);
-          firstSpanDeck.lineTo(r2.x, r2.z);
-          firstSpanDeck.closePath();
-          const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
-          const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
-          deckMesh.rotation.x = -Math.PI / 2;
-          deckMesh.position.y = y + 0.028;
-          deckMesh.castShadow = true;
-          deckMesh.receiveShadow = true;
-          cornerGroup.add(deckMesh);
-
-          // Habaki only along source-wall reused pair; avoid creating a false 600 east starter bay.
-          const hY = y + 0.06;
-          addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
+          if (isLShaped) {
+            // L-shaped (~90°) corner: full rule — one-to-one connectors, 600 span pair, walkable deck.
+            addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+            addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
+            addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
+            const firstSpanDeck = new THREE.Shape();
+            firstSpanDeck.moveTo(r1.x, r1.z);
+            firstSpanDeck.lineTo(t1.x, t1.z);
+            firstSpanDeck.lineTo(t2.x, t2.z);
+            firstSpanDeck.lineTo(r2.x, r2.z);
+            firstSpanDeck.closePath();
+            const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
+            const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
+            deckMesh.rotation.x = -Math.PI / 2;
+            deckMesh.position.y = y + 0.028;
+            deckMesh.castShadow = true;
+            deckMesh.receiveShadow = true;
+            cornerGroup.add(deckMesh);
+            const hY = y + 0.06;
+            addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
+          } else {
+            // Non-L-shaped corner: use pattanko (2 small filler planks per level to close the gap).
+            const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
+            const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;
+            const pattankoW = 0.25;
+            const pattankoD = 0.5;
+            addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
+            addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
+          }
         }
       }
       scene.add(cornerGroup);
