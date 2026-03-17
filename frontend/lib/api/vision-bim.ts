@@ -17,6 +17,8 @@ export interface VisionFootprintResult {
   frameSizeMm?: number;
   /** True when wallLengthsMm came from explicit dimension text on the plan. */
   wallLengthsFromDimText?: boolean;
+  /** Number of floors detected (for height estimation from 3D views). */
+  floorCount?: number;
   /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */
   obstacles?: Array<
     | {

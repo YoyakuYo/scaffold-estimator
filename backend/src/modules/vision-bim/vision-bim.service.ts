@@ -29,6 +29,8 @@ export interface VisionFootprintResult {
   frameSizeMm?: number;
   /** True when wallLengthsMm was read from plan dimension text (not estimated). */
   wallLengthsFromDimText?: boolean;
+  /** Number of floors detected in the image (for height estimation from 3D views). */
+  floorCount?: number;
   /**
    * Optional obstacles / special areas that affect scaffold layout (clearance, Buragetto).
    * Balconies and AC (outdoor unit) areas reduce clearance and may trigger single-pole + bracket layout.
@@ -56,12 +58,12 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const PDF_EXTENSIONS = ['.pdf'];
 const IFC_EXTENSIONS = ['.ifc'];
 
-const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, or photo) and extract the building exterior footprint, dimensions, and scaffold hints.
+const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, photo, or 3D BIM render) and extract the building exterior footprint, dimensions, and scaffold hints.
 
 OUTPUT FORMAT: Output ONLY a raw JSON object. No markdown, no code fences, no prose before or after.
 
 Required fields:
-- vertices: array of polygon vertices tracing the EXTERIOR building wall outline in perimeter order (clockwise or counter-clockwise).
+- vertices: array of polygon vertices tracing the EXTERIOR building wall outline AS SEEN FROM ABOVE (plan/top-down view) in perimeter order (clockwise or counter-clockwise).
   CONTOUR-FOLLOWING (critical): Trace the actual perimeter — do NOT use bounding boxes or convex hulls.
   Include INTERIOR VERTICES for L-shapes, notches, and indents: if a wall indents inward, add a vertex at that corner so the scaffold path follows the indent exactly.
   Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized.
@@ -81,12 +83,24 @@ Optional fields (read from dimension lines and annotations):
 - frameSizeMm: for 枠組足場 only — 1700, 1800, or 1900 if shown.
 - groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
+- floorCount: number of visible floors/stories (count them). Use for height estimation when no explicit height is given.
 - obstacles: optional array of special areas that affect scaffold clearance (for Buragetto / bracket layout).
   Balconies/AC: { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] } — closed polygon in same units as vertices.
   Pillars/columns: { "type": "pillar", "center": { x, y } or { xFrac, yFrac }, "radiusMm": number } — circular or square columns near the perimeter.
   When a scaffold path (600/900/1200mm from wall) would intersect a pillar, the system switches to Single-Pole + Buragetto (bracket) layout.
   Balconies: protruding floor areas. AC: outdoor unit areas. Pillars: 柱, コラム, circular or square structural columns at building corners or along walls.
   Omit obstacles if none are clearly visible or labeled.
+
+═══ 3D BIM RENDERS / ISOMETRIC / PERSPECTIVE VIEWS (CRITICAL) ═══
+If the image is a 3D rendering, isometric view, perspective view, or BIM screenshot (e.g. from Revit, ArchiCAD, Tekla, SketchUp):
+- You are seeing the building from an ANGLE, not from above. The visible outline in the image is a 2D projection of a 3D object — it is NOT the plan footprint.
+- You MUST mentally "look down" from above and reconstruct the TOP-DOWN plan footprint of the building.
+- For a rectangular building seen in perspective/isometric: output 4 vertices forming a RECTANGLE (not the 5-6 point silhouette you see in the image).
+- Use the visible proportions (width vs depth vs height) to estimate the plan shape. A building that looks roughly 2:1 in plan (long and narrow) should have a 2:1 rectangle as its footprint.
+- Count visible floors to estimate height: typical floor height is 3000–4000mm per story. If you see 3 floors, buildingHeightMm ≈ 9000–12000.
+- Do NOT trace the perspective outline (silhouette) of the 3D view — that gives wrong shapes (hexagons, trapezoids). Reconstruct the PLAN footprint.
+- When aspect ratios are unclear, prefer outputting a rectangle with { xFrac, yFrac } and estimate the aspect from the visible floor plan proportions.
+- Set wallLengthsFromDimText: false and confidence: 0.5–0.7 (lower than for dimensioned plans).
 
 Polygon rules — follow these exactly:
 1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
@@ -102,7 +116,7 @@ Polygon rules — follow these exactly:
    - Confirm: the dimension strings on the plan (e.g. "10@1829=18290") should match the edges you are tracing. If a long dimension string aligns with your traced edge, you have the right line.
    For non-scaffold plans (architectural cross-sections, photos): trace the visible outer wall boundary.
 
-4. SHAPE REALITY CHECK — Most Japanese buildings are elongated rectangles (taller or wider than they are square). If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline. Real buildings are NOT regular pentagons. Re-examine and trace the correct shape.
+4. SHAPE REALITY CHECK — Most buildings are elongated rectangles. If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline or traced a 3D silhouette instead of the plan footprint. Re-examine and extract the correct plan shape.
 
 5. CURVED FACADES — If the plan shows ONE curved exterior wall (e.g. a long convex curve along the top): represent it with ONE or TWO straight segments connecting the same endpoints. Do NOT approximate the curve with many short segments; that creates a zigzag and wrong sharp angles. Output 4–6 vertices total: left, bottom, right, and the curved side as one or two segments (e.g. top-left and top-right). The result must look like an elongated rectangle with one gently bent side, not a narrow V or arrowhead.
 
@@ -129,6 +143,7 @@ Self-check before outputting (fix issues silently — never output the check its
 - total of wallLengthsMm matches the plan's dimension string sums as closely as possible
 - no run of 3+ consecutive edges with the same length unless the building genuinely has those equal-length faces
 - polygon must NOT be a regular polygon (equal sides + equal angles) unless the building genuinely is one
+- if the image is a 3D view: your polygon should be a plan-view shape (rectangle, L, U), NOT a silhouette/trapezoid
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
@@ -493,7 +508,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, or pillars/columns (柱, コラム) near the perimeter, add obstacles: type "balcony"/"ac" with vertices, or type "pillar" with center and radiusMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint (e.g. a rectangle for a rectangular building, an L for an L-shaped building). Count floors and estimate height as floors × 3000–4000mm. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, or pillars/columns (柱, コラム) near the perimeter, add obstacles: type "balcony"/"ac" with vertices, or type "pillar" with center and radiusMm.',
               },
             ],
           },
@@ -548,7 +563,13 @@ export class VisionBimService {
         throw new Error('Vision returned invalid footprint vertices');
       }
       if (!parsed.buildingHeightMm || parsed.buildingHeightMm < 1000) {
-        parsed.buildingHeightMm = 3000;
+        const floors = typeof (parsed as any).floorCount === 'number' && (parsed as any).floorCount >= 1
+          ? (parsed as any).floorCount
+          : 1;
+        parsed.buildingHeightMm = floors * 3000;
+      }
+      if (typeof (parsed as any).floorCount === 'number' && (parsed as any).floorCount >= 1) {
+        parsed.floorCount = (parsed as any).floorCount;
       }
       const n = parsed.vertices.length;
       let wallLengths = Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === n

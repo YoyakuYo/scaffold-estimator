@@ -169,6 +169,273 @@ function BuildingShapeSvg({
   );
 }
 
+/** 3D building preview — renders extruded footprint with Three.js (for AI BIM confirmation). */
+function Building3DPreview({
+  outline,
+  buildingHeightMm,
+  wallLengthsMm,
+  className,
+  style,
+}: {
+  outline: Array<{ xFrac: number; yFrac: number }>;
+  buildingHeightMm: number;
+  wallLengthsMm?: number[];
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<any>(null);
+  const animFrameRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!containerRef.current || outline.length < 3) return;
+    let disposed = false;
+
+    import('three').then((THREE) => {
+      if (disposed || !containerRef.current) return;
+
+      const container = containerRef.current;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf8fafc);
+
+      const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 2000);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.innerHTML = '';
+      container.appendChild(renderer.domElement);
+      rendererRef.current = renderer;
+
+      // Normalize outline to meters
+      const xs = outline.map((p) => p.xFrac);
+      const ys = outline.map((p) => p.yFrac);
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      const maxX = Math.max(...xs);
+      const maxY = Math.max(...ys);
+      const spanX = Math.max(maxX - minX, 1e-6);
+      const spanY = Math.max(maxY - minY, 1e-6);
+
+      // If vertices look like mm (large values), scale to meters; if fractions, use wallLengths for reference
+      const maxCoord = Math.max(spanX, spanY);
+      let toM: number;
+      if (maxCoord > 500) {
+        toM = 0.001;
+      } else if (maxCoord > 5) {
+        toM = 1;
+      } else {
+        const perimeter = wallLengthsMm?.reduce((s, l) => s + l, 0) ?? 40000;
+        toM = (perimeter * 0.001) / (2 * (spanX + spanY));
+      }
+
+      const pts2D = outline.map((p) => ({
+        x: (p.xFrac - minX) * toM,
+        z: (p.yFrac - minY) * toM,
+      }));
+      const cx = pts2D.reduce((s, p) => s + p.x, 0) / pts2D.length;
+      const cz = pts2D.reduce((s, p) => s + p.z, 0) / pts2D.length;
+
+      const heightM = buildingHeightMm * 0.001;
+
+      // Extruded building
+      const shape = new THREE.Shape();
+      shape.moveTo(pts2D[0].x - cx, pts2D[0].z - cz);
+      for (let i = 1; i < pts2D.length; i++) {
+        shape.lineTo(pts2D[i].x - cx, pts2D[i].z - cz);
+      }
+      shape.closePath();
+
+      const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: heightM, bevelEnabled: false });
+      const buildingMat = new THREE.MeshStandardMaterial({
+        color: 0xd4d8e0, metalness: 0.1, roughness: 0.7,
+        side: THREE.DoubleSide,
+      });
+      const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
+      buildingMesh.rotation.x = -Math.PI / 2;
+      buildingMesh.position.y = 0;
+      scene.add(buildingMesh);
+
+      // Outline on ground
+      const outlinePts = pts2D.map((p) => new THREE.Vector3(p.x - cx, 0.01, p.z - cz));
+      outlinePts.push(outlinePts[0].clone());
+      const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
+      const outlineLine = new THREE.Line(outlineGeo, new THREE.LineBasicMaterial({ color: 0x6366f1, linewidth: 2 }));
+      scene.add(outlineLine);
+
+      // Edges on building
+      const edgesGeo = new THREE.EdgesGeometry(buildingGeo);
+      const edges = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0x94a3b8 }));
+      edges.rotation.x = -Math.PI / 2;
+      scene.add(edges);
+
+      // Floor lines
+      const floorH = 3;
+      for (let floorY = floorH; floorY < heightM; floorY += floorH) {
+        const floorPts = pts2D.map((p) => new THREE.Vector3(p.x - cx, floorY, p.z - cz));
+        floorPts.push(floorPts[0].clone());
+        const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
+        const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }));
+        scene.add(floorLine);
+      }
+
+      // Ground plane
+      const extent = Math.max(spanX * toM, spanY * toM, heightM) * 2;
+      const groundGeo = new THREE.PlaneGeometry(extent * 3, extent * 3);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.9 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.01;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const gridHelper = new THREE.GridHelper(extent * 3, 30, 0xd1d5db, 0xd1d5db);
+      gridHelper.position.y = 0;
+      (gridHelper.material as THREE.Material).opacity = 0.25;
+      (gridHelper.material as THREE.Material).transparent = true;
+      scene.add(gridHelper);
+
+      // Lights
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(extent, extent * 1.5, extent * 0.8);
+      scene.add(dirLight);
+
+      // Camera
+      const dist = Math.max(extent * 1.8, heightM * 2, 8);
+      camera.position.set(dist * 0.7, dist * 0.5, dist * 0.7);
+      camera.lookAt(0, heightM * 0.35, 0);
+      camera.far = dist * 10;
+      camera.updateProjectionMatrix();
+
+      // Simple orbit via mouse drag
+      const target = new THREE.Vector3(0, heightM * 0.35, 0);
+      const spherical = new THREE.Spherical().setFromVector3(
+        new THREE.Vector3().subVectors(camera.position, target),
+      );
+      let dragging = false;
+      let prevX = 0;
+      let prevY = 0;
+
+      const onDown = (e: MouseEvent) => { dragging = true; prevX = e.clientX; prevY = e.clientY; };
+      const onUp = () => { dragging = false; };
+      const onMove = (e: MouseEvent) => {
+        if (!dragging) return;
+        const dx = e.clientX - prevX;
+        const dy = e.clientY - prevY;
+        prevX = e.clientX;
+        prevY = e.clientY;
+        spherical.theta -= dx * 0.005;
+        spherical.phi = Math.max(0.2, Math.min(Math.PI * 0.48, spherical.phi - dy * 0.005));
+        const v = new THREE.Vector3().setFromSpherical(spherical);
+        camera.position.copy(target.clone().add(v));
+        camera.lookAt(target);
+      };
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        spherical.radius = Math.max(2, Math.min(dist * 3, spherical.radius + e.deltaY * 0.02));
+        const v = new THREE.Vector3().setFromSpherical(spherical);
+        camera.position.copy(target.clone().add(v));
+        camera.lookAt(target);
+      };
+
+      renderer.domElement.addEventListener('mousedown', onDown);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('mousemove', onMove);
+      renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+
+      const animate = () => {
+        if (disposed) return;
+        animFrameRef.current = requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      // Resize handling
+      const ro = new ResizeObserver(() => {
+        if (!container || disposed) return;
+        const nw = container.clientWidth;
+        const nh = container.clientHeight;
+        renderer.setSize(nw, nh);
+        camera.aspect = nw / nh;
+        camera.updateProjectionMatrix();
+      });
+      ro.observe(container);
+    });
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(animFrameRef.current);
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
+    };
+  }, [outline, buildingHeightMm, wallLengthsMm]);
+
+  if (outline.length < 3) return <div className={className} style={style} />;
+  return <div ref={containerRef} className={className} style={style} />;
+}
+
+/** Building preview panel with 2D (plan) / 3D toggle. */
+function BuildingPreviewPanel({
+  outline,
+  wallLengthsMm,
+  buildingHeightMm,
+}: {
+  outline: Array<{ xFrac: number; yFrac: number }>;
+  wallLengthsMm?: number[];
+  buildingHeightMm: number;
+}) {
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-gray-500">建物形状プレビュー</span>
+        <div className="flex rounded-md border border-gray-300 overflow-hidden text-xs">
+          <button
+            onClick={() => setViewMode('2d')}
+            className={`px-3 py-1 font-medium transition-colors ${
+              viewMode === '2d'
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            2D 平面
+          </button>
+          <button
+            onClick={() => setViewMode('3d')}
+            className={`px-3 py-1 font-medium transition-colors ${
+              viewMode === '3d'
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            3D ビュー
+          </button>
+        </div>
+      </div>
+      {viewMode === '2d' ? (
+        <BuildingShapeSvg
+          outline={outline}
+          wallLengthsMm={wallLengthsMm}
+          className="w-full max-w-sm aspect-square rounded-lg border border-gray-200 bg-white"
+        />
+      ) : (
+        <Building3DPreview
+          outline={outline}
+          buildingHeightMm={buildingHeightMm}
+          wallLengthsMm={wallLengthsMm}
+          className="w-full rounded-lg border border-gray-200 bg-slate-50"
+          style={{ height: 320 }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Manual building geometry: single closed footprint, walls derived from it ───
 
 type FootprintPoint = { xFrac: number; yFrac: number };
@@ -664,14 +931,14 @@ function ScaffoldPageContent() {
             <p className="text-sm text-gray-600 mb-6">
               {aiBimPreview
                 ? '抽出結果を確認し、問題なければ「確認して足場モデルを作成」を押してください。'
-                : '写真・青写真・DXF/CAD図面・IFC（BIM）をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
+                : '写真・青写真・DXF/CAD図面・IFC（BIM）・3D BIMレンダリング画像をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
             </p>
             {!aiBimPreview && (
             <>
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">クリックまたはドラッグでファイルをアップロード</span>
-              <span className="text-xs text-gray-500">PNG, JPEG, DXF, DWG, JWW, IFC（BIM）, PDF (max 50MB). DWG/JWWはDXFにエクスポート推奨</span>
+              <span className="text-xs text-gray-500">PNG, JPEG, DXF, DWG, JWW, IFC（BIM）, PDF (max 50MB). 3D BIMスクリーンショットも対応</span>
               <input
                 type="file"
                 className="hidden"
@@ -906,14 +1173,11 @@ function ScaffoldPageContent() {
                       <p className="text-xs text-slate-500 mt-1">クリアランス不足時は当該区間を単管＋ブラケット（ブラgetto）で提案します。</p>
                     </div>
                   )}
-                  <div>
-                    <span className="text-xs font-medium text-gray-500 block mb-2">建物平面形</span>
-                    <BuildingShapeSvg
-                      outline={aiBimPreview.buildingOutline}
-                      wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                      className="w-full max-w-sm aspect-square rounded-lg border border-gray-200 bg-white"
-                    />
-                  </div>
+                  <BuildingPreviewPanel
+                    outline={aiBimPreview.buildingOutline}
+                    wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                    buildingHeightMm={aiBimPreview.buildingHeightMm}
+                  />
                   <div className="grid grid-cols-1 gap-4">
                     {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
                     <div className="rounded-lg border border-violet-200 bg-white p-3 space-y-3">
