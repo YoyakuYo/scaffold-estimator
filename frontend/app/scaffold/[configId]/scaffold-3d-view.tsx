@@ -739,10 +739,10 @@ export default function Scaffold3DView({
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
         // When reusing corner posts from previous wall, do not create a duplicate start post pair.
-        // Keep span generation from index 0 so the turned first span (e.g. 1800) renders from wall logic.
+        // The turned first span (e.g. 1800) is rendered in cornerGroup so wall body starts after it.
         const reuseStartFromPrevCorner = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
-        const startSpanIdx = 0;
+        const startSpanIdx = reuseStartFromPrevCorner ? 1 : 0;
         // IMPORTANT (corner alignment):
         // Do NOT force the last post to exactly wallLengthMm.
         // A small overrun (≈200–300mm) is allowed/preferred to keep corners tight for pattanko.
@@ -1194,6 +1194,8 @@ export default function Scaffold3DView({
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       maxLevelsRef.current = maxLevelsForCorners;
+      const cornerPlankMat = plankMatEff.clone();
+      cornerPlankMat.side = THREE.DoubleSide;
       const toWorldXZ = (root: any, x: number, z: number) => {
         const p = root.localToWorld(new THREE.Vector3(x, 0, z));
         return { x: p.x, z: p.z };
@@ -1238,6 +1240,22 @@ export default function Scaffold3DView({
 
           // Keep source-wall 600 span pair visible (north side in the discussed example)
           addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
+
+          // Walkable turned first span (e.g. 1800): extend beyond wall from reused corner posts.
+          // Draw even for open polygon selections where only subset of walls is shown.
+          const firstSpanDeck = new THREE.Shape();
+          firstSpanDeck.moveTo(r1.x, r1.z);
+          firstSpanDeck.lineTo(t1.x, t1.z);
+          firstSpanDeck.lineTo(t2.x, t2.z);
+          firstSpanDeck.lineTo(r2.x, r2.z);
+          firstSpanDeck.closePath();
+          const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
+          const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
+          deckMesh.rotation.x = -Math.PI / 2;
+          deckMesh.position.y = y + 0.028;
+          deckMesh.castShadow = true;
+          deckMesh.receiveShadow = true;
+          cornerGroup.add(deckMesh);
 
           // Habaki only along source-wall reused pair; avoid creating a false 600 east starter bay.
           const hY = y + 0.06;
