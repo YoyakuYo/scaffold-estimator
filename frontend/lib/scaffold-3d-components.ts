@@ -72,18 +72,19 @@ export function createWoodTextures(THREE: ThreeNS) {
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#b8944c';
+  // Yellow-gold base so planks/habaki read clearly (not muddy)
+  ctx.fillStyle = '#d4b050';
   ctx.fillRect(0, 0, W, H);
   for (let y = 0; y < H; y++) {
-    const hue = 30 + Math.sin(y * 0.15) * 5;
-    const light = 55 + Math.sin(y * 0.3) * 8 + (Math.random() - 0.5) * 5;
-    ctx.strokeStyle = `hsl(${hue},45%,${light}%)`;
+    const hue = 42 + Math.sin(y * 0.15) * 4;
+    const light = 62 + Math.sin(y * 0.3) * 6 + (Math.random() - 0.5) * 4;
+    ctx.strokeStyle = `hsl(${hue},50%,${light}%)`;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
   for (let i = 0; i < 25; i++) {
     const y = Math.random() * H;
-    ctx.strokeStyle = `rgba(80,55,20,${0.06 + Math.random() * 0.1})`;
+    ctx.strokeStyle = `rgba(140,110,30,${0.05 + Math.random() * 0.08})`;
     ctx.lineWidth = 1 + Math.random() * 3;
     ctx.beginPath(); ctx.moveTo(0, y);
     for (let x = 0; x < W; x += 15) ctx.lineTo(x, y + Math.sin(x * 0.02) * 2);
@@ -94,8 +95,8 @@ export function createWoodTextures(THREE: ThreeNS) {
     const ky = 20 + Math.random() * (H - 40);
     const kr = 4 + Math.random() * 8;
     const grad = ctx.createRadialGradient(kx, ky, 0, kx, ky, kr);
-    grad.addColorStop(0, 'rgba(60,35,10,0.4)');
-    grad.addColorStop(1, 'rgba(60,35,10,0)');
+    grad.addColorStop(0, 'rgba(100,75,20,0.25)');
+    grad.addColorStop(1, 'rgba(100,75,20,0)');
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.arc(kx, ky, kr, 0, Math.PI * 2); ctx.fill();
   }

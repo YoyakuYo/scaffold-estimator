@@ -65,12 +65,15 @@ const C_TECH = {
 };
 /** Buragetto (bracket) sections — always blue for visual verification */
 const C_BRACKET = 0x2563eb;
+// Yellow-gold for planks/habaki (high contrast, reads clearly; avoids blurry look)
+const PLANK_HABAKI_GOLD = 0xe8b030;
+
 // Default scaffold palette — clean 2-tone:
 //   posts/pipes/structural: bright silver-white (galvanised steel)
-//   planks + habaki: golden yellow
+//   planks + habaki: yellow-gold
 const C = {
   post:       0xe8ecf0,  // bright silver-white — posts, jacks, yokoji, top guard, braces
-  plank:      0xf5b800,  // golden yellow — anchi planks + habaki
+  plank:      PLANK_HABAKI_GOLD,  // yellow-gold — anchi planks + habaki
   tesuri:     0x4a90d9,  // soft blue — guard rails (distinct from posts)
   brace:      0xc0c8d0,  // slightly darker silver — braces (subtle contrast from posts)
   ecoPallet:  0x2d2d2d,  // dark recycled plastic — eco pallet base
@@ -572,7 +575,7 @@ export default function Scaffold3DView({
       applyMetal(pipeDarkMat);
 
       const plankMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.plank : (woodTex ? 0xffffff : C.plank),
+        color: isTech ? C_TECH.plank : (woodTex ? PLANK_HABAKI_GOLD : C.plank),
         metalness: plankMetal, roughness: plankRough,
       });
       applyWood(plankMat);
@@ -580,7 +583,7 @@ export default function Scaffold3DView({
       const spanPlankMats: Record<number, THREE.MeshStandardMaterial> = {};
       const spanHabakiMats: Record<number, THREE.MeshStandardMaterial> = {};
       for (const span of STANDARD_SPANS) {
-        const spanColor = isTech ? C_TECH.plank : (SPAN_COLORS[span] ?? C.plank);
+        const spanColor = isTech ? C_TECH.plank : PLANK_HABAKI_GOLD;
         const pM = new THREE.MeshStandardMaterial({ color: spanColor, metalness: plankMetal, roughness: plankRough });
         applyWoodNormal(pM);
         spanPlankMats[span] = pM;
@@ -608,7 +611,7 @@ export default function Scaffold3DView({
       applyMetal(jackMat);
 
       const habakiMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.habaki : (woodTex ? 0xffffff : C.plank),
+        color: isTech ? C_TECH.habaki : (woodTex ? PLANK_HABAKI_GOLD : C.plank),
         metalness: plankMetal, roughness: plankRough,
       });
       applyWood(habakiMat);
