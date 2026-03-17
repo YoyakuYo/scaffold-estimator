@@ -29,7 +29,7 @@ const PIPE_SEG = 10;
 const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
-// Corner detail rule: 300mm overrun + 600mm turn span
+// Corner detail base rule on source wall: 300mm overrun + 600mm corner span
 const CORNER_OVERRUN_M = 0.3;
 const CORNER_TURN_SPAN_M = 0.6;
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
@@ -1153,8 +1153,6 @@ export default function Scaffold3DView({
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       maxLevelsRef.current = maxLevelsForCorners;
-      const cornerPlankMat = plankMatEff.clone();
-      cornerPlankMat.side = THREE.DoubleSide;
 
       for (let wi = 0; wi < walls.length; wi++) {
         const nextWi = (wi + 1) % walls.length;
@@ -1196,9 +1194,16 @@ export default function Scaffold3DView({
           z: baseInnerAz + tAz * (CORNER_OVERRUN_M + CORNER_TURN_SPAN_M),
         };
 
+        // East/next-wall first span should follow that wall's span setting (e.g. 1800),
+        // not the fixed 600mm corner span used on source wall A.
+        const nextWallFirstSpanM = Math.max(
+          0.6,
+          ((walls[nextWi]?.spans?.[0] ?? 1800) / 1000),
+        );
+
         // Direct turn: one bar from each reused post into wall B direction
-        const t1 = { x: r1.x + tBx * CORNER_TURN_SPAN_M, z: r1.z + tBz * CORNER_TURN_SPAN_M };
-        const t2 = { x: r2.x + tBx * CORNER_TURN_SPAN_M, z: r2.z + tBz * CORNER_TURN_SPAN_M };
+        const t1 = { x: r1.x + tBx * nextWallFirstSpanM, z: r1.z + tBz * nextWallFirstSpanM };
+        const t2 = { x: r2.x + tBx * nextWallFirstSpanM, z: r2.z + tBz * nextWallFirstSpanM };
 
         for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
@@ -1207,39 +1212,12 @@ export default function Scaffold3DView({
           addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
           addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
 
-          // Keep 600 span pair visible on both rows
+          // Keep source-wall 600 span pair visible (north side in the discussed example)
           addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
-          addPipe(cornerGroup, t1.x, y, t1.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.8);
 
-          // Simple corner deck patch (rectangular)
-          if (!isOpenPolygon) {
-            const cornerShape = new THREE.Shape();
-            cornerShape.moveTo(r1.x, r1.z);
-            cornerShape.lineTo(r2.x, r2.z);
-            cornerShape.lineTo(t2.x, t2.z);
-            cornerShape.lineTo(t1.x, t1.z);
-            cornerShape.closePath();
-            const extGeo = new THREE.ExtrudeGeometry(cornerShape, { depth: 0.025, bevelEnabled: false });
-            const plankMesh = new THREE.Mesh(extGeo, cornerPlankMat);
-            plankMesh.rotation.x = -Math.PI / 2;
-            plankMesh.position.y = y + 0.028;
-            plankMesh.castShadow = true;
-            plankMesh.receiveShadow = true;
-            cornerGroup.add(plankMesh);
-          }
-
-          // Habaki along reused pair and turned pair
+          // Habaki only along source-wall reused pair; avoid creating a false 600 east starter bay.
           const hY = y + 0.06;
           addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
-          addPipe(cornerGroup, t1.x, hY, t1.z, t2.x, hY, t2.z, habakiMatEff, PIPE_R * 0.5);
-
-          // Guard rails along the turned side
-          addPipe(cornerGroup, t1.x, y + 0.9, t1.z, t2.x, y + 0.9, t2.z, tesuriMat, PIPE_R * 0.65);
-          addPipe(cornerGroup, t1.x, y + 0.45, t1.z, t2.x, y + 0.45, t2.z, tesuriMat, PIPE_R * 0.6);
-
-          if (lv === maxLevelsForCorners && topGuardM > 0) {
-            addPipe(cornerGroup, t1.x, y + topGuardM, t1.z, t2.x, y + topGuardM, t2.z, topGuardMat, PIPE_R * 0.65);
-          }
         }
 
         // Ensure all connector endpoints land on visible posts.
