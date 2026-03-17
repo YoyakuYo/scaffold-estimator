@@ -211,8 +211,87 @@ export default function Scaffold2DView({ result }: Props) {
         const ex = postXPositions[si + 1];
         const isStairSpan = stairPositions.includes(si);
 
-        if (isStairSpan) {
-          // Stair
+        if (isStairSpan && needsExtendedBay) {
+          // 600mm extended bay: plank + brace + tesuri stay normal; stair is in a separate bay (shown as overlay indicator)
+          // Normal brace
+          elements.push(
+            <line key={`brace-1-${lvl}-${si}`}
+              x1={x(sx)} y1={y(baseY)} x2={x(ex)} y2={y(topY)}
+              stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
+            <line key={`brace-2-${lvl}-${si}`}
+              x1={x(sx)} y1={y(topY)} x2={x(ex)} y2={y(baseY)}
+              stroke={COL.brace} strokeWidth={BRACE_STROKE} />
+          );
+          // Normal tesuri / shitasan
+          if (!isWakugumi) {
+            elements.push(
+              <line key={`tesuri-1-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
+                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.45)}
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
+              <line key={`tesuri-2-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
+                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
+                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
+            );
+          } else {
+            elements.push(
+              <line key={`shitasan-${lvl}-${si}`}
+                x1={x(sx)} y1={y(baseY + 50)}
+                x2={x(ex)} y2={y(baseY + 50)}
+                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
+            );
+          }
+          // Normal plank (stays for extended bay)
+          elements.push(
+            <rect key={`plank-${lvl}-${si}`}
+              x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
+              width={(ex - sx) * scale - 4} height={PLANK_H_PX}
+              fill={COL.plank} opacity={0.7} rx={1} />
+          );
+          elements.push(
+            <line key={`habaki-${lvl}-${si}`}
+              x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
+              x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
+              stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
+          );
+          // Extended bay stair indicator: dashed box with stair glyph overlaid
+          const ebX = x(sx) + 1;
+          const ebW = (ex - sx) * scale - 2;
+          const ebY = y(topY) - 2;
+          const ebH = (topY - baseY) * scale + 4;
+          elements.push(
+            <rect key={`ext-bay-${lvl}-${si}`}
+              x={ebX} y={ebY}
+              width={ebW} height={ebH}
+              fill="none" stroke={COL.stair} strokeWidth={1.5}
+              strokeDasharray="4,3" rx={2} />
+          );
+          // Small stair diagonal inside the dashed box
+          elements.push(
+            <line key={`ext-stair-${lvl}-${si}`}
+              x1={ebX + ebW * 0.15} y1={ebY + ebH * 0.85}
+              x2={ebX + ebW * 0.85} y2={ebY + ebH * 0.15}
+              stroke={COL.stair} strokeWidth={2} opacity={0.6} />
+          );
+          // "EXT" label
+          elements.push(
+            <text key={`ext-label-${lvl}-${si}`}
+              x={ebX + ebW / 2} y={ebY + ebH / 2 + 3}
+              textAnchor="middle" fontSize={7} fontWeight="bold"
+              fill={COL.stair} opacity={0.8}>EXT</text>
+          );
+          // Extra post ticks at 3 positions (O, P, Q): left, center, right
+          const midXmm = (sx + ex) / 2;
+          for (const epx of [sx, midXmm, ex]) {
+            elements.push(
+              <line key={`ext-post-${lvl}-${si}-${epx}`}
+                x1={x(epx)} y1={ebY} x2={x(epx)} y2={ebY + ebH}
+                stroke={COL.stair} strokeWidth={1} strokeDasharray="2,2" opacity={0.5} />
+            );
+          }
+        } else if (isStairSpan) {
+          // Normal stair (900/1200mm): stair replaces plank
           elements.push(
             <line key={`stair-${lvl}-${si}`}
               x1={x(sx + span * 0.04)} y1={y(baseY)}
@@ -232,7 +311,6 @@ export default function Scaffold2DView({ result }: Props) {
             );
           });
           if (!isWakugumi) {
-            // Kusabi: tesuri on stair spans
             elements.push(
               <line key={`tesuri-s1-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
@@ -244,27 +322,11 @@ export default function Scaffold2DView({ result }: Props) {
                 stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
             );
           } else {
-            // Wakugumi: shitasan (bottom horizontal) on stair spans
             elements.push(
               <line key={`shitasan-s-${lvl}-${si}`}
                 x1={x(sx)} y1={y(baseY + 50)}
                 x2={x(ex)} y2={y(baseY + 50)}
                 stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
-            );
-          }
-          // 600mm extended bay: plank remains at stair span (rule: needsExtendedBay)
-          if (needsExtendedBay) {
-            elements.push(
-              <rect key={`plank-eb-${lvl}-${si}`}
-                x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
-                width={(ex - sx) * scale - 4} height={PLANK_H_PX}
-                fill={COL.plank} opacity={0.7} rx={1} />
-            );
-            elements.push(
-              <line key={`habaki-eb-${lvl}-${si}`}
-                x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
-                x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
-                stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
             );
           }
         } else {

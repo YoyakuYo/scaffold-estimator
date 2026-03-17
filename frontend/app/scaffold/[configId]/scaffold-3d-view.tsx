@@ -943,6 +943,7 @@ export default function Scaffold3DView({
         // ── Stairs ─────────────────────────────────────
         const RAIL_H_ABOVE = 0.9;
         const NUM_STEPS = 8;
+        const EXT_BAY_DEPTH = 0.9; // extended bay projects 900mm outward from scaffold outer face
 
         for (let lv = 1; lv <= levelsToBuild; lv++) {
           if (uniqueStairPos.length === 0) continue;
@@ -951,32 +952,72 @@ export default function Scaffold3DView({
           const sx1 = postX[stairSpanIdx];
           const sx2 = postX[stairSpanIdx + 1];
 
-          const stairZfront = 0.05;
-          const stairZback  = widthM - 0.05;
-          const stairZcenter = (stairZfront + stairZback) / 2;
-
           const btmY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.04;
           const topYStair = GROUND_Y + JACK_H + lv * LEVEL_H + 0.04;
           const sStartX = sx1 + 0.06;
           const sEndX   = sx2 - 0.06;
 
-          // Stringers
-          addPipe(group, sStartX, btmY, stairZfront, sEndX, topYStair, stairZfront, stairMat, PIPE_R);
-          addPipe(group, sStartX, btmY, stairZback,  sEndX, topYStair, stairZback,  stairMat, PIPE_R);
+          if (needsExtendedBay) {
+            // 600mm extended bay: stair is placed OUTSIDE the scaffold depth (z < 0)
+            // 3 extra posts (O, P, Q) per stair span per level at z = -EXT_BAY_DEPTH
+            const extZ = -EXT_BAY_DEPTH;
 
-          // Step treads
-          for (let st = 1; st <= NUM_STEPS; st++) {
-            const t = st / (NUM_STEPS + 1);
-            const stepX = sStartX + (sEndX - sStartX) * t;
-            const stepY = btmY + (topYStair - btmY) * t;
-            addBox(group, stepX, stepY, stairZcenter, 0.04, 0.018, stairZback - stairZfront, stairMat);
+            // Extended bay posts (3 posts: at sx1, midpoint, sx2)
+            const sMidX = (sx1 + sx2) / 2;
+            for (const epx of [sx1, sMidX, sx2]) {
+              const postBaseY = GROUND_Y + JACK_H;
+              addRealisticPost(THREE, group, epx, postBaseY, extZ, totalPostH, postMat);
+              addBasePlate(THREE, group, epx, GROUND_Y, extZ, basePlateMat);
+              addPipe(group, epx, GROUND_Y, extZ, epx, GROUND_Y + JACK_H, extZ, jackMatEff, PIPE_R * 0.95);
+            }
+
+            // Horizontal bars connecting extended posts to main scaffold at z=0
+            const yokojiY = GROUND_Y + JACK_H + lv * LEVEL_H;
+            for (const epx of [sx1, sx2]) {
+              addPipe(group, epx, yokojiY - 0.02, extZ, epx, yokojiY - 0.02, 0, yokojiMat, PIPE_R * 1.1);
+            }
+
+            // Braces on the extended bay outer face
+            addPipe(group, sx1, btmY, extZ, sx2, topYStair - 0.04, extZ, braceMat, PIPE_R * 0.75);
+            addPipe(group, sx1, topYStair - 0.04, extZ, sx2, btmY, extZ, braceMat, PIPE_R * 0.75);
+
+            // Stair stringers and treads in extended bay (from z=0 outward to z=extZ)
+            const stairZfront = extZ + 0.05;
+            const stairZback  = -0.05;
+            const stairZcenter = (stairZfront + stairZback) / 2;
+            addPipe(group, sStartX, btmY, stairZfront, sEndX, topYStair, stairZfront, stairMat, PIPE_R);
+            addPipe(group, sStartX, btmY, stairZback,  sEndX, topYStair, stairZback,  stairMat, PIPE_R);
+            for (let st = 1; st <= NUM_STEPS; st++) {
+              const t = st / (NUM_STEPS + 1);
+              const stepX = sStartX + (sEndX - sStartX) * t;
+              const stepY = btmY + (topYStair - btmY) * t;
+              addBox(group, stepX, stepY, stairZcenter, 0.04, 0.018, Math.abs(stairZback - stairZfront), stairMat);
+            }
+            // Handrails on extended bay stair
+            for (const hz of [stairZfront - 0.03, stairZback + 0.03]) {
+              addPipe(group, sStartX, btmY + RAIL_H_ABOVE, hz, sEndX, topYStair + RAIL_H_ABOVE, hz, pipeMat, PIPE_R * 0.7);
+              addPipe(group, sStartX, btmY + RAIL_H_ABOVE * 0.5, hz, sEndX, topYStair + RAIL_H_ABOVE * 0.5, hz, pipeMat, PIPE_R * 0.6);
+            }
+          } else {
+            // Normal stair (900/1200mm): stair inside the scaffold depth, replaces plank
+            const stairZfront = 0.05;
+            const stairZback  = widthM - 0.05;
+            const stairZcenter = (stairZfront + stairZback) / 2;
+
+            addPipe(group, sStartX, btmY, stairZfront, sEndX, topYStair, stairZfront, stairMat, PIPE_R);
+            addPipe(group, sStartX, btmY, stairZback,  sEndX, topYStair, stairZback,  stairMat, PIPE_R);
+            for (let st = 1; st <= NUM_STEPS; st++) {
+              const t = st / (NUM_STEPS + 1);
+              const stepX = sStartX + (sEndX - sStartX) * t;
+              const stepY = btmY + (topYStair - btmY) * t;
+              addBox(group, stepX, stepY, stairZcenter, 0.04, 0.018, stairZback - stairZfront, stairMat);
+            }
+            for (const hz of [stairZfront - 0.03, stairZback + 0.03]) {
+              addPipe(group, sStartX, btmY + RAIL_H_ABOVE, hz, sEndX, topYStair + RAIL_H_ABOVE, hz, pipeMat, PIPE_R * 0.7);
+              addPipe(group, sStartX, btmY + RAIL_H_ABOVE * 0.5, hz, sEndX, topYStair + RAIL_H_ABOVE * 0.5, hz, pipeMat, PIPE_R * 0.6);
+            }
           }
 
-          // Handrails (horizontal only; no extra vertical posts — only rule posts 2×(N+1) per wall)
-          for (const hz of [stairZfront - 0.03, stairZback + 0.03]) {
-            addPipe(group, sStartX, btmY + RAIL_H_ABOVE, hz, sEndX, topYStair + RAIL_H_ABOVE, hz, pipeMat, PIPE_R * 0.7);
-            addPipe(group, sStartX, btmY + RAIL_H_ABOVE * 0.5, hz, sEndX, topYStair + RAIL_H_ABOVE * 0.5, hz, pipeMat, PIPE_R * 0.6);
-          }
           } // end for stairSpanIdx
         }
 
