@@ -739,10 +739,10 @@ export default function Scaffold3DView({
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
         // When reusing corner posts from previous wall, do not create a duplicate start post pair.
-        // The turned first span (e.g. 1800) is rendered in cornerGroup so wall body starts after it.
+        // Still draw the first span (e.g. 1800) plank from the wall so the plank is never removed.
         const reuseStartFromPrevCorner = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
-        const startSpanIdx = reuseStartFromPrevCorner ? 1 : 0;
+        const startSpanIdx = 0;
         // IMPORTANT (corner alignment):
         // Do NOT force the last post to exactly wallLengthMm.
         // A small overrun (≈200–300mm) is allowed/preferred to keep corners tight for pattanko.
