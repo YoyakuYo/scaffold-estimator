@@ -476,7 +476,7 @@ export default function Scaffold3DView({
       scene.background = skyBgTexture;
       const envCubemap = createEnvironmentCubemap(THREE);
       scene.environment = envCubemap;
-      scene.fog = new THREE.FogExp2(0xdce4ec, 0.008);
+      scene.fog = new THREE.FogExp2(0x7a8490, 0.012);
       sceneRef.current = scene;
       wallObjectsRef.current = [];
       wallFocusRef.current = [];
@@ -495,7 +495,7 @@ export default function Scaffold3DView({
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      renderer.toneMappingExposure = 0.78;
       renderer.localClippingEnabled = true;
       const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 100);
       clippingPlaneRef.current = clipPlane;
@@ -505,14 +505,14 @@ export default function Scaffold3DView({
       canvasElement = renderer.domElement;
       canvasContainer.appendChild(canvasElement as unknown as Node);
 
-      // ── Lights (realistic metallic highlights) ─────────
-      const ambientLight = new THREE.AmbientLight(C.ambient, 0.9);
+      // ── Lights (reduced so scaffold reads clearly against darker background) ─────────
+      const ambientLight = new THREE.AmbientLight(0xe8ecf0, 0.48);
       scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8ecae6, 0.6);
+      const hemiLight = new THREE.HemisphereLight(0x8a98a8, 0x4a5a6a, 0.35);
       scene.add(hemiLight);
 
-      const dirLight = new THREE.DirectionalLight(C.dirLight, 1.4);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
       dirLight.position.set(18, 22, 12);
       dirLight.castShadow = true;
       dirLight.shadow.mapSize.width = 2048;
@@ -520,11 +520,11 @@ export default function Scaffold3DView({
       dirLight.shadow.bias = -0.0001;
       scene.add(dirLight);
 
-      const fillLight = new THREE.DirectionalLight(0xe8f4fc, 0.6);
+      const fillLight = new THREE.DirectionalLight(0xb0c0d0, 0.28);
       fillLight.position.set(-14, 8, -10);
       scene.add(fillLight);
 
-      const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      const rimLight = new THREE.DirectionalLight(0xc8d4e0, 0.22);
       rimLight.position.set(-8, 15, 15);
       scene.add(rimLight);
 
@@ -543,12 +543,12 @@ export default function Scaffold3DView({
         mat.map = metalTex.map;
         mat.normalMap = metalTex.normalMap;
         mat.roughnessMap = metalTex.roughnessMap;
-        mat.envMapIntensity = 1.2;
+        mat.envMapIntensity = 0.7;
       };
       const applyMetalNormal = (mat: THREE.MeshStandardMaterial) => {
         if (!metalTex) return;
         mat.normalMap = metalTex.normalMap;
-        mat.envMapIntensity = 0.8;
+        mat.envMapIntensity = 0.5;
       };
       const applyWood = (mat: THREE.MeshStandardMaterial) => {
         if (!woodTex) return;
@@ -561,15 +561,15 @@ export default function Scaffold3DView({
         mat.normalScale = new THREE.Vector2(0.4, 0.4);
       };
 
-      // ── Shared materials ───
+      // ── Shared materials (darker metals so scaffold is visible against background) ───
       const pipeMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.post : (metalTex ? 0xffffff : C.post),
+        color: isTech ? C_TECH.post : (metalTex ? 0xb8c0c8 : C.post),
         metalness: metal, roughness: rough,
       });
       applyMetal(pipeMat);
 
       const pipeDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : (metalTex ? 0xe0e0e0 : C.brace),
+        color: isTech ? C_TECH.brace : (metalTex ? 0x989ca4 : C.brace),
         metalness: metal, roughness: rough + 0.05,
       });
       applyMetal(pipeDarkMat);
@@ -605,7 +605,7 @@ export default function Scaffold3DView({
       };
 
       const jackMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.jack : (metalTex ? 0xd0d0d0 : C.post),
+        color: isTech ? C_TECH.jack : (metalTex ? 0x9098a0 : C.post),
         metalness: metal, roughness: rough + 0.1,
       });
       applyMetal(jackMat);
@@ -617,13 +617,13 @@ export default function Scaffold3DView({
       applyWood(habakiMat);
 
       const stairMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.stair : (metalTex ? 0xffffff : C.post),
+        color: isTech ? C_TECH.stair : (metalTex ? 0xb0b8c0 : C.post),
         metalness: metal, roughness: rough,
       });
       applyMetal(stairMat);
 
       const groundMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff, metalness: 0, roughness: 0.92, map: concreteTex.map,
+        color: 0xa8a49c, metalness: 0, roughness: 0.92, map: concreteTex.map,
       });
       const ecoPalletMat = new THREE.MeshStandardMaterial({ color: C.ecoPallet, metalness: 0.15, roughness: 0.75 });
 
@@ -653,13 +653,13 @@ export default function Scaffold3DView({
       const habakiMatEff = habakiMat;
 
       const couplerMat = new THREE.MeshStandardMaterial({
-        color: isTech ? 0x555555 : (metalTex ? 0xb0b0b0 : 0x888888),
+        color: isTech ? 0x555555 : (metalTex ? 0x788088 : 0x888888),
         metalness: metal + 0.05, roughness: rough + 0.1,
       });
       applyMetalNormal(couplerMat);
 
       const basePlateMat = new THREE.MeshStandardMaterial({
-        color: metalTex ? 0xd0d0d0 : 0x999999,
+        color: metalTex ? 0x889098 : 0x777777,
         metalness: metal, roughness: rough + 0.15,
       });
       applyMetal(basePlateMat);
@@ -1417,9 +1417,9 @@ export default function Scaffold3DView({
       groundPlane.userData = { noClip: true, isGround: true };
       scene.add(groundPlane);
       const gridDivisions = Math.min(40, Math.max(10, Math.floor(groundSize / 5)));
-      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0xc4c8cc, 0xd0d4d8);
+      const gridHelper = new THREE.GridHelper(groundSize, gridDivisions, 0x6a7078, 0x7a8088);
       gridHelper.position.y = GROUND_Y - 0.02;
-      (gridHelper.material as THREE.Material).opacity = 0.25;
+      (gridHelper.material as THREE.Material).opacity = 0.2;
       (gridHelper.material as THREE.Material).transparent = true;
       gridHelper.userData = { noClip: true, isGround: true };
       scene.add(gridHelper);

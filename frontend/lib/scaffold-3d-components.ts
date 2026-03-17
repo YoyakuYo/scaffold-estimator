@@ -17,11 +17,11 @@ export function createMetalTextures(THREE: ThreeNS) {
   const dc = document.createElement('canvas');
   dc.width = W; dc.height = H;
   const d = dc.getContext('2d')!;
-  d.fillStyle = '#c0c8d0';
+  d.fillStyle = '#9ca4ac';
   d.fillRect(0, 0, W, H);
   const dd = d.getImageData(0, 0, W, H);
   for (let i = 0; i < dd.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 18;
+    const n = (Math.random() - 0.5) * 14;
     dd.data[i]     = Math.min(255, Math.max(0, dd.data[i] + n));
     dd.data[i + 1] = Math.min(255, Math.max(0, dd.data[i + 1] + n + 2));
     dd.data[i + 2] = Math.min(255, Math.max(0, dd.data[i + 2] + n + 4));
@@ -29,7 +29,7 @@ export function createMetalTextures(THREE: ThreeNS) {
   d.putImageData(dd, 0, 0);
   for (let i = 0; i < 50; i++) {
     const y = Math.random() * H;
-    d.strokeStyle = `rgba(210,218,226,${0.08 + Math.random() * 0.12})`;
+    d.strokeStyle = `rgba(160,168,178,${0.06 + Math.random() * 0.1})`;
     d.lineWidth = 0.5 + Math.random() * 1.5;
     d.beginPath(); d.moveTo(0, y); d.lineTo(W, y + (Math.random() - 0.5) * 3); d.stroke();
   }
@@ -125,18 +125,18 @@ export function createConcreteTexture(THREE: ThreeNS) {
   const c = document.createElement('canvas');
   c.width = SZ; c.height = SZ;
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#c8c4be';
+  ctx.fillStyle = '#8a8580';
   ctx.fillRect(0, 0, SZ, SZ);
   const data = ctx.getImageData(0, 0, SZ, SZ);
   for (let i = 0; i < data.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 22;
-    data.data[i]     = Math.min(255, Math.max(0, 195 + n));
-    data.data[i + 1] = Math.min(255, Math.max(0, 192 + n));
-    data.data[i + 2] = Math.min(255, Math.max(0, 186 + n));
+    const n = (Math.random() - 0.5) * 18;
+    data.data[i]     = Math.min(255, Math.max(0, 138 + n));
+    data.data[i + 1] = Math.min(255, Math.max(0, 133 + n));
+    data.data[i + 2] = Math.min(255, Math.max(0, 128 + n));
   }
   ctx.putImageData(data, 0, 0);
   for (let i = 0; i < 5; i++) {
-    ctx.strokeStyle = `rgba(140,135,125,${0.12 + Math.random() * 0.1})`;
+    ctx.strokeStyle = `rgba(100,95,90,${0.14 + Math.random() * 0.08})`;
     ctx.lineWidth = 0.5 + Math.random();
     ctx.beginPath();
     let x = Math.random() * SZ, y = Math.random() * SZ;
@@ -162,12 +162,12 @@ export function createEnvironmentCubemap(THREE: ThreeNS) {
     return c;
   }
   const faces = [
-    makeFace('#8ec8e6', '#e0e8f0'),
-    makeFace('#8ec8e6', '#e0e8f0'),
-    makeFace('#5fa8d3', '#5fa8d3'),
-    makeFace('#c8c4be', '#c8c4be'),
-    makeFace('#8ec8e6', '#e0e8f0'),
-    makeFace('#8ec8e6', '#e0e8f0'),
+    makeFace('#4a6b80', '#6b7d8a'),
+    makeFace('#4a6b80', '#6b7d8a'),
+    makeFace('#3d5f70', '#3d5f70'),
+    makeFace('#7a7570', '#7a7570'),
+    makeFace('#4a6b80', '#6b7d8a'),
+    makeFace('#4a6b80', '#6b7d8a'),
   ];
   const tex = new THREE.CubeTexture(faces);
   tex.needsUpdate = true;
@@ -179,11 +179,11 @@ export function createSkyGradientTexture(THREE: ThreeNS) {
   c.width = 2; c.height = 512;
   const ctx = c.getContext('2d')!;
   const g = ctx.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, '#4a9fd5');
-  g.addColorStop(0.35, '#7dbde0');
-  g.addColorStop(0.65, '#b8d4e8');
-  g.addColorStop(0.85, '#dce4ec');
-  g.addColorStop(1.0, '#e8eef4');
+  g.addColorStop(0, '#2a5070');
+  g.addColorStop(0.3, '#3d6080');
+  g.addColorStop(0.55, '#5a7088');
+  g.addColorStop(0.78, '#7a8894');
+  g.addColorStop(1.0, '#8a929c');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 2, 512);
   const tex = new THREE.CanvasTexture(c);
   return tex;
