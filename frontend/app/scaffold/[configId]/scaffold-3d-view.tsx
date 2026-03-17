@@ -718,6 +718,7 @@ export default function Scaffold3DView({
         skipInnerAtStart?: boolean,
         skipInnerAtEnd?: boolean,
         dropLeadingCorner600?: boolean,
+        flushDeckAtCornerEnd?: boolean,
       ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
         const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
         const isBracket = wall.layoutMode === 'bracket';
@@ -840,6 +841,12 @@ export default function Scaffold3DView({
             const x1 = postX[i];
             const x2 = postX[i + 1];
             const spanM = spans[i] / 1000;
+            const cornerStartTouch = reuseStartFromPrevCorner && i === 0;
+            const cornerEndTouch = !!flushDeckAtCornerEnd && i === spans.length - 1;
+            // 0-gap corner rule: corner-touching spans render full length (no -40mm inset).
+            const spanDeckLen = (cornerStartTouch || cornerEndTouch)
+              ? spanM
+              : Math.max(0.05, spanM - 0.04);
             const midX = (x1 + x2) / 2;
             const isStairSpan = uniqueStairPos.includes(i);
 
@@ -862,14 +869,14 @@ export default function Scaffold3DView({
             const plankColorMat = getPlankMat(spanMm);
             const habakiColorMat = getHabakiMat(spanMm);
             if (!isStairSpan) {
-              addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanM - 0.04, widthM * 0.9, plankColorMat);
-              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanM - 0.04, habakiColorMat);
-              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanM - 0.04, habakiColorMat);
+              addRealisticPlank(THREE, group, midX, y + 0.015, widthM / 2, spanDeckLen, widthM * 0.9, plankColorMat);
+              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.05, spanDeckLen, habakiColorMat);
+              addRealisticHabaki(THREE, group, midX, y + 0.015, widthM * 0.95, spanDeckLen, habakiColorMat);
             }
 
             // Habaki / Toe boards — same color as span plank
-            addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanM - 0.04, habakiColorMat);
-            addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanM - 0.04, habakiColorMat);
+            addRealisticHabaki(THREE, group, midX, y + 0.06, 0, spanDeckLen, habakiColorMat);
+            addRealisticHabaki(THREE, group, midX, y + 0.06, widthM, spanDeckLen, habakiColorMat);
           }
 
           // Top guard posts + top rail (最上段)
@@ -1027,6 +1034,7 @@ export default function Scaffold3DView({
           false,
           false,
           isStartCorner,
+          isEndCorner,
         );
 
         // Scale/place wall run. Per 足場コーナー詳細図:
