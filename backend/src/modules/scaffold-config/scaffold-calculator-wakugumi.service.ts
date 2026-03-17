@@ -466,6 +466,53 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
+    // ─── 11. 梁枠 (Hariwaku / Beam Frame) — door openings ──────
+    const resolvedDoors: WallCalculationResult['doorOpenings'] = [];
+    if (wall.doorOpenings && wall.doorOpenings.length > 0) {
+      const cumulativePos: number[] = [0];
+      let accum = 0;
+      for (const s of spans) { accum += s; cumulativePos.push(accum); }
+
+      for (const door of wall.doorOpenings) {
+        const doorStart = door.positionMm - door.widthMm / 2;
+        const doorEnd = door.positionMm + door.widthMm / 2;
+        let startIdx = 0;
+        let endIdx = 0;
+        for (let si = 0; si < spans.length; si++) {
+          if (cumulativePos[si] <= doorStart) startIdx = si;
+          if (cumulativePos[si + 1] >= doorEnd) { endIdx = si; break; }
+          endIdx = si;
+        }
+        const spanCount = Math.max(2, endIdx - startIdx + 1);
+        let hariwakuMm = 0;
+        for (let si = startIdx; si < startIdx + spanCount && si < spans.length; si++) {
+          hariwakuMm += spans[si];
+        }
+
+        resolvedDoors.push({
+          positionMm: door.positionMm,
+          widthMm: door.widthMm,
+          startSpanIndex: startIdx,
+          spanCount,
+          hariwakuSizeMm: hariwakuMm,
+        });
+
+        sortOrder++;
+        components.push({
+          type: 'hariwaku',
+          category: '梁枠',
+          categoryEn: 'Beam Frame',
+          name: `Beam Frame (Hariwaku) ${spanCount} span`,
+          nameJp: `梁枠 ${spanCount}スパン`,
+          sizeSpec: `${hariwakuMm}mm (${spanCount}スパン)`,
+          unit: '基',
+          quantity: 1,
+          sortOrder,
+          materialCode: `HARIWAKU-${spanCount}SPAN`,
+        });
+      }
+    }
+
     // Apply complexity multiplier
     if (complexityMultiplier !== 1.0) {
       for (const comp of components) {
@@ -500,6 +547,7 @@ export class ScaffoldCalculatorWakugumiService {
       components,
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
+      doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
     };
   }
 

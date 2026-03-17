@@ -785,6 +785,17 @@ export default function Scaffold3DView({
         const isWakugumi = result?.scaffoldType === 'wakugumi';
         const habakiCountPerSpan = result?.habakiCountPerSpan ?? 2;
 
+        // Door opening span indices (for skipping planks/braces/habaki at ground level)
+        const doorSpanIndices = new Set<number>();
+        const doorOpeningsRaw = wall.doorOpenings ?? (wall as any).door_openings;
+        if (Array.isArray(doorOpeningsRaw) && doorOpeningsRaw.length > 0) {
+          for (const door of doorOpeningsRaw) {
+            const start = door.startSpanIndex ?? 0;
+            const count = door.spanCount ?? 2;
+            for (let di = 0; di < count; di++) doorSpanIndices.add(start + di);
+          }
+        }
+
         // ── Eco pallets (エコプレット) at each post position ─────
         const palletH = 0.04;
         const palletW = 0.25;
@@ -875,21 +886,24 @@ export default function Scaffold3DView({
               : Math.max(0.05, spanM - 0.04);
             const midX = (x1 + x2) / 2;
             const isStairSpan = uniqueStairPos.includes(i);
+            const isDoorSpan = doorSpanIndices.has(i) && lv === 1;
 
-            // Braces (ブレス)
+            // Braces (ブレス) — skip at ground level for door opening spans
             // Kusabi: OUTER face only (z=widthM for double_post, z=0 for bracket)
             // Wakugumi: BOTH faces (front z=0 + back z=widthM)
-            const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
-            const braceTopY = y - 0.18;
-            if (isWakugumi && !isBracket) {
-              for (const bz of [0, widthM]) {
-                addPipe(group, x1, braceBottomY, bz, x2, braceTopY, bz, braceMat, PIPE_R * 0.75);
-                addPipe(group, x1, braceTopY, bz, x2, braceBottomY, bz, braceMat, PIPE_R * 0.75);
+            if (!isDoorSpan) {
+              const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
+              const braceTopY = y - 0.18;
+              if (isWakugumi && !isBracket) {
+                for (const bz of [0, widthM]) {
+                  addPipe(group, x1, braceBottomY, bz, x2, braceTopY, bz, braceMat, PIPE_R * 0.75);
+                  addPipe(group, x1, braceTopY, bz, x2, braceBottomY, bz, braceMat, PIPE_R * 0.75);
+                }
+              } else {
+                const braceZ = isBracket ? 0 : widthM;
+                addPipe(group, x1, braceBottomY, braceZ, x2, braceTopY, braceZ, braceMat, PIPE_R * 0.75);
+                addPipe(group, x1, braceTopY, braceZ, x2, braceBottomY, braceZ, braceMat, PIPE_R * 0.75);
               }
-            } else {
-              const braceZ = isBracket ? 0 : widthM;
-              addPipe(group, x1, braceBottomY, braceZ, x2, braceTopY, braceZ, braceMat, PIPE_R * 0.75);
-              addPipe(group, x1, braceTopY, braceZ, x2, braceBottomY, braceZ, braceMat, PIPE_R * 0.75);
             }
 
             // Horizontal bars — type-dependent:
@@ -910,17 +924,6 @@ export default function Scaffold3DView({
               addPipe(group, x1, railTop, 0, x2, railTop, 0, tesuriMat, PIPE_R * 0.65);
               addPipe(group, x1, railMid, 0, x2, railMid, 0, tesuriMat, PIPE_R * 0.6);
             }
-
-            // Door opening: skip planks/habaki at ground level for door spans
-            const doorSpanIndices = new Set<number>();
-            if (wall.doorOpenings) {
-              for (const door of wall.doorOpenings) {
-                for (let di = 0; di < door.spanCount; di++) {
-                  doorSpanIndices.add(door.startSpanIndex + di);
-                }
-              }
-            }
-            const isDoorSpan = doorSpanIndices.has(i) && lv === 1;
 
             // Plank / Anchi — rule: show plank if not a stair span, OR 600mm extended bay (stair span still has plank)
             // Skip planks at ground level for door openings
@@ -1059,16 +1062,17 @@ export default function Scaffold3DView({
         }
 
         // ── Hariwaku (梁枠 / beam frame) at door openings ──────
-        if (wall.doorOpenings && wall.doorOpenings.length > 0) {
+        if (doorOpeningsRaw && doorOpeningsRaw.length > 0) {
           const hariwakuColor = 0xef4444;
           const hariwakuMat = new THREE.MeshStandardMaterial({ color: hariwakuColor, metalness: 0.4, roughness: 0.5 });
           const groundLevelY = GROUND_Y + JACK_H + LEVEL_H;
 
-          for (const door of wall.doorOpenings) {
-            const si = door.startSpanIndex;
-            if (si < 0 || si + door.spanCount > spans.length) continue;
+          for (const door of doorOpeningsRaw) {
+            const si = door.startSpanIndex ?? (door as any).start_span_index ?? 0;
+            const spanCount = door.spanCount ?? (door as any).span_count ?? 2;
+            if (si < 0 || si + spanCount > spans.length) continue;
             const x1 = postX[si] ?? 0;
-            const x2 = postX[si + door.spanCount] ?? postX[postX.length - 1];
+            const x2 = postX[si + spanCount] ?? postX[postX.length - 1];
             const doorLen = x2 - x1;
             if (doorLen <= 0) continue;
 
@@ -1082,7 +1086,7 @@ export default function Scaffold3DView({
             addPipe(group, x1, bottomY, widthM, x2, bottomY, widthM, hariwakuMat, PIPE_R * 0.9);
 
             // Diagonal truss members (X pattern per span in the door opening)
-            for (let di = 0; di < door.spanCount; di++) {
+            for (let di = 0; di < spanCount; di++) {
               const sx1 = postX[si + di] ?? x1;
               const sx2 = postX[si + di + 1] ?? x2;
               for (const tz of [0, widthM]) {
@@ -1092,7 +1096,7 @@ export default function Scaffold3DView({
             }
 
             // Vertical web members at intermediate posts
-            for (let di = 1; di < door.spanCount; di++) {
+            for (let di = 1; di < spanCount; di++) {
               const px = postX[si + di] ?? x1;
               for (const tz of [0, widthM]) {
                 addPipe(group, px, bottomY, tz, px, groundLevelY - 0.02, tz, hariwakuMat, PIPE_R * 0.7);
