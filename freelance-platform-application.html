@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Freelance platform — application answers + project sample</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen antialiased selection:bg-teal-900 selection:text-teal-100">
+  <div class="max-w-3xl mx-auto px-4 py-10 space-y-14 print:max-w-none print:py-6">
+    <header class="border-b border-slate-800 pb-8">
+      <p class="text-teal-400 text-sm font-medium uppercase tracking-wider">Additional details — copy for forms</p>
+      <h1 class="text-2xl font-bold text-white mt-2">Scaffold material estimation system</h1>
+      <p class="text-slate-500 text-sm mt-1">Next.js · NestJS (Node) · Tailwind · TypeScript</p>
+    </header>
+
+    <!-- Cover Letter -->
+    <section>
+      <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-600 text-sm font-bold text-white">1</span>
+        Cover letter
+      </h2>
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 leading-relaxed text-[15px]">
+        <p>
+          I ship a <strong class="text-slate-100">full-stack scaffold BOM app</strong> for construction: users define building perimeters, pick <strong class="text-slate-100">Kusabi (wedge-type)</strong> or <strong class="text-slate-100">frame</strong> rules, and get deterministic material lists with <strong class="text-slate-100">Excel export</strong>, <strong class="text-slate-100">2D SVG</strong>, and <strong class="text-slate-100">Three.js 3D</strong>. The stack is <strong class="text-slate-100">Next.js + Tailwind</strong> on the client and <strong class="text-slate-100">NestJS on Node</strong> for APIs, auth, and persistence. I used AI tools heavily for velocity; <strong class="text-slate-100">calculation logic stays explicit and testable</strong> so estimates remain auditable. I’m comfortable owning features end-to-end, reviewing AI-generated code, and keeping architecture documented so the codebase stays consistent.
+        </p>
+      </div>
+    </section>
+
+    <!-- Project (AI + Node/Tailwind scale) -->
+    <section>
+      <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700 text-sm font-bold text-white">2</span>
+        AI-built project (Node / Tailwind at scale)
+      </h2>
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 leading-relaxed text-[15px] space-y-3">
+        <p>
+          <strong class="text-white">Scaffold material estimator</strong> — monorepo with meaningful surface area: multi-step config UI (walls, spans, stairs, per-type rules), a <strong class="text-slate-100">pure TypeScript client engine</strong> for quantities, <strong class="text-slate-100">NestJS</strong> REST + TypeORM + PostgreSQL, JWT auth, PWA, i18n, vision/BIM-assisted footprint input, and exports. <strong class="text-slate-100">Tailwind</strong> is used throughout the Next.js app at real product scale (forms, dashboards, complex layouts). AI accelerated UI wiring, refactors, and boilerplate; domain rules and BOM math live in dedicated modules with clear contracts.
+        </p>
+        <p class="text-slate-500 text-sm">Note: Stack is Next.js + Node (NestJS), not Astro — same class of “modern full-stack + Tailwind.”</p>
+      </div>
+    </section>
+
+    <!-- Unit testing -->
+    <section>
+      <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700 text-sm font-bold text-white">3</span>
+        Unit testing in AI-first workflows
+      </h2>
+      <ul class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 text-[15px] space-y-2 list-disc list-inside marker:text-teal-500">
+        <li><strong class="text-slate-100">Isolate truth:</strong> Test pure calculators and serializers with fixed inputs/outputs so refactors don’t change business results silently.</li>
+        <li><strong class="text-slate-100">Regression tests:</strong> When a bug appears, add a failing test first, then fix — AI refactors are less likely to reintroduce the same bug.</li>
+        <li><strong class="text-slate-100">CI gates:</strong> Run unit tests, type-check, and lint on every change so generated code can’t skip the bar.</li>
+        <li><strong class="text-slate-100">Coverage:</strong> Prioritize critical paths (money, auth, quantity rules) over blanket %; snapshots only for stable, reviewed outputs.</li>
+      </ul>
+    </section>
+
+    <!-- Subagents / MCP -->
+    <section>
+      <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700 text-sm font-bold text-white">4</span>
+        Subagents, MCP, orchestration
+      </h2>
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 leading-relaxed text-[15px] space-y-3">
+        <p>
+          I use <strong class="text-slate-100">task-focused subagents</strong> for parallel work: e.g. one pass to map API usage, another to implement a feature, then merge with a single human review. That keeps context windows focused and reduces conflicting edits.
+        </p>
+        <p>
+          <strong class="text-slate-100">MCP</strong> where it fits: structured tool access (docs, payments, etc.) instead of pasting secrets into chat; treat integrations like any other dependency — schema-checked and reviewed.
+        </p>
+        <p>
+          <strong class="text-slate-100">Pattern:</strong> One thread owns architecture and file ownership; exploration runs read-only until the implementation plan is clear.
+        </p>
+      </div>
+    </section>
+
+    <!-- Models & editors -->
+    <section>
+      <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700 text-sm font-bold text-white">5</span>
+        AI models &amp; editors
+      </h2>
+      <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 text-[15px]">
+        <p><strong class="text-white">Editor:</strong> Cursor (AI pair programming, repo-aware context).</p>
+        <p class="mt-2"><strong class="text-white">Models:</strong> Claude for larger refactors and multi-file reasoning; GPT-4 class for quick iterations and vision-heavy flows where the product uses them; smaller/faster models for mechanical edits when quality is sufficient.</p>
+      </div>
+    </section>
+
+    <!-- QC / architecture -->
+    <section>
+      <h2 class="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700 text-sm font-bold text-white">6</span>
+        Quality control &amp; architecture when AI writes most code
+      </h2>
+      <ul class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 text-[15px] space-y-2 list-disc list-inside marker:text-teal-500">
+        <li><strong class="text-slate-100">Repo docs:</strong> CLAUDE.md / cursor rules so AI stays inside agreed boundaries (e.g. engine vs pages).</li>
+        <li><strong class="text-slate-100">Strict TypeScript + ESLint</strong> to catch sloppy generated code early.</li>
+        <li><strong class="text-slate-100">Human review</strong> on auth, billing, and any path that affects quoted quantities.</li>
+        <li><strong class="text-slate-100">Graceful degradation</strong> (e.g. optional AI features when API keys are missing).</li>
+        <li><strong class="text-slate-100">Periodic trace:</strong> Walk one user journey through the stack to remove duplication and dead paths.</li>
+      </ul>
+    </section>
+
+    <!-- HTML sample: product UI mock -->
+    <section class="pt-4">
+      <h2 class="text-lg font-semibold text-white mb-4">HTML sample — in-app style (Tailwind)</h2>
+      <p class="text-slate-500 text-sm mb-6">Mock of the scaffold config wizard; mirrors the real product’s stack (Tailwind + component-style layout).</p>
+
+      <div class="rounded-2xl border border-slate-700 overflow-hidden shadow-2xl ring-1 ring-white/5">
+        <div class="bg-slate-900 px-4 py-3 flex items-center justify-between border-b border-slate-800">
+          <span class="text-sm font-medium text-white">Scaffold config</span>
+          <span class="text-xs text-slate-500 font-mono">/scaffold</span>
+        </div>
+        <div class="grid md:grid-cols-2 gap-0 bg-slate-950">
+          <div class="p-6 md:p-8 border-b md:border-b-0 md:border-r border-slate-800">
+            <h3 class="text-xl font-bold text-white mb-2">BOM from perimeter &amp; rules</h3>
+            <p class="text-slate-400 text-sm leading-relaxed mb-4">
+              Kusabi or frame scaffolds — wall lengths, stairs, spans. Client engine + NestJS API, Excel &amp; 2D/3D output.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <span class="px-2 py-1 text-xs rounded-md bg-teal-950 text-teal-300 border border-teal-800/80">Three.js</span>
+              <span class="px-2 py-1 text-xs rounded-md bg-teal-950 text-teal-300 border border-teal-800/80">SVG 2D</span>
+              <span class="px-2 py-1 text-xs rounded-md bg-teal-950 text-teal-300 border border-teal-800/80">Excel</span>
+              <span class="px-2 py-1 text-xs rounded-md bg-teal-950 text-teal-300 border border-teal-800/80">PWA</span>
+            </div>
+          </div>
+          <div class="p-6 md:p-8 bg-slate-900/40">
+            <p class="text-xs text-slate-500 uppercase tracking-wider mb-3">Wizard</p>
+            <div class="flex gap-2 mb-4">
+              <button type="button" class="flex-1 py-2.5 rounded-lg bg-teal-600 text-white text-sm font-medium shadow-lg shadow-teal-900/20">Kusabi</button>
+              <button type="button" class="flex-1 py-2.5 rounded-lg bg-slate-800 text-slate-400 text-sm border border-slate-600">Frame</button>
+            </div>
+            <label class="block text-xs text-slate-500 mb-1">Building height (mm)</label>
+            <input type="text" readonly value="12,600" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-200 text-sm mb-4" />
+            <div class="grid grid-cols-3 gap-2 text-center text-sm mb-4">
+              <div class="py-3 rounded-lg bg-slate-800/80 border border-slate-700">
+                <div class="text-slate-500 text-xs">Walls</div>
+                <div class="font-semibold text-white">4</div>
+              </div>
+              <div class="py-3 rounded-lg bg-slate-800/80 border border-slate-700">
+                <div class="text-slate-500 text-xs">Spans</div>
+                <div class="font-semibold text-white">28</div>
+              </div>
+              <div class="py-3 rounded-lg bg-slate-800/80 border border-slate-700">
+                <div class="text-slate-500 text-xs">Levels</div>
+                <div class="font-semibold text-white">7</div>
+              </div>
+            </div>
+            <button type="button" class="w-full py-3 rounded-xl bg-gradient-to-r from-teal-600 to-teal-700 text-white font-semibold text-sm">Calculate quantities</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="text-center text-slate-600 text-sm pb-8 pt-4 border-t border-slate-800">
+      Copy sections above into the platform forms. Print this page (Ctrl+P) for a PDF attachment if needed.
+    </footer>
+  </div>
+</body>
+</html>
