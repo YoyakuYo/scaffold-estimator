@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Calculator,
   Building2,
@@ -19,15 +19,19 @@ import {
   UserPlus,
   Ruler,
 } from 'lucide-react';
-import { useI18n } from '@/lib/i18n';
+import { useI18n, type Locale } from '@/lib/i18n';
 import { usePwaInstall } from '@/lib/pwa-install-context';
 import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
+
+const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
 
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
   const { canInstall, triggerInstall } = usePwaInstall();
+  const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
+  const localeMenuRef = useRef<HTMLDivElement>(null);
 
   const hasToken = !!authApi.getToken();
 
@@ -42,7 +46,13 @@ export default function LandingPage() {
     if (profile) router.replace('/dashboard');
   }, [profile, router]);
 
-  const toggleLocale = () => setLocale(locale === 'ja' ? 'en' : 'ja');
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (localeMenuRef.current && !localeMenuRef.current.contains(e.target as Node)) setLocaleMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (profile) return null;
 
@@ -56,14 +66,31 @@ export default function LandingPage() {
               {t('landing', 'appName')}
             </Link>
             <div className="flex items-center gap-2">
-              <button
-                onClick={toggleLocale}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200"
-                title={locale === 'ja' ? 'Switch to English' : '日本語に切り替え'}
-              >
-                <Globe className="h-4 w-4" />
-                <span>{locale === 'ja' ? 'EN' : 'JP'}</span>
-              </button>
+              <div className="relative" ref={localeMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setLocaleMenuOpen((o) => !o)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200"
+                  title="Language / Langue"
+                >
+                  <Globe className="h-4 w-4" />
+                  <span suppressHydrationWarning>{localeLabels[locale]}</span>
+                </button>
+                {localeMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 py-1 w-28 rounded-md bg-white border border-gray-200 shadow-lg z-50">
+                    {(['ja', 'en', 'fr'] as const).map((loc) => (
+                      <button
+                        key={loc}
+                        type="button"
+                        onClick={() => { setLocale(loc); setLocaleMenuOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-sm font-medium ${locale === loc ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                      >
+                        {localeLabels[loc]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <Link
                 href="/login"
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
