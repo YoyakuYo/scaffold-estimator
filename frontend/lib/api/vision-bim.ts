@@ -19,6 +19,12 @@ export interface VisionFootprintResult {
   wallLengthsFromDimText?: boolean;
   /** Number of floors detected (for height estimation from 3D views). */
   floorCount?: number;
+  /**
+   * Per-edge wall heights in mm (one per polygon edge, same order as vertices).
+   * For stepped/tiered buildings where different facades have different heights.
+   * When omitted, all walls use buildingHeightMm uniformly.
+   */
+  wallHeightsMm?: number[];
   /** URL to the stored IFC file for frontend 3D rendering. */
   ifcFileUrl?: string;
   /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */

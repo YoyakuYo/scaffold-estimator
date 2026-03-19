@@ -71,12 +71,13 @@ export class ScaffoldManager {
    * Inject footprint from vision/BIM pipeline and build graph.
    * Returns wall inputs suitable for createAndCalculate (existing API).
    * When wallLengthsMm is provided (e.g. from plan dimension text), overrides graph-derived lengths for accuracy.
+   * When wallHeightsMm is provided (stepped/tiered buildings), each wall gets its own height.
    */
   injectFootprintAndGetWalls(
     vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
     buildingHeightMm: number,
     refLengthMm?: number,
-    options?: { wallLengthsMm?: number[] },
+    options?: { wallLengthsMm?: number[]; wallHeightsMm?: number[] },
   ): { walls: WallInput[]; buildingOutline: FootprintVertex[] } {
     const graph = buildGraphFromFootprint(vertices, refLengthMm, {
       wallLengthsMm: options?.wallLengthsMm,
@@ -92,6 +93,7 @@ export class ScaffoldManager {
       buildingHeightMm,
       0,
       options?.wallLengthsMm,
+      options?.wallHeightsMm,
     ).map((w) => ({
       side: w.side,
       wallLengthMm: w.wallLengthMm,

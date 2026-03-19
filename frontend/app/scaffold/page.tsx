@@ -581,6 +581,7 @@ function ScaffoldPageContent() {
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
     ifcFileUrl?: string;
+    isStepped?: boolean;
     obstacles?: Array<
       | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
       | { type: 'pillar'; center: { x: number; y: number } | { xFrac: number; yFrac: number }; radiusMm: number }
@@ -979,11 +980,12 @@ function ScaffoldPageContent() {
                       ? (footprint.scaleDenominator ? 20000 : 10000)
                       : undefined;
                     const wallLengthsMm = correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm;
+                    const wallHeightsMm = footprint.wallHeightsMm;
                     const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
                       footprint.vertices,
                       footprint.buildingHeightMm,
                       refMm,
-                      { wallLengthsMm },
+                      { wallLengthsMm, wallHeightsMm },
                     );
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
@@ -1002,6 +1004,8 @@ function ScaffoldPageContent() {
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
                     };
+                    const isStepped = Array.isArray(wallHeightsMm) && wallHeightsMm.length > 0
+                      && new Set(walls.map((w) => w.wallHeightMm)).size > 1;
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
                       walls,
@@ -1010,6 +1014,7 @@ function ScaffoldPageContent() {
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
                       ifcFileUrl: footprint.ifcFileUrl,
+                      isStepped,
                       obstacles,
                       dto,
                     });
@@ -1060,19 +1065,22 @@ function ScaffoldPageContent() {
                 <div className="border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
                   <h3 className="text-sm font-semibold text-gray-800">抽出結果の確認</h3>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">建物高さ (mm)</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      {aiBimPreview.isStepped ? '最大建物高さ (mm)' : '建物高さ (mm)'}
+                    </label>
                     <input
                       type="number"
                       value={aiBimPreview.buildingHeightMm}
                       onChange={(e) => {
                         const h = Math.max(1000, Number(e.target.value) || 1000);
+                        const newWalls = aiBimPreview.isStepped
+                          ? aiBimPreview.walls.map((w) => w)
+                          : aiBimPreview.walls.map((w) => ({ ...w, wallHeightMm: h }));
                         setAiBimPreview({
                           ...aiBimPreview,
                           buildingHeightMm: h,
-                          dto: {
-                            ...aiBimPreview.dto,
-                            walls: aiBimPreview.walls.map((w) => ({ ...w, wallHeightMm: h })),
-                          },
+                          walls: newWalls,
+                          dto: { ...aiBimPreview.dto, walls: newWalls },
                         });
                       }}
                       min={1000}
@@ -1082,6 +1090,12 @@ function ScaffoldPageContent() {
                     <p className="text-xs text-gray-500 mt-0.5">
                       {(aiBimPreview.buildingHeightMm / 1000).toFixed(1)} m
                     </p>
+                    {aiBimPreview.isStepped && (
+                      <p className="text-xs text-violet-600 mt-1 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-violet-500" />
+                        段差建物を検出 — 壁面ごとに異なる高さが設定されています。下の表で個別に調整できます。
+                      </p>
+                    )}
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-2">
@@ -1097,15 +1111,40 @@ function ScaffoldPageContent() {
                           <tr className="bg-gray-100 border-b border-gray-200">
                             <th className="text-left py-2 px-3 font-medium text-gray-700">壁面</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (mm)</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">高さ (mm)</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">足場幅</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">階段数</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aiBimPreview.walls.map((w, i) => (
-                            <tr key={w.side} className="border-b border-gray-100 last:border-0">
+                            <tr key={w.side} className={`border-b border-gray-100 last:border-0 ${aiBimPreview.isStepped && w.wallHeightMm !== aiBimPreview.buildingHeightMm ? 'bg-violet-50/50' : ''}`}>
                               <td className="py-2 px-3 text-gray-800">壁面 {i + 1}</td>
                               <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
+                              <td className="py-2 px-3 text-right">
+                                <input
+                                  type="number"
+                                  value={w.wallHeightMm ?? aiBimPreview.buildingHeightMm}
+                                  onChange={(e) => {
+                                    const h = Math.max(1000, Number(e.target.value) || 1000);
+                                    const newWalls = aiBimPreview.walls.map((wall, j) =>
+                                      j === i ? { ...wall, wallHeightMm: h } : wall,
+                                    );
+                                    const maxH = Math.max(...newWalls.map((wall) => wall.wallHeightMm ?? 0));
+                                    const isStepped = new Set(newWalls.map((wall) => wall.wallHeightMm)).size > 1;
+                                    setAiBimPreview({
+                                      ...aiBimPreview,
+                                      walls: newWalls,
+                                      buildingHeightMm: maxH,
+                                      isStepped,
+                                      dto: { ...aiBimPreview.dto, walls: newWalls },
+                                    });
+                                  }}
+                                  min={1000}
+                                  step={100}
+                                  className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right font-mono focus:ring-2 focus:ring-violet-500"
+                                />
+                              </td>
                               <td className="py-2 px-3 text-right">
                                 <select
                                   value={w.scaffoldWidthMm ?? ''}
@@ -1173,7 +1212,7 @@ function ScaffoldPageContent() {
                             <td className="py-2 px-3 text-right font-mono font-semibold text-gray-800">
                               {aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0).toLocaleString()}
                             </td>
-                            <td colSpan={2} />
+                            <td colSpan={3} />
                           </tr>
                         </tfoot>
                       </table>

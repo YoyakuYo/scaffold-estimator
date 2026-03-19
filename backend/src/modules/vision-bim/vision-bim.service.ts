@@ -31,6 +31,12 @@ export interface VisionFootprintResult {
   wallLengthsFromDimText?: boolean;
   /** Number of floors detected in the image (for height estimation from 3D views). */
   floorCount?: number;
+  /**
+   * Per-edge wall heights in mm (one per polygon edge, same order as vertices).
+   * For stepped/tiered buildings where different facades have different heights.
+   * When omitted, all walls use buildingHeightMm uniformly.
+   */
+  wallHeightsMm?: number[];
   /** URL to the stored IFC file for frontend 3D rendering (set by controller after storage upload). */
   ifcFileUrl?: string;
   /**
@@ -79,9 +85,17 @@ Required fields:
   Include INTERIOR VERTICES for L-shapes, notches, and indents: if a wall indents inward, add a vertex at that corner so the scaffold path follows the indent exactly.
   Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized.
   UNITS: If the drawing shows a scale (S=1/100, S=1/200, 縮尺 etc.) you MUST output { x, y } in real mm. Never use fractions when scale is readable.
-- buildingHeightMm: total building height in mm (ground to eaves/top). If not shown, use typical 3000mm per story.
+- buildingHeightMm: total building height in mm (ground to highest point/eaves/top). If not shown, use typical 3000mm per story.
 
 Optional fields (read from dimension lines and annotations):
+- wallHeightsMm: array of heights in mm, one per edge, same count as vertices.
+  For STEPPED / TIERED / SETBACK buildings where different facade sections have different heights:
+  * A stepped building (like a wedding cake or cascading tower) has wings or sections at different roof levels.
+  * Each polygon edge (wall) should get the height of the roof/eaves above THAT specific wall section.
+  * Example: A building with a 5-story wing (15000mm) on the left and a 12-story tower (36000mm) on the right → the left-side walls get 15000, the right-side walls get 36000.
+  * For walls connecting sections of different height (transition walls), use the TALLER adjacent section's height.
+  * If ALL walls have the same height (simple box), you may omit this field — buildingHeightMm alone is sufficient.
+  * CRITICAL for 3D BIM renders: If you can see that parts of the building are taller than others (stepped roofline, cascading floors, different wing heights), you MUST output wallHeightsMm with the correct per-wall height for each edge. This is the #1 most important new field for scaffold estimation accuracy on complex buildings.
 - scaleDenominator: scale from drawing (e.g. 100 for S=1/100, 200 for S=1/200).
 - wallLengthsMm: array of lengths in mm, one per edge, same count as vertices.
   Edge i = vertex[i] → vertex[i+1]; last edge = last vertex → first vertex (closes polygon).
@@ -119,6 +133,24 @@ If the image is a 3D rendering, isometric view, perspective view, or BIM screens
 - Do NOT trace the perspective outline (silhouette) of the 3D view — that gives wrong shapes (hexagons, trapezoids). Reconstruct the PLAN footprint.
 - When the building shape is unclear but is definitely not rectangular, output your best L/U/T approximation rather than defaulting to a rectangle.
 - Set wallLengthsFromDimText: false and confidence: 0.5–0.7 (lower than for dimensioned plans).
+
+═══ STEPPED / TIERED / CASCADING BUILDINGS (CRITICAL FOR HEIGHT) ═══
+Many buildings have DIFFERENT heights on different sides — stepped rooflines, cascading floors, or wings of varying height.
+Examples: a building that steps down from 15 stories to 10 to 5 (like a staircase/pyramid), or a low podium with a tall tower.
+When you detect this:
+1. Set buildingHeightMm to the MAXIMUM height (tallest point).
+2. MUST output wallHeightsMm: an array with one height per polygon edge, matching the height of each facade section.
+   - Count floors visible above each wall section. Each floor ≈ 3000–4000mm.
+   - Walls facing the tall part get the tall height; walls facing the short part get the short height.
+   - Transition walls (connecting tall to short) get the TALLER adjacent height.
+3. For the footprint polygon: trace the FULL base outline as seen from above (the ground-level footprint).
+   The stepped nature is captured in wallHeightsMm, not in extra footprint vertices.
+   Exception: if sections have different plan outlines at ground level (e.g. tower on a podium where the tower is narrower), DO add the setback vertices in the polygon.
+4. DETECTION CUES in 3D views:
+   - Visible horizontal rooflines at different levels = stepped building.
+   - One side has more floors visible than another = different heights.
+   - "Wedding cake" or "pyramid" profile = cascading tiers.
+   - If the building looks like stairs from the side, it IS stepped — output wallHeightsMm.
 
 Polygon rules — follow these exactly:
 1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
@@ -536,7 +568,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. STEPPED/TIERED BUILDINGS: If different parts of the building have different heights (stepped roofline, cascading floors, tower+podium), you MUST output wallHeightsMm — one height per edge matching the roof height above that wall section. Set buildingHeightMm to the tallest point. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: wallHeightsMm (per-edge heights for stepped buildings), scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
               },
             ],
           },
@@ -584,7 +616,8 @@ export class VisionBimService {
 
       this.logger.log(
         `Vision BIM raw response: ${parsed.vertices?.length ?? 0} vertices, ` +
-        `height=${parsed.buildingHeightMm}mm, wallLengths=${JSON.stringify(parsed.wallLengthsMm ?? 'none')}`,
+        `height=${parsed.buildingHeightMm}mm, wallLengths=${JSON.stringify(parsed.wallLengthsMm ?? 'none')}, ` +
+        `wallHeights=${JSON.stringify((parsed as any).wallHeightsMm ?? 'none')}`,
       );
 
       if (!parsed.vertices || !Array.isArray(parsed.vertices) || parsed.vertices.length < 3) {
@@ -640,6 +673,34 @@ export class VisionBimService {
       parsed.wallLengthsFromDimText = wallLengths != null
         ? (parsed.wallLengthsFromDimText === true)
         : undefined;
+      // Validate and normalize wallHeightsMm (per-edge heights for stepped buildings)
+      if (Array.isArray((parsed as any).wallHeightsMm)) {
+        let wallHeights = (parsed as any).wallHeightsMm as number[];
+        if (wallHeights.length === n && wallHeights.every((h: any) => typeof h === 'number' && h > 0)) {
+          const maxH = Math.max(...wallHeights);
+          if (maxH < 100) {
+            wallHeights = wallHeights.map((h) => Math.round(h * 1000));
+            this.logger.warn(`wallHeightsMm auto-converted from m→mm (max was ${maxH})`);
+          }
+          if (wallHeights.every((h) => h >= 1000)) {
+            parsed.wallHeightsMm = wallHeights;
+            this.logger.log(`wallHeightsMm: ${wallHeights.map((h) => `${h}mm`).join(', ')}`);
+          } else {
+            parsed.wallHeightsMm = undefined;
+          }
+        } else {
+          parsed.wallHeightsMm = undefined;
+        }
+        // If all per-wall heights are the same, drop the array (buildingHeightMm alone suffices)
+        if (parsed.wallHeightsMm) {
+          const unique = new Set(parsed.wallHeightsMm);
+          if (unique.size === 1) {
+            parsed.wallHeightsMm = undefined;
+          }
+        }
+      } else {
+        parsed.wallHeightsMm = undefined;
+      }
       if (parsed.scaffoldTypeHint !== 'kusabi' && parsed.scaffoldTypeHint !== 'wakugumi') {
         parsed.scaffoldTypeHint = undefined;
       }
@@ -720,10 +781,11 @@ export class VisionBimService {
     const isMm = 'x' in verts[0];
 
     // Normalise to {x, y} in whatever unit the AI used (mm or 0-1 fraction).
-    let pts: Array<{ x: number; y: number }> = verts.map((v) =>
+    // Track original indices so wallHeightsMm can be remapped after cleanup.
+    let indexed: Array<{ x: number; y: number; origIdx: number }> = verts.map((v, idx) =>
       isMm
-        ? { x: (v as { x: number; y: number }).x, y: (v as { x: number; y: number }).y }
-        : { x: (v as { xFrac: number; yFrac: number }).xFrac, y: (v as { xFrac: number; yFrac: number }).yFrac },
+        ? { x: (v as { x: number; y: number }).x, y: (v as { x: number; y: number }).y, origIdx: idx }
+        : { x: (v as { xFrac: number; yFrac: number }).xFrac, y: (v as { xFrac: number; yFrac: number }).yFrac, origIdx: idx },
     );
 
     // ── Pass 1: remove duplicate / degenerate consecutive vertices ──────────
@@ -732,12 +794,12 @@ export class VisionBimService {
       const ys = arr.map((p) => p.y);
       return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
     };
-    const minDist = polyExtent(pts) * 0.0005; // 0.05 % of extent
-    pts = pts.filter((p, i, a) => {
+    const minDist = polyExtent(indexed) * 0.0005; // 0.05 % of extent
+    indexed = indexed.filter((p, i, a) => {
       const next = a[(i + 1) % a.length];
       return Math.hypot(p.x - next.x, p.y - next.y) > minDist;
     });
-    if (pts.length < 4) return;
+    if (indexed.length < 4) return;
 
     // ── Pass 2: iteratively remove near-collinear vertices ───────────────────
     // Threshold: sin(angle at B) < 0.09 ≈ deviation ≤ 5°.
@@ -745,30 +807,31 @@ export class VisionBimService {
     // corners of slightly non-orthogonal buildings.
     const SIN_THR = 0.09;
     let changed = true;
-    while (changed && pts.length > minVertices) {
+    while (changed && indexed.length > minVertices) {
       changed = false;
-      for (let i = 0; i < pts.length; i++) {
-        const a = pts[(i - 1 + pts.length) % pts.length];
-        const b = pts[i];
-        const c = pts[(i + 1) % pts.length];
+      for (let i = 0; i < indexed.length; i++) {
+        const a = indexed[(i - 1 + indexed.length) % indexed.length];
+        const b = indexed[i];
+        const c = indexed[(i + 1) % indexed.length];
         const abx = b.x - a.x, aby = b.y - a.y;
         const bcx = c.x - b.x, bcy = c.y - b.y;
         const abLen = Math.hypot(abx, aby);
         const bcLen = Math.hypot(bcx, bcy);
         if (abLen < 1e-12 || bcLen < 1e-12) {
-          pts.splice(i, 1);
+          indexed.splice(i, 1);
           changed = true;
           break;
         }
         const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
         if (sinAngle < SIN_THR) {
-          pts.splice(i, 1);
+          indexed.splice(i, 1);
           changed = true;
           break;
         }
       }
     }
 
+    const pts = indexed.map((p) => ({ x: p.x, y: p.y }));
     if (pts.length >= verts.length || pts.length < 3) return; // nothing changed
 
     this.logger.log(
@@ -796,6 +859,28 @@ export class VisionBimService {
       // to different edges — clear so the caller recomputes from vertex distances.
       parsed.wallLengthsMm = undefined;
       parsed.wallLengthsFromDimText = undefined;
+    }
+
+    // Remap wallHeightsMm to match the surviving vertices.
+    // For each kept vertex i, the outgoing edge inherits the max height
+    // of all original edges that were merged into this new edge.
+    if (Array.isArray(parsed.wallHeightsMm) && parsed.wallHeightsMm.length === verts.length) {
+      const origHeights = parsed.wallHeightsMm;
+      const keptOrigIndices = indexed.map((p) => p.origIdx);
+      const newHeights: number[] = [];
+      for (let i = 0; i < keptOrigIndices.length; i++) {
+        const nextKept = keptOrigIndices[(i + 1) % keptOrigIndices.length];
+        let maxH = 0;
+        let idx = keptOrigIndices[i];
+        while (true) {
+          maxH = Math.max(maxH, origHeights[idx] ?? 0);
+          if (idx === nextKept) break;
+          idx = (idx + 1) % verts.length;
+          if (idx === keptOrigIndices[i]) break;
+        }
+        newHeights.push(maxH || origHeights[keptOrigIndices[i]] || parsed.buildingHeightMm);
+      }
+      parsed.wallHeightsMm = newHeights;
     }
   }
 

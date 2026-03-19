@@ -196,18 +196,21 @@ export function ensureMiterJoin(graph: BuildingGraphData): BuildingGraphData {
  * Convert BuildingGraph to wall inputs for the existing estimator.
  * Each edge → one WallInput (side = edge id, wallLengthMm = edge length).
  * If overrideLengthsMm is provided and length matches edges, use those lengths (e.g. from plan dimensions).
+ * If wallHeightsMm is provided (one per edge), each wall gets its own height (for stepped/tiered buildings).
  */
 export function graphToWallInputs(
   graph: BuildingGraphData,
   buildingHeightMm: number,
   stairAccessCountPerWall: number = 0,
   overrideLengthsMm?: number[],
+  wallHeightsMm?: number[],
 ): Array<{ side: string; wallLengthMm: number; wallHeightMm: number; stairAccessCount: number }> {
   const useOverride = Array.isArray(overrideLengthsMm) && overrideLengthsMm.length === graph.edges.length;
+  const usePerWallHeight = Array.isArray(wallHeightsMm) && wallHeightsMm.length === graph.edges.length;
   return graph.edges.map((e, i) => ({
     side: e.id,
     wallLengthMm: Math.max(600, useOverride ? overrideLengthsMm[i]! : e.lengthMm),
-    wallHeightMm: buildingHeightMm,
+    wallHeightMm: usePerWallHeight ? wallHeightsMm[i]! : buildingHeightMm,
     stairAccessCount: stairAccessCountPerWall,
   }));
 }
