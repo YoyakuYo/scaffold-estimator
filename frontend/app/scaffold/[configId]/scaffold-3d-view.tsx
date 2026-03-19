@@ -1477,7 +1477,10 @@ export default function Scaffold3DView({
       scene.add(cornerGroup);
 
       // ── Building outline at ground level ─────────────────
-      const outlineMat = new THREE.LineBasicMaterial({ color: 0x7a8090, linewidth: 2 });
+      const outlineMat = new THREE.LineBasicMaterial({
+        color: isAiBim ? 0x0f0f0f : 0x7a8090,
+        linewidth: 2,
+      });
       const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, GROUND_Y + 0.01, v.z - cz));
       if (!isOpenPolygon) {
         outlinePts.push(outlinePts[0].clone());
@@ -1495,46 +1498,112 @@ export default function Scaffold3DView({
         }
         shape.closePath();
         const buildingH = Math.max(maxH * 0.85, 2);
-        const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
-        const buildingMat = new THREE.MeshStandardMaterial({
-          color: 0xd5cfc7, metalness: 0.05, roughness: 0.8,
-          transparent: true, opacity: 0.55, side: THREE.DoubleSide,
-        });
-        const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
-        buildingMesh.rotation.x = -Math.PI / 2;
-        buildingMesh.position.y = GROUND_Y + 0.02;
-        buildingMesh.userData = { noClip: true };
-        scene.add(buildingMesh);
-
-        // Building edges
-        const buildingEdgesGeo = new THREE.EdgesGeometry(buildingGeo);
-        const buildingEdges = new THREE.LineSegments(buildingEdgesGeo, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
-        buildingEdges.rotation.x = -Math.PI / 2;
-        buildingEdges.position.y = GROUND_Y + 0.02;
-        buildingEdges.userData = { noClip: true };
-        scene.add(buildingEdges);
-
-        // Floor slab lines on building perimeter
         const floorH = 3.0;
         const centeredVerts = verts.map(v => ({ x: v.x - cx, z: v.z - cz }));
-        for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
-          const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, GROUND_Y + 0.02 + floorY, v.z));
-          floorPts.push(floorPts[0].clone());
-          const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-          const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0x8b95a3, transparent: true, opacity: 0.6 }));
-          floorLine.userData = { noClip: true };
-          scene.add(floorLine);
+
+        /** BIM AI path: flat “shaded with edges” CAD look (solid fills + black outlines, no hatching / no translucent wash). */
+        const edgeLineMat = new THREE.LineBasicMaterial({ color: 0x0a0a0a });
+        const addBlackEdges = (geo: THREE.ExtrudeGeometry, posY: number) => {
+          const eg = new THREE.EdgesGeometry(geo);
+          const lines = new THREE.LineSegments(eg, edgeLineMat);
+          lines.rotation.x = -Math.PI / 2;
+          lines.position.y = posY;
+          lines.userData = { noClip: true };
+          scene.add(lines);
+        };
+
+        if (isAiBim) {
+          const lowerH = buildingH * 0.48;
+          const upperH = buildingH * 0.52;
+          const lowerGeo = new THREE.ExtrudeGeometry(shape, { depth: lowerH, bevelEnabled: false });
+          const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
+          const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+
+          const lowerMat = new THREE.MeshBasicMaterial({ color: 0xc9b89a, side: THREE.DoubleSide });
+          const upperMat = new THREE.MeshBasicMaterial({ color: 0x3d3d42, side: THREE.DoubleSide });
+          const roofMat = new THREE.MeshBasicMaterial({ color: 0x2f7a48, side: THREE.DoubleSide });
+
+          const baseY = GROUND_Y + 0.02;
+          const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat);
+          lowerMesh.rotation.x = -Math.PI / 2;
+          lowerMesh.position.y = baseY;
+          lowerMesh.userData = { noClip: true };
+          scene.add(lowerMesh);
+          addBlackEdges(lowerGeo, baseY);
+
+          const upperMesh = new THREE.Mesh(upperGeo, upperMat);
+          upperMesh.rotation.x = -Math.PI / 2;
+          upperMesh.position.y = baseY + lowerH;
+          upperMesh.userData = { noClip: true };
+          scene.add(upperMesh);
+          addBlackEdges(upperGeo, baseY + lowerH);
+
+          const roofTopY = baseY + lowerH + upperH;
+          const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+          roofMesh.rotation.x = -Math.PI / 2;
+          roofMesh.position.y = roofTopY;
+          roofMesh.userData = { noClip: true };
+          scene.add(roofMesh);
+          addBlackEdges(roofGeo, roofTopY);
+
+          for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
+            const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, baseY + floorY, v.z));
+            floorPts.push(floorPts[0].clone());
+            const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
+            const floorLine = new THREE.Line(
+              floorGeo,
+              new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: false, opacity: 1 }),
+            );
+            floorLine.userData = { noClip: true };
+            scene.add(floorLine);
+          }
+        } else {
+          const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
+          const buildingMat = new THREE.MeshStandardMaterial({
+            color: 0xd5cfc7, metalness: 0.05, roughness: 0.8,
+            transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+          });
+          const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
+          buildingMesh.rotation.x = -Math.PI / 2;
+          buildingMesh.position.y = GROUND_Y + 0.02;
+          buildingMesh.userData = { noClip: true };
+          scene.add(buildingMesh);
+
+          const buildingEdgesGeo = new THREE.EdgesGeometry(buildingGeo);
+          const buildingEdges = new THREE.LineSegments(buildingEdgesGeo, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
+          buildingEdges.rotation.x = -Math.PI / 2;
+          buildingEdges.position.y = GROUND_Y + 0.02;
+          buildingEdges.userData = { noClip: true };
+          scene.add(buildingEdges);
+
+          for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
+            const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, GROUND_Y + 0.02 + floorY, v.z));
+            floorPts.push(floorPts[0].clone());
+            const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
+            const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0x8b95a3, transparent: true, opacity: 0.6 }));
+            floorLine.userData = { noClip: true };
+            scene.add(floorLine);
+          }
         }
 
         // Window pattern on each facade
-        const windowMat = new THREE.MeshStandardMaterial({
-          color: 0x7cb8d4, metalness: 0.3, roughness: 0.4,
-          transparent: true, opacity: 0.5, side: THREE.DoubleSide,
-        });
-        const windowSillMat = new THREE.MeshStandardMaterial({
-          color: 0x4a5568, metalness: 0.2, roughness: 0.6,
-          transparent: true, opacity: 0.5,
-        });
+        const windowMat = isAiBim
+          ? new THREE.MeshBasicMaterial({
+              color: 0x6baed6,
+              transparent: true,
+              opacity: 0.92,
+              side: THREE.DoubleSide,
+            })
+          : new THREE.MeshStandardMaterial({
+              color: 0x7cb8d4, metalness: 0.3, roughness: 0.4,
+              transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+            });
+        const windowSillMat = isAiBim
+          ? new THREE.MeshBasicMaterial({ color: 0x2d3748, side: THREE.DoubleSide })
+          : new THREE.MeshStandardMaterial({
+              color: 0x4a5568, metalness: 0.2, roughness: 0.6,
+              transparent: true, opacity: 0.5,
+            });
         const nFloors = Math.max(1, Math.floor(buildingH / floorH));
         const windowH = floorH * 0.45;
         const windowBottomOffset = floorH * 0.3;
