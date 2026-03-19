@@ -3,6 +3,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { WallCalculationResult } from '@/lib/api/scaffold-configs';
+import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
 import { ZoomIn, ZoomOut, Printer } from 'lucide-react';
 
 // ─── Colors ─────────────────────────────────────────────────────
@@ -50,15 +51,6 @@ function signedArea(pts: { x: number; y: number }[]): number {
  * Handles 1-2 walls (open segments), 3+ walls (closed polygon).
  * Uses stored polygon vertices when available, falls back to regular polygon.
  */
-function readVertex(v: any): { x: number; y: number } {
-  const rawX = v?.xFrac ?? v?.x ?? 0;
-  const rawY = v?.yFrac ?? v?.y ?? 0;
-  return {
-    x: typeof rawX === 'number' && isFinite(rawX) ? rawX : 0,
-    y: typeof rawY === 'number' && isFinite(rawY) ? rawY : 0,
-  };
-}
-
 function buildPolygonFromWalls(
   walls: WallCalculationResult[],
   scaleFactor: number,
@@ -70,36 +62,27 @@ function buildPolygonFromWalls(
   const vertices: { x: number; y: number }[] = [];
   const edges: Edge[] = [];
 
-  // ── Use stored polygon vertices if available ──
-  if (storedVertices && storedVertices.length >= n && n >= 3) {
-    const parsed = storedVertices.map(readVertex);
-    const xs = parsed.map(v => v.x);
-    const ys = parsed.map(v => v.y);
-    const bbW = Math.max(...xs) - Math.min(...xs);
-    const bbH = Math.max(...ys) - Math.min(...ys);
-    const maxDim = Math.max(bbW, bbH);
-
-    // If all vertices collapse to a single point, fall through to regular polygon
-    if (!isFinite(maxDim) || maxDim < 1) {
-      // fall through
-    } else {
-      const sf = 700 / maxDim;
-      const offX = Math.min(...xs);
-      const offY = Math.min(...ys);
-
+  // ── Closed 3+ walls: same footprint math as 3D (fixes mis-closed BIM hex / 辺6) ──
+  if (n >= 3) {
+    const polyM = buildFootprintPolygonXZ(walls, storedVertices);
+    if (polyM.length >= n) {
+      const mmPts = polyM.map((v) => ({ x: v.x * 1000, y: v.z * 1000 }));
+      const offX = Math.min(...mmPts.map((p) => p.x));
+      const offY = Math.min(...mmPts.map((p) => p.y));
       for (let i = 0; i < n; i++) {
-        vertices.push({ x: (parsed[i].x - offX) * sf, y: (parsed[i].y - offY) * sf });
+        vertices.push({
+          x: (mmPts[i].x - offX) * scaleFactor,
+          y: (mmPts[i].y - offY) * scaleFactor,
+        });
       }
-
       for (let i = 0; i < n; i++) {
-        const v1 = vertices[i];
-        const v2 = vertices[(i + 1) % n];
+        const v1 = vertices[i]!;
+        const v2 = vertices[(i + 1) % n]!;
         const dx = v2.x - v1.x;
         const dy = v2.y - v1.y;
         const angle = Math.atan2(dy, dx);
         edges.push({ x1: v1.x, y1: v1.y, x2: v2.x, y2: v2.y, wallIdx: i, angle });
       }
-
       return { vertices, edges, isClosed: true };
     }
   }

@@ -77,24 +77,34 @@ export function rebuildFromDimensions(
   const n = rawVertices.length;
   if (n < 3 || wallLengthsMm.length !== n) return rawVertices;
 
-  const pts: Point2D[] = [];
-  let x = 0;
-  let y = 0;
+  /**
+   * Walk the first (n-1) edges with given lengths along raw directions from corner i → i+1.
+   * Start at rawVertices[0] (not 0,0) so the footprint stays aligned with BIM coordinates.
+   * The closing wall (n-1) is the chord from the last built corner back to the first — we do
+   * not apply wallLengthsMm[n-1] as a step that overwrites the first corner (that produced
+   * self-intersections / “辺6 cuts through the building” when one length was wrong).
+   */
+  const first = { ...rawVertices[0] };
+  const pts: Point2D[] = [first];
+  let x = first.x;
+  let y = first.y;
 
-  for (let i = 0; i < n; i++) {
-    pts.push({ x, y });
-
-    const next = (i + 1) % n;
+  for (let i = 0; i < n - 1; i++) {
+    const next = i + 1;
     const rawDx = rawVertices[next].x - rawVertices[i].x;
     const rawDy = rawVertices[next].y - rawVertices[i].y;
     const rawLen = Math.hypot(rawDx, rawDy);
-    const tgtLen = wallLengthsMm[i]; // mm
+    const tgtLen = wallLengthsMm[i];
 
-    if (rawLen < 1e-12) continue;
+    if (rawLen < 1e-12) {
+      pts.push({ x, y });
+      continue;
+    }
     const dx = (rawDx / rawLen) * tgtLen;
     const dy = (rawDy / rawLen) * tgtLen;
     x += dx;
     y += dy;
+    pts.push({ x, y });
   }
 
   return pts;

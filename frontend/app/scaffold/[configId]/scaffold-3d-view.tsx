@@ -17,12 +17,14 @@ import {
   addCoupler,
   BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
+import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
 import { bimHexToNumber } from '@/lib/bim-facade-colors';
 
 /**
  * 3D Scaffold View — Closed Polygon
- * The building is one closed polygon; each edge is one wall. Walls are scaled to exactly
- * match the polygon edge length so corners meet with no gap (rectangle or any n-gon).
+ * Footprint vertices come from `buildFootprintPolygonXZ` (shared with plan view):
+ * walk stored outline directions with per-wall lengths; closing edge is the chord back
+ * to the first corner (no overwriting vertex 0, which broke the last wall in BIM hexes).
  * Span generation uses correct post reuse (N spans → N+1 post positions). One shared
  * vertical post per polygon vertex closes the corners visually.
  */
@@ -98,200 +100,6 @@ const SPAN_COLORS: Record<number, number> = {
   1800: 0x8b5cf6,  // purple
 };
 const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
-
-/**
- * Build polygon vertices from stored vertices or regular polygon fallback.
- * Returns 3D positions on XZ plane (in meters). Always NaN-safe.
- *
- * Rules:
- * - Uniform scale: X and Z use the SAME scale factor (no aspect distortion).
- * - 90° corners: For 4 walls (rectangle), use explicit rectangle with correct dimensions.
- * - Closed loop: Last vertex connects back to first; all n edges use wall lengths.
- * - Dimensions: Each edge length = walls[i].wallLengthMm (e.g. 11'-6" = 3505mm).
- */
-function buildPolygonVertices(
-  walls: WallCalculationResult[],
-  storedVertices?: Array<{ xFrac: number; yFrac: number }>,
-): { x: number; z: number }[] {
-  const n = walls.length;
-  if (n < 1) return [];
-
-  // Normalise incoming vertices:
-  // - DXF / vision-bim may send absolute mm coordinates: { x, y }
-  // - Older AI output may send 0–1 fractions: { xFrac, yFrac }
-  // We convert both into a unified { x, z } shape-space.
-  const normaliseVertex = (v: any): { x: number; z: number } => {
-    const hasMm = typeof v?.x === 'number' && typeof v?.y === 'number';
-    if (hasMm) {
-      // Keep mm as-is here; later logic decides whether to divide by 1000
-      // or rescale uniformly based on spread/maxCoord.
-      return {
-        x: Number.isFinite(v.x) ? v.x : 0,
-        z: Number.isFinite(v.y) ? v.y : 0,
-      };
-    }
-    const xf = v?.xFrac;
-    const yf = v?.yFrac;
-    return {
-      x: Number.isFinite(xf) ? xf : 0,
-      z: Number.isFinite(yf) ? yf : 0,
-    };
-  };
-
-  const wallLenM = (i: number) => {
-    const mm = (walls[i] as any)?.wallLengthMm;
-    const safeMm = Number.isFinite(mm) ? Math.max(600, Number(mm)) : 6000;
-    return safeMm / 1000;
-  };
-
-  // ── 1 wall: single edge (2 vertices) ──
-  if (n === 1) {
-    const lenM = wallLenM(0);
-    return [{ x: 0, z: 0 }, { x: lenM, z: 0 }];
-  }
-
-  // ── 2 walls: L-shape (3 vertices) ──
-  if (n === 2) {
-    const len0 = wallLenM(0);
-    const len1 = wallLenM(1);
-    return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
-  }
-
-  // ── 4 walls: try stored vertices first (preserves BIM AI non-rectangular shape);
-  //    fall back to axis-aligned rectangle when stored vertices are absent or degenerate ──
-  if (n === 4) {
-    const rect = () => {
-      const w0 = wallLenM(0);
-      const w1 = wallLenM(1);
-      return [
-        { x: 0, z: 0 },
-        { x: w0, z: 0 },
-        { x: w0, z: w1 },
-        { x: 0, z: w1 },
-      ];
-    };
-    if (!storedVertices || storedVertices.length < 4) return rect();
-    // Validate stored vertices form a non-degenerate polygon before using them
-    const raw4 = storedVertices.slice(0, 4).map(normaliseVertex);
-    const xs4 = raw4.map(v => v.x);
-    const zs4 = raw4.map(v => v.z);
-    const spread4 = Math.max(
-      Math.max(...xs4) - Math.min(...xs4),
-      Math.max(...zs4) - Math.min(...zs4),
-    );
-    // If all stored vertices are degenerate (zero spread / all same point),
-    // or contain non-finite values, use the simple rectangle instead.
-    if (spread4 < 0.001 || !raw4.every(v => Number.isFinite(v.x) && Number.isFinite(v.z))) {
-      return rect();
-    }
-    // Non-degenerate stored vertices — fall through to generic handler below
-  }
-
-  // ── 6 walls: Irregular hexagon — rebuild from stored vertices + wall lengths, closed loop ──
-  // Wall 6 end connects back to Wall 1 start (continuous perimeter, no gap).
-  if (n === 6 && storedVertices && storedVertices.length >= 6) {
-    const raw = storedVertices.slice(0, 6).map(normaliseVertex);
-    const corrected: { x: number; z: number }[] = [{ x: 0, z: 0 }];
-    for (let i = 0; i < 6; i++) {
-      const next = (i + 1) % 6;
-      const rawDx = raw[next].x - raw[i].x;
-      const rawDz = raw[next].z - raw[i].z;
-      const rawLen = Math.hypot(rawDx, rawDz);
-      const tgtLen = wallLenM(i);
-      const from = corrected[i];
-      if (rawLen >= 0.001) {
-        const dx = (rawDx / rawLen) * tgtLen;
-        const dz = (rawDz / rawLen) * tgtLen;
-        if (next > 0) {
-          corrected.push({ x: from.x + dx, z: from.z + dz });
-        } else {
-          corrected[0] = { x: from.x + dx, z: from.z + dz };
-        }
-      }
-    }
-    return corrected;
-  }
-
-  // ── Use stored vertices (any wall count including 4 from BIM AI) ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(normaliseVertex);
-    const xs = raw.map(v => v.x);
-    const zs = raw.map(v => v.z);
-    const spreadX = Math.max(...xs) - Math.min(...xs);
-    const spreadZ = Math.max(...zs) - Math.min(...zs);
-    const spread = Math.max(spreadX, spreadZ, 1e-6);
-    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
-
-    if (spread >= 1e-6) {
-      let verts: { x: number; z: number }[];
-      if (maxCoord <= 1.1 && spread <= 1.1) {
-        // 0–1 fraction: UNIFORM scale (same factor for X and Z) to preserve aspect
-        const refM = Math.max(...walls.map(w => Math.max(w.wallLengthMm, 600))) / 1000;
-        const scale = refM / spread;
-        verts = raw.map(v => ({ x: v.x * scale, z: v.z * scale }));
-      } else if (spread > 1000 || maxCoord > 1000) {
-        verts = raw.map(v => ({ x: v.x / 1000, z: v.z / 1000 }));
-      } else {
-        verts = raw.map(v => ({ x: v.x, z: v.z }));
-      }
-
-      const spreadM = Math.max(
-        Math.max(...verts.map(v => v.x)) - Math.min(...verts.map(v => v.x)),
-        Math.max(...verts.map(v => v.z)) - Math.min(...verts.map(v => v.z)),
-      );
-      if (spreadM > 0.01) {
-        // Rebuild polygon: each edge i has length walls[i].wallLengthMm, direction from stored.
-        // CLOSED LOOP: include the closing edge (n-1) -> 0.
-        const corrected: { x: number; z: number }[] = [{ ...verts[0] }];
-        for (let i = 0; i < n; i++) {
-          const next = (i + 1) % n;
-          const rawDx = verts[next].x - verts[i].x;
-          const rawDz = verts[next].z - verts[i].z;
-          const rawLen = Math.hypot(rawDx, rawDz);
-          const tgtLen = wallLenM(i);
-          const from = corrected[i];
-          if (rawLen < 0.001) {
-            if (next > 0) corrected.push({ x: from.x, z: from.z });
-            continue;
-          }
-          const dx = (rawDx / rawLen) * tgtLen;
-          const dz = (rawDz / rawLen) * tgtLen;
-          if (next > 0) {
-            corrected.push({ x: from.x + dx, z: from.z + dz });
-          } else {
-            // Closing edge: ensure vertex 0 is reached (closed loop)
-            corrected[0] = { x: from.x + dx, z: from.z + dz };
-          }
-        }
-        return corrected;
-      }
-    }
-  }
-
-  // ── Generic fallback: place walls with lengths, force closed loop ──
-  // Build n-1 edges from origin with equal angle steps; last edge closes back to (0,0).
-  const extAngle = (2 * Math.PI) / n;
-  const verts: { x: number; z: number }[] = [{ x: 0, z: 0 }];
-  let cx = 0, cz = 0;
-  let angle = 0;
-  for (let i = 0; i < n - 1; i++) {
-    const lenM = wallLenM(i);
-    cx += lenM * Math.cos(angle);
-    cz += lenM * Math.sin(angle);
-    angle += extAngle;
-    verts.push({ x: cx, z: cz });
-  }
-  // Last edge: from verts[n-1] back to verts[0] with length walls[n-1] (closed loop)
-  const lastLenM = wallLenM(n - 1);
-  const dx = -cx;
-  const dz = -cz;
-  const dist = Math.hypot(dx, dz);
-  if (dist >= 1e-6) {
-    const scale = lastLenM / dist;
-    verts[0] = { x: cx + dx * scale, z: cz + dz * scale };
-  }
-  return verts;
-}
 
 // ── Performance limits ──────────────────────────────────────
 // Each span-level creates ~20 mesh objects.  Beyond this threshold
@@ -1114,12 +922,12 @@ export default function Scaffold3DView({
       // ══════════════════════════════════════════════════════
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices ?? (result as any)?.polygonVertices;
-      let verts = buildPolygonVertices(walls, storedVerts);
+      let verts = buildFootprintPolygonXZ(walls, storedVerts);
       let vertsOk =
         verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
       // Safety net: if stored vertices produced invalid geometry, retry without them
       if (!vertsOk && storedVerts && storedVerts.length > 0) {
-        verts = buildPolygonVertices(walls, undefined);
+        verts = buildFootprintPolygonXZ(walls, undefined);
         vertsOk =
           verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
       }
