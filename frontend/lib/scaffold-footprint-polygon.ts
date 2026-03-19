@@ -69,7 +69,7 @@ function tryOrthogonalFallback(
   walls: Array<{ wallLengthMm?: number }>,
   n: number,
 ): FootprintVertexXZ[] | null {
-  if (n < 4 || n > 12 || n % 2 !== 0) return null;
+  if (n < 4 || n > 16 || n % 2 !== 0) return null;
 
   const numReflex = (n - 4) / 2;
   if (numReflex < 0) return null;

@@ -151,7 +151,8 @@ Construction plans show internal structural grids (e.g. Y1/Y2/Y3/Y4/Y5 lines spa
 - NEVER place an extra vertex where a grid line crosses an exterior wall. A straight or diagonal exterior wall is ONE edge (2 vertices: start and end), even if 4 grid lines cross it.
 - NEVER trace a diagonal edge as a staircase of alternating horizontal/vertical steps. A slanted wall = one straight edge.
 - WARNING SIGN: if you have 3 or more consecutive edges with the same length (e.g. four × 7200 mm in a row), you are following a grid, not the building perimeter. Replace those segments with the single outer wall they belong to.
-- Typical buildings have 4–8 vertices. More than 10 almost always means grid-line tracing errors — review and remove spurious vertices before outputting.
+- Typical buildings have 4–8 vertices. Complex multi-wing buildings (hospitals, schools, offices) may have 10–16 vertices. More than 20 almost always means grid-line tracing errors — review and remove spurious vertices before outputting.
+- MULTI-WING BUILDINGS: Large institutional/commercial buildings often have multiple connected wings forming complex shapes. Trace the OUTER perimeter of the entire connected structure as ONE polygon. Each wing junction creates 2+ vertices. Common patterns: H-shape (12 vertices), E-shape (12 vertices), courtyard buildings (8+ vertices).
 
 Self-check before outputting (fix issues silently — never output the check itself):
 - edges count == vertices count (not vertices count + 1)
@@ -710,10 +711,11 @@ export class VisionBimService {
     const verts = parsed.vertices;
     if (!Array.isArray(verts) || verts.length < 5) return;
 
-    // Conservative: don't remove vertices from small polygons (≤6 vertices).
-    // These are typically intentional L/U/T shapes, not grid-tracing artifacts.
-    // Grid-tracing produces 8+ vertices; genuine shapes with 4-6 should be preserved.
-    const minVertices = Math.max(4, Math.min(verts.length - 2, 6));
+    // Conservative: preserve intentional shape vertices.
+    // L/U/T shapes have 6-8 vertices; multi-wing buildings may have 10-16.
+    // Grid-tracing artifacts produce runs of 3+ equal-length edges on a straight wall.
+    // Only simplify when there are clearly too many vertices (>= 8 original).
+    const minVertices = Math.max(4, Math.min(verts.length - 2, 12));
 
     const isMm = 'x' in verts[0];
 
@@ -798,8 +800,9 @@ export class VisionBimService {
   }
 
   /**
-   * Parse IFC (BIM) buffer using web-ifc and extract an axis-aligned bounding box
-   * as a rectangular building footprint + height.
+   * Parse IFC (BIM) buffer using web-ifc and extract the actual building
+   * footprint polygon (L-shapes, U-shapes, multi-wing) via 2D occupancy grid.
+   * Falls back to bounding box rectangle if grid extraction fails.
    */
   async processIfc(buffer: Buffer): Promise<VisionFootprintResult> {
     let ifcApi: any = null;
@@ -816,6 +819,7 @@ export class VisionBimService {
       let minX = Infinity, minY = Infinity, minZ = Infinity;
       let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
       let vertexCount = 0;
+      const xyPoints: Array<{ x: number; y: number }> = [];
 
       ifcApi.StreamAllMeshes(modelID, (mesh: any) => {
         const numGeoms = mesh.geometries.size();
@@ -836,6 +840,7 @@ export class VisionBimService {
             minX = Math.min(minX, tx); maxX = Math.max(maxX, tx);
             minY = Math.min(minY, ty); maxY = Math.max(maxY, ty);
             minZ = Math.min(minZ, tz); maxZ = Math.max(maxZ, tz);
+            xyPoints.push({ x: tx, y: ty });
             vertexCount++;
           }
           geom.delete();
@@ -851,34 +856,49 @@ export class VisionBimService {
       const spanZ = maxZ - minZ;
       const maxSpan = Math.max(spanX, spanY, spanZ);
       const toMm = maxSpan < 500 ? 1000 : 1;
-
       const buildingHeightMm = Math.max(1000, Math.round(spanZ * toMm));
 
+      // Try grid-based footprint extraction (captures L/U/T and complex shapes)
+      const footprint = this.extractFootprintFromXY(
+        xyPoints, minX, minY, maxX, maxY, toMm,
+      );
+      if (footprint && footprint.length >= 3) {
+        const n = footprint.length;
+        const wallLengthsMm = footprint.map((v, i) => {
+          const next = footprint[(i + 1) % n];
+          return Math.round(Math.hypot(next.x - v.x, next.y - v.y));
+        });
+        this.logger.log(
+          `IFC footprint: ${n} vertices (grid-based), height=${buildingHeightMm}mm, ` +
+          `walls=${wallLengthsMm.join('/')}mm`,
+        );
+        return {
+          vertices: footprint,
+          buildingHeightMm,
+          wallLengthsMm,
+          wallLengthsFromDimText: true,
+          confidence: 0.85,
+        };
+      }
+
+      // Fallback: bounding box rectangle
       const x0 = Math.round(minX * toMm);
       const y0 = Math.round(minY * toMm);
       const x1 = Math.round(maxX * toMm);
       const y1 = Math.round(maxY * toMm);
-
-      const vertices = [
-        { x: x0, y: y0 },
-        { x: x1, y: y0 },
-        { x: x1, y: y1 },
-        { x: x0, y: y1 },
-      ];
-
       const wX = Math.round(spanX * toMm);
       const wY = Math.round(spanY * toMm);
-      const wallLengthsMm = [wX, wY, wX, wY];
-
       this.logger.log(
-        `IFC processed: ${vertexCount} vertices, bbox ${spanX.toFixed(1)}×${spanY.toFixed(1)}×${spanZ.toFixed(1)}, ` +
-        `toMm=${toMm}, height=${buildingHeightMm}mm, walls=${wallLengthsMm.join('/')}mm`,
+        `IFC fallback bbox: ${spanX.toFixed(1)}×${spanY.toFixed(1)}×${spanZ.toFixed(1)}, ` +
+        `toMm=${toMm}, height=${buildingHeightMm}mm`,
       );
-
       return {
-        vertices,
+        vertices: [
+          { x: x0, y: y0 }, { x: x1, y: y0 },
+          { x: x1, y: y1 }, { x: x0, y: y1 },
+        ],
         buildingHeightMm,
-        wallLengthsMm,
+        wallLengthsMm: [wX, wY, wX, wY],
         wallLengthsFromDimText: true,
         confidence: 0.9,
       };
@@ -893,6 +913,231 @@ export class VisionBimService {
         }
       } catch { /* ignore cleanup errors */ }
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Grid-based footprint extraction for IFC models
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * Project all mesh vertices to XY, build an occupancy grid,
+   * flood-fill exterior, then trace the boundary polygon.
+   * Returns the actual building footprint (L/U/T/complex shapes).
+   */
+  private extractFootprintFromXY(
+    xyPoints: Array<{ x: number; y: number }>,
+    minX: number, minY: number, maxX: number, maxY: number,
+    toMm: number,
+  ): Array<{ x: number; y: number }> | null {
+    const spanX = (maxX - minX) * toMm;
+    const spanY = (maxY - minY) * toMm;
+    if (spanX < 100 || spanY < 100) return null;
+
+    const cellMm = Math.max(250, Math.min(1000,
+      Math.max(spanX, spanY) / 150,
+    ));
+    const pad = 2;
+    const gw = Math.ceil(spanX / cellMm) + pad * 2;
+    const gh = Math.ceil(spanY / cellMm) + pad * 2;
+    if (gw * gh > 200000) return null;
+
+    const originXMm = minX * toMm - pad * cellMm;
+    const originYMm = minY * toMm - pad * cellMm;
+    const grid = new Uint8Array(gw * gh);
+
+    for (const p of xyPoints) {
+      const gx = Math.floor((p.x * toMm - originXMm) / cellMm);
+      const gy = Math.floor((p.y * toMm - originYMm) / cellMm);
+      if (gx >= 0 && gx < gw && gy >= 0 && gy < gh) {
+        grid[gy * gw + gx] = 1;
+      }
+    }
+
+    this.dilateGrid(grid, gw, gh, Math.max(2, Math.ceil(1500 / cellMm)));
+    this.floodFillExterior(grid, gw, gh);
+
+    const boundary = this.extractBoundaryFromGrid(grid, gw, gh, originXMm, originYMm, cellMm);
+    if (boundary.length < 3) return null;
+
+    const simplified = this.removeCollinearVertices(boundary, cellMm * cellMm * 0.5);
+    return simplified.length >= 3 ? simplified : null;
+  }
+
+  private dilateGrid(grid: Uint8Array, w: number, h: number, radius: number): void {
+    const original = new Uint8Array(grid);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!original[y * w + x]) continue;
+        const r2 = radius * radius;
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            if (dx * dx + dy * dy > r2) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+              grid[ny * w + nx] = 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private floodFillExterior(grid: Uint8Array, w: number, h: number): void {
+    const visited = new Uint8Array(w * h);
+    const queue: number[] = [];
+    for (let x = 0; x < w; x++) {
+      for (const y of [0, h - 1]) {
+        const idx = y * w + x;
+        if (!grid[idx] && !visited[idx]) { visited[idx] = 1; queue.push(idx); }
+      }
+    }
+    for (let y = 1; y < h - 1; y++) {
+      for (const x of [0, w - 1]) {
+        const idx = y * w + x;
+        if (!grid[idx] && !visited[idx]) { visited[idx] = 1; queue.push(idx); }
+      }
+    }
+    let head = 0;
+    while (head < queue.length) {
+      const idx = queue[head++];
+      const x = idx % w, y = (idx - x) / w;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+        const nIdx = ny * w + nx;
+        if (visited[nIdx] || grid[nIdx]) continue;
+        visited[nIdx] = 1;
+        queue.push(nIdx);
+      }
+    }
+    for (let i = 0; i < w * h; i++) {
+      if (!grid[i] && !visited[i]) grid[i] = 1;
+    }
+  }
+
+  /**
+   * Trace the outer boundary of occupied cells using column/row profiles.
+   * Produces a clockwise polygon with vertices at grid cell corners.
+   * Correctly captures L-shapes, U-shapes, T-shapes, and multi-wing buildings.
+   */
+  private extractBoundaryFromGrid(
+    grid: Uint8Array, w: number, h: number,
+    originXMm: number, originYMm: number, cellMm: number,
+  ): Array<{ x: number; y: number }> {
+    const isOcc = (gx: number, gy: number) =>
+      gx >= 0 && gx < w && gy >= 0 && gy < h && grid[gy * w + gx] === 1;
+
+    const colTop = new Array(w).fill(-1);
+    const colBot = new Array(w).fill(-1);
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        if (isOcc(x, y)) {
+          if (colTop[x] < 0) colTop[x] = y;
+          colBot[x] = y;
+        }
+      }
+    }
+    const rowLeft = new Array(h).fill(-1);
+    const rowRight = new Array(h).fill(-1);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (isOcc(x, y)) {
+          if (rowLeft[y] < 0) rowLeft[y] = x;
+          rowRight[y] = x;
+        }
+      }
+    }
+
+    let minOccX = w, maxOccX = -1;
+    for (let x = 0; x < w; x++) {
+      if (colTop[x] >= 0) { minOccX = Math.min(minOccX, x); maxOccX = x; }
+    }
+    if (minOccX > maxOccX) return [];
+
+    const mmX = (gx: number) => Math.round(originXMm + gx * cellMm);
+    const mmY = (gy: number) => Math.round(originYMm + gy * cellMm);
+    const pts: Array<{ x: number; y: number }> = [];
+    const add = (gx: number, gy: number) => {
+      const p = { x: mmX(gx), y: mmY(gy) };
+      const last = pts[pts.length - 1];
+      if (last && last.x === p.x && last.y === p.y) return;
+      pts.push(p);
+    };
+
+    // Phase 1: Top edge (left → right)
+    let prevTopY = colTop[minOccX];
+    add(minOccX, prevTopY);
+    for (let x = minOccX + 1; x <= maxOccX; x++) {
+      if (colTop[x] < 0) continue;
+      if (colTop[x] !== prevTopY) {
+        add(x, prevTopY);
+        add(x, colTop[x]);
+        prevTopY = colTop[x];
+      }
+    }
+    add(maxOccX + 1, prevTopY);
+
+    // Phase 2: Right edge (top → bottom)
+    const rightStartY = prevTopY;
+    let rightEndY = 0;
+    for (let y = 0; y < h; y++) if (rowRight[y] >= 0) rightEndY = y;
+    let prevRightX = rowRight[rightStartY] >= 0 ? rowRight[rightStartY] + 1 : maxOccX + 1;
+    for (let y = rightStartY + 1; y <= rightEndY; y++) {
+      if (rowRight[y] < 0) continue;
+      const rx = rowRight[y] + 1;
+      if (rx !== prevRightX) {
+        add(prevRightX, y);
+        add(rx, y);
+        prevRightX = rx;
+      }
+    }
+    add(prevRightX, rightEndY + 1);
+
+    // Phase 3: Bottom edge (right → left)
+    let prevBotY = colBot[maxOccX] >= 0 ? colBot[maxOccX] + 1 : rightEndY + 1;
+    for (let x = maxOccX - 1; x >= minOccX; x--) {
+      if (colBot[x] < 0) continue;
+      const by = colBot[x] + 1;
+      if (by !== prevBotY) {
+        add(x + 1, prevBotY);
+        add(x + 1, by);
+        prevBotY = by;
+      }
+    }
+    add(minOccX, prevBotY);
+
+    // Phase 4: Left edge (bottom → top)
+    let leftStartY = 0;
+    for (let y = h - 1; y >= 0; y--) { if (rowLeft[y] >= 0) { leftStartY = y; break; } }
+    let prevLeftX = rowLeft[leftStartY] >= 0 ? rowLeft[leftStartY] : minOccX;
+    for (let y = leftStartY - 1; y >= colTop[minOccX]; y--) {
+      if (rowLeft[y] < 0) continue;
+      const lx = rowLeft[y];
+      if (lx !== prevLeftX) {
+        add(prevLeftX, y + 1);
+        add(lx, y + 1);
+        prevLeftX = lx;
+      }
+    }
+
+    return pts;
+  }
+
+  private removeCollinearVertices(
+    pts: Array<{ x: number; y: number }>,
+    tolerance: number,
+  ): Array<{ x: number; y: number }> {
+    if (pts.length <= 3) return pts;
+    const result: typeof pts = [];
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[(i - 1 + pts.length) % pts.length];
+      const curr = pts[i];
+      const next = pts[(i + 1) % pts.length];
+      const cross = (curr.x - prev.x) * (next.y - curr.y)
+                  - (curr.y - prev.y) * (next.x - curr.x);
+      if (Math.abs(cross) > tolerance) result.push(curr);
+    }
+    return result.length >= 3 ? result : pts;
   }
 
   private getFallbackFootprint(): VisionFootprintResult {
