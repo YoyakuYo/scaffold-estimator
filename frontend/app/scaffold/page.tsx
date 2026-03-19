@@ -812,7 +812,7 @@ function ScaffoldPageContent() {
         habakiCountPerSpan,
         endStopperType,
       }),
-      ...(polygonVertices.length >= 3 && {
+      ...(polygonVertices.length >= 3 && polygonVertices.length === enabledWalls.length && {
         buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
         pattankoCornerCount: countPattankoCorners(polygonVertices),
       }),

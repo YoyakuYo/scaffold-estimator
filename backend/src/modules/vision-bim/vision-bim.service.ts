@@ -107,11 +107,17 @@ Optional fields (read from dimension lines and annotations):
 If the image is a 3D rendering, isometric view, perspective view, or BIM screenshot (e.g. from Revit, ArchiCAD, Tekla, SketchUp):
 - You are seeing the building from an ANGLE, not from above. The visible outline in the image is a 2D projection of a 3D object — it is NOT the plan footprint.
 - You MUST mentally "look down" from above and reconstruct the TOP-DOWN plan footprint of the building.
-- For a rectangular building seen in perspective/isometric: output 4 vertices forming a RECTANGLE (not the 5-6 point silhouette you see in the image).
-- Use the visible proportions (width vs depth vs height) to estimate the plan shape. A building that looks roughly 2:1 in plan (long and narrow) should have a 2:1 rectangle as its footprint.
+- DETECT COMPLEX SHAPES: Look carefully for L-shaped, U-shaped, or T-shaped buildings. In 3D views, these shapes have visible setbacks, wings, or recesses. Key indicators:
+  * An L-shaped building has TWO WINGS meeting at a corner — one wing is shorter/narrower than the other. From above, this is 6 vertices.
+  * A U-shaped building has a central courtyard or recess. From above, this is 8 vertices.
+  * A T-shaped building has a protruding central section. From above, this is 8 vertices.
+  * IMPORTANT: If you can see that one part of the building extends further than another in any direction, or there is a visible step/setback in the facade, it is NOT a simple rectangle. Output the correct number of vertices for the actual shape.
+- For a rectangular building (all walls flush, no setbacks) seen in perspective/isometric: output 4 vertices forming a RECTANGLE.
+- For an L-shaped building in 3D: output 6 vertices tracing the L from above. Estimate the wing proportions from the visible geometry.
+- Use the visible proportions (width vs depth vs height) to estimate the plan shape.
 - Count visible floors to estimate height: typical floor height is 3000–4000mm per story. If you see 3 floors, buildingHeightMm ≈ 9000–12000.
 - Do NOT trace the perspective outline (silhouette) of the 3D view — that gives wrong shapes (hexagons, trapezoids). Reconstruct the PLAN footprint.
-- When aspect ratios are unclear, prefer outputting a rectangle with { xFrac, yFrac } and estimate the aspect from the visible floor plan proportions.
+- When the building shape is unclear but is definitely not rectangular, output your best L/U/T approximation rather than defaulting to a rectangle.
 - Set wallLengthsFromDimText: false and confidence: 0.5–0.7 (lower than for dimensioned plans).
 
 Polygon rules — follow these exactly:
@@ -156,6 +162,7 @@ Self-check before outputting (fix issues silently — never output the check its
 - no run of 3+ consecutive edges with the same length unless the building genuinely has those equal-length faces
 - polygon must NOT be a regular polygon (equal sides + equal angles) unless the building genuinely is one
 - if the image is a 3D view: your polygon should be a plan-view shape (rectangle, L, U), NOT a silhouette/trapezoid
+- if the image is a 3D view and the building has visible setbacks, wings, or L/U/T shape: you MUST output 6+ vertices (NOT 4). Outputting a rectangle for a non-rectangular building is the #1 most common error.
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
@@ -528,7 +535,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint (e.g. a rectangle for a rectangular building, an L for an L-shaped building). Count floors and estimate height as floors × 3000–4000mm. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
               },
             ],
           },

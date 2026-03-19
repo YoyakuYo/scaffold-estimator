@@ -32,6 +32,109 @@ function wallLenM(walls: Array<{ wallLengthMm?: number }>, i: number): number {
 }
 
 /**
+ * Generate combinations C(n, k): choose k indices from 0..n-1.
+ */
+function combinations(n: number, k: number): number[][] {
+  if (k === 0) return [[]];
+  if (k === 1) return Array.from({ length: n }, (_, i) => [i]);
+  const result: number[][] = [];
+  const pick = (start: number, current: number[]) => {
+    if (current.length === k) { result.push([...current]); return; }
+    for (let i = start; i < n; i++) {
+      current.push(i);
+      pick(i + 1, current);
+      current.pop();
+    }
+  };
+  pick(0, []);
+  return result;
+}
+
+/**
+ * Try to construct an orthogonal (all-90°-corners) polygon from wall lengths.
+ * Buildings are almost always orthogonal:
+ *   4 walls → rectangle (0 concave corners)
+ *   6 walls → L-shape  (1 concave corner)
+ *   8 walls → U-shape  (2 concave corners)
+ *  10 walls → complex   (3 concave corners)
+ *
+ * For a closed orthogonal polygon with n vertices:
+ *   convex corners = (n+4)/2, concave = (n-4)/2
+ *   (sum of exterior angles = 360°, each turn ±90°)
+ *
+ * Tries all possible reflex vertex placements and picks the one
+ * whose closing edge best matches the last wall length.
+ */
+function tryOrthogonalFallback(
+  walls: Array<{ wallLengthMm?: number }>,
+  n: number,
+): FootprintVertexXZ[] | null {
+  if (n < 4 || n > 12 || n % 2 !== 0) return null;
+
+  const numReflex = (n - 4) / 2;
+  if (numReflex < 0) return null;
+  if (numReflex === 0) {
+    // Rectangle: already handled by the 4-wall branch above
+    return null;
+  }
+
+  const lengths = Array.from({ length: n }, (_, i) => wallLenM(walls, i));
+  const reflexCombos = combinations(n, numReflex);
+
+  let bestVerts: FootprintVertexXZ[] | null = null;
+  let bestError = Infinity;
+
+  for (const reflexPositions of reflexCombos) {
+    const reflexSet = new Set(reflexPositions);
+
+    // Try CW and CCW traversals
+    for (const cwSign of [1, -1] as const) {
+      const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
+      let dir = 0; // start heading right
+
+      for (let i = 0; i < n - 1; i++) {
+        const prev = verts[verts.length - 1];
+        verts.push({
+          x: prev.x + lengths[i] * Math.cos(dir),
+          z: prev.z + lengths[i] * Math.sin(dir),
+        });
+        const nextVertex = (i + 1) % n;
+        const turn = reflexSet.has(nextVertex) ? -Math.PI / 2 : Math.PI / 2;
+        dir += cwSign * turn;
+      }
+
+      // Check if closing edge matches last wall
+      const last = verts[n - 1];
+      const closeDx = verts[0].x - last.x;
+      const closeDz = verts[0].z - last.z;
+      const closeDist = Math.hypot(closeDx, closeDz);
+      const lenError = Math.abs(closeDist - lengths[n - 1]);
+
+      // Verify closing direction aligns with current heading
+      let dirOk = true;
+      if (closeDist > 0.001) {
+        const closeAngle = Math.atan2(closeDz, closeDx);
+        let angleDiff = Math.abs(((closeAngle - dir) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+        if (angleDiff > 0.15) dirOk = false;
+      }
+
+      const totalError = dirOk ? lenError : lenError + 1e9;
+      if (totalError < bestError) {
+        bestError = totalError;
+        bestVerts = [...verts];
+      }
+    }
+  }
+
+  // Accept if closing error < 10% of last wall or < 0.5m absolute
+  const tolerance = Math.max(lengths[n - 1] * 0.1, 0.5);
+  if (bestVerts && bestError < tolerance) {
+    return bestVerts;
+  }
+  return null;
+}
+
+/**
  * Build footprint polygon in meters (XZ horizontal plane; Y is up in Three.js).
  */
 export function buildFootprintPolygonXZ(
@@ -126,7 +229,11 @@ export function buildFootprintPolygonXZ(
     }
   }
 
-  // ── Generic fallback: regular n-gon from lengths ──
+  // ── Orthogonal fallback: try to build an L/U/T-shape with 90° turns ──
+  const orthoResult = tryOrthogonalFallback(walls, n);
+  if (orthoResult) return orthoResult;
+
+  // ── Last resort: regular n-gon from lengths ──
   const extAngle = (2 * Math.PI) / n;
   const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
   let cx = 0,
