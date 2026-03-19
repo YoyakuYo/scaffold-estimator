@@ -105,14 +105,32 @@ function ScaffoldResultPage() {
       }
     : undefined;
 
+  /** Merge row-level scaffoldType / wakugumi fields into calculation JSON (older results omitted scaffoldType). */
+  const resultMergedForViz = useMemo(() => {
+    if (!result) return undefined;
+    if (!config) return result;
+    const st = (result.scaffoldType ??
+      (rawResult as any)?.scaffold_type ??
+      config.scaffoldType ??
+      'kusabi') as 'kusabi' | 'wakugumi';
+    return {
+      ...result,
+      scaffoldType: st,
+      frameSizeMm: result.frameSizeMm ?? config.frameSizeMm,
+      habakiCountPerSpan: result.habakiCountPerSpan ?? config.habakiCountPerSpan,
+      endStopperType: (result.endStopperType ?? config.endStopperType ?? 'nuno') as 'nuno' | 'frame',
+    };
+  }, [result, config, rawResult]);
+
   const resultFor3D = useMemo(() => {
-    if (!result) return result;
-    if (Array.isArray(result.walls) && result.walls.length > 0) return result;
-    if (!config?.walls?.length) return result;
-    const levelH = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800;
+    const base = resultMergedForViz ?? result;
+    if (!base) return base;
+    if (Array.isArray(base.walls) && base.walls.length > 0) return base;
+    if (!config?.walls?.length) return base;
+    const levelH = base.scaffoldType === 'wakugumi' ? (base.frameSizeMm ?? 1800) : 1800;
     const levels = Math.max(1, Math.floor((config.buildingHeightMm ?? 3000) / levelH));
-    const topGuardMm = result.topGuardHeightMm ?? 900;
-    const scaffoldWidthMm = config.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900;
+    const topGuardMm = base.topGuardHeightMm ?? 900;
+    const scaffoldWidthMm = config.scaffoldWidthMm ?? base.scaffoldWidthMm ?? 900;
     const minimalWalls: WallCalculationResult[] = config.walls
       .filter((w) => w.enabled !== false)
       .map((w) => {
@@ -142,8 +160,8 @@ function ScaffoldResultPage() {
           },
         };
       });
-    return { ...result, walls: minimalWalls };
-  }, [result, config]);
+    return { ...base, walls: minimalWalls };
+  }, [result, resultMergedForViz, config]);
 
   const maxLevels = result ? (result.totalLevels ?? Math.max(...(result.walls?.map((w: WallCalculationResult) => w.levelCalc?.fullLevels ?? 1) ?? [1]))) : 1;
 
@@ -425,11 +443,11 @@ function ScaffoldResultPage() {
         {/* Tab Content */}
         {activeTab === 'table' && <QuotationTable result={result} />}
         {activeTab === 'perside' && <PerSideBreakdown result={result} />}
-        {activeTab === '2d' && <Scaffold2DView result={result} />}
-        {activeTab === 'plan' && <ScaffoldPlanView result={result} />}
+        {activeTab === '2d' && <Scaffold2DView result={resultMergedForViz ?? result} />}
+        {activeTab === 'plan' && <ScaffoldPlanView result={resultMergedForViz ?? result} />}
         {activeTab === '3d' && (
           <Scaffold3DView
-            result={resultFor3D ?? result}
+            result={resultFor3D ?? resultMergedForViz ?? result}
             totalLevels={maxLevels}
             complianceMode={isAiBim ? 'ai_bim' : 'default'}
           />

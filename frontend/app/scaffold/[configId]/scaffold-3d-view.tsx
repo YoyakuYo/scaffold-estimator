@@ -402,7 +402,7 @@ export default function Scaffold3DView({
       const plankMatEff = plankMat;
 
       const tesuriMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : BIM_COLORS.tesuri,
+        color: isTech ? C_TECH.tesuri : BIM_COLORS.tesuri,
         metalness: metal, roughness: rough,
       });
       const yokojiMat = new THREE.MeshStandardMaterial({
@@ -438,7 +438,8 @@ export default function Scaffold3DView({
       });
 
       const topGuardM = result.topGuardHeightMm / 1000;
-      const scaffoldType: 'kusabi' | 'wakugumi' = result.scaffoldType || 'kusabi';
+      const scaffoldType: 'kusabi' | 'wakugumi' =
+        (result.scaffoldType ?? (result as any).scaffold_type ?? 'kusabi') as 'kusabi' | 'wakugumi';
       const isWakugumi = scaffoldType === 'wakugumi';
       const LEVEL_H = isWakugumi ? ((result.frameSizeMm || 1700) / 1000) : LEVEL_H_KUSABI;
 
@@ -600,7 +601,6 @@ export default function Scaffold3DView({
         const hasAnyStairs = kaidanSpanIndices.length > 0 || stairCount > 0;
         const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && hasAnyStairs);
         const anchiLayout = ANCHI_LAYOUT_BY_WIDTH[widthMm] ?? ANCHI_LAYOUT_BY_WIDTH[600];
-        const isWakugumi = result?.scaffoldType === 'wakugumi';
         const habakiCountPerSpan = result?.habakiCountPerSpan ?? 2;
 
         // Door opening span indices (for skipping planks/braces/habaki at ground level)
@@ -923,27 +923,38 @@ export default function Scaffold3DView({
           }
         }
 
-        // ── End Stoppers (端部) at wall ends ──────────────────
+        // ── End Stoppers at wall ends ─────────────────────────
+        // Wakugumi: 端部布材 / 妻側枠 (user-selectable). Kusabi: 端部手摺 (2 heights × 2 ends, matches BOM).
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
-        if (isWakugumi && postX.length >= 2) {
+        if (postX.length >= 2) {
           const endPositions = [postX[startPostIdx], postX[postX.length - 1]];
-          for (const ex of endPositions) {
-            for (let lv = 1; lv <= levelsToBuild; lv++) {
-              const y = GROUND_Y + JACK_H + lv * LEVEL_H;
-              if (endStopperType === 'nuno') {
-                // Nuno type: 2 horizontal bars spanning scaffold width at each end
-                const barY1 = y + 0.05;
-                const barY2 = y + 0.45;
-                addPipe(group, ex, barY1, 0, ex, barY1, widthM, endStopperMat, PIPE_R * 0.7);
-                addPipe(group, ex, barY2, 0, ex, barY2, widthM, endStopperMat, PIPE_R * 0.7);
-              } else {
-                // Frame type: vertical frame with two uprights + top rail
-                const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
-                const frameTop = y - 0.05;
-                addPipe(group, ex, frameBottom, 0, ex, frameTop, 0, endStopperFrameMat, PIPE_R * 0.8);
-                addPipe(group, ex, frameBottom, widthM, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.8);
-                addPipe(group, ex, frameTop, 0, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.7);
-                addPipe(group, ex, frameBottom, 0, ex, frameBottom, widthM, endStopperFrameMat, PIPE_R * 0.6);
+          if (isWakugumi) {
+            for (const ex of endPositions) {
+              for (let lv = 1; lv <= levelsToBuild; lv++) {
+                const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+                if (endStopperType === 'nuno') {
+                  const barY1 = y + 0.05;
+                  const barY2 = y + 0.45;
+                  addPipe(group, ex, barY1, 0, ex, barY1, widthM, endStopperMat, PIPE_R * 0.7);
+                  addPipe(group, ex, barY2, 0, ex, barY2, widthM, endStopperMat, PIPE_R * 0.7);
+                } else {
+                  const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
+                  const frameTop = y - 0.05;
+                  addPipe(group, ex, frameBottom, 0, ex, frameTop, 0, endStopperFrameMat, PIPE_R * 0.8);
+                  addPipe(group, ex, frameBottom, widthM, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.8);
+                  addPipe(group, ex, frameTop, 0, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.7);
+                  addPipe(group, ex, frameBottom, 0, ex, frameBottom, widthM, endStopperFrameMat, PIPE_R * 0.6);
+                }
+              }
+            }
+          } else if (!isBracket) {
+            for (const ex of endPositions) {
+              for (let lv = 1; lv <= levelsToBuild; lv++) {
+                const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+                const railTop = y + 0.9;
+                const railMid = y + 0.45;
+                addPipe(group, ex, railTop, 0, ex, railTop, widthM, endStopperMat, PIPE_R * 0.65);
+                addPipe(group, ex, railMid, 0, ex, railMid, widthM, endStopperMat, PIPE_R * 0.6);
               }
             }
           }

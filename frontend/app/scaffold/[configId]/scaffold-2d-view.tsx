@@ -63,7 +63,9 @@ export default function Scaffold2DView({ result }: Props) {
 
   if (walls.length === 0) return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
 
-  const scaffoldType: 'kusabi' | 'wakugumi' = result.scaffoldType || 'kusabi';
+  const scaffoldType: 'kusabi' | 'wakugumi' = (result.scaffoldType ??
+    (result as any).scaffold_type ??
+    'kusabi') as 'kusabi' | 'wakugumi';
   const isWakugumi = scaffoldType === 'wakugumi';
   const LEVEL_H = isWakugumi ? (result.frameSizeMm || 1700) : LEVEL_H_KUSABI;
   const topGuardMm = result.topGuardHeightMm ?? 900;
@@ -436,7 +438,7 @@ export default function Scaffold2DView({ result }: Props) {
       );
     });
 
-    // End stopper (端部) — wakugumi only, at wall ends
+    // End stopper — wakugumi: vertical marker at ends; kusabi: 端部手摺 (2 rails) at each end
     if (isWakugumi) {
       Array.from({ length: levels }).forEach((_, lvl) => {
         const baseY = JACK_BASE_H + lvl * LEVEL_H;
@@ -447,6 +449,22 @@ export default function Scaffold2DView({ result }: Props) {
               x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
               stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />
           );
+        });
+      });
+    } else {
+      const tickMm = 55;
+      Array.from({ length: levels }).forEach((_, lvl) => {
+        const baseY = JACK_BASE_H + lvl * LEVEL_H;
+        [0, totalLengthMm].forEach((px, ei) => {
+          [0.45, 0.9].forEach((frac, ti) => {
+            const ymm = baseY + LEVEL_H * frac;
+            elements.push(
+              <line key={`kusabi-endstop-${lvl}-${ei}-${ti}`}
+                x1={x(Math.max(0, px - tickMm))} y1={y(ymm)}
+                x2={x(px + tickMm)} y2={y(ymm)}
+                stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="3,2" />
+            );
+          });
         });
       });
     }
@@ -681,6 +699,7 @@ export default function Scaffold2DView({ result }: Props) {
               { color: COL.tesuri, label: t('result', 'legendTesuri') || '手摺' },
               { color: COL.plank, label: t('result', 'legendPlank') || '踏板' },
               { color: COL.habaki, label: t('result', 'legendHabaki') || '巾木' },
+              { color: COL.endStopper, label: '端部手摺' },
               { color: COL.yokoji, label: t('result', 'legendYokoji') || '根がらみ' },
               { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
               { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },

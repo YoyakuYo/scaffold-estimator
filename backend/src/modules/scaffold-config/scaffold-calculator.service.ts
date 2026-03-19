@@ -211,6 +211,7 @@ export class ScaffoldCalculatorService {
     this.logger.log(`Calculation complete: ${wallResults.length} walls, ${summary.length} material types`);
 
     return {
+      scaffoldType: 'kusabi' as const,
       walls: wallResults,
       summary,
       scaffoldWidthMm: input.scaffoldWidthMm,
