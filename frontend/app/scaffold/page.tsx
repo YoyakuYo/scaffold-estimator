@@ -186,14 +186,18 @@ function Building3DPreview({
   outline,
   buildingHeightMm,
   wallLengthsMm,
+  wallHeightsMm,
   ifcFileUrl,
+  ifcArrayBuffer,
   className,
   style,
 }: {
   outline: Array<{ xFrac: number; yFrac: number }>;
   buildingHeightMm: number;
   wallLengthsMm?: number[];
+  wallHeightsMm?: number[];
   ifcFileUrl?: string;
+  ifcArrayBuffer?: ArrayBuffer;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -254,30 +258,114 @@ function Building3DPreview({
       const cz = pts2D.reduce((s, p) => s + p.z, 0) / pts2D.length;
 
       const heightM = buildingHeightMm * 0.001;
-
-      // Extruded building
-      const shape = new THREE.Shape();
-      shape.moveTo(pts2D[0].x - cx, pts2D[0].z - cz);
-      for (let i = 1; i < pts2D.length; i++) {
-        shape.lineTo(pts2D[i].x - cx, pts2D[i].z - cz);
-      }
-      shape.closePath();
-
-      const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: heightM, bevelEnabled: false });
-      const buildingMat = new THREE.MeshStandardMaterial({
-        color: 0xd4d8e0,
-        metalness: 0.1,
-        roughness: 0.7,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.85,
-      });
-      const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
-      buildingMesh.rotation.x = -Math.PI / 2;
-      buildingMesh.position.y = 0;
+      const hasSteppedHeights = Array.isArray(wallHeightsMm) && wallHeightsMm.length === outline.length
+        && new Set(wallHeightsMm).size > 1;
 
       const fallbackGroup = new THREE.Group();
-      fallbackGroup.add(buildingMesh);
+
+      if (hasSteppedHeights) {
+        // Stepped building: create per-wall panels at their own heights
+        const buildingMat = new THREE.MeshStandardMaterial({
+          color: 0xd4d8e0, metalness: 0.1, roughness: 0.7,
+          side: THREE.DoubleSide, transparent: true, opacity: 0.85,
+        });
+        const edgeMat = new THREE.LineBasicMaterial({ color: 0x94a3b8 });
+        const n = pts2D.length;
+
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const p0x = pts2D[i].x - cx;
+          const p0z = pts2D[i].z - cz;
+          const p1x = pts2D[j].x - cx;
+          const p1z = pts2D[j].z - cz;
+          const wH = (wallHeightsMm![i] ?? buildingHeightMm) * 0.001;
+
+          const positions = new Float32Array([
+            p0x, 0, p0z,   p1x, 0, p1z,   p1x, wH, p1z,
+            p0x, 0, p0z,   p1x, wH, p1z,  p0x, wH, p0z,
+          ]);
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          geo.computeVertexNormals();
+          fallbackGroup.add(new THREE.Mesh(geo, buildingMat));
+
+          const wallEdgePts = [
+            new THREE.Vector3(p0x, 0, p0z), new THREE.Vector3(p1x, 0, p1z),
+            new THREE.Vector3(p1x, wH, p1z), new THREE.Vector3(p0x, wH, p0z),
+            new THREE.Vector3(p0x, 0, p0z),
+          ];
+          fallbackGroup.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(wallEdgePts), edgeMat,
+          ));
+        }
+
+        // Top caps: for each edge, create a horizontal line at its height
+        const floorH = 3;
+        const uniqueHeights = [...new Set(wallHeightsMm!)].sort((a, b) => a - b);
+        for (const h of uniqueHeights) {
+          const hM = h * 0.001;
+          const capPts = pts2D
+            .filter((_, i) => (wallHeightsMm![i] ?? buildingHeightMm) >= h)
+            .map((p) => new THREE.Vector3(p.x - cx, hM, p.z - cz));
+          if (capPts.length >= 3) {
+            capPts.push(capPts[0].clone());
+            fallbackGroup.add(new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(capPts),
+              new THREE.LineBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.4 }),
+            ));
+          }
+        }
+
+        // Floor lines per-wall
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const wH = (wallHeightsMm![i] ?? buildingHeightMm) * 0.001;
+          for (let floorY = floorH; floorY < wH; floorY += floorH) {
+            const pts = [
+              new THREE.Vector3(pts2D[i].x - cx, floorY, pts2D[i].z - cz),
+              new THREE.Vector3(pts2D[j].x - cx, floorY, pts2D[j].z - cz),
+            ];
+            fallbackGroup.add(new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(pts),
+              new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }),
+            ));
+          }
+        }
+      } else {
+        // Uniform height: single extrusion
+        const shape = new THREE.Shape();
+        shape.moveTo(pts2D[0].x - cx, pts2D[0].z - cz);
+        for (let i = 1; i < pts2D.length; i++) {
+          shape.lineTo(pts2D[i].x - cx, pts2D[i].z - cz);
+        }
+        shape.closePath();
+
+        const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: heightM, bevelEnabled: false });
+        const buildingMat = new THREE.MeshStandardMaterial({
+          color: 0xd4d8e0, metalness: 0.1, roughness: 0.7,
+          side: THREE.DoubleSide, transparent: true, opacity: 0.85,
+        });
+        const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
+        buildingMesh.rotation.x = -Math.PI / 2;
+        buildingMesh.position.y = 0;
+        fallbackGroup.add(buildingMesh);
+
+        const edgesGeo = new THREE.EdgesGeometry(buildingGeo);
+        const edges = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0x94a3b8 }));
+        edges.rotation.x = -Math.PI / 2;
+        fallbackGroup.add(edges);
+
+        const floorH = 3;
+        for (let floorY = floorH; floorY < heightM; floorY += floorH) {
+          const floorPts = pts2D.map((p) => new THREE.Vector3(p.x - cx, floorY, p.z - cz));
+          floorPts.push(floorPts[0].clone());
+          fallbackGroup.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(floorPts),
+            new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }),
+          ));
+        }
+      }
+
       scene.add(fallbackGroup);
 
       // Outline on ground
@@ -286,25 +374,6 @@ function Building3DPreview({
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
       const outlineLine = new THREE.Line(outlineGeo, new THREE.LineBasicMaterial({ color: 0x6366f1, linewidth: 2 }));
       scene.add(outlineLine);
-
-      // Edges on building
-      const edgesGeo = new THREE.EdgesGeometry(buildingGeo);
-      const edges = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0x94a3b8 }));
-      edges.rotation.x = -Math.PI / 2;
-      fallbackGroup.add(edges);
-
-      // Floor lines
-      const floorH = 3;
-      for (let floorY = floorH; floorY < heightM; floorY += floorH) {
-        const floorPts = pts2D.map((p) => new THREE.Vector3(p.x - cx, floorY, p.z - cz));
-        floorPts.push(floorPts[0].clone());
-        const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-        const floorLine = new THREE.Line(
-          floorGeo,
-          new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }),
-        );
-        fallbackGroup.add(floorLine);
-      }
 
       // Ground plane
       const extent = Math.max(spanX * toM, spanY * toM, heightM) * 2;
@@ -329,17 +398,27 @@ function Building3DPreview({
       scene.add(dirLight);
 
       // Optional: overlay actual IFC mesh in preview (same footprint frame).
-      if (ifcFileUrl) {
+      const ifcSource = ifcArrayBuffer || ifcFileUrl;
+      if (ifcSource) {
         (async () => {
           try {
-            let meshes = IFC_PREVIEW_MESH_CACHE.get(ifcFileUrl);
+            const cacheKey = typeof ifcSource === 'string' ? ifcSource : '__local_ifc__';
+            let meshes = IFC_PREVIEW_MESH_CACHE.get(cacheKey);
             if (!meshes) {
-              const response = await fetch(ifcFileUrl);
-              if (!response.ok) return;
-              const arrayBuffer = await response.arrayBuffer();
+              let arrayBuffer: ArrayBuffer;
+              if (ifcArrayBuffer) {
+                arrayBuffer = ifcArrayBuffer;
+              } else {
+                const response = await fetch(ifcFileUrl!);
+                if (!response.ok) {
+                  console.warn('[Building3DPreview] IFC fetch failed:', response.status);
+                  return;
+                }
+                arrayBuffer = await response.arrayBuffer();
+              }
               const { parseIfcToMeshes } = await import('@/lib/ifc-loader');
               meshes = await parseIfcToMeshes(arrayBuffer);
-              IFC_PREVIEW_MESH_CACHE.set(ifcFileUrl, meshes);
+              IFC_PREVIEW_MESH_CACHE.set(cacheKey, meshes);
             }
             if (disposed || !meshes || meshes.length === 0) return;
 
@@ -503,7 +582,7 @@ function Building3DPreview({
         rendererRef.current = null;
       }
     };
-  }, [outline, buildingHeightMm, wallLengthsMm, ifcFileUrl]);
+  }, [outline, buildingHeightMm, wallLengthsMm, wallHeightsMm, ifcFileUrl, ifcArrayBuffer]);
 
   if (outline.length < 3) return <div className={className} style={style} />;
   return <div ref={containerRef} className={className} style={style} />;
@@ -513,13 +592,17 @@ function Building3DPreview({
 function BuildingPreviewPanel({
   outline,
   wallLengthsMm,
+  wallHeightsMm,
   buildingHeightMm,
   ifcFileUrl,
+  ifcArrayBuffer,
 }: {
   outline: Array<{ xFrac: number; yFrac: number }>;
   wallLengthsMm?: number[];
+  wallHeightsMm?: number[];
   buildingHeightMm: number;
   ifcFileUrl?: string;
+  ifcArrayBuffer?: ArrayBuffer;
 }) {
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
   return (
@@ -560,7 +643,9 @@ function BuildingPreviewPanel({
           outline={outline}
           buildingHeightMm={buildingHeightMm}
           wallLengthsMm={wallLengthsMm}
+          wallHeightsMm={wallHeightsMm}
           ifcFileUrl={ifcFileUrl}
+          ifcArrayBuffer={ifcArrayBuffer}
           className="w-full rounded-lg border border-gray-200 bg-slate-50"
           style={{ height: 320 }}
         />
@@ -710,6 +795,7 @@ function ScaffoldPageContent() {
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
     ifcFileUrl?: string;
+    ifcArrayBuffer?: ArrayBuffer;
     isStepped?: boolean;
     obstacles?: Array<
       | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
@@ -1090,6 +1176,10 @@ function ScaffoldPageContent() {
                   setAiBimUploading(true);
                   try {
                     const isIfc = file.name.toLowerCase().endsWith('.ifc');
+                    let ifcArrayBuffer: ArrayBuffer | undefined;
+                    if (isIfc) {
+                      ifcArrayBuffer = await file.arrayBuffer();
+                    }
                     const raw = isIfc
                       ? await visionBimApi.fromIfc(file)
                       : await visionBimApi.analyze(file);
@@ -1134,6 +1224,7 @@ function ScaffoldPageContent() {
                       buildingOutline,
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
+                      ...(footprint.ifcFileUrl && { ifcFileUrl: footprint.ifcFileUrl }),
                     };
                     const isStepped = Array.isArray(wallHeightsMm) && wallHeightsMm.length > 0
                       && new Set(walls.map((w) => w.wallHeightMm)).size > 1;
@@ -1145,6 +1236,7 @@ function ScaffoldPageContent() {
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
                       ifcFileUrl: footprint.ifcFileUrl,
+                      ifcArrayBuffer,
                       isStepped,
                       obstacles,
                       dto,
@@ -1372,8 +1464,10 @@ function ScaffoldPageContent() {
                   <BuildingPreviewPanel
                     outline={aiBimPreview.buildingOutline}
                     wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                    wallHeightsMm={aiBimPreview.isStepped ? aiBimPreview.walls.map((w) => w.wallHeightMm) : undefined}
                     buildingHeightMm={aiBimPreview.buildingHeightMm}
                     ifcFileUrl={aiBimPreview.ifcFileUrl}
+                    ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}
                   />
                   <div className="grid grid-cols-1 gap-4">
                     {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
