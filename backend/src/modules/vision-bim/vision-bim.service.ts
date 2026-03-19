@@ -904,7 +904,7 @@ export class VisionBimService {
       let minX = Infinity, minY = Infinity, minZ = Infinity;
       let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
       let vertexCount = 0;
-      const xyPoints: Array<{ x: number; y: number }> = [];
+      const xyzPoints: Array<{ x: number; y: number; z: number }> = [];
 
       ifcApi.StreamAllMeshes(modelID, (mesh: any) => {
         const numGeoms = mesh.geometries.size();
@@ -925,7 +925,7 @@ export class VisionBimService {
             minX = Math.min(minX, tx); maxX = Math.max(maxX, tx);
             minY = Math.min(minY, ty); maxY = Math.max(maxY, ty);
             minZ = Math.min(minZ, tz); maxZ = Math.max(maxZ, tz);
-            xyPoints.push({ x: tx, y: ty });
+            xyzPoints.push({ x: tx, y: ty, z: tz });
             vertexCount++;
           }
           geom.delete();
@@ -942,10 +942,13 @@ export class VisionBimService {
       const maxSpan = Math.max(spanX, spanY, spanZ);
       const toMm = maxSpan < 500 ? 1000 : 1;
       const buildingHeightMm = Math.max(1000, Math.round(spanZ * toMm));
+      const pointsMm = xyzPoints.map((p) => ({ x: p.x * toMm, y: p.y * toMm, z: p.z * toMm }));
+      const minZMm = minZ * toMm;
+      const maxZMm = maxZ * toMm;
 
       // Try grid-based footprint extraction (captures L/U/T and complex shapes)
       const footprint = this.extractFootprintFromXY(
-        xyPoints, minX, minY, maxX, maxY, toMm,
+        xyzPoints.map((p) => ({ x: p.x, y: p.y })), minX, minY, maxX, maxY, toMm,
       );
       if (footprint && footprint.length >= 3) {
         const n = footprint.length;
@@ -953,14 +956,23 @@ export class VisionBimService {
           const next = footprint[(i + 1) % n];
           return Math.round(Math.hypot(next.x - v.x, next.y - v.y));
         });
+        const wallHeightsMm = this.estimateWallHeightsFromIfcPoints(
+          footprint,
+          pointsMm,
+          minZMm,
+          maxZMm,
+          buildingHeightMm,
+        );
         this.logger.log(
           `IFC footprint: ${n} vertices (grid-based), height=${buildingHeightMm}mm, ` +
-          `walls=${wallLengthsMm.join('/')}mm`,
+          `walls=${wallLengthsMm.join('/')}mm` +
+          `${wallHeightsMm ? `, wallHeights=${wallHeightsMm.join('/')}mm` : ''}`,
         );
         return {
           vertices: footprint,
           buildingHeightMm,
           wallLengthsMm,
+          ...(wallHeightsMm && { wallHeightsMm }),
           wallLengthsFromDimText: true,
           confidence: 0.85,
         };
@@ -984,6 +996,7 @@ export class VisionBimService {
         ],
         buildingHeightMm,
         wallLengthsMm: [wX, wY, wX, wY],
+        wallHeightsMm: [buildingHeightMm, buildingHeightMm, buildingHeightMm, buildingHeightMm],
         wallLengthsFromDimText: true,
         confidence: 0.9,
       };
@@ -1038,7 +1051,8 @@ export class VisionBimService {
       }
     }
 
-    this.dilateGrid(grid, gw, gh, Math.max(2, Math.ceil(1500 / cellMm)));
+    // Keep small gaps closed without over-inflating the footprint into a rectangle.
+    this.dilateGrid(grid, gw, gh, Math.max(1, Math.ceil(600 / cellMm)));
     this.floodFillExterior(grid, gw, gh);
 
     const boundary = this.extractBoundaryFromGrid(grid, gw, gh, originXMm, originYMm, cellMm);
@@ -1101,9 +1115,9 @@ export class VisionBimService {
   }
 
   /**
-   * Trace the outer boundary of occupied cells using column/row profiles.
-   * Produces a clockwise polygon with vertices at grid cell corners.
-   * Correctly captures L-shapes, U-shapes, T-shapes, and multi-wing buildings.
+   * Trace occupied-cell contour by extracting exposed cell edges and stitching
+   * them into closed loops. This preserves concave and multi-wing perimeters
+   * better than row/column envelope tracing.
    */
   private extractBoundaryFromGrid(
     grid: Uint8Array, w: number, h: number,
@@ -1112,100 +1126,165 @@ export class VisionBimService {
     const isOcc = (gx: number, gy: number) =>
       gx >= 0 && gx < w && gy >= 0 && gy < h && grid[gy * w + gx] === 1;
 
-    const colTop = new Array(w).fill(-1);
-    const colBot = new Array(w).fill(-1);
-    for (let x = 0; x < w; x++) {
-      for (let y = 0; y < h; y++) {
-        if (isOcc(x, y)) {
-          if (colTop[x] < 0) colTop[x] = y;
-          colBot[x] = y;
-        }
-      }
-    }
-    const rowLeft = new Array(h).fill(-1);
-    const rowRight = new Array(h).fill(-1);
+    type Edge = { sx: number; sy: number; ex: number; ey: number };
+    const edges: Edge[] = [];
+    const pushEdge = (sx: number, sy: number, ex: number, ey: number) => {
+      edges.push({ sx, sy, ex, ey });
+    };
+
+    // Build directed boundary edges (clockwise around occupied region).
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (isOcc(x, y)) {
-          if (rowLeft[y] < 0) rowLeft[y] = x;
-          rowRight[y] = x;
-        }
+        if (!isOcc(x, y)) continue;
+        if (!isOcc(x, y - 1)) pushEdge(x, y, x + 1, y); // top
+        if (!isOcc(x + 1, y)) pushEdge(x + 1, y, x + 1, y + 1); // right
+        if (!isOcc(x, y + 1)) pushEdge(x + 1, y + 1, x, y + 1); // bottom
+        if (!isOcc(x - 1, y)) pushEdge(x, y + 1, x, y); // left
       }
     }
+    if (edges.length === 0) return [];
 
-    let minOccX = w, maxOccX = -1;
-    for (let x = 0; x < w; x++) {
-      if (colTop[x] >= 0) { minOccX = Math.min(minOccX, x); maxOccX = x; }
+    const key = (x: number, y: number) => `${x},${y}`;
+    const outgoing = new Map<string, number[]>();
+    for (let i = 0; i < edges.length; i++) {
+      const k = key(edges[i].sx, edges[i].sy);
+      if (!outgoing.has(k)) outgoing.set(k, []);
+      outgoing.get(k)!.push(i);
     }
-    if (minOccX > maxOccX) return [];
+
+    const used = new Uint8Array(edges.length);
+    const loops: Array<Array<{ x: number; y: number }>> = [];
+
+    for (let i = 0; i < edges.length; i++) {
+      if (used[i]) continue;
+      const e0 = edges[i];
+      const startX = e0.sx;
+      const startY = e0.sy;
+      let curX = e0.ex;
+      let curY = e0.ey;
+      used[i] = 1;
+
+      const loop: Array<{ x: number; y: number }> = [{ x: startX, y: startY }];
+      const maxSteps = edges.length + 8;
+      let steps = 0;
+      while (steps++ < maxSteps) {
+        loop.push({ x: curX, y: curY });
+        if (curX === startX && curY === startY) break;
+        const cand = outgoing.get(key(curX, curY)) ?? [];
+        let nextIdx = -1;
+        for (const ci of cand) {
+          if (!used[ci]) {
+            nextIdx = ci;
+            break;
+          }
+        }
+        if (nextIdx < 0) break;
+        used[nextIdx] = 1;
+        const en = edges[nextIdx];
+        curX = en.ex;
+        curY = en.ey;
+      }
+
+      if (loop.length >= 4 && loop[0].x === loop[loop.length - 1].x && loop[0].y === loop[loop.length - 1].y) {
+        loops.push(loop);
+      }
+    }
+    if (loops.length === 0) return [];
+
+    const areaAbs = (poly: Array<{ x: number; y: number }>) => {
+      let a = 0;
+      for (let i = 0; i < poly.length - 1; i++) {
+        const p = poly[i];
+        const q = poly[i + 1];
+        a += p.x * q.y - q.x * p.y;
+      }
+      return Math.abs(a / 2);
+    };
+    loops.sort((a, b) => areaAbs(b) - areaAbs(a));
+    const best = loops[0];
 
     const mmX = (gx: number) => Math.round(originXMm + gx * cellMm);
     const mmY = (gy: number) => Math.round(originYMm + gy * cellMm);
-    const pts: Array<{ x: number; y: number }> = [];
-    const add = (gx: number, gy: number) => {
-      const p = { x: mmX(gx), y: mmY(gy) };
-      const last = pts[pts.length - 1];
-      if (last && last.x === p.x && last.y === p.y) return;
-      pts.push(p);
-    };
-
-    // Phase 1: Top edge (left → right)
-    let prevTopY = colTop[minOccX];
-    add(minOccX, prevTopY);
-    for (let x = minOccX + 1; x <= maxOccX; x++) {
-      if (colTop[x] < 0) continue;
-      if (colTop[x] !== prevTopY) {
-        add(x, prevTopY);
-        add(x, colTop[x]);
-        prevTopY = colTop[x];
-      }
-    }
-    add(maxOccX + 1, prevTopY);
-
-    // Phase 2: Right edge (top → bottom)
-    const rightStartY = prevTopY;
-    let rightEndY = 0;
-    for (let y = 0; y < h; y++) if (rowRight[y] >= 0) rightEndY = y;
-    let prevRightX = rowRight[rightStartY] >= 0 ? rowRight[rightStartY] + 1 : maxOccX + 1;
-    for (let y = rightStartY + 1; y <= rightEndY; y++) {
-      if (rowRight[y] < 0) continue;
-      const rx = rowRight[y] + 1;
-      if (rx !== prevRightX) {
-        add(prevRightX, y);
-        add(rx, y);
-        prevRightX = rx;
-      }
-    }
-    add(prevRightX, rightEndY + 1);
-
-    // Phase 3: Bottom edge (right → left)
-    let prevBotY = colBot[maxOccX] >= 0 ? colBot[maxOccX] + 1 : rightEndY + 1;
-    for (let x = maxOccX - 1; x >= minOccX; x--) {
-      if (colBot[x] < 0) continue;
-      const by = colBot[x] + 1;
-      if (by !== prevBotY) {
-        add(x + 1, prevBotY);
-        add(x + 1, by);
-        prevBotY = by;
-      }
-    }
-    add(minOccX, prevBotY);
-
-    // Phase 4: Left edge (bottom → top)
-    let leftStartY = 0;
-    for (let y = h - 1; y >= 0; y--) { if (rowLeft[y] >= 0) { leftStartY = y; break; } }
-    let prevLeftX = rowLeft[leftStartY] >= 0 ? rowLeft[leftStartY] : minOccX;
-    for (let y = leftStartY - 1; y >= colTop[minOccX]; y--) {
-      if (rowLeft[y] < 0) continue;
-      const lx = rowLeft[y];
-      if (lx !== prevLeftX) {
-        add(prevLeftX, y + 1);
-        add(lx, y + 1);
-        prevLeftX = lx;
-      }
-    }
-
+    const pts = best.slice(0, -1).map((p) => ({ x: mmX(p.x), y: mmY(p.y) }));
     return pts;
+  }
+
+  /**
+   * Estimate per-edge wall heights from IFC geometry by sampling point clouds
+   * near each footprint edge. Used for stepped/tiered buildings where wall
+   * heights differ by facade section.
+   */
+  private estimateWallHeightsFromIfcPoints(
+    footprint: Array<{ x: number; y: number }>,
+    pointsMm: Array<{ x: number; y: number; z: number }>,
+    minZMm: number,
+    maxZMm: number,
+    buildingHeightMm: number,
+  ): number[] | undefined {
+    const n = footprint.length;
+    if (n < 3 || pointsMm.length < 100) return undefined;
+
+    const perimeter = footprint.reduce((sum, p, i) => {
+      const q = footprint[(i + 1) % n];
+      return sum + Math.hypot(q.x - p.x, q.y - p.y);
+    }, 0);
+    const bandMm = Math.max(300, Math.min(1200, perimeter / Math.max(1, n * 8)));
+    const bandSq = bandMm * bandMm;
+
+    // Keep runtime bounded on large IFCs.
+    const sampleStride = Math.max(1, Math.ceil(pointsMm.length / 180000));
+    const zSample: number[] = [];
+    for (let i = 0; i < pointsMm.length; i += Math.max(1, sampleStride * 4)) {
+      zSample.push(pointsMm[i].z);
+    }
+    zSample.sort((a, b) => a - b);
+    const zAt = (q: number, fallback: number) =>
+      zSample.length > 0
+        ? zSample[Math.max(0, Math.min(zSample.length - 1, Math.floor((zSample.length - 1) * q)))]
+        : fallback;
+    const baseZ = zAt(0.02, minZMm);
+    const topZ = zAt(0.98, maxZMm);
+    const usableTop = Math.max(baseZ + 1000, topZ);
+
+    const edges = footprint.map((p, i) => {
+      const q = footprint[(i + 1) % n];
+      return {
+        x1: p.x,
+        y1: p.y,
+        x2: q.x,
+        y2: q.y,
+        minX: Math.min(p.x, q.x) - bandMm,
+        maxX: Math.max(p.x, q.x) + bandMm,
+        minY: Math.min(p.y, q.y) - bandMm,
+        maxY: Math.max(p.y, q.y) + bandMm,
+      };
+    });
+    const edgeZs: number[][] = Array.from({ length: n }, () => []);
+
+    for (let pi = 0; pi < pointsMm.length; pi += sampleStride) {
+      const p = pointsMm[pi];
+      if (p.z < baseZ - 200 || p.z > usableTop + 300) continue;
+      for (let ei = 0; ei < edges.length; ei++) {
+        const e = edges[ei];
+        if (p.x < e.minX || p.x > e.maxX || p.y < e.minY || p.y > e.maxY) continue;
+        const d = this.pointToSegmentDist(p.x, p.y, e.x1, e.y1, e.x2, e.y2);
+        if (d * d <= bandSq) edgeZs[ei].push(p.z);
+      }
+    }
+
+    const heights = edgeZs.map((zs) => {
+      if (zs.length < 8) return buildingHeightMm;
+      zs.sort((a, b) => a - b);
+      const p95 = zs[Math.floor((zs.length - 1) * 0.95)];
+      const h = Math.round(Math.max(1000, Math.min(buildingHeightMm, p95 - baseZ)));
+      return Math.round(h / 100) * 100;
+    });
+
+    const minH = Math.min(...heights);
+    const maxH = Math.max(...heights);
+    // Ignore near-uniform results; then global buildingHeightMm is sufficient.
+    if (maxH - minH < 600) return undefined;
+    return heights;
   }
 
   private removeCollinearVertices(

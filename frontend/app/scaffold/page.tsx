@@ -131,6 +131,14 @@ function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefin
   return out;
 }
 
+type IfcPreviewMesh = {
+  vertices: Float32Array;
+  indices: Uint32Array;
+  color: { r: number; g: number; b: number; a: number };
+};
+
+const IFC_PREVIEW_MESH_CACHE = new Map<string, IfcPreviewMesh[]>();
+
 /** Renders building footprint outline as SVG (for AI BIM double-check panel). */
 function BuildingShapeSvg({
   outline,
@@ -178,12 +186,14 @@ function Building3DPreview({
   outline,
   buildingHeightMm,
   wallLengthsMm,
+  ifcFileUrl,
   className,
   style,
 }: {
   outline: Array<{ xFrac: number; yFrac: number }>;
   buildingHeightMm: number;
   wallLengthsMm?: number[];
+  ifcFileUrl?: string;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -194,6 +204,7 @@ function Building3DPreview({
   useEffect(() => {
     if (!containerRef.current || outline.length < 3) return;
     let disposed = false;
+    const cleanupFns: Array<() => void> = [];
 
     import('three').then((THREE) => {
       if (disposed || !containerRef.current) return;
@@ -254,13 +265,20 @@ function Building3DPreview({
 
       const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: heightM, bevelEnabled: false });
       const buildingMat = new THREE.MeshStandardMaterial({
-        color: 0xd4d8e0, metalness: 0.1, roughness: 0.7,
+        color: 0xd4d8e0,
+        metalness: 0.1,
+        roughness: 0.7,
         side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
       });
       const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
       buildingMesh.rotation.x = -Math.PI / 2;
       buildingMesh.position.y = 0;
-      scene.add(buildingMesh);
+
+      const fallbackGroup = new THREE.Group();
+      fallbackGroup.add(buildingMesh);
+      scene.add(fallbackGroup);
 
       // Outline on ground
       const outlinePts = pts2D.map((p) => new THREE.Vector3(p.x - cx, 0.01, p.z - cz));
@@ -273,7 +291,7 @@ function Building3DPreview({
       const edgesGeo = new THREE.EdgesGeometry(buildingGeo);
       const edges = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0x94a3b8 }));
       edges.rotation.x = -Math.PI / 2;
-      scene.add(edges);
+      fallbackGroup.add(edges);
 
       // Floor lines
       const floorH = 3;
@@ -281,8 +299,11 @@ function Building3DPreview({
         const floorPts = pts2D.map((p) => new THREE.Vector3(p.x - cx, floorY, p.z - cz));
         floorPts.push(floorPts[0].clone());
         const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-        const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }));
-        scene.add(floorLine);
+        const floorLine = new THREE.Line(
+          floorGeo,
+          new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }),
+        );
+        fallbackGroup.add(floorLine);
       }
 
       // Ground plane
@@ -306,6 +327,105 @@ function Building3DPreview({
       const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
       dirLight.position.set(extent, extent * 1.5, extent * 0.8);
       scene.add(dirLight);
+
+      // Optional: overlay actual IFC mesh in preview (same footprint frame).
+      if (ifcFileUrl) {
+        (async () => {
+          try {
+            let meshes = IFC_PREVIEW_MESH_CACHE.get(ifcFileUrl);
+            if (!meshes) {
+              const response = await fetch(ifcFileUrl);
+              if (!response.ok) return;
+              const arrayBuffer = await response.arrayBuffer();
+              const { parseIfcToMeshes } = await import('@/lib/ifc-loader');
+              meshes = await parseIfcToMeshes(arrayBuffer);
+              IFC_PREVIEW_MESH_CACHE.set(ifcFileUrl, meshes);
+            }
+            if (disposed || !meshes || meshes.length === 0) return;
+
+            let minMx = Infinity; let maxMx = -Infinity;
+            let minMy = Infinity; let maxMy = -Infinity;
+            let minMz = Infinity; let maxMz = -Infinity;
+            for (const mesh of meshes) {
+              const stride = 6;
+              for (let vi = 0; vi < mesh.vertices.length; vi += stride) {
+                const x = mesh.vertices[vi];
+                const y = mesh.vertices[vi + 1];
+                const z = mesh.vertices[vi + 2];
+                if (x < minMx) minMx = x; if (x > maxMx) maxMx = x;
+                if (y < minMy) minMy = y; if (y > maxMy) maxMy = y;
+                if (z < minMz) minMz = z; if (z > maxMz) maxMz = z;
+              }
+            }
+            if (!Number.isFinite(minMx) || !Number.isFinite(maxMx)) return;
+
+            const rawSpanX = Math.max(maxMx - minMx, 1e-6);
+            const rawSpanY = Math.max(maxMy - minMy, 1e-6);
+            const rawSpanZ = Math.max(maxMz - minMz, 1e-6);
+            const rawMaxSpan = Math.max(rawSpanX, rawSpanY, rawSpanZ);
+            const rawToM = rawMaxSpan > 500 ? 0.001 : 1;
+
+            const ifcSpanX = rawSpanX * rawToM;
+            const ifcSpanY = rawSpanY * rawToM;
+            const ifcSpanZ = rawSpanZ * rawToM;
+            const targetSpanX = Math.max(spanX * toM, 1e-6);
+            const targetSpanZ = Math.max(spanY * toM, 1e-6);
+            const scaleXY = Math.min(targetSpanX / ifcSpanX, targetSpanZ / ifcSpanZ);
+            const scaleY = ifcSpanY > 1e-6 ? (heightM / ifcSpanY) : scaleXY;
+
+            const centerX = (minMx + maxMx) / 2;
+            const centerZ = (minMz + maxMz) / 2;
+
+            const ifcGroup = new THREE.Group();
+            for (const meshData of meshes) {
+              const stride = 6;
+              const vertCount = meshData.vertices.length / stride;
+              const positions = new Float32Array(vertCount * 3);
+              const normals = new Float32Array(vertCount * 3);
+              for (let vi = 0; vi < vertCount; vi++) {
+                positions[vi * 3] = (meshData.vertices[vi * stride] - centerX) * rawToM * scaleXY;
+                positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - minMy) * rawToM * scaleY;
+                positions[vi * 3 + 2] = (meshData.vertices[vi * stride + 2] - centerZ) * rawToM * scaleXY;
+                normals[vi * 3] = meshData.vertices[vi * stride + 3];
+                normals[vi * 3 + 1] = meshData.vertices[vi * stride + 4];
+                normals[vi * 3 + 2] = meshData.vertices[vi * stride + 5];
+              }
+
+              const geo = new THREE.BufferGeometry();
+              geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+              geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+              geo.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+
+              const mat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(meshData.color.r, meshData.color.g, meshData.color.b),
+                transparent: true,
+                opacity: Math.max(0.35, Math.min(0.92, meshData.color.a)),
+                side: THREE.DoubleSide,
+                roughness: 0.75,
+                metalness: 0.1,
+              });
+              ifcGroup.add(new THREE.Mesh(geo, mat));
+            }
+            if (disposed) return;
+            scene.add(ifcGroup);
+            fallbackGroup.visible = false;
+            cleanupFns.push(() => {
+              scene.remove(ifcGroup);
+              ifcGroup.traverse((obj) => {
+                const mesh = obj as THREE.Mesh;
+                if ((mesh as any).isMesh) {
+                  mesh.geometry?.dispose?.();
+                  const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+                  if (Array.isArray(material)) material.forEach((m) => m.dispose());
+                  else material?.dispose?.();
+                }
+              });
+            });
+          } catch {
+            // Keep fallback extruded preview when IFC loading fails.
+          }
+        })();
+      }
 
       // Camera
       const dist = Math.max(extent * 1.8, heightM * 2, 8);
@@ -349,6 +469,10 @@ function Building3DPreview({
       window.addEventListener('mouseup', onUp);
       window.addEventListener('mousemove', onMove);
       renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+      cleanupFns.push(() => renderer.domElement.removeEventListener('mousedown', onDown));
+      cleanupFns.push(() => window.removeEventListener('mouseup', onUp));
+      cleanupFns.push(() => window.removeEventListener('mousemove', onMove));
+      cleanupFns.push(() => renderer.domElement.removeEventListener('wheel', onWheel));
 
       const animate = () => {
         if (disposed) return;
@@ -367,17 +491,19 @@ function Building3DPreview({
         camera.updateProjectionMatrix();
       });
       ro.observe(container);
+      cleanupFns.push(() => ro.disconnect());
     });
 
     return () => {
       disposed = true;
+      for (const fn of cleanupFns) fn();
       cancelAnimationFrame(animFrameRef.current);
       if (rendererRef.current) {
         rendererRef.current.dispose();
         rendererRef.current = null;
       }
     };
-  }, [outline, buildingHeightMm, wallLengthsMm]);
+  }, [outline, buildingHeightMm, wallLengthsMm, ifcFileUrl]);
 
   if (outline.length < 3) return <div className={className} style={style} />;
   return <div ref={containerRef} className={className} style={style} />;
@@ -388,10 +514,12 @@ function BuildingPreviewPanel({
   outline,
   wallLengthsMm,
   buildingHeightMm,
+  ifcFileUrl,
 }: {
   outline: Array<{ xFrac: number; yFrac: number }>;
   wallLengthsMm?: number[];
   buildingHeightMm: number;
+  ifcFileUrl?: string;
 }) {
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
   return (
@@ -432,6 +560,7 @@ function BuildingPreviewPanel({
           outline={outline}
           buildingHeightMm={buildingHeightMm}
           wallLengthsMm={wallLengthsMm}
+          ifcFileUrl={ifcFileUrl}
           className="w-full rounded-lg border border-gray-200 bg-slate-50"
           style={{ height: 320 }}
         />
@@ -979,7 +1108,9 @@ function ScaffoldPageContent() {
                     const refMm = footprint.vertices.some((v) => 'xFrac' in v)
                       ? (footprint.scaleDenominator ? 20000 : 10000)
                       : undefined;
-                    const wallLengthsMm = correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm;
+                    const wallLengthsMm = isIfc
+                      ? footprint.wallLengthsMm
+                      : (correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm);
                     const wallHeightsMm = footprint.wallHeightsMm;
                     const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
                       footprint.vertices,
@@ -1242,6 +1373,7 @@ function ScaffoldPageContent() {
                     outline={aiBimPreview.buildingOutline}
                     wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
                     buildingHeightMm={aiBimPreview.buildingHeightMm}
+                    ifcFileUrl={aiBimPreview.ifcFileUrl}
                   />
                   <div className="grid grid-cols-1 gap-4">
                     {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
