@@ -298,7 +298,7 @@ function ScaffoldResultPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        <div className={`grid grid-cols-2 ${result.scaffoldType === 'wakugumi' ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-3 mb-4`}>
           <SummaryCard
             icon={<Building2 className="h-5 w-5" />}
             label={t('result', 'maxHeight') || 'Max Height'}
@@ -326,6 +326,11 @@ function ScaffoldResultPage() {
                 label={t('result', 'habakiCount')}
                 value={`${result.habakiCountPerSpan}${result.habakiCountPerSpan === 1 ? t('result', 'habakiSingle') : t('result', 'habakiDouble')}`}
               />
+              <SummaryCard
+                icon={<ShieldCheck className="h-5 w-5" />}
+                label={t('result', 'endStopperType')}
+                value={result.endStopperType === 'frame' ? '枠タイプ' : '布材タイプ'}
+              />
             </>
           ) : (
             <>
@@ -352,7 +357,8 @@ function ScaffoldResultPage() {
           <span>
             {t('result', 'specWidth')} {result.scaffoldWidthMm}mm
             {result.scaffoldType === 'wakugumi'
-              ? result.frameSizeMm != null && ` · ${t('result', 'specFrame')} ${result.frameSizeMm}mm`
+              ? (result.frameSizeMm != null && ` · ${t('result', 'specFrame')} ${result.frameSizeMm}mm`)
+                + (result.endStopperType ? ` · ${t('result', 'endStopperType')} ${result.endStopperType === 'frame' ? '枠' : '布材'}` : '')
               : result.preferredMainTatejiMm != null && ` · ${t('result', 'specMainPost')} ${result.preferredMainTatejiMm}mm`}
           </span>
         </div>

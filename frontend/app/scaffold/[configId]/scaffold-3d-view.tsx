@@ -154,6 +154,7 @@ const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = 
   jack: { nameJp: 'ジャッキベース', description: '支柱の根元に設置し、高さを微調整する部材です。' },
   stair: { nameJp: '階段', description: 'レベル間の昇降用。手摺付きで安全に通行できます。' },
   frame: { nameJp: '建枠', description: '枠組足場の基本ユニット。門型フレームで一層の高さを構成します。' },
+  endStopper: { nameJp: '端部', description: '壁面の両端に設置する端部材。布材タイプまたは枠タイプがあります。' },
 };
 
 export default function Scaffold3DView({
@@ -426,6 +427,14 @@ export default function Scaffold3DView({
       });
       const bracketMat = new THREE.MeshStandardMaterial({
         color: C_BRACKET, metalness: metal, roughness: rough,
+      });
+      const endStopperMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.endStopper : 0x7c3aed,
+        metalness: metal, roughness: rough,
+      });
+      const endStopperFrameMat = new THREE.MeshStandardMaterial({
+        color: isTech ? C_TECH.endStopper : 0x6d28d9,
+        metalness: metal + 0.1, roughness: rough,
       });
 
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -909,6 +918,32 @@ export default function Scaffold3DView({
               const px = postX[si + di] ?? x1;
               for (const tz of [0, widthM]) {
                 addPipe(group, px, bottomY, tz, px, groundLevelY - 0.02, tz, hariwakuMat, PIPE_R * 0.7);
+              }
+            }
+          }
+        }
+
+        // ── End Stoppers (端部) at wall ends ──────────────────
+        const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
+        if (isWakugumi && postX.length >= 2) {
+          const endPositions = [postX[startPostIdx], postX[postX.length - 1]];
+          for (const ex of endPositions) {
+            for (let lv = 1; lv <= levelsToBuild; lv++) {
+              const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+              if (endStopperType === 'nuno') {
+                // Nuno type: 2 horizontal bars spanning scaffold width at each end
+                const barY1 = y + 0.05;
+                const barY2 = y + 0.45;
+                addPipe(group, ex, barY1, 0, ex, barY1, widthM, endStopperMat, PIPE_R * 0.7);
+                addPipe(group, ex, barY2, 0, ex, barY2, widthM, endStopperMat, PIPE_R * 0.7);
+              } else {
+                // Frame type: vertical frame with two uprights + top rail
+                const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
+                const frameTop = y - 0.05;
+                addPipe(group, ex, frameBottom, 0, ex, frameTop, 0, endStopperFrameMat, PIPE_R * 0.8);
+                addPipe(group, ex, frameBottom, widthM, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.8);
+                addPipe(group, ex, frameTop, 0, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.7);
+                addPipe(group, ex, frameBottom, 0, ex, frameBottom, widthM, endStopperFrameMat, PIPE_R * 0.6);
               }
             }
           }
