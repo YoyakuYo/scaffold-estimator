@@ -125,7 +125,17 @@ function ScaffoldResultPage() {
   const resultFor3D = useMemo(() => {
     const base = resultMergedForViz ?? result;
     if (!base) return base;
-    if (Array.isArray(base.walls) && base.walls.length > 0) return base;
+    if (Array.isArray(base.walls) && base.walls.length > 0) {
+      const configWalls = config?.walls?.filter((w) => w.enabled !== false) ?? [];
+      const mergedWalls = base.walls.map((wall: WallCalculationResult, index: number) => ({
+        ...wall,
+        wallHeightMm:
+          wall.wallHeightMm ??
+          configWalls.find((cfg) => cfg.side === wall.side)?.wallHeightMm ??
+          configWalls[index]?.wallHeightMm,
+      }));
+      return { ...base, walls: mergedWalls };
+    }
     if (!config?.walls?.length) return base;
     const levelH = base.scaffoldType === 'wakugumi' ? (base.frameSizeMm ?? 1800) : 1800;
     const levels = Math.max(1, Math.floor((config.buildingHeightMm ?? 3000) / levelH));
@@ -140,6 +150,7 @@ function ScaffoldResultPage() {
           side: w.side,
           sideJp: w.side,
           wallLengthMm: w.wallLengthMm,
+          wallHeightMm: w.wallHeightMm,
           spans: [1800],
           totalSpans: 1,
           postPositions: 2,

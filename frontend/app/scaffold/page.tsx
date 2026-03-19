@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
-import { visionBimApi, type VisionFootprintResult } from '@/lib/api/vision-bim';
+import { visionBimApi, type VisionFootprintResult, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
 import {
@@ -86,6 +86,7 @@ function countPattankoCorners(vertices: Array<{ x?: number; y?: number; xFrac?: 
   const n = vertices.length;
   if (n < 3) return 0;
   const COS_L_SHAPED_MAX = 0.35;
+  const COS_STRAIGHT_MIN = 0.98;
   let count = 0;
   for (let j = 0; j < n; j++) {
     const prev = (j - 1 + n) % n;
@@ -107,6 +108,7 @@ function countPattankoCorners(vertices: Array<{ x?: number; y?: number; xFrac?: 
     const lenNext = Math.hypot(dxNext, dyNext);
     if (lenPrev < 1e-9 || lenNext < 1e-9) continue;
     const cosAngle = (dxPrev * dxNext + dyPrev * dyNext) / (lenPrev * lenNext);
+    if (Math.abs(cosAngle) >= COS_STRAIGHT_MIN) continue;
     if (Math.abs(cosAngle) >= COS_L_SHAPED_MAX) count++;
   }
   return count;
@@ -187,6 +189,7 @@ function Building3DPreview({
   buildingHeightMm,
   wallLengthsMm,
   wallHeightsMm,
+  massingTiers,
   ifcFileUrl,
   ifcArrayBuffer,
   className,
@@ -196,6 +199,7 @@ function Building3DPreview({
   buildingHeightMm: number;
   wallLengthsMm?: number[];
   wallHeightsMm?: number[];
+  massingTiers?: VisionMassingTier[];
   ifcFileUrl?: string;
   ifcArrayBuffer?: ArrayBuffer;
   className?: string;
@@ -228,9 +232,19 @@ function Building3DPreview({
       container.appendChild(renderer.domElement);
       rendererRef.current = renderer;
 
-      // Normalize outline to meters
-      const xs = outline.map((p) => p.xFrac);
-      const ys = outline.map((p) => p.yFrac);
+      // Normalize outline/tier vertices to meters in one shared coordinate frame.
+      const allPlanVerts = [
+        ...outline,
+        ...(massingTiers?.flatMap((tier) =>
+          tier.vertices.map((v) =>
+            'xFrac' in v
+              ? { xFrac: v.xFrac, yFrac: v.yFrac }
+              : { xFrac: v.x, yFrac: v.y },
+          ),
+        ) ?? []),
+      ];
+      const xs = allPlanVerts.map((p) => p.xFrac);
+      const ys = allPlanVerts.map((p) => p.yFrac);
       const minX = Math.min(...xs);
       const minY = Math.min(...ys);
       const maxX = Math.max(...xs);
@@ -250,10 +264,17 @@ function Building3DPreview({
         toM = (perimeter * 0.001) / (2 * (spanX + spanY));
       }
 
-      const pts2D = outline.map((p) => ({
-        x: (p.xFrac - minX) * toM,
-        z: (p.yFrac - minY) * toM,
-      }));
+      const toPlanM = (verts: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>) =>
+        verts.map((p) => {
+          const px = p.xFrac ?? p.x ?? 0;
+          const py = p.yFrac ?? p.y ?? 0;
+          return {
+            x: (px - minX) * toM,
+            z: (py - minY) * toM,
+          };
+        });
+
+      const pts2D = toPlanM(outline);
       const cx = pts2D.reduce((s, p) => s + p.x, 0) / pts2D.length;
       const cz = pts2D.reduce((s, p) => s + p.z, 0) / pts2D.length;
 
@@ -262,8 +283,51 @@ function Building3DPreview({
         && new Set(wallHeightsMm).size > 1;
 
       const fallbackGroup = new THREE.Group();
+      const hasMassingTiers = Array.isArray(massingTiers) && massingTiers.length > 0;
 
-      if (hasSteppedHeights) {
+      if (hasMassingTiers) {
+        const tiers = [...massingTiers!]
+          .filter((tier) => Array.isArray(tier.vertices) && tier.vertices.length >= 3)
+          .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
+        const tierMat = new THREE.MeshStandardMaterial({
+          color: 0xd4d8e0, metalness: 0.1, roughness: 0.7,
+          side: THREE.DoubleSide, transparent: true, opacity: 0.85,
+        });
+        for (const tier of tiers) {
+          const tierPts = toPlanM(tier.vertices);
+          if (tierPts.length < 3) continue;
+          const shape = new THREE.Shape();
+          shape.moveTo(tierPts[0].x - cx, tierPts[0].z - cz);
+          for (let i = 1; i < tierPts.length; i++) {
+            shape.lineTo(tierPts[i].x - cx, tierPts[i].z - cz);
+          }
+          shape.closePath();
+          const baseH = Math.max(0, (tier.baseHeightMm ?? 0) * 0.001);
+          const topH = Math.max(baseH + 0.2, tier.topHeightMm * 0.001);
+          const tierGeo = new THREE.ExtrudeGeometry(shape, { depth: topH - baseH, bevelEnabled: false });
+          const tierMesh = new THREE.Mesh(tierGeo, tierMat);
+          tierMesh.rotation.x = -Math.PI / 2;
+          tierMesh.position.y = baseH;
+          fallbackGroup.add(tierMesh);
+
+          const tierEdges = new THREE.LineSegments(
+            new THREE.EdgesGeometry(tierGeo),
+            new THREE.LineBasicMaterial({ color: 0x94a3b8 }),
+          );
+          tierEdges.rotation.x = -Math.PI / 2;
+          tierEdges.position.y = baseH;
+          fallbackGroup.add(tierEdges);
+
+          for (let floorY = Math.ceil(baseH / 3) * 3; floorY < topH; floorY += 3) {
+            const floorPts = tierPts.map((p) => new THREE.Vector3(p.x - cx, floorY, p.z - cz));
+            floorPts.push(floorPts[0].clone());
+            fallbackGroup.add(new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(floorPts),
+              new THREE.LineBasicMaterial({ color: 0xbdc3cf, transparent: true, opacity: 0.5 }),
+            ));
+          }
+        }
+      } else if (hasSteppedHeights) {
         // Stepped building: create per-wall panels at their own heights
         const buildingMat = new THREE.MeshStandardMaterial({
           color: 0xd4d8e0, metalness: 0.1, roughness: 0.7,
@@ -582,7 +646,7 @@ function Building3DPreview({
         rendererRef.current = null;
       }
     };
-  }, [outline, buildingHeightMm, wallLengthsMm, wallHeightsMm, ifcFileUrl, ifcArrayBuffer]);
+  }, [outline, buildingHeightMm, wallLengthsMm, wallHeightsMm, massingTiers, ifcFileUrl, ifcArrayBuffer]);
 
   if (outline.length < 3) return <div className={className} style={style} />;
   return <div ref={containerRef} className={className} style={style} />;
@@ -593,6 +657,7 @@ function BuildingPreviewPanel({
   outline,
   wallLengthsMm,
   wallHeightsMm,
+  massingTiers,
   buildingHeightMm,
   ifcFileUrl,
   ifcArrayBuffer,
@@ -600,6 +665,7 @@ function BuildingPreviewPanel({
   outline: Array<{ xFrac: number; yFrac: number }>;
   wallLengthsMm?: number[];
   wallHeightsMm?: number[];
+  massingTiers?: VisionMassingTier[];
   buildingHeightMm: number;
   ifcFileUrl?: string;
   ifcArrayBuffer?: ArrayBuffer;
@@ -644,6 +710,7 @@ function BuildingPreviewPanel({
           buildingHeightMm={buildingHeightMm}
           wallLengthsMm={wallLengthsMm}
           wallHeightsMm={wallHeightsMm}
+          massingTiers={massingTiers}
           ifcFileUrl={ifcFileUrl}
           ifcArrayBuffer={ifcArrayBuffer}
           className="w-full rounded-lg border border-gray-200 bg-slate-50"
@@ -791,6 +858,7 @@ function ScaffoldPageContent() {
     buildingHeightMm: number;
     walls: WallInput[];
     buildingOutline: Array<{ xFrac: number; yFrac: number }>;
+    massingTiers?: VisionMassingTier[];
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
@@ -1222,6 +1290,7 @@ function ScaffoldPageContent() {
                       topGuardHeightMm: defaults.topGuardHeightMm,
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
+                      ...(footprint.massingTiers && footprint.massingTiers.length > 0 && { massingTiers: footprint.massingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
                       ...(footprint.ifcFileUrl && { ifcFileUrl: footprint.ifcFileUrl }),
@@ -1232,6 +1301,7 @@ function ScaffoldPageContent() {
                       buildingHeightMm: footprint.buildingHeightMm,
                       walls,
                       buildingOutline,
+                      massingTiers: footprint.massingTiers,
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
@@ -1465,6 +1535,7 @@ function ScaffoldPageContent() {
                     outline={aiBimPreview.buildingOutline}
                     wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
                     wallHeightsMm={aiBimPreview.isStepped ? aiBimPreview.walls.map((w) => w.wallHeightMm) : undefined}
+                    massingTiers={aiBimPreview.massingTiers}
                     buildingHeightMm={aiBimPreview.buildingHeightMm}
                     ifcFileUrl={aiBimPreview.ifcFileUrl}
                     ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}

@@ -77,6 +77,7 @@ export interface WallCalculationResult {
   side: string; // Can be 'north' | 'south' | 'east' | 'west' or arbitrary edge names
   sideJp: string;
   wallLengthMm: number;
+  wallHeightMm: number;
   spans: number[];                  // array of span sizes used
   totalSpans: number;
   postPositions: number;            // totalSpans + 1
@@ -639,6 +640,7 @@ export class ScaffoldCalculatorService {
       side: wall.side,
       sideJp: getSideLabel(wall.side),
       wallLengthMm: wall.wallLengthMm,
+      wallHeightMm: wall.wallHeightMm,
       spans,
       totalSpans,
       postPositions,

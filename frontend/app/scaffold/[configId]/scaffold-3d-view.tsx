@@ -1016,9 +1016,14 @@ export default function Scaffold3DView({
       // L-shaped corner: ~90° turn. Full corner rule (300+600, overrun, walkable deck) only for these.
       // Non-L-shaped corners use pattanko (small filler planks) instead.
       const COS_L_SHAPED_MAX = 0.35; // |cos| < 0.35 => angle between ~70° and ~110°
+      const COS_STRAIGHT_MIN = 0.98;
+      const hasCornerAtStart: boolean[] = [];
+      const hasCornerAtEnd: boolean[] = [];
       const isLShapedAtStart: boolean[] = [];
       const isLShapedAtEnd: boolean[] = [];
       for (let i = 0; i < walls.length; i++) {
+        hasCornerAtStart.push(false);
+        hasCornerAtEnd.push(false);
         isLShapedAtStart.push(false);
         isLShapedAtEnd.push(false);
       }
@@ -1041,11 +1046,19 @@ export default function Scaffold3DView({
           const lenNext = Math.hypot(dxNext, dzNext);
           if (lenPrev < 1e-6 || lenNext < 1e-6) continue;
           const cosAngle = (dxPrev * dxNext + dzPrev * dzNext) / (lenPrev * lenNext);
-          const isL = Math.abs(cosAngle) < COS_L_SHAPED_MAX;
+          const absCos = Math.abs(cosAngle);
+          const isCorner = absCos < COS_STRAIGHT_MIN;
+          const isL = isCorner && absCos < COS_L_SHAPED_MAX;
           const wallEnd = !isOpenPolygon ? (j - 1 + nW) % nW : j - 1;
           const wallStart = !isOpenPolygon ? j % nW : j;
-          if (wallEnd >= 0 && wallEnd < nW) isLShapedAtEnd[wallEnd] = isL;
-          if (wallStart >= 0 && wallStart < nW) isLShapedAtStart[wallStart] = isL;
+          if (wallEnd >= 0 && wallEnd < nW) {
+            hasCornerAtEnd[wallEnd] = isCorner;
+            isLShapedAtEnd[wallEnd] = isL;
+          }
+          if (wallStart >= 0 && wallStart < nW) {
+            hasCornerAtStart[wallStart] = isCorner;
+            isLShapedAtStart[wallStart] = isL;
+          }
         }
       }
 
@@ -1077,8 +1090,8 @@ export default function Scaffold3DView({
 
         // Determine if wall start/end are corners (shared vertex with adjacent walls).
         // Full corner rule (300+600 / 300 overrun) only for L-shaped (~90°) corners; else use pattanko.
-        const isStartCorner = !isOpenPolygon || i > 0;
-        const isEndCorner = !isOpenPolygon || i < walls.length - 1;
+        const isStartCorner = (!isOpenPolygon || i > 0) && (hasCornerAtStart[i] ?? false);
+        const isEndCorner = (!isOpenPolygon || i < walls.length - 1) && (hasCornerAtEnd[i] ?? false);
         const isStartLShaped = isStartCorner && (isLShapedAtStart[i] ?? false);
         const isEndLShaped = isEndCorner && (isLShapedAtEnd[i] ?? false);
 
@@ -1267,6 +1280,7 @@ export default function Scaffold3DView({
       for (let wi = 0; wi < walls.length; wi++) {
         const nextWi = (wi + 1) % walls.length;
         if (isOpenPolygon && nextWi <= wi) continue;
+        if (!(hasCornerAtEnd[wi] ?? false)) continue;
 
         const infoA = wallRenderInfos[wi];
         const infoB = wallRenderInfos[nextWi];
@@ -1352,9 +1366,75 @@ export default function Scaffold3DView({
           shape.lineTo(verts[i].x - cx, verts[i].z - cz);
         }
         shape.closePath();
-        const buildingH = Math.max(maxH * 0.85, 2);
         const floorH = 3.0;
         const centeredVerts = verts.map(v => ({ x: v.x - cx, z: v.z - cz }));
+        const fallbackWallHeightM = Math.max(maxH * 0.85, 2);
+        const wallHeightsM = walls.map((wall) => {
+          const explicitMm = wall.wallHeightMm;
+          if (typeof explicitMm === 'number' && Number.isFinite(explicitMm) && explicitMm >= 1000) {
+            return explicitMm / 1000;
+          }
+          const topPlankMm = wall.levelCalc?.topPlankHeightMm;
+          if (typeof topPlankMm === 'number' && Number.isFinite(topPlankMm) && topPlankMm >= 1000) {
+            return topPlankMm / 1000;
+          }
+          return fallbackWallHeightM;
+        });
+        const buildingH = Math.max(...wallHeightsM, fallbackWallHeightM);
+        const hasSteppedWallHeights =
+          wallHeightsM.length === centeredVerts.length &&
+          new Set(wallHeightsM.map((h) => Math.round(h * 1000))).size > 1;
+        const massingTiers = Array.isArray((result as any)?.massingTiers)
+          ? ((result as any).massingTiers as Array<{
+              vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+              topHeightMm: number;
+              baseHeightMm?: number;
+            }>)
+          : [];
+        const hasMassingTiers = massingTiers.length > 0;
+        const rawBaseVerts = Array.isArray(storedVerts)
+          ? storedVerts.map((v) => ({
+              x: (v as any).xFrac ?? (v as any).x ?? 0,
+              z: (v as any).yFrac ?? (v as any).y ?? 0,
+            }))
+          : [];
+        const builtBaseMinX = Math.min(...verts.map((v) => v.x));
+        const builtBaseMinZ = Math.min(...verts.map((v) => v.z));
+        const builtBaseSpan = Math.max(
+          Math.max(...verts.map((v) => v.x)) - builtBaseMinX,
+          Math.max(...verts.map((v) => v.z)) - builtBaseMinZ,
+          1e-6,
+        );
+        const rawBaseMinX = rawBaseVerts.length > 0 ? Math.min(...rawBaseVerts.map((v) => v.x)) : 0;
+        const rawBaseMinZ = rawBaseVerts.length > 0 ? Math.min(...rawBaseVerts.map((v) => v.z)) : 0;
+        const rawBaseSpan = rawBaseVerts.length > 0
+          ? Math.max(
+              Math.max(...rawBaseVerts.map((v) => v.x)) - rawBaseMinX,
+              Math.max(...rawBaseVerts.map((v) => v.z)) - rawBaseMinZ,
+              1e-6,
+            )
+          : 1;
+        const normaliseTierVerts = (
+          tierVerts: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
+        ) => {
+          const rawTierVerts = tierVerts.map((v) => ({
+            x: v.xFrac ?? v.x ?? 0,
+            z: v.yFrac ?? v.y ?? 0,
+          }));
+          if (rawTierVerts.length < 3) return [];
+          if (rawBaseVerts.length >= 3) {
+            const scale = builtBaseSpan / rawBaseSpan;
+            return rawTierVerts.map((v) => ({
+              x: builtBaseMinX + (v.x - rawBaseMinX) * scale,
+              z: builtBaseMinZ + (v.z - rawBaseMinZ) * scale,
+            }));
+          }
+          const maxCoord = Math.max(...rawTierVerts.map((v) => Math.max(Math.abs(v.x), Math.abs(v.z))));
+          if (maxCoord > 1000) {
+            return rawTierVerts.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }));
+          }
+          return rawTierVerts;
+        };
 
         /** BIM AI path: flat “shaded with edges” CAD look (solid fills + black outlines, no hatching / no translucent wash). */
         const edgeLineMat = new THREE.LineBasicMaterial({ color: 0x0a0a0a });
@@ -1366,161 +1446,307 @@ export default function Scaffold3DView({
           lines.userData = { noClip: true };
           scene.add(lines);
         };
+        const addSteppedWallPanels = (
+          wallMat: any,
+          lineColor: number,
+          lineOpacity: number,
+        ) => {
+          const panelLineMat = new THREE.LineBasicMaterial({
+            color: lineColor,
+            transparent: lineOpacity < 1,
+            opacity: lineOpacity,
+          });
+          for (let i = 0; i < centeredVerts.length; i++) {
+            const next = (i + 1) % centeredVerts.length;
+            const edgeHeight = wallHeightsM[i] ?? buildingH;
+            if (!Number.isFinite(edgeHeight) || edgeHeight <= 0.1) continue;
+            const vStart = centeredVerts[i];
+            const vEnd = centeredVerts[next];
+            const positions = new Float32Array([
+              vStart.x, GROUND_Y + 0.02, vStart.z,
+              vEnd.x, GROUND_Y + 0.02, vEnd.z,
+              vEnd.x, GROUND_Y + 0.02 + edgeHeight, vEnd.z,
+              vStart.x, GROUND_Y + 0.02, vStart.z,
+              vEnd.x, GROUND_Y + 0.02 + edgeHeight, vEnd.z,
+              vStart.x, GROUND_Y + 0.02 + edgeHeight, vStart.z,
+            ]);
+            const wallGeo = new THREE.BufferGeometry();
+            wallGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            wallGeo.computeVertexNormals();
+            const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+            wallMesh.userData = { noClip: true };
+            scene.add(wallMesh);
+
+            const wallEdgePts = [
+              new THREE.Vector3(vStart.x, GROUND_Y + 0.02, vStart.z),
+              new THREE.Vector3(vEnd.x, GROUND_Y + 0.02, vEnd.z),
+              new THREE.Vector3(vEnd.x, GROUND_Y + 0.02 + edgeHeight, vEnd.z),
+              new THREE.Vector3(vStart.x, GROUND_Y + 0.02 + edgeHeight, vStart.z),
+              new THREE.Vector3(vStart.x, GROUND_Y + 0.02, vStart.z),
+            ];
+            const wallEdge = new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints(wallEdgePts),
+              panelLineMat,
+            );
+            wallEdge.userData = { noClip: true };
+            scene.add(wallEdge);
+
+            const roofEdge = new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(vStart.x, GROUND_Y + 0.02 + edgeHeight, vStart.z),
+                new THREE.Vector3(vEnd.x, GROUND_Y + 0.02 + edgeHeight, vEnd.z),
+              ]),
+              panelLineMat,
+            );
+            roofEdge.userData = { noClip: true };
+            scene.add(roofEdge);
+
+            for (let floorY = floorH; floorY < edgeHeight; floorY += floorH) {
+              const floorGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(vStart.x, GROUND_Y + 0.02 + floorY, vStart.z),
+                new THREE.Vector3(vEnd.x, GROUND_Y + 0.02 + floorY, vEnd.z),
+              ]);
+              const floorLine = new THREE.Line(
+                floorGeo,
+                new THREE.LineBasicMaterial({
+                  color: lineColor,
+                  transparent: true,
+                  opacity: Math.max(0.35, lineOpacity * 0.7),
+                }),
+              );
+              floorLine.userData = { noClip: true };
+              scene.add(floorLine);
+            }
+          }
+        };
+        const addMassingTiers = (
+          tierMat: any,
+          edgeColor: number,
+          edgeOpacity: number,
+        ) => {
+          const tierLineMat = new THREE.LineBasicMaterial({
+            color: edgeColor,
+            transparent: edgeOpacity < 1,
+            opacity: edgeOpacity,
+          });
+          const sortedTiers = [...massingTiers]
+            .filter((tier) => Array.isArray(tier.vertices) && tier.vertices.length >= 3)
+            .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
+          for (const tier of sortedTiers) {
+            const tierVerts = normaliseTierVerts(tier.vertices);
+            if (tierVerts.length < 3) continue;
+            const shapeTier = new THREE.Shape();
+            shapeTier.moveTo(tierVerts[0].x - cx, tierVerts[0].z - cz);
+            for (let i = 1; i < tierVerts.length; i++) {
+              shapeTier.lineTo(tierVerts[i].x - cx, tierVerts[i].z - cz);
+            }
+            shapeTier.closePath();
+            const baseY = GROUND_Y + 0.02 + ((tier.baseHeightMm ?? 0) / 1000);
+            const topY = GROUND_Y + 0.02 + (tier.topHeightMm / 1000);
+            if (!(topY > baseY)) continue;
+            const geo = new THREE.ExtrudeGeometry(shapeTier, { depth: topY - baseY, bevelEnabled: false });
+            const mesh = new THREE.Mesh(geo, tierMat);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.y = baseY;
+            mesh.userData = { noClip: true };
+            scene.add(mesh);
+
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), tierLineMat);
+            edges.rotation.x = -Math.PI / 2;
+            edges.position.y = baseY;
+            edges.userData = { noClip: true };
+            scene.add(edges);
+
+            for (let floorY = Math.ceil(baseY / floorH) * floorH; floorY < topY; floorY += floorH) {
+              const floorPts = tierVerts.map((v) => new THREE.Vector3(v.x - cx, floorY, v.z - cz));
+              floorPts.push(floorPts[0].clone());
+              const floorLine = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints(floorPts),
+                new THREE.LineBasicMaterial({
+                  color: edgeColor,
+                  transparent: true,
+                  opacity: Math.max(0.35, edgeOpacity * 0.7),
+                }),
+              );
+              floorLine.userData = { noClip: true };
+              scene.add(floorLine);
+            }
+          }
+        };
 
         if (isAiBim) {
           const fc = (result as any)?.bimFacadeColors as
             | { lowerHex?: string; upperHex?: string; roofHex?: string; windowHex?: string; sillHex?: string }
             | undefined;
-          const lowerH = buildingH * 0.48;
-          const upperH = buildingH * 0.52;
-          const lowerGeo = new THREE.ExtrudeGeometry(shape, { depth: lowerH, bevelEnabled: false });
-          const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
-          const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
-
-          const lowerMat = new THREE.MeshBasicMaterial({
+          const steppedMat = new THREE.MeshBasicMaterial({
             color: bimHexToNumber(fc?.lowerHex, 0xc9b89a),
             side: THREE.DoubleSide,
           });
-          const upperMat = new THREE.MeshBasicMaterial({
-            color: bimHexToNumber(fc?.upperHex, 0x3d3d42),
-            side: THREE.DoubleSide,
-          });
-          const roofMat = new THREE.MeshBasicMaterial({
-            color: bimHexToNumber(fc?.roofHex, 0x2f7a48),
-            side: THREE.DoubleSide,
-          });
+          if (hasMassingTiers) {
+            addMassingTiers(steppedMat, 0x0a0a0a, 1);
+          } else if (hasSteppedWallHeights) {
+            addSteppedWallPanels(steppedMat, 0x0a0a0a, 1);
+          } else {
+            const lowerH = buildingH * 0.48;
+            const upperH = buildingH * 0.52;
+            const lowerGeo = new THREE.ExtrudeGeometry(shape, { depth: lowerH, bevelEnabled: false });
+            const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
+            const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
 
-          const baseY = GROUND_Y + 0.02;
-          const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat);
-          lowerMesh.rotation.x = -Math.PI / 2;
-          lowerMesh.position.y = baseY;
-          lowerMesh.userData = { noClip: true };
-          scene.add(lowerMesh);
-          addBlackEdges(lowerGeo, baseY);
+            const lowerMat = new THREE.MeshBasicMaterial({
+              color: bimHexToNumber(fc?.lowerHex, 0xc9b89a),
+              side: THREE.DoubleSide,
+            });
+            const upperMat = new THREE.MeshBasicMaterial({
+              color: bimHexToNumber(fc?.upperHex, 0x3d3d42),
+              side: THREE.DoubleSide,
+            });
+            const roofMat = new THREE.MeshBasicMaterial({
+              color: bimHexToNumber(fc?.roofHex, 0x2f7a48),
+              side: THREE.DoubleSide,
+            });
 
-          const upperMesh = new THREE.Mesh(upperGeo, upperMat);
-          upperMesh.rotation.x = -Math.PI / 2;
-          upperMesh.position.y = baseY + lowerH;
-          upperMesh.userData = { noClip: true };
-          scene.add(upperMesh);
-          addBlackEdges(upperGeo, baseY + lowerH);
+            const baseY = GROUND_Y + 0.02;
+            const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat);
+            lowerMesh.rotation.x = -Math.PI / 2;
+            lowerMesh.position.y = baseY;
+            lowerMesh.userData = { noClip: true };
+            scene.add(lowerMesh);
+            addBlackEdges(lowerGeo, baseY);
 
-          const roofTopY = baseY + lowerH + upperH;
-          const roofMesh = new THREE.Mesh(roofGeo, roofMat);
-          roofMesh.rotation.x = -Math.PI / 2;
-          roofMesh.position.y = roofTopY;
-          roofMesh.userData = { noClip: true };
-          scene.add(roofMesh);
-          addBlackEdges(roofGeo, roofTopY);
+            const upperMesh = new THREE.Mesh(upperGeo, upperMat);
+            upperMesh.rotation.x = -Math.PI / 2;
+            upperMesh.position.y = baseY + lowerH;
+            upperMesh.userData = { noClip: true };
+            scene.add(upperMesh);
+            addBlackEdges(upperGeo, baseY + lowerH);
 
-          for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
-            const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, baseY + floorY, v.z));
-            floorPts.push(floorPts[0].clone());
-            const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-            const floorLine = new THREE.Line(
-              floorGeo,
-              new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: false, opacity: 1 }),
-            );
-            floorLine.userData = { noClip: true };
-            scene.add(floorLine);
+            const roofTopY = baseY + lowerH + upperH;
+            const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+            roofMesh.rotation.x = -Math.PI / 2;
+            roofMesh.position.y = roofTopY;
+            roofMesh.userData = { noClip: true };
+            scene.add(roofMesh);
+            addBlackEdges(roofGeo, roofTopY);
+
+            for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
+              const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, baseY + floorY, v.z));
+              floorPts.push(floorPts[0].clone());
+              const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
+              const floorLine = new THREE.Line(
+                floorGeo,
+                new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: false, opacity: 1 }),
+              );
+              floorLine.userData = { noClip: true };
+              scene.add(floorLine);
+            }
           }
         } else {
-          const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
           const buildingMat = new THREE.MeshStandardMaterial({
             color: 0xd5cfc7, metalness: 0.05, roughness: 0.8,
             transparent: true, opacity: 0.55, side: THREE.DoubleSide,
           });
-          const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
-          buildingMesh.rotation.x = -Math.PI / 2;
-          buildingMesh.position.y = GROUND_Y + 0.02;
-          buildingMesh.userData = { noClip: true };
-          scene.add(buildingMesh);
+          if (hasMassingTiers) {
+            addMassingTiers(buildingMat, 0x9ca3af, 0.8);
+          } else if (hasSteppedWallHeights) {
+            addSteppedWallPanels(buildingMat, 0x9ca3af, 0.8);
+          } else {
+            const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
+            const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
+            buildingMesh.rotation.x = -Math.PI / 2;
+            buildingMesh.position.y = GROUND_Y + 0.02;
+            buildingMesh.userData = { noClip: true };
+            scene.add(buildingMesh);
 
-          const buildingEdgesGeo = new THREE.EdgesGeometry(buildingGeo);
-          const buildingEdges = new THREE.LineSegments(buildingEdgesGeo, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
-          buildingEdges.rotation.x = -Math.PI / 2;
-          buildingEdges.position.y = GROUND_Y + 0.02;
-          buildingEdges.userData = { noClip: true };
-          scene.add(buildingEdges);
+            const buildingEdgesGeo = new THREE.EdgesGeometry(buildingGeo);
+            const buildingEdges = new THREE.LineSegments(buildingEdgesGeo, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
+            buildingEdges.rotation.x = -Math.PI / 2;
+            buildingEdges.position.y = GROUND_Y + 0.02;
+            buildingEdges.userData = { noClip: true };
+            scene.add(buildingEdges);
 
-          for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
-            const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, GROUND_Y + 0.02 + floorY, v.z));
-            floorPts.push(floorPts[0].clone());
-            const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-            const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0x8b95a3, transparent: true, opacity: 0.6 }));
-            floorLine.userData = { noClip: true };
-            scene.add(floorLine);
+            for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
+              const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, GROUND_Y + 0.02 + floorY, v.z));
+              floorPts.push(floorPts[0].clone());
+              const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
+              const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0x8b95a3, transparent: true, opacity: 0.6 }));
+              floorLine.userData = { noClip: true };
+              scene.add(floorLine);
+            }
           }
         }
 
-        // Window pattern on each facade
-        const fcWin = isAiBim
-          ? ((result as any)?.bimFacadeColors as { windowHex?: string; sillHex?: string } | undefined)
-          : undefined;
-        const windowMat = isAiBim
-          ? new THREE.MeshBasicMaterial({
-              color: bimHexToNumber(fcWin?.windowHex, 0x6baed6),
-              transparent: true,
-              opacity: 0.92,
-              side: THREE.DoubleSide,
-            })
-          : new THREE.MeshStandardMaterial({
-              color: 0x7cb8d4, metalness: 0.3, roughness: 0.4,
-              transparent: true, opacity: 0.5, side: THREE.DoubleSide,
-            });
-        const windowSillMat = isAiBim
-          ? new THREE.MeshBasicMaterial({
-              color: bimHexToNumber(fcWin?.sillHex, 0x2d3748),
-              side: THREE.DoubleSide,
-            })
-          : new THREE.MeshStandardMaterial({
-              color: 0x4a5568, metalness: 0.2, roughness: 0.6,
-              transparent: true, opacity: 0.5,
-            });
-        const nFloors = Math.max(1, Math.floor(buildingH / floorH));
-        const windowH = floorH * 0.45;
-        const windowBottomOffset = floorH * 0.3;
+        if (!hasMassingTiers) {
+          // Window pattern on each facade
+          const fcWin = isAiBim
+            ? ((result as any)?.bimFacadeColors as { windowHex?: string; sillHex?: string } | undefined)
+            : undefined;
+          const windowMat = isAiBim
+            ? new THREE.MeshBasicMaterial({
+                color: bimHexToNumber(fcWin?.windowHex, 0x6baed6),
+                transparent: true,
+                opacity: 0.92,
+                side: THREE.DoubleSide,
+              })
+            : new THREE.MeshStandardMaterial({
+                color: 0x7cb8d4, metalness: 0.3, roughness: 0.4,
+                transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+              });
+          const windowSillMat = isAiBim
+            ? new THREE.MeshBasicMaterial({
+                color: bimHexToNumber(fcWin?.sillHex, 0x2d3748),
+                side: THREE.DoubleSide,
+              })
+            : new THREE.MeshStandardMaterial({
+                color: 0x4a5568, metalness: 0.2, roughness: 0.6,
+                transparent: true, opacity: 0.5,
+              });
+          const windowH = floorH * 0.45;
+          const windowBottomOffset = floorH * 0.3;
 
-        for (let ei = 0; ei < centeredVerts.length; ei++) {
-          const v1 = centeredVerts[ei];
-          const v2 = centeredVerts[(ei + 1) % centeredVerts.length];
-          const edgeDx = v2.x - v1.x;
-          const edgeDz = v2.z - v1.z;
-          const edgeLen = Math.hypot(edgeDx, edgeDz);
-          if (edgeLen < 2) continue;
+          for (let ei = 0; ei < centeredVerts.length; ei++) {
+            const v1 = centeredVerts[ei];
+            const v2 = centeredVerts[(ei + 1) % centeredVerts.length];
+            const edgeHeight = wallHeightsM[ei] ?? buildingH;
+            const nFloors = Math.max(1, Math.floor(edgeHeight / floorH));
+            const edgeDx = v2.x - v1.x;
+            const edgeDz = v2.z - v1.z;
+            const edgeLen = Math.hypot(edgeDx, edgeDz);
+            if (edgeLen < 2) continue;
 
-          const normalX = -edgeDz / edgeLen;
-          const normalZ = edgeDx / edgeLen;
-          const windowSpacing = Math.max(1.5, Math.min(3, edgeLen / Math.max(1, Math.round(edgeLen / 2.5))));
-          const nWindows = Math.max(1, Math.floor((edgeLen - 1) / windowSpacing));
-          const windowW = windowSpacing * 0.55;
-          const startOffset = (edgeLen - (nWindows - 1) * windowSpacing) / 2;
+            const normalX = -edgeDz / edgeLen;
+            const normalZ = edgeDx / edgeLen;
+            const windowSpacing = Math.max(1.5, Math.min(3, edgeLen / Math.max(1, Math.round(edgeLen / 2.5))));
+            const nWindows = Math.max(1, Math.floor((edgeLen - 1) / windowSpacing));
+            const windowW = windowSpacing * 0.55;
+            const startOffset = (edgeLen - (nWindows - 1) * windowSpacing) / 2;
 
-          for (let fi = 0; fi < nFloors; fi++) {
-            const floorBase = GROUND_Y + 0.03 + fi * floorH;
-            const wBot = floorBase + windowBottomOffset;
-            const wMid = wBot + windowH / 2;
+            for (let fi = 0; fi < nFloors; fi++) {
+              const floorBase = GROUND_Y + 0.03 + fi * floorH;
+              const wBot = floorBase + windowBottomOffset;
+              const wMid = wBot + windowH / 2;
 
-            for (let wi = 0; wi < nWindows; wi++) {
-              const t = (startOffset + wi * windowSpacing) / edgeLen;
-              const wx = v1.x + edgeDx * t + normalX * 0.01;
-              const wz = v1.z + edgeDz * t + normalZ * 0.01;
+              for (let wi = 0; wi < nWindows; wi++) {
+                const t = (startOffset + wi * windowSpacing) / edgeLen;
+                const wx = v1.x + edgeDx * t + normalX * 0.01;
+                const wz = v1.z + edgeDz * t + normalZ * 0.01;
 
-              const windowGeo = new THREE.PlaneGeometry(windowW, windowH);
-              const windowMesh = new THREE.Mesh(windowGeo, windowMat);
-              windowMesh.position.set(wx, wMid, wz);
-              const angle = Math.atan2(normalX, normalZ);
-              windowMesh.rotation.y = angle;
-              windowMesh.userData = { noClip: true };
-              scene.add(windowMesh);
+                const windowGeo = new THREE.PlaneGeometry(windowW, windowH);
+                const windowMesh = new THREE.Mesh(windowGeo, windowMat);
+                windowMesh.position.set(wx, wMid, wz);
+                const angle = Math.atan2(normalX, normalZ);
+                windowMesh.rotation.y = angle;
+                windowMesh.userData = { noClip: true };
+                scene.add(windowMesh);
 
-              // Sill (bottom bar)
-              const sillGeo = new THREE.PlaneGeometry(windowW + 0.08, 0.06);
-              const sillMesh = new THREE.Mesh(sillGeo, windowSillMat);
-              sillMesh.position.set(wx, wBot - 0.01, wz);
-              sillMesh.rotation.y = angle;
-              sillMesh.userData = { noClip: true };
-              scene.add(sillMesh);
+                // Sill (bottom bar)
+                const sillGeo = new THREE.PlaneGeometry(windowW + 0.08, 0.06);
+                const sillMesh = new THREE.Mesh(sillGeo, windowSillMat);
+                sillMesh.position.set(wx, wBot - 0.01, wz);
+                sillMesh.rotation.y = angle;
+                sillMesh.userData = { noClip: true };
+                scene.add(sillMesh);
+              }
             }
           }
         }
@@ -1811,6 +2037,7 @@ export default function Scaffold3DView({
     isAiBim,
     technicalMode,
     t,
+    JSON.stringify((result as any)?.massingTiers ?? null),
     JSON.stringify((result as any)?.bimFacadeColors ?? null),
   ]);
 

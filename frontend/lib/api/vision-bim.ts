@@ -1,5 +1,13 @@
 import apiClient from './client';
 
+export interface VisionMassingTier {
+  vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+  /** Cumulative top height of this mass tier in mm. */
+  topHeightMm: number;
+  /** Optional bottom height of this tier in mm. Defaults to previous tier top / ground. */
+  baseHeightMm?: number;
+}
+
 export interface VisionFootprintResult {
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
   buildingHeightMm: number;
@@ -25,6 +33,8 @@ export interface VisionFootprintResult {
    * When omitted, all walls use buildingHeightMm uniformly.
    */
   wallHeightsMm?: number[];
+  /** Optional stacked building masses for setback / terrace buildings. */
+  massingTiers?: VisionMassingTier[];
   /** URL to the stored IFC file for frontend 3D rendering. */
   ifcFileUrl?: string;
   /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */

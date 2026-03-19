@@ -536,6 +536,7 @@ export class ScaffoldCalculatorWakugumiService {
       side: wall.side,
       sideJp: getSideLabel(wall.side),
       wallLengthMm: wall.wallLengthMm,
+      wallHeightMm: wall.wallHeightMm,
       spans,
       totalSpans,
       postPositions,

@@ -6,6 +6,12 @@ import { createHash } from 'crypto';
 const DxfParser = require('dxf-parser');
 
 /** Structured footprint output from vision or CAD (2D polygon + height). */
+export interface VisionMassingTier {
+  vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+  topHeightMm: number;
+  baseHeightMm?: number;
+}
+
 export interface VisionFootprintResult {
   /** Polygon vertices: in mm (x, z) or 0-1 fraction. Prefer mm for scaling. */
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
@@ -37,6 +43,11 @@ export interface VisionFootprintResult {
    * When omitted, all walls use buildingHeightMm uniformly.
    */
   wallHeightsMm?: number[];
+  /**
+   * Optional stacked massing tiers for setback / terrace buildings where upper floors
+   * have smaller footprints than the ground floor.
+   */
+  massingTiers?: VisionMassingTier[];
   /** URL to the stored IFC file for frontend 3D rendering (set by controller after storage upload). */
   ifcFileUrl?: string;
   /**
@@ -94,8 +105,16 @@ Optional fields (read from dimension lines and annotations):
   * Each polygon edge (wall) should get the height of the roof/eaves above THAT specific wall section.
   * Example: A building with a 5-story wing (15000mm) on the left and a 12-story tower (36000mm) on the right → the left-side walls get 15000, the right-side walls get 36000.
   * For walls connecting sections of different height (transition walls), use the TALLER adjacent section's height.
+  * IMPORTANT: if a long straight facade contains multiple height zones along its length, SPLIT that facade into multiple consecutive edges at the height-change points. Those split vertices may be perfectly collinear and are intentional.
   * If ALL walls have the same height (simple box), you may omit this field — buildingHeightMm alone is sufficient.
   * CRITICAL for 3D BIM renders: If you can see that parts of the building are taller than others (stepped roofline, cascading floors, different wing heights), you MUST output wallHeightsMm with the correct per-wall height for each edge. This is the #1 most important new field for scaffold estimation accuracy on complex buildings.
+- massingTiers: optional array for buildings whose upper floors step inward or have smaller footprints than the base.
+  * Use this when the building is a terrace / wedding-cake / podium+tower shape and a single base polygon plus wallHeightsMm is not enough to show the real 3D mass.
+  * Each tier: { vertices, topHeightMm, baseHeightMm? }.
+  * vertices = footprint of that tier in the same coordinate system as the main vertices.
+  * topHeightMm = cumulative top elevation of that tier above ground.
+  * baseHeightMm = optional bottom elevation; omit for the first tier and it defaults to ground / previous tier top.
+  * Include one tier per major setback, ordered from lowest to highest.
 - scaleDenominator: scale from drawing (e.g. 100 for S=1/100, 200 for S=1/200).
 - wallLengthsMm: array of lengths in mm, one per edge, same count as vertices.
   Edge i = vertex[i] → vertex[i+1]; last edge = last vertex → first vertex (closes polygon).
@@ -144,8 +163,9 @@ When you detect this:
    - Walls facing the tall part get the tall height; walls facing the short part get the short height.
    - Transition walls (connecting tall to short) get the TALLER adjacent height.
 3. For the footprint polygon: trace the FULL base outline as seen from above (the ground-level footprint).
-   The stepped nature is captured in wallHeightsMm, not in extra footprint vertices.
-   Exception: if sections have different plan outlines at ground level (e.g. tower on a podium where the tower is narrower), DO add the setback vertices in the polygon.
+   The stepped nature is primarily captured in wallHeightsMm.
+   If a straight facade changes height partway along its run, add split vertices at those change points so each edge can carry its own wall height. These split vertices may be collinear and must be preserved.
+   If sections have different plan outlines at ground level (e.g. tower on a podium where the tower is narrower), DO add the setback vertices in the polygon.
 4. DETECTION CUES in 3D views:
    - Visible horizontal rooflines at different levels = stepped building.
    - One side has more floors visible than another = different heights.
@@ -568,7 +588,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. STEPPED/TIERED BUILDINGS: If different parts of the building have different heights (stepped roofline, cascading floors, tower+podium), you MUST output wallHeightsMm — one height per edge matching the roof height above that wall section. Set buildingHeightMm to the tallest point. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: wallHeightsMm (per-edge heights for stepped buildings), scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. STEPPED/TIERED BUILDINGS: If different parts of the building have different heights (stepped roofline, cascading floors, tower+podium), you MUST output wallHeightsMm — one height per edge matching the roof height above that wall section. If a straight facade changes height partway along its length, split that facade into multiple consecutive edges at the change points, even if the split vertices are collinear. If upper floors step inward and have smaller footprints than the base, also output massingTiers as stacked footprints with topHeightMm/baseHeightMm so the 3D preview can match the real mass. Set buildingHeightMm to the tallest point. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: wallHeightsMm (per-edge heights for stepped buildings), massingTiers (for setback/terrace massing), scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
               },
             ],
           },
@@ -707,6 +727,31 @@ export class VisionBimService {
       if (typeof parsed.frameSizeMm !== 'number' || ![1700, 1800, 1900].includes(parsed.frameSizeMm)) {
         parsed.frameSizeMm = undefined;
       }
+      if (Array.isArray((parsed as any).massingTiers) && (parsed as any).massingTiers.length > 0) {
+        const maxBuildingH = parsed.buildingHeightMm;
+        parsed.massingTiers = ((parsed as any).massingTiers as any[])
+          .filter(
+            (tier) =>
+              tier &&
+              Array.isArray(tier.vertices) &&
+              tier.vertices.length >= 3 &&
+              typeof tier.topHeightMm === 'number' &&
+              tier.topHeightMm >= 1000,
+          )
+          .map((tier) => ({
+            vertices: tier.vertices as Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
+            topHeightMm: Math.min(maxBuildingH, Math.max(1000, Math.round(tier.topHeightMm))),
+            baseHeightMm:
+              typeof tier.baseHeightMm === 'number'
+                ? Math.max(0, Math.round(tier.baseHeightMm))
+                : undefined,
+          }))
+          .filter((tier) => (tier.baseHeightMm ?? 0) < tier.topHeightMm)
+          .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
+        if (parsed.massingTiers.length === 0) parsed.massingTiers = undefined;
+      } else {
+        parsed.massingTiers = undefined;
+      }
       // Normalize optional obstacles (balcony / AC areas / pillars / doors)
       if (Array.isArray(parsed.obstacles) && parsed.obstacles.length > 0) {
         parsed.obstacles = parsed.obstacles
@@ -771,6 +816,10 @@ export class VisionBimService {
   private cleanupPolygon(parsed: VisionFootprintResult): void {
     const verts = parsed.vertices;
     if (!Array.isArray(verts) || verts.length < 5) return;
+    const originalWallHeights =
+      Array.isArray(parsed.wallHeightsMm) && parsed.wallHeightsMm.length === verts.length
+        ? [...parsed.wallHeightsMm]
+        : undefined;
 
     // Conservative: preserve intentional shape vertices.
     // L/U/T shapes have 6-8 vertices; multi-wing buildings may have 10-16.
@@ -824,6 +873,18 @@ export class VisionBimService {
         }
         const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
         if (sinAngle < SIN_THR) {
+          if (originalWallHeights) {
+            const prevEdgeHeight = originalWallHeights[a.origIdx];
+            const nextEdgeHeight = originalWallHeights[b.origIdx];
+            if (
+              typeof prevEdgeHeight === 'number' &&
+              typeof nextEdgeHeight === 'number' &&
+              Math.abs(prevEdgeHeight - nextEdgeHeight) > 1
+            ) {
+              // Intentional collinear split: same facade line, different height zone.
+              continue;
+            }
+          }
           indexed.splice(i, 1);
           changed = true;
           break;

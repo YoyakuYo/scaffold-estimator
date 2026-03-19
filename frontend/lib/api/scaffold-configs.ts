@@ -11,6 +11,12 @@ export interface WallSegment {
   offsetMm: number;
 }
 
+export interface BuildingMassingTier {
+  vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
+  topHeightMm: number;
+  baseHeightMm?: number;
+}
+
 export interface WallInput {
   side: string; // 'north' | 'south' | 'east' | 'west' or dynamic edge names like 'edge-0', 'edge-1'
   wallLengthMm: number;
@@ -52,6 +58,8 @@ export interface CreateScaffoldConfigDto {
   pattankoCornerCount?: number;
   /** Optional: Building outline polygon (for complex shapes) */
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
+  /** Optional: stacked building volumes for stepped/setback massing preview. */
+  massingTiers?: BuildingMassingTier[];
   /** Optional: Detected balconies / AC areas / pillars from vision (for Buragetto / clearance) */
   obstacles?: Array<
     | {
@@ -137,6 +145,7 @@ export interface WallCalculationResult {
   side: string;
   sideJp: string;
   wallLengthMm: number;
+  wallHeightMm?: number;
   spans: number[];
   totalSpans: number;
   postPositions: number;

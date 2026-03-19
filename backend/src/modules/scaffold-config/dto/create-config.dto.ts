@@ -32,6 +32,20 @@ export class BimFacadeColorsDto {
   sillHex?: string;
 }
 
+export class BuildingMassingTierDto {
+  @IsArray()
+  vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+
+  @IsNumber()
+  @Min(1000)
+  topHeightMm: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  baseHeightMm?: number;
+}
+
 /** A single straight segment of a wall face (for stepped/L-shaped walls). */
 export class WallSegmentDto {
   @IsNumber()
@@ -184,6 +198,13 @@ export class CreateScaffoldConfigDto {
   @IsOptional()
   @IsArray()
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
+
+  /** Optional: stacked building mass tiers for stepped/setback 3D preview. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BuildingMassingTierDto)
+  massingTiers?: BuildingMassingTierDto[];
 
   /** Optional: Detected balconies / AC areas / pillars from vision (for Buragetto / clearance) */
   @IsOptional()
