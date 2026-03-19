@@ -17,6 +17,7 @@ import {
   addCoupler,
   BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
+import { bimHexToNumber } from '@/lib/bim-facade-colors';
 
 /**
  * 3D Scaffold View — Closed Polygon
@@ -1513,15 +1514,27 @@ export default function Scaffold3DView({
         };
 
         if (isAiBim) {
+          const fc = (result as any)?.bimFacadeColors as
+            | { lowerHex?: string; upperHex?: string; roofHex?: string; windowHex?: string; sillHex?: string }
+            | undefined;
           const lowerH = buildingH * 0.48;
           const upperH = buildingH * 0.52;
           const lowerGeo = new THREE.ExtrudeGeometry(shape, { depth: lowerH, bevelEnabled: false });
           const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
           const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
 
-          const lowerMat = new THREE.MeshBasicMaterial({ color: 0xc9b89a, side: THREE.DoubleSide });
-          const upperMat = new THREE.MeshBasicMaterial({ color: 0x3d3d42, side: THREE.DoubleSide });
-          const roofMat = new THREE.MeshBasicMaterial({ color: 0x2f7a48, side: THREE.DoubleSide });
+          const lowerMat = new THREE.MeshBasicMaterial({
+            color: bimHexToNumber(fc?.lowerHex, 0xc9b89a),
+            side: THREE.DoubleSide,
+          });
+          const upperMat = new THREE.MeshBasicMaterial({
+            color: bimHexToNumber(fc?.upperHex, 0x3d3d42),
+            side: THREE.DoubleSide,
+          });
+          const roofMat = new THREE.MeshBasicMaterial({
+            color: bimHexToNumber(fc?.roofHex, 0x2f7a48),
+            side: THREE.DoubleSide,
+          });
 
           const baseY = GROUND_Y + 0.02;
           const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat);
@@ -1587,9 +1600,12 @@ export default function Scaffold3DView({
         }
 
         // Window pattern on each facade
+        const fcWin = isAiBim
+          ? ((result as any)?.bimFacadeColors as { windowHex?: string; sillHex?: string } | undefined)
+          : undefined;
         const windowMat = isAiBim
           ? new THREE.MeshBasicMaterial({
-              color: 0x6baed6,
+              color: bimHexToNumber(fcWin?.windowHex, 0x6baed6),
               transparent: true,
               opacity: 0.92,
               side: THREE.DoubleSide,
@@ -1599,7 +1615,10 @@ export default function Scaffold3DView({
               transparent: true, opacity: 0.5, side: THREE.DoubleSide,
             });
         const windowSillMat = isAiBim
-          ? new THREE.MeshBasicMaterial({ color: 0x2d3748, side: THREE.DoubleSide })
+          ? new THREE.MeshBasicMaterial({
+              color: bimHexToNumber(fcWin?.sillHex, 0x2d3748),
+              side: THREE.DoubleSide,
+            })
           : new THREE.MeshStandardMaterial({
               color: 0x4a5568, metalness: 0.2, roughness: 0.6,
               transparent: true, opacity: 0.5,
@@ -1929,7 +1948,17 @@ export default function Scaffold3DView({
     });
 
     return () => { disposed = true; };
-  }, [walls, result?.scaffoldWidthMm, result?.topGuardHeightMm, result?.polygonVertices, result?.wallStandoffMm, isAiBim, technicalMode, t]);
+  }, [
+    walls,
+    result?.scaffoldWidthMm,
+    result?.topGuardHeightMm,
+    result?.polygonVertices,
+    result?.wallStandoffMm,
+    isAiBim,
+    technicalMode,
+    t,
+    JSON.stringify((result as any)?.bimFacadeColors ?? null),
+  ]);
 
   useEffect(() => {
     applyWallVisibility(viewMode, activeWallIdx);

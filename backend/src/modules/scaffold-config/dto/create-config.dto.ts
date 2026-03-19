@@ -12,6 +12,26 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+/** Per-upload façade colors sampled from BIM/render image (stored in calculationResult for 3D view). */
+export class BimFacadeColorsDto {
+  @IsString()
+  lowerHex: string;
+
+  @IsString()
+  upperHex: string;
+
+  @IsString()
+  roofHex: string;
+
+  @IsOptional()
+  @IsString()
+  windowHex?: string;
+
+  @IsOptional()
+  @IsString()
+  sillHex?: string;
+}
+
 /** A single straight segment of a wall face (for stepped/L-shaped walls). */
 export class WallSegmentDto {
   @IsNumber()
@@ -189,4 +209,10 @@ export class CreateScaffoldConfigDto {
   /** Optional: URL to stored IFC file for 3D rendering in frontend */
   @IsOptional()
   ifcFileUrl?: string;
+
+  /** Optional: façade colors extracted client-side from uploaded render (persisted on calculationResult). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BimFacadeColorsDto)
+  bimFacadeColors?: BimFacadeColorsDto;
 }

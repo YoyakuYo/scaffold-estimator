@@ -193,6 +193,7 @@ export class ScaffoldConfigService {
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
+      ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
     };
     await client
       .from('scaffold_configurations')
@@ -389,6 +390,7 @@ export class ScaffoldConfigService {
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
+      ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);

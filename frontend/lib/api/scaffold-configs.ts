@@ -72,6 +72,14 @@ export interface CreateScaffoldConfigDto {
   >;
   /** Optional: URL to stored IFC file for frontend 3D rendering */
   ifcFileUrl?: string;
+  /** Optional: per-upload façade colors (raster image sampling for AI BIM 3D building) */
+  bimFacadeColors?: {
+    lowerHex: string;
+    upperHex: string;
+    roofHex: string;
+    windowHex?: string;
+    sillHex?: string;
+  };
   /** Optional: Extracted dimensions (for scaling polygon edges) */
   extractedDimensions?: {
     walls: {

@@ -35,6 +35,10 @@ import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-sha
 import { visionBimApi, type VisionFootprintResult } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
+import {
+  extractBimFacadeColorsFromImageFile,
+  isRasterImageUpload,
+} from '@/lib/bim-facade-colors';
 
 // Dynamic import for PerimeterTracer (uses browser APIs)
 const PerimeterTracer = dynamic(
@@ -935,6 +939,11 @@ function ScaffoldPageContent() {
                 : '写真・青写真・DXF/CAD図面・IFC（BIM）・3D BIMレンダリング画像をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
             </p>
             {!aiBimPreview && (
+              <p className="text-xs text-violet-700/90 -mt-4 mb-6">
+                PNG/JPEG などの画像では、3Dビューの建物色もアップロード画像から自動サンプリングします（立面・パース向け）。
+              </p>
+            )}
+            {!aiBimPreview && (
             <>
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
@@ -954,6 +963,15 @@ function ScaffoldPageContent() {
                     const raw = isIfc
                       ? await visionBimApi.fromIfc(file)
                       : await visionBimApi.analyze(file);
+                    let bimFacadeColors: CreateScaffoldConfigDto['bimFacadeColors'];
+                    if (!isIfc && isRasterImageUpload(file)) {
+                      try {
+                        const extracted = await extractBimFacadeColorsFromImageFile(file);
+                        if (extracted) bimFacadeColors = extracted;
+                      } catch {
+                        /* sampling failed — fall back to default 3D palette */
+                      }
+                    }
                     const footprint = raw as VisionFootprintResult;
                     const obstacles = footprint.obstacles;
                     const manager = scaffoldManagerRef.current!;
@@ -982,6 +1000,7 @@ function ScaffoldPageContent() {
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
+                      ...(bimFacadeColors && { bimFacadeColors }),
                     };
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
