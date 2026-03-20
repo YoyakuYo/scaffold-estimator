@@ -95,6 +95,7 @@ Required fields:
   CONTOUR-FOLLOWING (critical): Trace the actual perimeter — do NOT use bounding boxes or convex hulls.
   Include INTERIOR VERTICES for L-shapes, notches, and indents: if a wall indents inward, add a vertex at that corner so the scaffold path follows the indent exactly.
   Each vertex: { x, y } in millimeters, or { xFrac, yFrac } for 0-1 normalized.
+  COORDINATE SYSTEM (critical): Use IMAGE/SCREEN coordinates — x increases to the RIGHT, y increases DOWNWARD (same direction as image pixels). Do NOT use mathematical/geographic coordinates where y increases upward. The top-left of the plan = {x:0, y:0}, bottom-right has the largest x and y values. This ensures the rendered plan matches the original drawing orientation.
   UNITS: If the drawing shows a scale (S=1/100, S=1/200, 縮尺 etc.) you MUST output { x, y } in real mm. Never use fractions when scale is readable.
 - buildingHeightMm: total building height in mm (ground to highest point/eaves/top). If not shown, use typical 3000mm per story.
 
@@ -184,6 +185,8 @@ Polygon rules — follow these exactly:
    - BLUE FILLED/HATCHED ZONE: this is the scaffold overhang area (the zone between the building wall and the outer scaffold edge). DO NOT trace its outer boundary.
    - BLUE PERIMETER LINE (the inner boundary of the blue zone, adjacent to the building): this IS the building wall face. TRACE THIS LINE as your polygon.
    - Confirm: the dimension strings on the plan (e.g. "10@1829=18290") should match the edges you are tracing. If a long dimension string aligns with your traced edge, you have the right line.
+   - DIAGONAL / ANGLED WALLS: If the building has a wall that is neither horizontal nor vertical (e.g. a slanted or cut corner), trace it as a SINGLE straight edge between its two endpoints. DO NOT break it into horizontal+vertical steps.
+   - BUILDING SHAPE DETECTION for scaffold plans: The colored scaffold strip (blue/yellow/green rectangle) wraps around the building. The building itself is the uncolored area INSIDE the scaffold strip. Identify the building outline (the inner edge of the scaffold strip, not the outer edge), and trace it accurately including any diagonal corners.
    For non-scaffold plans (architectural cross-sections, photos): trace the visible outer wall boundary.
 
 4. SHAPE REALITY CHECK — Most buildings are elongated rectangles. If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline or traced a 3D silhouette instead of the plan footprint. Re-examine and extract the correct plan shape.
@@ -588,7 +591,7 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. STEPPED/TIERED BUILDINGS: If different parts of the building have different heights (stepped roofline, cascading floors, tower+podium), you MUST output wallHeightsMm — one height per edge matching the roof height above that wall section. If a straight facade changes height partway along its length, split that facade into multiple consecutive edges at the change points, even if the split vertices are collinear. If upper floors step inward and have smaller footprints than the base, also output massingTiers as stacked footprints with topHeightMm/baseHeightMm so the 3D preview can match the real mass. Set buildingHeightMm to the tallest point. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: wallHeightsMm (per-edge heights for stepped buildings), massingTiers (for setback/terrace massing), scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
+                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). COORDINATE SYSTEM: Use image/screen coordinates — x increases RIGHT, y increases DOWNWARD. Top-left of the plan = {x:0,y:0}. This is critical for the rendered plan to match the original drawing. CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. STEPPED/TIERED BUILDINGS: If different parts of the building have different heights (stepped roofline, cascading floors, tower+podium), you MUST output wallHeightsMm — one height per edge matching the roof height above that wall section. If a straight facade changes height partway along its length, split that facade into multiple consecutive edges at the change points, even if the split vertices are collinear. If upper floors step inward and have smaller footprints than the base, also output massingTiers as stacked footprints with topHeightMm/baseHeightMm so the 3D preview can match the real mass. Set buildingHeightMm to the tallest point. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: wallHeightsMm (per-edge heights for stepped buildings), massingTiers (for setback/terrace massing), scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
               },
             ],
           },
@@ -824,8 +827,9 @@ export class VisionBimService {
     // Conservative: preserve intentional shape vertices.
     // L/U/T shapes have 6-8 vertices; multi-wing buildings may have 10-16.
     // Grid-tracing artifacts produce runs of 3+ equal-length edges on a straight wall.
-    // Only simplify when there are clearly too many vertices (>= 8 original).
-    const minVertices = Math.max(4, Math.min(verts.length - 2, 12));
+    // Only simplify when there are clearly too many vertices.
+    // Preserve at least 75% of original vertices to avoid over-simplification.
+    const minVertices = Math.max(4, Math.ceil(verts.length * 0.75));
 
     const isMm = 'x' in verts[0];
 
@@ -851,10 +855,10 @@ export class VisionBimService {
     if (indexed.length < 4) return;
 
     // ── Pass 2: iteratively remove near-collinear vertices ───────────────────
-    // Threshold: sin(angle at B) < 0.09 ≈ deviation ≤ 5°.
-    // More conservative than before (was 0.13 / 7.5°) to avoid removing valid
-    // corners of slightly non-orthogonal buildings.
-    const SIN_THR = 0.09;
+    // Threshold: sin(angle at B) < 0.06 ≈ deviation ≤ 3.5°.
+    // Very conservative to avoid removing valid corners of non-orthogonal
+    // buildings with diagonal or angled walls.
+    const SIN_THR = 0.06;
     let changed = true;
     while (changed && indexed.length > minVertices) {
       changed = false;

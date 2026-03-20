@@ -4,7 +4,7 @@ import { useState, useRef, useMemo } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { WallCalculationResult } from '@/lib/api/scaffold-configs';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
-import { ZoomIn, ZoomOut, Printer } from 'lucide-react';
+import { ZoomIn, ZoomOut, Printer, FlipHorizontal, FlipVertical } from 'lucide-react';
 
 // ─── Colors ─────────────────────────────────────────────────────
 const WALL_ACCENT = [
@@ -223,6 +223,8 @@ export default function ScaffoldPlanView({ result }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const walls: WallCalculationResult[] = result?.walls ?? [];
   const [scale, setScale] = useState(1);
+  const [flipH, setFlipH] = useState(false);
+  const [flipV, setFlipV] = useState(false);
 
   const scaffoldWidthMm = result?.scaffoldWidthMm ?? 600;
 
@@ -238,10 +240,30 @@ export default function ScaffoldPlanView({ result }: Props) {
   const sf = baseSf * scale;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const { vertices, edges, isClosed } = useMemo(
+  const { vertices: rawVertices, edges: rawEdges, isClosed } = useMemo(
     () => buildPolygonFromWalls(walls, sf, storedVertices),
     [walls, sf, storedVertices],
   );
+
+  // Apply flip transforms if requested by user
+  const { vertices, edges } = useMemo(() => {
+    if (!flipH && !flipV) return { vertices: rawVertices, edges: rawEdges };
+    const rawMaxX = rawVertices.length > 0 ? Math.max(...rawVertices.map(v => v.x)) : 0;
+    const rawMaxY = rawVertices.length > 0 ? Math.max(...rawVertices.map(v => v.y)) : 0;
+    const rawMinX = rawVertices.length > 0 ? Math.min(...rawVertices.map(v => v.x)) : 0;
+    const rawMinY = rawVertices.length > 0 ? Math.min(...rawVertices.map(v => v.y)) : 0;
+    const flipPt = (p: { x: number; y: number }) => ({
+      x: flipH ? rawMaxX + rawMinX - p.x : p.x,
+      y: flipV ? rawMaxY + rawMinY - p.y : p.y,
+    });
+    const flippedVerts = rawVertices.map(flipPt);
+    const flippedEdges = rawEdges.map(e => {
+      const s = flipPt({ x: e.x1, y: e.y1 });
+      const en = flipPt({ x: e.x2, y: e.y2 });
+      return { ...e, x1: s.x, y1: s.y, x2: en.x, y2: en.y, angle: Math.atan2(en.y - s.y, en.x - s.x) };
+    });
+    return { vertices: flippedVerts, edges: flippedEdges };
+  }, [rawVertices, rawEdges, flipH, flipV]);
 
   // Determine normal flip: for closed polygons, ensure normals point outward.
   // signedArea > 0 means CW in SVG coords → normals from (-dy, dx) point outward.
@@ -474,6 +496,22 @@ export default function ScaffoldPlanView({ result }: Props) {
           <button onClick={() => setScale(s => Math.max(s / 1.25, 0.3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomOut')}>
             <ZoomOut className="h-4 w-4 text-gray-600" />
           </button>
+          <div className="w-px h-5 bg-gray-300" />
+          <button
+            onClick={() => setFlipH(f => !f)}
+            className={`p-1.5 rounded transition-colors ${flipH ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200 text-gray-600'}`}
+            title="左右反転 (Mirror horizontal)"
+          >
+            <FlipHorizontal className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setFlipV(f => !f)}
+            className={`p-1.5 rounded transition-colors ${flipV ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200 text-gray-600'}`}
+            title="上下反転 (Mirror vertical)"
+          >
+            <FlipVertical className="h-4 w-4" />
+          </button>
+          <div className="w-px h-5 bg-gray-300" />
           <button onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-200 transition-colors border border-gray-300">
             <Printer className="h-4 w-4" /> {t('result', 'print')}

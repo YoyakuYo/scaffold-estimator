@@ -12,6 +12,8 @@ export type FootprintVertexXZ = { x: number; z: number };
 function normaliseVertex(v: any): { x: number; z: number } {
   const hasMm = typeof v?.x === 'number' && typeof v?.y === 'number';
   if (hasMm) {
+    // Note: AI returns {x, y} in image/screen coordinates (x right, y down).
+    // We map y→z directly (both increase "southward").
     return {
       x: Number.isFinite(v.x) ? v.x : 0,
       z: Number.isFinite(v.y) ? v.y : 0,
