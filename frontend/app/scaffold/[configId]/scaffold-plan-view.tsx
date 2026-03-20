@@ -33,6 +33,11 @@ interface Edge {
   wallIdx: number; angle: number;
 }
 
+interface Point2D {
+  x: number;
+  y: number;
+}
+
 /**
  * Compute signed area of a polygon — positive=CCW in math coords (CW in SVG).
  * Used to determine winding and flip normals when needed.
@@ -44,6 +49,95 @@ function signedArea(pts: { x: number; y: number }[]): number {
     area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
   }
   return area / 2;
+}
+
+function intersectLines(a1: Point2D, a2: Point2D, b1: Point2D, b2: Point2D): Point2D | null {
+  const dax = a2.x - a1.x;
+  const day = a2.y - a1.y;
+  const dbx = b2.x - b1.x;
+  const dby = b2.y - b1.y;
+  const det = dax * dby - day * dbx;
+  if (Math.abs(det) < 1e-6) return null;
+  const dx = b1.x - a1.x;
+  const dy = b1.y - a1.y;
+  const t = (dx * dby - dy * dbx) / det;
+  return { x: a1.x + t * dax, y: a1.y + t * day };
+}
+
+function edgeNormal(edge: Edge, normalSign: number): Point2D {
+  const dx = edge.x2 - edge.x1;
+  const dy = edge.y2 - edge.y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return { x: 0, y: 0 };
+  return {
+    x: normalSign * (-dy / len),
+    y: normalSign * (dx / len),
+  };
+}
+
+function buildOffsetPolyline(
+  vertices: Point2D[],
+  edges: Edge[],
+  normalSign: number,
+  offset: number,
+  isClosed: boolean,
+): Point2D[] {
+  if (vertices.length === 0 || edges.length === 0) return [];
+
+  const shiftedPoint = (p: Point2D, n: Point2D): Point2D => ({
+    x: p.x + n.x * offset,
+    y: p.y + n.y * offset,
+  });
+
+  const miterLimit = offset * 6;
+
+  if (!isClosed) {
+    const out: Point2D[] = [];
+    const firstNormal = edgeNormal(edges[0], normalSign);
+    out.push(shiftedPoint(vertices[0], firstNormal));
+
+    for (let i = 1; i < vertices.length - 1; i++) {
+      const prevEdge = edges[i - 1];
+      const nextEdge = edges[i];
+      const prevNormal = edgeNormal(prevEdge, normalSign);
+      const nextNormal = edgeNormal(nextEdge, normalSign);
+      const hit = intersectLines(
+        shiftedPoint({ x: prevEdge.x1, y: prevEdge.y1 }, prevNormal),
+        shiftedPoint({ x: prevEdge.x2, y: prevEdge.y2 }, prevNormal),
+        shiftedPoint({ x: nextEdge.x1, y: nextEdge.y1 }, nextNormal),
+        shiftedPoint({ x: nextEdge.x2, y: nextEdge.y2 }, nextNormal),
+      );
+      const fallback = shiftedPoint(vertices[i], {
+        x: (prevNormal.x + nextNormal.x) / 2 || nextNormal.x || prevNormal.x,
+        y: (prevNormal.y + nextNormal.y) / 2 || nextNormal.y || prevNormal.y,
+      });
+      if (!hit || Math.hypot(hit.x - vertices[i].x, hit.y - vertices[i].y) > miterLimit) out.push(fallback);
+      else out.push(hit);
+    }
+
+    const lastNormal = edgeNormal(edges[edges.length - 1], normalSign);
+    out.push(shiftedPoint(vertices[vertices.length - 1], lastNormal));
+    return out;
+  }
+
+  return vertices.map((vertex, i) => {
+    const prevEdge = edges[(i - 1 + edges.length) % edges.length];
+    const nextEdge = edges[i % edges.length];
+    const prevNormal = edgeNormal(prevEdge, normalSign);
+    const nextNormal = edgeNormal(nextEdge, normalSign);
+    const hit = intersectLines(
+      shiftedPoint({ x: prevEdge.x1, y: prevEdge.y1 }, prevNormal),
+      shiftedPoint({ x: prevEdge.x2, y: prevEdge.y2 }, prevNormal),
+      shiftedPoint({ x: nextEdge.x1, y: nextEdge.y1 }, nextNormal),
+      shiftedPoint({ x: nextEdge.x2, y: nextEdge.y2 }, nextNormal),
+    );
+    const fallback = shiftedPoint(vertex, {
+      x: (prevNormal.x + nextNormal.x) / 2 || nextNormal.x || prevNormal.x,
+      y: (prevNormal.y + nextNormal.y) / 2 || nextNormal.y || prevNormal.y,
+    });
+    if (!hit || Math.hypot(hit.x - vertex.x, hit.y - vertex.y) > miterLimit) return fallback;
+    return hit;
+  });
 }
 
 /**
@@ -157,6 +251,11 @@ export default function ScaffoldPlanView({ result }: Props) {
     return signedArea(vertices) > 0 ? -1 : 1;
   }, [vertices, isClosed]);
 
+  const outerVertices = useMemo(
+    () => buildOffsetPolyline(vertices, edges, normalSign, SCAFFOLD_STRIP_W, isClosed),
+    [vertices, edges, normalSign, isClosed],
+  );
+
   // Bounding box — handle empty/degenerate cases
   const allPts = [...vertices, ...edges.map(e => ({ x: e.x2, y: e.y2 }))];
   const minX = allPts.length > 0 ? Math.min(...allPts.map(p => p.x)) : 0;
@@ -188,15 +287,17 @@ export default function ScaffoldPlanView({ result }: Props) {
     const ny = normalSign * (dx / len);
 
     const stripOffset = SCAFFOLD_STRIP_W;
-    const sx1 = edge.x1 + offsetX + nx * stripOffset;
-    const sy1 = edge.y1 + offsetY + ny * stripOffset;
-    const sx2 = edge.x2 + offsetX + nx * stripOffset;
-    const sy2 = edge.y2 + offsetY + ny * stripOffset;
 
     const ex1 = edge.x1 + offsetX;
     const ey1 = edge.y1 + offsetY;
     const ex2 = edge.x2 + offsetX;
     const ey2 = edge.y2 + offsetY;
+    const outerA = outerVertices[idx];
+    const sx1 = (outerA?.x ?? (edge.x1 + nx * stripOffset)) + offsetX;
+    const sy1 = (outerA?.y ?? (edge.y1 + ny * stripOffset)) + offsetY;
+    const nextOuterIndex = isClosed ? ((idx + 1) % outerVertices.length) : (idx + 1);
+    const sx2 = (outerVertices[nextOuterIndex]?.x ?? (edge.x2 + nx * stripOffset)) + offsetX;
+    const sy2 = (outerVertices[nextOuterIndex]?.y ?? (edge.y2 + ny * stripOffset)) + offsetY;
 
     // Post positions along the edge
     const spans = wall.spans ?? [];
