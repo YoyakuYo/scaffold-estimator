@@ -108,6 +108,110 @@ const MAX_TOTAL_MESHES = 60_000;           // ≈ 3 000 span-levels
 const MESHES_PER_SPAN_LEVEL = 20;
 const MAX_SPAN_LEVELS = Math.floor(MAX_TOTAL_MESHES / MESHES_PER_SPAN_LEVEL);
 
+type PointXZ = { x: number; z: number };
+
+function lineIntersectionXZ(a1: PointXZ, a2: PointXZ, b1: PointXZ, b2: PointXZ): PointXZ | null {
+  const dax = a2.x - a1.x;
+  const daz = a2.z - a1.z;
+  const dbx = b2.x - b1.x;
+  const dbz = b2.z - b1.z;
+  const det = dax * dbz - daz * dbx;
+  if (Math.abs(det) < 1e-9) return null;
+  const dx = b1.x - a1.x;
+  const dz = b1.z - a1.z;
+  const t = (dx * dbz - dz * dbx) / det;
+  return { x: a1.x + t * dax, z: a1.z + t * daz };
+}
+
+function shiftedPointXZ(p: PointXZ, n: PointXZ, offset: number): PointXZ {
+  return { x: p.x + n.x * offset, z: p.z + n.z * offset };
+}
+
+function edgeEndpointsXZ(verts: PointXZ[], edgeIdx: number, isOpen: boolean): [PointXZ, PointXZ] {
+  const start = verts[edgeIdx]!;
+  const end = isOpen ? verts[edgeIdx + 1]! : verts[(edgeIdx + 1) % verts.length]!;
+  return [start, end];
+}
+
+function edgeNormalXZ(verts: PointXZ[], edgeIdx: number, normalSign: number, isOpen: boolean): PointXZ {
+  const [a, b] = edgeEndpointsXZ(verts, edgeIdx, isOpen);
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-9) return { x: 0, z: 0 };
+  return {
+    x: normalSign * (-dz / len),
+    z: normalSign * (dx / len),
+  };
+}
+
+function buildOffsetPathXZ(
+  verts: PointXZ[],
+  edgeCount: number,
+  normalSign: number,
+  offset: number,
+  isOpen: boolean,
+): PointXZ[] {
+  if (edgeCount <= 0 || verts.length < 2) return [];
+  const vertexCount = isOpen
+    ? Math.min(verts.length, edgeCount + 1)
+    : Math.min(verts.length, edgeCount);
+  if (vertexCount < 2) return [];
+  const pts = verts.slice(0, vertexCount);
+  const miterLimit = Math.max(offset * 6, 0.05);
+  const getNormal = (edgeIdx: number) => edgeNormalXZ(pts, edgeIdx, normalSign, isOpen);
+
+  if (isOpen) {
+    const out: PointXZ[] = [];
+    const firstNormal = getNormal(0);
+    out.push(shiftedPointXZ(pts[0]!, firstNormal, offset));
+    for (let i = 1; i < pts.length - 1; i++) {
+      const prevEdge = i - 1;
+      const nextEdge = i;
+      const prevNormal = getNormal(prevEdge);
+      const nextNormal = getNormal(nextEdge);
+      const [p1, p2] = edgeEndpointsXZ(pts, prevEdge, true);
+      const [n1, n2] = edgeEndpointsXZ(pts, nextEdge, true);
+      const hit = lineIntersectionXZ(
+        shiftedPointXZ(p1, prevNormal, offset),
+        shiftedPointXZ(p2, prevNormal, offset),
+        shiftedPointXZ(n1, nextNormal, offset),
+        shiftedPointXZ(n2, nextNormal, offset),
+      );
+      const fallback = shiftedPointXZ(pts[i]!, {
+        x: (prevNormal.x + nextNormal.x) / 2 || nextNormal.x || prevNormal.x,
+        z: (prevNormal.z + nextNormal.z) / 2 || nextNormal.z || prevNormal.z,
+      }, offset);
+      if (!hit || Math.hypot(hit.x - pts[i]!.x, hit.z - pts[i]!.z) > miterLimit) out.push(fallback);
+      else out.push(hit);
+    }
+    const lastNormal = getNormal(edgeCount - 1);
+    out.push(shiftedPointXZ(pts[pts.length - 1]!, lastNormal, offset));
+    return out;
+  }
+
+  return pts.map((v, i) => {
+    const prevEdge = (i - 1 + edgeCount) % edgeCount;
+    const nextEdge = i % edgeCount;
+    const prevNormal = getNormal(prevEdge);
+    const nextNormal = getNormal(nextEdge);
+    const [p1, p2] = edgeEndpointsXZ(pts, prevEdge, false);
+    const [n1, n2] = edgeEndpointsXZ(pts, nextEdge, false);
+    const hit = lineIntersectionXZ(
+      shiftedPointXZ(p1, prevNormal, offset),
+      shiftedPointXZ(p2, prevNormal, offset),
+      shiftedPointXZ(n1, nextNormal, offset),
+      shiftedPointXZ(n2, nextNormal, offset),
+    );
+    const fallback = shiftedPointXZ(v, {
+      x: (prevNormal.x + nextNormal.x) / 2 || nextNormal.x || prevNormal.x,
+      z: (prevNormal.z + nextNormal.z) / 2 || nextNormal.z || prevNormal.z,
+    }, offset);
+    if (!hit || Math.hypot(hit.x - v.x, hit.z - v.z) > miterLimit) return fallback;
+    return hit;
+  });
+}
+
 /** Return the max spans we can afford per wall so the total stays under budget. */
 function computeSpanCaps(walls: WallCalculationResult[], levelH: number) {
   let totalSpanLevels = 0;
@@ -1025,6 +1129,9 @@ export default function Scaffold3DView({
       const outwardNormalSign = !isOpenPolygon && verts.length >= 3
         ? (signedAreaXZ(verts) > 0 ? -1 : 1)
         : 1;
+      // Near-row path (building wall + standoff) with mitered corner joins.
+      // This keeps 3D wall placement consistent with the 2D plan strip geometry.
+      const nearRowPath = buildOffsetPathXZ(verts, walls.length, outwardNormalSign, standoffM, isOpenPolygon);
 
       // L-shaped corner: ~90° turn. Full corner rule (300+600, overrun, walkable deck) only for these.
       // Non-L-shaped corners use pattanko (small filler planks) instead.
@@ -1101,6 +1208,15 @@ export default function Scaffold3DView({
             nz = -nz;
           }
         }
+        const fallbackStart = { x: v1.x + nx * standoffM, z: v1.z + nz * standoffM };
+        const fallbackEnd = { x: v2.x + nx * standoffM, z: v2.z + nz * standoffM };
+        const nearStart = nearRowPath[i] ?? fallbackStart;
+        const nearEndIdx = isOpenPolygon ? i + 1 : ((i + 1) % nearRowPath.length);
+        const nearEnd = nearRowPath[nearEndIdx] ?? fallbackEnd;
+        const nearDx = nearEnd.x - nearStart.x;
+        const nearDz = nearEnd.z - nearStart.z;
+        const alignedLen = Math.hypot(nearDx, nearDz);
+        if (alignedLen < 1e-6) continue;
 
         // Determine if wall start/end are corners (shared vertex with adjacent walls).
         // Full corner rule (300+600 / 300 overrun) only for L-shaped (~90°) corners; else use pattanko.
@@ -1130,7 +1246,7 @@ export default function Scaffold3DView({
         const useStartCornerExtension = walls.length >= 2 && !isOpenPolygon && isStartLShaped;
         const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
         const baseLen = Math.max(runLenM, 1e-6);
-        let desiredLen = edgeLen;
+        let desiredLen = alignedLen;
         if (useCornerExtension) desiredLen += cornerExtensionM;
         if (useStartCornerExtension) desiredLen += CORNER_OVERRUN_M;
         const rawScale = desiredLen / baseLen;
@@ -1148,12 +1264,12 @@ export default function Scaffold3DView({
         //   local Y → world Y (up)
         //   origin → v1 (centered) + standoff from building so near posts are 250–500mm from wall
 
-        const edgeDirX = dx / edgeLen;
-        const edgeDirZ = dz / edgeLen;
+        const edgeDirX = nearDx / alignedLen;
+        const edgeDirZ = nearDz / alignedLen;
 
-        // Translation: place scaffold so near row is at building + standoff (250–500mm)
-        const tx = (v1.x - cx) + nx * standoffM;
-        const tz = (v1.z - cz) + nz * standoffM;
+        // Translation: place scaffold start on the mitered near-row path.
+        const tx = nearStart.x - cx;
+        const tz = nearStart.z - cz;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
