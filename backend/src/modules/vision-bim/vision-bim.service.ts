@@ -189,7 +189,13 @@ Polygon rules — follow these exactly:
    - BUILDING SHAPE DETECTION for scaffold plans: The colored scaffold strip (blue/yellow/green rectangle) wraps around the building. The building itself is the uncolored area INSIDE the scaffold strip. Identify the building outline (the inner edge of the scaffold strip, not the outer edge), and trace it accurately including any diagonal corners.
    For non-scaffold plans (architectural cross-sections, photos): trace the visible outer wall boundary.
 
-4. SHAPE REALITY CHECK — Most buildings are elongated rectangles. If your polygon looks like a REGULAR PENTAGON or has roughly equal side lengths and equal angles, you almost certainly traced the wrong outline or traced a 3D silhouette instead of the plan footprint. Re-examine and extract the correct plan shape.
+4. SHAPE REALITY CHECK — Most buildings are elongated rectangles or simple polygons. Common real shapes:
+   - RECTANGLE: 4 vertices, 4 edges (most common)
+   - TRAPEZOID (台形): 4 vertices — rectangle with ONE diagonal/slanted side instead of a straight right or left wall. This is VERY COMMON in Japanese urban buildings that face a diagonal street. Example: top-left, top-right, bottom-right-shifted, bottom-left. USE ONLY 4 VERTICES.
+   - L-SHAPE: 6 vertices (rectangular notch cut from one corner)
+   - RECTANGLE WITH CUT CORNER (面取り): 5 vertices (one diagonal chamfer at a corner — this creates ONE extra vertex, NOT multiple)
+   If your polygon looks like a NARROW DIAMOND, ARROW, or has many equal-length sides, you almost certainly traced the scaffold strip outline or grid lines instead of the building wall. Re-examine and extract the correct plan shape.
+   ANTI-PATTERN — the most common error: drawing a diagonal wall as multiple short steps following grid lines. A diagonal wall going from point A to point B is ALWAYS one straight edge with exactly 2 endpoints, even if 10 structural grid lines cross it.
 
 5. CURVED FACADES — If the plan shows ONE curved exterior wall (e.g. a long convex curve along the top): represent it with ONE or TWO straight segments connecting the same endpoints. Do NOT approximate the curve with many short segments; that creates a zigzag and wrong sharp angles. Output 4–6 vertices total: left, bottom, right, and the curved side as one or two segments (e.g. top-left and top-right). The result must look like an elongated rectangle with one gently bent side, not a narrow V or arrowhead.
 
@@ -217,8 +223,11 @@ Self-check before outputting (fix issues silently — never output the check its
 - total of wallLengthsMm matches the plan's dimension string sums as closely as possible
 - no run of 3+ consecutive edges with the same length unless the building genuinely has those equal-length faces
 - polygon must NOT be a regular polygon (equal sides + equal angles) unless the building genuinely is one
+- DIAGONAL WALL CHECK: if you have 4+ consecutive edges all going in roughly the same diagonal direction, collapse them into ONE straight edge. A diagonal wall is one edge, period.
+- SHAPE SANITY: a typical urban building is a rectangle or trapezoid (4-6 vertices). If you output 7+ vertices, double-check that each vertex represents a REAL corner of the building wall (not a grid intersection or scaffold strip corner).
 - if the image is a 3D view: your polygon should be a plan-view shape (rectangle, L, U), NOT a silhouette/trapezoid
 - if the image is a 3D view and the building has visible setbacks, wings, or L/U/T shape: you MUST output 6+ vertices (NOT 4). Outputting a rectangle for a non-rectangular building is the #1 most common error.
+- JAPANESE PLAN FINAL CHECK: Did you trace the building wall (the GRAY/UNCOLORED outer wall of the building, which is the INNER boundary of the blue scaffold zone)? If your traced polygon is outside the blue zone, you traced the wrong line.
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
@@ -553,7 +562,7 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v1:${modelForKey}:${hash}`;
+      const cacheKey = `vision-bim:v2:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
@@ -591,7 +600,21 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: 'Extract the exterior building footprint as a CLOSED polygon (last edge returns to vertex[0], no duplicate closing vertex). COORDINATE SYSTEM: Use image/screen coordinates — x increases RIGHT, y increases DOWNWARD. Top-left of the plan = {x:0,y:0}. This is critical for the rendered plan to match the original drawing. CONTOUR-FOLLOW: trace the real perimeter including L-shapes and indents — do NOT use bounding box or convex hull. IMPORTANT: If this is a 3D rendering, isometric, or perspective BIM view (e.g. Revit screenshot), do NOT trace the visible silhouette. Instead reconstruct the TOP-DOWN PLAN footprint. CRITICAL SHAPE DETECTION: Look for L-shaped (6 vertices), U-shaped (8 vertices), or T-shaped (8 vertices) buildings — visible setbacks, wings, or recesses mean it is NOT a simple rectangle. An L-shaped building in 3D shows two wings of different length/width meeting at a corner. Output the correct polygon shape (L=6 vertices, U=8, T=8, rectangle=4). Count floors and estimate height as floors × 3000–4000mm. STEPPED/TIERED BUILDINGS: If different parts of the building have different heights (stepped roofline, cascading floors, tower+podium), you MUST output wallHeightsMm — one height per edge matching the roof height above that wall section. If a straight facade changes height partway along its length, split that facade into multiple consecutive edges at the change points, even if the split vertices are collinear. If upper floors step inward and have smaller footprints than the base, also output massingTiers as stacked footprints with topHeightMm/baseHeightMm so the 3D preview can match the real mass. Set buildingHeightMm to the tallest point. Return raw JSON only (no markdown). Include: vertices, buildingHeightMm, floorCount, and if visible: wallHeightsMm (per-edge heights for stepped buildings), massingTiers (for setback/terrace massing), scaleDenominator, wallLengthsMm (one mm value per edge, same count as vertices), wallLengthsFromDimText, scaffoldTypeHint, spanSizeMm, frameSizeMm. If the plan shows balconies, AC areas, pillars/columns (柱, コラム), or doors/entrances (ドア, 入口, 出入口), add obstacles: type "balcony"/"ac" with vertices, type "pillar" with center and radiusMm, or type "door" with wallIndex, positionMm, and widthMm.',
+                text: `Extract the exterior building footprint as a CLOSED polygon.
+
+COORDINATE SYSTEM: x increases RIGHT, y increases DOWNWARD (image pixel coords). Top-left = {x:0,y:0}.
+
+JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the SCAFFOLD AREA, NOT the building. The building wall is the INNER edge of the blue zone (where blue meets the gray/white building interior). Trace THIS inner edge.
+
+TRAPEZOID BUILDINGS (very common in Japan): Many urban buildings are trapezoids — a rectangle where one side (often the right wall) is diagonal/slanted. This is 4 vertices: top-left, top-right, bottom-right (shifted), bottom-left. Do NOT add extra vertices along the diagonal wall for grid line intersections.
+
+DIAGONAL WALL RULE: A slanted wall from point A to point B = exactly ONE straight edge, 2 vertices only. Structural grid lines (Y1, Y2, Y3...) crossing a diagonal wall are NOT building corners. Never trace a diagonal as steps.
+
+VERTEX COUNT GUIDE: rectangle=4, trapezoid=4, rectangle-with-cut-corner=5, L-shape=6. If you output 7+ vertices, verify each is a real wall corner (not a grid crossing).
+
+Read dimension strings for wall lengths: "10@1829=18290" means 18290mm. "S=1/100" means scale 1:100.
+
+Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount.`,
               },
             ],
           },
