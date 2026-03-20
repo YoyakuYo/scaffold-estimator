@@ -993,6 +993,14 @@ export default function Scaffold3DView({
       // Center the polygon
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
       const cz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
+      const signedAreaXZ = (pts: Array<{ x: number; z: number }>): number => {
+        let area = 0;
+        for (let i = 0; i < pts.length; i++) {
+          const j = (i + 1) % pts.length;
+          area += pts[i].x * pts[j].z - pts[j].x * pts[i].z;
+        }
+        return area / 2;
+      };
 
       let maxH = 0;
       let maxExtent = 0;
@@ -1012,6 +1020,11 @@ export default function Scaffold3DView({
 
       // Open polygon (L-shape): walls.length < verts.length; endpoints don't share corners
       const isOpenPolygon = walls.length < verts.length;
+      // Closed polygon winding:
+      // area > 0 (CCW) => outward normal is right-hand normal, so flip left normal by -1.
+      const outwardNormalSign = !isOpenPolygon && verts.length >= 3
+        ? (signedAreaXZ(verts) > 0 ? -1 : 1)
+        : 1;
 
       // L-shaped corner: ~90° turn. Full corner rule (300+600, overrun, walkable deck) only for these.
       // Non-L-shaped corners use pattanko (small filler planks) instead.
@@ -1074,18 +1087,19 @@ export default function Scaffold3DView({
         const edgeLen = Math.hypot(dx, dz);
         if (edgeLen < 0.001) continue;
 
-        // Normal pointing outward (away from polygon center)
-        let nx = -dz / edgeLen;
-        let nz = dx / edgeLen;
-
-        // Check if normal points outward (away from center)
-        const midX = (v1.x + v2.x) / 2;
-        const midZ = (v1.z + v2.z) / 2;
-        const toCenterX = cx - midX;
-        const toCenterZ = cz - midZ;
-        if (nx * toCenterX + nz * toCenterZ > 0) {
-          nx = -nx;
-          nz = -nz;
+        // Outward normal from polygon winding. More stable than centroid checks for concave shapes.
+        let nx = outwardNormalSign * (-dz / edgeLen);
+        let nz = outwardNormalSign * (dx / edgeLen);
+        // Open polyline fallback (1-2 walls): keep centroid-based orientation.
+        if (isOpenPolygon) {
+          const midX = (v1.x + v2.x) / 2;
+          const midZ = (v1.z + v2.z) / 2;
+          const toCenterX = cx - midX;
+          const toCenterZ = cz - midZ;
+          if (nx * toCenterX + nz * toCenterZ > 0) {
+            nx = -nx;
+            nz = -nz;
+          }
         }
 
         // Determine if wall start/end are corners (shared vertex with adjacent walls).
