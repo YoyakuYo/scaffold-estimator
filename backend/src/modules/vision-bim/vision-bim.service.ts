@@ -636,14 +636,14 @@ Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same co
       let i = start;
       while (i < cleaned.length) {
         const c = cleaned[i];
-        if (c === '"' && depth > 0) {
+        // Skip quoted strings (handles both depth=0 preamble and depth>0 values)
+        if (c === '"') {
           i++;
           while (i < cleaned.length) {
             if (cleaned[i] === '\\') i += 2;
-            else if (cleaned[i] === '"') break;
+            else if (cleaned[i] === '"') { i++; break; }
             else i++;
           }
-          i++;
           continue;
         }
         if (c === '{') depth++;
@@ -657,8 +657,26 @@ Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same co
         i++;
       }
       if (end < start) throw new Error('Vision model did not return valid JSON object');
-      const jsonStr = cleaned.slice(start, end + 1);
-      const parsed = JSON.parse(jsonStr) as VisionFootprintResult;
+      let jsonStr = cleaned.slice(start, end + 1);
+
+      // Repair common AI JSON errors before parsing:
+      // 1. Trailing commas before } or ]
+      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+      // 2. Single-quoted strings → double-quoted
+      jsonStr = jsonStr.replace(/'([^'\\]*(\\.[^'\\]*)*)'/g, '"$1"');
+      // 3. Unquoted keys (word chars followed by colon not inside string)
+      jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+      let parsed: VisionFootprintResult;
+      try {
+        parsed = JSON.parse(jsonStr) as VisionFootprintResult;
+      } catch (parseErr) {
+        // Log the raw response for debugging and re-throw with context
+        this.logger.error(
+          `JSON parse failed. Raw AI response (first 500 chars): ${text.slice(0, 500)}`,
+        );
+        throw new Error(`Vision model returned invalid JSON: ${(parseErr as Error).message}`);
+      }
 
       this.logger.log(
         `Vision BIM raw response: ${parsed.vertices?.length ?? 0} vertices, ` +
