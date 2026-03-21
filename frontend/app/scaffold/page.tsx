@@ -297,9 +297,9 @@ function Building3DPreview({
           const tierPts = toPlanM(tier.vertices);
           if (tierPts.length < 3) continue;
           const shape = new THREE.Shape();
-          shape.moveTo(tierPts[0].x - cx, tierPts[0].z - cz);
+          shape.moveTo(tierPts[0].x - cx, -(tierPts[0].z - cz));
           for (let i = 1; i < tierPts.length; i++) {
-            shape.lineTo(tierPts[i].x - cx, tierPts[i].z - cz);
+            shape.lineTo(tierPts[i].x - cx, -(tierPts[i].z - cz));
           }
           shape.closePath();
           const baseH = Math.max(0, (tier.baseHeightMm ?? 0) * 0.001);
@@ -397,10 +397,11 @@ function Building3DPreview({
         }
       } else {
         // Uniform height: single extrusion
+        // Negate Z because ExtrudeGeometry + rotation.x=-PI/2 maps Shape Y → world -Z
         const shape = new THREE.Shape();
-        shape.moveTo(pts2D[0].x - cx, pts2D[0].z - cz);
+        shape.moveTo(pts2D[0].x - cx, -(pts2D[0].z - cz));
         for (let i = 1; i < pts2D.length; i++) {
-          shape.lineTo(pts2D[i].x - cx, pts2D[i].z - cz);
+          shape.lineTo(pts2D[i].x - cx, -(pts2D[i].z - cz));
         }
         shape.closePath();
 

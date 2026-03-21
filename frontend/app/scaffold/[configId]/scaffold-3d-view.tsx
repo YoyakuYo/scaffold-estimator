@@ -1448,10 +1448,10 @@ export default function Scaffold3DView({
             addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
             addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
             const firstSpanDeck = new THREE.Shape();
-            firstSpanDeck.moveTo(r1.x, r1.z);
-            firstSpanDeck.lineTo(t1.x, t1.z);
-            firstSpanDeck.lineTo(t2.x, t2.z);
-            firstSpanDeck.lineTo(r2.x, r2.z);
+            firstSpanDeck.moveTo(r1.x, -r1.z);
+            firstSpanDeck.lineTo(t1.x, -t1.z);
+            firstSpanDeck.lineTo(t2.x, -t2.z);
+            firstSpanDeck.lineTo(r2.x, -r2.z);
             firstSpanDeck.closePath();
             const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
             const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
@@ -1490,10 +1490,13 @@ export default function Scaffold3DView({
 
       // Building fill — procedural building with floor slabs, window grids, and edges
       if (!isOpenPolygon && verts.length >= 3) {
+        // ExtrudeGeometry extrudes in local +Z; rotation.x = -PI/2 maps local Y → world -Z.
+        // So Shape(X, Y) → World(X, -Z). We negate Z so the building aligns with
+        // the scaffold which uses world Z directly.
         const shape = new THREE.Shape();
-        shape.moveTo(verts[0].x - cx, verts[0].z - cz);
+        shape.moveTo(verts[0].x - cx, -(verts[0].z - cz));
         for (let i = 1; i < verts.length; i++) {
-          shape.lineTo(verts[i].x - cx, verts[i].z - cz);
+          shape.lineTo(verts[i].x - cx, -(verts[i].z - cz));
         }
         shape.closePath();
         const floorH = 3.0;
@@ -1666,9 +1669,9 @@ export default function Scaffold3DView({
             const tierVerts = normaliseTierVerts(tier.vertices);
             if (tierVerts.length < 3) continue;
             const shapeTier = new THREE.Shape();
-            shapeTier.moveTo(tierVerts[0].x - cx, tierVerts[0].z - cz);
+            shapeTier.moveTo(tierVerts[0].x - cx, -(tierVerts[0].z - cz));
             for (let i = 1; i < tierVerts.length; i++) {
-              shapeTier.lineTo(tierVerts[i].x - cx, tierVerts[i].z - cz);
+              shapeTier.lineTo(tierVerts[i].x - cx, -(tierVerts[i].z - cz));
             }
             shapeTier.closePath();
             const baseY = GROUND_Y + 0.02 + ((tier.baseHeightMm ?? 0) / 1000);
