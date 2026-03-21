@@ -144,6 +144,96 @@ type IfcPreviewMesh = {
 
 const IFC_PREVIEW_MESH_CACHE = new Map<string, IfcPreviewMesh[]>();
 
+type PreviewPlanVertex = { x?: number; y?: number; xFrac?: number; yFrac?: number };
+
+function previewVertexXY(v: PreviewPlanVertex): { x: number; y: number } {
+  return {
+    x: v.xFrac ?? v.x ?? 0,
+    y: v.yFrac ?? v.y ?? 0,
+  };
+}
+
+function previewBounds(verts: PreviewPlanVertex[]): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  spanX: number;
+  spanY: number;
+} {
+  const pts = verts.map(previewVertexXY);
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    spanX: Math.max(maxX - minX, 1e-9),
+    spanY: Math.max(maxY - minY, 1e-9),
+  };
+}
+
+function isFractionLikePreviewVerts(verts: PreviewPlanVertex[]): boolean {
+  if (verts.length < 3) return false;
+  const { minX, minY, maxX, maxY, spanX, spanY } = previewBounds(verts);
+  const maxCoord = Math.max(Math.abs(minX), Math.abs(minY), Math.abs(maxX), Math.abs(maxY));
+  return maxCoord <= 1.1 && Math.max(spanX, spanY) <= 1.1;
+}
+
+function previewPolygonArea(verts: PreviewPlanVertex[]): number {
+  if (verts.length < 3) return 0;
+  const pts = verts.map(previewVertexXY);
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  return Math.abs(area / 2);
+}
+
+function normalizeMassingTiersForPreview(
+  outline: Array<{ xFrac: number; yFrac: number }>,
+  massingTiers?: VisionMassingTier[],
+): VisionMassingTier[] {
+  if (!Array.isArray(massingTiers) || massingTiers.length === 0 || outline.length < 3) return [];
+
+  const outlineIsFraction = isFractionLikePreviewVerts(outline);
+  const outlineBox = previewBounds(outline);
+  const outlineArea = Math.max(previewPolygonArea(outline), 1e-9);
+
+  return massingTiers
+    .filter((tier) => Array.isArray(tier.vertices) && tier.vertices.length >= 3)
+    .map((tier) => {
+      const tierVerts = tier.vertices as PreviewPlanVertex[];
+      const tierIsFraction = isFractionLikePreviewVerts(tierVerts);
+
+      if (tierIsFraction && !outlineIsFraction) {
+        return {
+          ...tier,
+          vertices: tierVerts.map((v) => {
+            const p = previewVertexXY(v);
+            return {
+              x: Math.round(outlineBox.minX + p.x * outlineBox.spanX),
+              y: Math.round(outlineBox.minY + p.y * outlineBox.spanY),
+            };
+          }),
+        } satisfies VisionMassingTier;
+      }
+
+      return tier;
+    })
+    .filter((tier) => {
+      const area = previewPolygonArea(tier.vertices as PreviewPlanVertex[]);
+      // Reject tiers that are effectively invisible or wildly larger than the base footprint.
+      return area >= outlineArea * 0.002 && area <= outlineArea * 1.1;
+    });
+}
+
 /** Renders building footprint outline as SVG (for AI BIM double-check panel). */
 function BuildingShapeSvg({
   outline,
@@ -218,6 +308,7 @@ function Building3DPreview({
     let disposed = false;
     const cleanupFns: Array<() => void> = [];
     setPreviewError(null);
+    const previewMassingTiers = normalizeMassingTiersForPreview(outline, massingTiers);
 
     import('three').then((THREE) => {
       if (disposed || !containerRef.current) return;
@@ -239,7 +330,7 @@ function Building3DPreview({
 
       const { toPlanM, planSpanXM, planSpanZM } = computeBimPreviewPlanToM({
         outline,
-        massingTiers,
+        massingTiers: previewMassingTiers,
         wallLengthsMm,
       });
 
@@ -260,10 +351,10 @@ function Building3DPreview({
         && new Set(wallHeightsMm).size > 1;
 
       const fallbackGroup = new THREE.Group();
-      const hasMassingTiers = Array.isArray(massingTiers) && massingTiers.length > 0;
+      const hasMassingTiers = previewMassingTiers.length > 0;
 
       if (hasMassingTiers) {
-        const tiers = [...massingTiers!]
+        const tiers = [...previewMassingTiers]
           .filter((tier) => Array.isArray(tier.vertices) && tier.vertices.length >= 3)
           .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
         const tierMat = new THREE.MeshStandardMaterial({
