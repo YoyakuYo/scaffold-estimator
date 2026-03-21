@@ -12,6 +12,24 @@ export type BimPreviewVertex = {
   yFrac?: number;
 };
 
+function minMax2D(coords: Array<{ x: number; y: number }>): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (coords.length === 0) {
+    return { minX: 0, minY: 0, maxX: 1e-6, maxY: 1e-6 };
+  }
+  let minX = coords[0]!.x;
+  let minY = coords[0]!.y;
+  let maxX = minX;
+  let maxY = minY;
+  for (let i = 1; i < coords.length; i++) {
+    const p = coords[i]!;
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 export function computeBimPreviewPlanToM(params: {
   outline: BimPreviewVertex[];
   massingTiers?: Array<{ vertices: BimPreviewVertex[] }>;
@@ -29,12 +47,11 @@ export function computeBimPreviewPlanToM(params: {
     ...(massingTiers?.flatMap((tier) => tier.vertices) ?? []),
   ];
 
-  const xs = allPlanVerts.map((p) => p.xFrac ?? p.x ?? 0);
-  const ys = allPlanVerts.map((p) => p.yFrac ?? p.y ?? 0);
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
+  const xyPairs = allPlanVerts.map((p) => ({
+    x: p.xFrac ?? p.x ?? 0,
+    y: p.yFrac ?? p.y ?? 0,
+  }));
+  const { minX, minY, maxX, maxY } = minMax2D(xyPairs);
   const spanX = Math.max(maxX - minX, 1e-6);
   const spanY = Math.max(maxY - minY, 1e-6);
 

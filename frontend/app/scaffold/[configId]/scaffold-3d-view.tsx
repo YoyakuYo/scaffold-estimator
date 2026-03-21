@@ -110,6 +110,12 @@ const MAX_TOTAL_MESHES = 60_000;           // ≈ 3 000 span-levels
 const MESHES_PER_SPAN_LEVEL = 20;
 const MAX_SPAN_LEVELS = Math.floor(MAX_TOTAL_MESHES / MESHES_PER_SPAN_LEVEL);
 
+/**
+ * Max scaffold storeys drawn per wall in 3D only (kusabi 1.8m → ~108m at 60).
+ * Tall IFC / stepped towers otherwise block the main thread for minutes (looks like a blank view).
+ */
+const MAX_3D_RENDER_LEVELS = 60;
+
 type PointXZ = { x: number; z: number };
 
 function lineIntersectionXZ(a1: PointXZ, a2: PointXZ, b1: PointXZ, b2: PointXZ): PointXZ | null {
@@ -281,6 +287,8 @@ export default function Scaffold3DView({
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [simplified, setSimplified] = useState(false);
+  /** True when 3D caps storey count for performance (quantities unchanged). */
+  const [levelVisCap, setLevelVisCap] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [activeWallIdx, setActiveWallIdx] = useState<number>(0);
   const [selectedComponent, setSelectedComponent] = useState<{ nameJp: string; description: string } | null>(null);
@@ -394,6 +402,7 @@ export default function Scaffold3DView({
 
     setReady(false);
     setError(null);
+    setLevelVisCap(false);
 
     const canvasContainer = canvasContainerRef.current;
     let disposed = false;
@@ -690,6 +699,8 @@ export default function Scaffold3DView({
         parent.add(sprite);
       }
 
+      let threeDLevelsCapped = false;
+
       // ══════════════════════════════════════════════════════
       // BUILD SCAFFOLD FOR ONE WALL (local coordinates: along X axis, depth along Z)
       // First span: 4 posts. Each next span: reuse 2 closest, add 2 new → N+1 positions, 2 posts per position.
@@ -738,7 +749,8 @@ export default function Scaffold3DView({
           ? (postX[postX.length - 1] - postX[0])
           : Math.max(wall.wallLengthMm, 600) / 1000;
         const levels = wall.levelCalc.fullLevels;
-        const levelsToBuild = levels;
+        const levelsToBuild = Math.min(levels, MAX_3D_RENDER_LEVELS);
+        if (levels > MAX_3D_RENDER_LEVELS) threeDLevelsCapped = true;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
         const postCapAbovePlank = 0;
         const totalPostH = levelsToBuild * LEVEL_H + postCapAbovePlank;
@@ -1659,6 +1671,7 @@ export default function Scaffold3DView({
         });
         clickTargetsRef.current.push(clickMesh);
       }
+      setLevelVisCap(threeDLevelsCapped);
       maxHeightRef.current = maxH;
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
@@ -1669,7 +1682,10 @@ export default function Scaffold3DView({
       // This creates the direct one-to-one bars the user requested.
 
       const cornerGroup = new THREE.Group();
-      const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
+      const maxLevelsForCorners = Math.min(
+        Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1),
+        MAX_3D_RENDER_LEVELS,
+      );
       maxLevelsRef.current = maxLevelsForCorners;
       const cornerPlankMat = plankMatEff.clone();
       cornerPlankMat.side = THREE.DoubleSide;
@@ -2393,6 +2409,17 @@ export default function Scaffold3DView({
             const meshes = await parseIfcToMeshes(arrayBuffer);
             if (disposed || meshes.length === 0) return;
 
+            const MAX_IFC_MESHES_IN_VIEW = 4000;
+            const meshesForView =
+              meshes.length > MAX_IFC_MESHES_IN_VIEW
+                ? meshes.slice(0, MAX_IFC_MESHES_IN_VIEW)
+                : meshes;
+            if (meshes.length > MAX_IFC_MESHES_IN_VIEW) {
+              console.warn(
+                `[Scaffold3DView] IFC has ${meshes.length} meshes; showing first ${MAX_IFC_MESHES_IN_VIEW} for performance`,
+              );
+            }
+
             const bimMaterials = createBimMaterialSet(THREE);
             const ifcGroup = new THREE.Group();
             ifcGroup.userData = { noClip: true, isIfcModel: true, bimMaterials };
@@ -2401,7 +2428,7 @@ export default function Scaffold3DView({
             let ifcMinY = Infinity, ifcMaxY = -Infinity;
             let ifcMinZ = Infinity, ifcMaxZ = -Infinity;
 
-            for (const mesh of meshes) {
+            for (const mesh of meshesForView) {
               const stride = 6;
               const count = mesh.vertices.length / stride;
               for (let vi = 0; vi < count; vi++) {
@@ -2420,14 +2447,23 @@ export default function Scaffold3DView({
             const ifcCenterX = (ifcMinX + ifcMaxX) / 2;
             const ifcCenterZ = (ifcMinZ + ifcMaxZ) / 2;
 
-            const buildingExtentX = Math.max(...verts.map(v => v.x - cx)) - Math.min(...verts.map(v => v.x - cx));
-            const buildingExtentZ = Math.max(...verts.map(v => v.z - cz)) - Math.min(...verts.map(v => v.z - cz));
+            let bxMin = Infinity, bxMax = -Infinity, bzMin = Infinity, bzMax = -Infinity;
+            for (const v of verts) {
+              const ax = v.x - cx;
+              const az = v.z - cz;
+              if (ax < bxMin) bxMin = ax;
+              if (ax > bxMax) bxMax = ax;
+              if (az < bzMin) bzMin = az;
+              if (az > bzMax) bzMax = az;
+            }
+            const buildingExtentX = Number.isFinite(bxMin) ? Math.max(bxMax - bxMin, 0.1) : 10;
+            const buildingExtentZ = Number.isFinite(bzMin) ? Math.max(bzMax - bzMin, 0.1) : 10;
             const scaleX = ifcSizeX > 0.01 ? buildingExtentX / ifcSizeX : 1;
             const scaleZ = ifcSizeZ > 0.01 ? buildingExtentZ / ifcSizeZ : 1;
             const uniformScale = Math.min(scaleX, scaleZ);
             const scaleY = ifcSizeY > 0.01 ? maxH / ifcSizeY : uniformScale;
 
-            for (const meshData of meshes) {
+            for (const meshData of meshesForView) {
               if (meshData.elementType === 'opening') continue;
 
               const stride = 6;
@@ -2504,6 +2540,7 @@ export default function Scaffold3DView({
     t,
     JSON.stringify((result as any)?.massingTiers ?? null),
     JSON.stringify((result as any)?.bimFacadeColors ?? null),
+    (result as any)?.ifcFileUrl,
   ]);
 
   useEffect(() => {
@@ -2915,13 +2952,17 @@ export default function Scaffold3DView({
           </div>
         )}
       </div>
-      {simplified && ready && (
+      {(simplified || levelVisCap) && ready && (
         <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2">
           <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>
-            大規模足場のため、3D表示を簡略化しています（各壁の一部スパンのみ表示）。数量計算は全スパン分正確です。
+            {simplified && levelVisCap
+              ? '大規模・高層のため、3D表示を簡略化しています（スパン数と表示レベルに上限）。数量計算は正確です。'
+              : simplified
+                ? '大規模足場のため、3D表示を簡略化しています（各壁の一部スパンのみ表示）。数量計算は全スパン分正確です。'
+                : `超高層モデルのため、3Dでは最大${MAX_3D_RENDER_LEVELS}段まで表示しています（数量・見積は全段）。`}
           </span>
         </div>
       )}
