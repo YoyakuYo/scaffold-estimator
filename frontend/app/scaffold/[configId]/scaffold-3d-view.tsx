@@ -243,6 +243,11 @@ export interface Scaffold3DViewProps {
   complianceMode?: 'default' | 'ai_bim';
   /** When true, use distinct colors per component (支柱/ブレス/手摺/踏板 etc.) for estimation clarity */
   technicalQuotationMode?: boolean;
+  /**
+   * Each façade is a separate external run within wall limits; end stoppers only, no corner wrap/deck.
+   * Default: true when complianceMode is ai_bim, otherwise false (L-corner continuity enabled).
+   */
+  independentExternalWallRuns?: boolean;
 }
 
 const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = {
@@ -266,6 +271,7 @@ export default function Scaffold3DView({
   totalLevels = 1,
   complianceMode = 'default',
   technicalQuotationMode = false,
+  independentExternalWallRuns: independentWallRunsProp,
 }: Scaffold3DViewProps) {
   const { t } = useI18n();
   const params = useParams();
@@ -304,6 +310,8 @@ export default function Scaffold3DView({
   const controlsRef = useRef<any>(null);
 
   const isAiBim = complianceMode === 'ai_bim';
+  /** 外部足場を壁面ごとに完結（角で回り込まず端部ストッパーのみ）。未指定時は AI BIM で true。 */
+  const independentExternalWallRuns = independentWallRunsProp ?? isAiBim;
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
   const rawWalls: WallCalculationResult[] = Array.isArray(result?.walls)
@@ -1318,6 +1326,9 @@ export default function Scaffold3DView({
         const isEndCorner = (!tierIsOpen || localIdx < tierGroups[tgi].walls.length - 1) && (tHCE[localIdx] ?? false);
         const isStartLShaped = isStartCorner && (tILS[localIdx] ?? false);
         const isEndLShaped = isEndCorner && (tILE[localIdx] ?? false);
+        // Per-face external scaffold: no L-corner trim/flush, no length overrun past wall ends.
+        const startLForBuild = independentExternalWallRuns ? false : isStartLShaped;
+        const endLForBuild = independentExternalWallRuns ? false : isEndLShaped;
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
@@ -1329,16 +1340,18 @@ export default function Scaffold3DView({
           spanCaps[i],
           false,
           false,
-          isStartLShaped,
-          isEndLShaped,
+          startLForBuild,
+          endLForBuild,
         );
 
         // Scale/place wall run. Per 足場コーナー詳細図 (L-shaped only):
         // wall end extends 300mm past corner, then one 600mm span (total +900mm).
         // Wall start at L-corner: first span overruns 300mm so 1800 can go beyond wall and fill gap.
         const tierWallCount = tierGroups[tgi]?.walls.length ?? walls.length;
-        const useCornerExtension = tierWallCount >= 2 && !tierIsOpen && isEndLShaped;
-        const useStartCornerExtension = tierWallCount >= 2 && !tierIsOpen && isStartLShaped;
+        const useCornerExtension =
+          !independentExternalWallRuns && tierWallCount >= 2 && !tierIsOpen && isEndLShaped;
+        const useStartCornerExtension =
+          !independentExternalWallRuns && tierWallCount >= 2 && !tierIsOpen && isStartLShaped;
         const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
         const baseLen = Math.max(runLenM, 1e-6);
         let desiredLen = alignedLen;
@@ -1489,87 +1502,85 @@ export default function Scaffold3DView({
       maxHeightRef.current = maxH;
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // Rule:
-      //   1) 300mm overrun from corner on wall A inner row
-      //   2) then 600mm corner span on wall A inner row
-      //   3) reuse those two inner posts and connect each directly into wall B
-      // This creates the direct one-to-one bars the user requested.
-
+      // Skipped for independent external runs: 壁面単位の外部足場は角で回り込まず端部で完結。
       const cornerGroup = new THREE.Group();
-      const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
-      maxLevelsRef.current = maxLevelsForCorners;
-      const cornerPlankMat = plankMatEff.clone();
-      cornerPlankMat.side = THREE.DoubleSide;
-      const toWorldXZ = (root: any, x: number, z: number) => {
-        const p = root.localToWorld(new THREE.Vector3(x, 0, z));
-        return { x: p.x, z: p.z };
-      };
+      if (!independentExternalWallRuns) {
+        // Rule:
+        //   1) 300mm overrun from corner on wall A inner row
+        //   2) then 600mm corner span on wall A inner row
+        //   3) reuse those two inner posts and connect each directly into wall B
+        const maxLevelsForCorners = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
+        maxLevelsRef.current = maxLevelsForCorners;
+        const cornerPlankMat = plankMatEff.clone();
+        cornerPlankMat.side = THREE.DoubleSide;
+        const toWorldXZ = (root: any, x: number, z: number) => {
+          const p = root.localToWorld(new THREE.Vector3(x, 0, z));
+          return { x: p.x, z: p.z };
+        };
 
-      for (let wi = 0; wi < walls.length; wi++) {
-        const nextWi = (wi + 1) % walls.length;
-        if (isOpenPolygon && nextWi <= wi) continue;
-        if (!(hasCornerAtEnd[wi] ?? false)) continue;
+        for (let wi = 0; wi < walls.length; wi++) {
+          const nextWi = (wi + 1) % walls.length;
+          if (isOpenPolygon && nextWi <= wi) continue;
+          if (!(hasCornerAtEnd[wi] ?? false)) continue;
 
-        const infoA = wallRenderInfos[wi];
-        const infoB = wallRenderInfos[nextWi];
-        if (!infoA || !infoB) continue;
-        if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
+          const infoA = wallRenderInfos[wi];
+          const infoB = wallRenderInfos[nextWi];
+          if (!infoA || !infoB) continue;
+          if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
 
-        const isLShaped = isLShapedAtEnd[wi] ?? false;
+          const isLShaped = isLShapedAtEnd[wi] ?? false;
 
-        // Reuse the actual last two inner posts from wall A (matches rendered geometry exactly).
-        const aLast = infoA.postX.length - 1;
-        const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
-        const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
+          const aLast = infoA.postX.length - 1;
+          const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
+          const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
 
-        // Connect into wall B's first rendered span endpoint.
-        const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
-        let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
-        let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
-        // Keep left/right pairing stable and avoid crossing connectors.
-        const matchDirect =
-          Math.hypot(r1.x - t1.x, r1.z - t1.z) + Math.hypot(r2.x - t2.x, r2.z - t2.z);
-        const matchCross =
-          Math.hypot(r1.x - t2.x, r1.z - t2.z) + Math.hypot(r2.x - t1.x, r2.z - t1.z);
-        if (matchCross < matchDirect) {
-          const tmp = t1;
-          t1 = t2;
-          t2 = tmp;
-        }
+          const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
+          let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
+          let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
+          const matchDirect =
+            Math.hypot(r1.x - t1.x, r1.z - t1.z) + Math.hypot(r2.x - t2.x, r2.z - t2.z);
+          const matchCross =
+            Math.hypot(r1.x - t2.x, r1.z - t2.z) + Math.hypot(r2.x - t1.x, r2.z - t1.z);
+          if (matchCross < matchDirect) {
+            const tmp = t1;
+            t1 = t2;
+            t2 = tmp;
+          }
 
-        for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
-          const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+          for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
+            const y = GROUND_Y + JACK_H + lv * LEVEL_H;
 
-          if (isLShaped) {
-            // L-shaped (~90°) corner: full rule — one-to-one connectors, 600 span pair, walkable deck.
-            addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
-            addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
-            addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
-            const firstSpanDeck = new THREE.Shape();
-            firstSpanDeck.moveTo(r1.x, -r1.z);
-            firstSpanDeck.lineTo(t1.x, -t1.z);
-            firstSpanDeck.lineTo(t2.x, -t2.z);
-            firstSpanDeck.lineTo(r2.x, -r2.z);
-            firstSpanDeck.closePath();
-            const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
-            const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
-            deckMesh.rotation.x = -Math.PI / 2;
-            deckMesh.position.y = y + 0.028;
-            deckMesh.castShadow = true;
-            deckMesh.receiveShadow = true;
-            cornerGroup.add(deckMesh);
-            const hY = y + 0.06;
-            addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
-          } else {
-            // Non-L-shaped corner: use pattanko (2 small filler planks per level to close the gap).
-            const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
-            const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;
-            const pattankoW = 0.25;
-            const pattankoD = 0.5;
-            addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
-            addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
+            if (isLShaped) {
+              addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+              addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
+              addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
+              const firstSpanDeck = new THREE.Shape();
+              firstSpanDeck.moveTo(r1.x, -r1.z);
+              firstSpanDeck.lineTo(t1.x, -t1.z);
+              firstSpanDeck.lineTo(t2.x, -t2.z);
+              firstSpanDeck.lineTo(r2.x, -r2.z);
+              firstSpanDeck.closePath();
+              const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
+              const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
+              deckMesh.rotation.x = -Math.PI / 2;
+              deckMesh.position.y = y + 0.028;
+              deckMesh.castShadow = true;
+              deckMesh.receiveShadow = true;
+              cornerGroup.add(deckMesh);
+              const hY = y + 0.06;
+              addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
+            } else {
+              const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
+              const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;
+              const pattankoW = 0.25;
+              const pattankoD = 0.5;
+              addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
+              addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
+            }
           }
         }
+      } else {
+        maxLevelsRef.current = Math.max(...walls.map((w) => w.levelCalc?.fullLevels ?? 1), 1);
       }
       scene.add(cornerGroup);
 
@@ -2326,6 +2337,7 @@ export default function Scaffold3DView({
     result?.polygonVertices,
     result?.wallStandoffMm,
     isAiBim,
+    independentExternalWallRuns,
     technicalMode,
     t,
     JSON.stringify((result as any)?.massingTiers ?? null),
