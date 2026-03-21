@@ -103,6 +103,23 @@ export class WallInputDto {
   @Min(600)
   @Max(1200)
   scaffoldWidthMm?: number;
+
+  /** Base elevation (mm) for tier-aware scaffold on stepped/setback buildings. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  baseHeightMm?: number;
+
+  /** Group identifier linking walls that belong to the same building side across tiers. */
+  @IsOptional()
+  @IsString()
+  tierGroup?: string;
+
+  /** Zero-based tier index within the group (0 = ground tier). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  tierIndex?: number;
 }
 
 export class CreateScaffoldConfigDto {
