@@ -269,8 +269,10 @@ export class VisionBimService {
       return this.processIfc(buffer);
     }
     if (isPdf) {
-      this.logger.log('PDF upload: export as PNG/JPEG for vision analysis, or upload DXF for CAD plans');
-      return this.getFallbackFootprint();
+      throw new Error(
+        'PDFファイルは直接解析できません。画像（JPEG/PNG）に変換するか、CADデータの場合はDXF形式でエクスポートしてアップロードしてください。 / ' +
+        'PDF files cannot be analyzed directly. Please convert to an image (JPEG/PNG) for photo analysis, or export as DXF from your CAD software.',
+      );
     }
     if (isImage) {
       return this.processImage(buffer);
