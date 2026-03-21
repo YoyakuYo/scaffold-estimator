@@ -57,6 +57,12 @@ export class ScaffoldConfiguration {
      *  wallLengthMm = sum of segment lengths + return wall transitions.
      */
     segments?: Array<{ lengthMm: number; offsetMm: number }>;
+    /** Tier base elevation (mm). For stepped buildings, scaffold starts here. */
+    baseHeightMm?: number;
+    /** Logical side for BOM grouping (e.g. 'east' groups east-T1..east-TN). */
+    tierGroup?: string;
+    /** Tier index (0-based) within the tierGroup. */
+    tierIndex?: number;
   }>;
 
   // ─── Scaffold Type ─────────────────────────────────────

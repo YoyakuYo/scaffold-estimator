@@ -47,6 +47,12 @@ export interface WallCalculationInput {
   layoutMode?: 'double_post' | 'bracket';
   /** Door openings on this wall — each gets a 梁枠 (hariwaku / beam frame) at ground level. */
   doorOpenings?: Array<{ positionMm: number; widthMm: number }>;
+  /** Tier base elevation (mm). For stepped buildings, scaffold starts at this height. */
+  baseHeightMm?: number;
+  /** Logical side group for BOM aggregation (e.g. 'east' groups all east tier-walls). */
+  tierGroup?: string;
+  /** Tier index (0-based) within the tierGroup. */
+  tierIndex?: number;
 }
 
 export interface ScaffoldCalculationInput {
@@ -102,6 +108,12 @@ export interface WallCalculationResult {
     /** Hariwaku size: total mm of the beam frame. */
     hariwakuSizeMm: number;
   }>;
+  /** Tier base elevation (mm). For stepped buildings, scaffold starts at this height. */
+  baseHeightMm?: number;
+  /** Logical side group for BOM aggregation (e.g. 'east' groups all east tier-walls). */
+  tierGroup?: string;
+  /** Tier index (0-based) within the tierGroup. */
+  tierIndex?: number;
 }
 
 export interface ScaffoldCalculationResult {
@@ -131,6 +143,13 @@ export interface ScaffoldCalculationResult {
 
 // Helper to get Japanese label for any side (polygon edges)
 function getSideLabel(side: string): string {
+  // Handle tier-wall names like 'north-T1', 'edge-0-T2'
+  const tierMatch = side.match(/^(.+)-T(\d+)$/);
+  if (tierMatch) {
+    const baseSide = tierMatch[1];
+    const tierNum = tierMatch[2];
+    return `${getSideLabel(baseSide)}-階層${tierNum}`;
+  }
   // Handle edge-0, edge-1, etc.
   if (side.startsWith('edge-')) {
     const num = parseInt(side.replace('edge-', ''), 10);
@@ -653,6 +672,9 @@ export class ScaffoldCalculatorService {
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
       doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
+      baseHeightMm: wall.baseHeightMm,
+      tierGroup: wall.tierGroup,
+      tierIndex: wall.tierIndex,
     };
   }
 

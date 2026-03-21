@@ -29,6 +29,13 @@ export interface WallInput {
   segments?: WallSegment[];
   /** Per-wall scaffold width (600/900/1200). Overrides global scaffoldWidthMm. */
   scaffoldWidthMm?: number;
+  /** Tier base elevation (mm). Scaffold starts at this height instead of ground level.
+   *  Used for stepped/setback buildings where upper tiers have smaller footprints. */
+  baseHeightMm?: number;
+  /** Logical side group for BOM aggregation (e.g. 'east' groups east-T1, east-T2, east-T3). */
+  tierGroup?: string;
+  /** Tier index (0-based) within the tierGroup. */
+  tierIndex?: number;
 }
 
 export interface CreateScaffoldConfigDto {

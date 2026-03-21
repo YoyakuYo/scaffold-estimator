@@ -1669,8 +1669,22 @@ function ScaffoldPageContent() {
                       setAiBimConfirming(true);
                       try {
                         const outline = aiBimPreview.buildingOutline;
+                        // Auto-decompose walls for stepped/setback buildings
+                        let finalWalls = aiBimPreview.dto.walls;
+                        if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 0) {
+                          const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
+                          const decomposed = decomposeTierWalls(
+                            aiBimPreview.dto.walls,
+                            aiBimPreview.massingTiers,
+                            aiBimPreview.buildingHeightMm,
+                          );
+                          if (decomposed.length > aiBimPreview.dto.walls.length) {
+                            finalWalls = decomposed;
+                          }
+                        }
                         const dto = {
                           ...aiBimPreview.dto,
+                          walls: finalWalls,
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
                           ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };

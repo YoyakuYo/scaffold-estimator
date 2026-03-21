@@ -634,6 +634,25 @@ function QuotationTable({ result }: { result: any }) {
   const walls: WallCalculationResult[] = result.walls;
   const summary: CalculatedComponent[] = result.summary;
 
+  // Detect tier-walls and build tier group info for BOM display
+  const hasTierWalls = walls.some((w: any) => w.tierGroup != null || (w.baseHeightMm ?? 0) > 0);
+  const tierGroupOrder = useMemo(() => {
+    if (!hasTierWalls) return null;
+    const groups = new globalThis.Map<string, { label: string; wallIndices: number[] }>();
+    walls.forEach((w: any, idx: number) => {
+      const grp = w.tierGroup ?? w.side;
+      if (!groups.has(grp)) {
+        const baseLabel = grp.replace(/-T\d+$/, '');
+        const jp = ['north', 'south', 'east', 'west'].includes(baseLabel)
+          ? ({ north: '北面', south: '南面', east: '東面', west: '西面' } as Record<string, string>)[baseLabel] ?? baseLabel
+          : baseLabel;
+        groups.set(grp, { label: locale === 'ja' ? jp : baseLabel, wallIndices: [] });
+      }
+      groups.get(grp)!.wallIndices.push(idx);
+    });
+    return groups;
+  }, [walls, hasTierWalls, locale]);
+
   // Build per-wall quantity maps
   // IMPORTANT: Use the same key generation logic as backend aggregation
   // Use globalThis.Map so the built-in constructor is always used (avoids shadowing by lucide-react Map icon)
@@ -694,6 +713,11 @@ function QuotationTable({ result }: { result: any }) {
                 <div className="font-semibold text-gray-700">
                   {locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1))}
                 </div>
+                {(wall as any).baseHeightMm > 0 && (
+                  <div className="text-xs text-violet-600">
+                    GL+{((wall as any).baseHeightMm / 1000).toFixed(1)}m〜
+                  </div>
+                )}
                 <div className="text-gray-500">
                   {t('result', 'wallLengthLabel')} {wall.wallLengthMm.toLocaleString()}mm | 高さ {scaffoldH.toLocaleString()}mm
                 </div>
@@ -745,20 +769,38 @@ function QuotationTable({ result }: { result: any }) {
               <th className="px-3 py-2 text-left font-medium">{t('result', 'colName')}</th>
               <th className="px-3 py-2 text-left font-medium">{t('result', 'colSpec')}</th>
               <th className="px-3 py-2 text-center font-medium w-14">{t('result', 'colUnit')}</th>
-              {walls.map((wall, idx) => (
-                <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
-                  {locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1))}
-                </th>
+              {walls.map((wall, idx) => {
+                const baseH = (wall as any).baseHeightMm ?? 0;
+                const tierLabel = baseH > 0 ? ` GL+${(baseH / 1000).toFixed(0)}m` : '';
+                return (
+                  <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
+                    <div>{locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1))}</div>
+                    {tierLabel && <div className="text-[10px] font-normal opacity-80">{tierLabel}</div>}
+                  </th>
+                );
+              })}
+              {/* Tier group subtotal columns */}
+              {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => (
+                info.wallIndices.length > 1 ? (
+                  <th key={`grp-${grp}`} className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-500">
+                    <div>{info.label}</div>
+                    <div className="text-[10px] font-normal opacity-80">小計</div>
+                  </th>
+                ) : null
               ))}
               <th className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-700">{t('result', 'colTotal')}</th>
             </tr>
           </thead>
           <tbody>
             {rowsWithGrouping.map((row, ri) => {
+              const subtotalColCount = hasTierWalls && tierGroupOrder
+                ? Array.from(tierGroupOrder.values()).filter((g) => g.wallIndices.length > 1).length
+                : 0;
+
               if (row.type === 'header') {
                 return (
                   <tr key={`cat-${ri}`} className="bg-gray-100 border-b border-gray-200">
-                    <td colSpan={5 + walls.length + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <td colSpan={5 + walls.length + subtotalColCount + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
                       {row.category}
                     </td>
                   </tr>
@@ -766,7 +808,6 @@ function QuotationTable({ result }: { result: any }) {
               }
 
               const { comp, idx } = row;
-              // Use the same key generation logic as backend aggregation and wallMaps
               let key: string;
               if (comp.category === '布材') {
                 key = `${comp.category}-${comp.sizeSpec}`;
@@ -794,6 +835,16 @@ function QuotationTable({ result }: { result: any }) {
                       {qty > 0 ? qty : '-'}
                     </td>
                   ))}
+                  {/* Tier group subtotal cells */}
+                  {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => {
+                    if (info.wallIndices.length <= 1) return null;
+                    const subtotal = info.wallIndices.reduce((sum, wi) => sum + (perWall[wi] || 0), 0);
+                    return (
+                      <td key={`sub-${grp}`} className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50">
+                        {subtotal > 0 ? subtotal : '-'}
+                      </td>
+                    );
+                  })}
                   <td className="px-3 py-2 text-center font-bold text-blue-700 bg-blue-50">
                     {total}
                   </td>

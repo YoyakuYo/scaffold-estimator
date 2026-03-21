@@ -1070,17 +1070,47 @@ export default function Scaffold3DView({
       // ══════════════════════════════════════════════════════
       // BUILD POLYGON VERTICES & POSITION WALLS
       // ══════════════════════════════════════════════════════
+
+      // Partition walls into tier groups for stepped/setback buildings.
+      // Each tier group gets its own footprint polygon.
+      const tierGroups: Array<{ tierIndex: number; baseHeightMm: number; walls: WallCalculationResult[]; wallIndices: number[] }> = [];
+      {
+        const tierMap = new Map<number, { walls: WallCalculationResult[]; wallIndices: number[]; baseHeightMm: number }>();
+        for (let wi = 0; wi < walls.length; wi++) {
+          const w = walls[wi];
+          const ti = (w as any).tierIndex ?? 0;
+          const bh = (w as any).baseHeightMm ?? 0;
+          if (!tierMap.has(ti)) tierMap.set(ti, { walls: [], wallIndices: [], baseHeightMm: bh });
+          const entry = tierMap.get(ti)!;
+          entry.walls.push(w);
+          entry.wallIndices.push(wi);
+        }
+        for (const [ti, entry] of [...tierMap.entries()].sort((a, b) => a[0] - b[0])) {
+          tierGroups.push({ tierIndex: ti, baseHeightMm: entry.baseHeightMm, walls: entry.walls, wallIndices: entry.wallIndices });
+        }
+      }
+      const hasTiers = tierGroups.length > 1;
+
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices ?? (result as any)?.polygonVertices;
-      let verts = buildFootprintPolygonXZ(walls, storedVerts);
-      let vertsOk =
-        verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-      // Safety net: if stored vertices produced invalid geometry, retry without them
-      if (!vertsOk && storedVerts && storedVerts.length > 0) {
-        verts = buildFootprintPolygonXZ(walls, undefined);
-        vertsOk =
-          verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+
+      // For tier-aware rendering: build a polygon per tier group.
+      // Ground tier (tierIndex 0) uses storedVerts if available; upper tiers use wall lengths only.
+      const tierPolygons: Array<{ verts: PointXZ[] }> = [];
+      for (const tg of tierGroups) {
+        const sv = tg.tierIndex === 0 ? storedVerts : undefined;
+        let tverts = buildFootprintPolygonXZ(tg.walls, sv);
+        let tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+        if (!tok && sv && sv.length > 0) {
+          tverts = buildFootprintPolygonXZ(tg.walls, undefined);
+          tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+        }
+        tierPolygons.push({ verts: tok ? tverts : [] });
       }
+
+      // Primary polygon = ground tier (or first valid tier)
+      let verts = tierPolygons[0]?.verts ?? [];
+      let vertsOk = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
       if (!vertsOk) {
         setError(
           walls.length === 0
@@ -1122,71 +1152,90 @@ export default function Scaffold3DView({
       const standoffMm = WALL_TO_INNER_POSTS_MM;
       const standoffM = standoffMm / 1000;
 
-      // Open polygon (L-shape): walls.length < verts.length; endpoints don't share corners
-      const isOpenPolygon = walls.length < verts.length;
-      // Closed polygon winding:
-      // area > 0 (CCW) => outward normal is right-hand normal, so flip left normal by -1.
-      const outwardNormalSign = !isOpenPolygon && verts.length >= 3
-        ? (signedAreaXZ(verts) > 0 ? -1 : 1)
-        : 1;
-      // Near-row path (building wall + standoff) with mitered corner joins.
-      // This keeps 3D wall placement consistent with the 2D plan strip geometry.
-      const nearRowPath = buildOffsetPathXZ(verts, walls.length, outwardNormalSign, standoffM, isOpenPolygon);
-
-      // L-shaped corner: ~90° turn. Full corner rule (300+600, overrun, walkable deck) only for these.
-      // Non-L-shaped corners use pattanko (small filler planks) instead.
-      const COS_L_SHAPED_MAX = 0.35; // |cos| < 0.35 => angle between ~70° and ~110°
+      // Pre-compute per-tier polygon data (normal signs, offset paths, corner flags)
+      const tierPolyData: Array<{
+        tierVerts: PointXZ[];
+        isOpen: boolean;
+        normalSign: number;
+        nearRow: PointXZ[];
+        hasCornerAtStart: boolean[];
+        hasCornerAtEnd: boolean[];
+        isLShapedAtStart: boolean[];
+        isLShapedAtEnd: boolean[];
+      }> = [];
+      const COS_L_SHAPED_MAX = 0.35;
       const COS_STRAIGHT_MIN = 0.98;
-      const hasCornerAtStart: boolean[] = [];
-      const hasCornerAtEnd: boolean[] = [];
-      const isLShapedAtStart: boolean[] = [];
-      const isLShapedAtEnd: boolean[] = [];
-      for (let i = 0; i < walls.length; i++) {
-        hasCornerAtStart.push(false);
-        hasCornerAtEnd.push(false);
-        isLShapedAtStart.push(false);
-        isLShapedAtEnd.push(false);
-      }
-      if (walls.length >= 2 && verts.length >= 3) {
-        // Closed polygon: every vertex j is a corner; use modulo for prev/next.
-        // Open polygon (e.g. 2 walls, 3 verts): only vertex 1 is the corner between wall 0 and 1.
-        const nV = verts.length;
-        const nW = walls.length;
-        const vertexIndices = !isOpenPolygon
-          ? Array.from({ length: nV }, (_, j) => j)
-          : [1];
-        for (const j of vertexIndices) {
-          const prev = (j - 1 + nV) % nV;
-          const next = (j + 1) % nV;
-          const dxPrev = verts[j].x - verts[prev].x;
-          const dzPrev = verts[j].z - verts[prev].z;
-          const dxNext = verts[next].x - verts[j].x;
-          const dzNext = verts[next].z - verts[j].z;
-          const lenPrev = Math.hypot(dxPrev, dzPrev);
-          const lenNext = Math.hypot(dxNext, dzNext);
-          if (lenPrev < 1e-6 || lenNext < 1e-6) continue;
-          const cosAngle = (dxPrev * dxNext + dzPrev * dzNext) / (lenPrev * lenNext);
-          const absCos = Math.abs(cosAngle);
-          const isCorner = absCos < COS_STRAIGHT_MIN;
-          const isL = isCorner && absCos < COS_L_SHAPED_MAX;
-          const wallEnd = !isOpenPolygon ? (j - 1 + nW) % nW : j - 1;
-          const wallStart = !isOpenPolygon ? j % nW : j;
-          if (wallEnd >= 0 && wallEnd < nW) {
-            hasCornerAtEnd[wallEnd] = isCorner;
-            isLShapedAtEnd[wallEnd] = isL;
-          }
-          if (wallStart >= 0 && wallStart < nW) {
-            hasCornerAtStart[wallStart] = isCorner;
-            isLShapedAtStart[wallStart] = isL;
+
+      for (let tgi = 0; tgi < tierGroups.length; tgi++) {
+        const tg = tierGroups[tgi];
+        const tv = tierPolygons[tgi]?.verts ?? verts;
+        const tWalls = tg.walls;
+        const tOpen = tWalls.length < tv.length;
+        const tSign = !tOpen && tv.length >= 3
+          ? (signedAreaXZ(tv) > 0 ? -1 : 1)
+          : 1;
+        const tNear = buildOffsetPathXZ(tv, tWalls.length, tSign, standoffM, tOpen);
+
+        const hCS: boolean[] = [], hCE: boolean[] = [], iLS: boolean[] = [], iLE: boolean[] = [];
+        for (let wi = 0; wi < tWalls.length; wi++) { hCS.push(false); hCE.push(false); iLS.push(false); iLE.push(false); }
+        if (tWalls.length >= 2 && tv.length >= 3) {
+          const nV = tv.length, nW = tWalls.length;
+          const vIdxs = !tOpen ? Array.from({ length: nV }, (_, j) => j) : [1];
+          for (const j of vIdxs) {
+            const prev = (j - 1 + nV) % nV, next = (j + 1) % nV;
+            const dxP = tv[j].x - tv[prev].x, dzP = tv[j].z - tv[prev].z;
+            const dxN = tv[next].x - tv[j].x, dzN = tv[next].z - tv[j].z;
+            const lP = Math.hypot(dxP, dzP), lN = Math.hypot(dxN, dzN);
+            if (lP < 1e-6 || lN < 1e-6) continue;
+            const cosA = (dxP * dxN + dzP * dzN) / (lP * lN);
+            const absC = Math.abs(cosA);
+            const isCor = absC < COS_STRAIGHT_MIN, isL = isCor && absC < COS_L_SHAPED_MAX;
+            const wEnd = !tOpen ? (j - 1 + nW) % nW : j - 1;
+            const wStart = !tOpen ? j % nW : j;
+            if (wEnd >= 0 && wEnd < nW) { hCE[wEnd] = isCor; iLE[wEnd] = isL; }
+            if (wStart >= 0 && wStart < nW) { hCS[wStart] = isCor; iLS[wStart] = isL; }
           }
         }
+        tierPolyData.push({
+          tierVerts: tv, isOpen: tOpen, normalSign: tSign, nearRow: tNear,
+          hasCornerAtStart: hCS, hasCornerAtEnd: hCE, isLShapedAtStart: iLS, isLShapedAtEnd: iLE,
+        });
       }
 
+      // Legacy aliases for ground-tier polygon (used by building rendering below)
+      const isOpenPolygon = tierPolyData[0]?.isOpen ?? (walls.length < verts.length);
+      const outwardNormalSign = tierPolyData[0]?.normalSign ?? 1;
+      const nearRowPath = tierPolyData[0]?.nearRow ?? [];
+      const hasCornerAtStart = tierPolyData[0]?.hasCornerAtStart ?? [];
+      const hasCornerAtEnd = tierPolyData[0]?.hasCornerAtEnd ?? [];
+      const isLShapedAtStart = tierPolyData[0]?.isLShapedAtStart ?? [];
+      const isLShapedAtEnd = tierPolyData[0]?.isLShapedAtEnd ?? [];
+
+      // Render scaffold for each wall, using the correct tier polygon
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
-        const v1 = verts[i];
-        const v2 = verts[(i + 1) % verts.length];
+
+        // Find which tier group this wall belongs to
+        let tgi = 0;
+        let localIdx = i;
+        for (let g = 0; g < tierGroups.length; g++) {
+          const gIdx = tierGroups[g].wallIndices.indexOf(i);
+          if (gIdx >= 0) { tgi = g; localIdx = gIdx; break; }
+        }
+        const tpd = tierPolyData[tgi];
+        const tierV = tpd?.tierVerts ?? verts;
+
+        // Center upper tier polygons on the same centroid as ground tier
+        // so all tiers are visually aligned
+        const tierCx = tierV.reduce((s, v) => s + v.x, 0) / tierV.length;
+        const tierCz = tierV.reduce((s, v) => s + v.z, 0) / tierV.length;
+        const tierOffX = hasTiers ? (cx - tierCx) : 0;
+        const tierOffZ = hasTiers ? (cz - tierCz) : 0;
+
+        const v1 = { x: tierV[localIdx].x + tierOffX, z: tierV[localIdx].z + tierOffZ };
+        const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
+        const v2 = { x: tierV[v2Idx].x + tierOffX, z: tierV[v2Idx].z + tierOffZ };
 
         // Edge direction on XZ plane
         const dx = v2.x - v1.x;
@@ -1194,11 +1243,15 @@ export default function Scaffold3DView({
         const edgeLen = Math.hypot(dx, dz);
         if (edgeLen < 0.001) continue;
 
-        // Outward normal from polygon winding. More stable than centroid checks for concave shapes.
-        let nx = outwardNormalSign * (-dz / edgeLen);
-        let nz = outwardNormalSign * (dx / edgeLen);
-        // Open polyline fallback (1-2 walls): keep centroid-based orientation.
-        if (isOpenPolygon) {
+        // Use tier-specific polygon data for normals and corners
+        const tierIsOpen = tpd?.isOpen ?? isOpenPolygon;
+        const tierNormSign = tpd?.normalSign ?? outwardNormalSign;
+        const tierNearRow = tpd?.nearRow ?? nearRowPath;
+
+        // Outward normal from polygon winding.
+        let nx = tierNormSign * (-dz / edgeLen);
+        let nz = tierNormSign * (dx / edgeLen);
+        if (tierIsOpen) {
           const midX = (v1.x + v2.x) / 2;
           const midZ = (v1.z + v2.z) / 2;
           const toCenterX = cx - midX;
@@ -1210,20 +1263,31 @@ export default function Scaffold3DView({
         }
         const fallbackStart = { x: v1.x + nx * standoffM, z: v1.z + nz * standoffM };
         const fallbackEnd = { x: v2.x + nx * standoffM, z: v2.z + nz * standoffM };
-        const nearStart = nearRowPath[i] ?? fallbackStart;
-        const nearEndIdx = isOpenPolygon ? i + 1 : ((i + 1) % nearRowPath.length);
-        const nearEnd = nearRowPath[nearEndIdx] ?? fallbackEnd;
+        const tierNearStart = tierNearRow[localIdx];
+        const tierNearEndIdx = tierIsOpen ? localIdx + 1 : ((localIdx + 1) % tierNearRow.length);
+        const tierNearEnd = tierNearRow[tierNearEndIdx];
+        const nearStart = tierNearStart
+          ? { x: tierNearStart.x + (hasTiers ? (cx - (tierV.reduce((s, v) => s + v.x, 0) / tierV.length)) : 0),
+              z: tierNearStart.z + (hasTiers ? (cz - (tierV.reduce((s, v) => s + v.z, 0) / tierV.length)) : 0) }
+          : fallbackStart;
+        const nearEnd = tierNearEnd
+          ? { x: tierNearEnd.x + (hasTiers ? (cx - (tierV.reduce((s, v) => s + v.x, 0) / tierV.length)) : 0),
+              z: tierNearEnd.z + (hasTiers ? (cz - (tierV.reduce((s, v) => s + v.z, 0) / tierV.length)) : 0) }
+          : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
         const nearDz = nearEnd.z - nearStart.z;
         const alignedLen = Math.hypot(nearDx, nearDz);
         if (alignedLen < 1e-6) continue;
 
-        // Determine if wall start/end are corners (shared vertex with adjacent walls).
-        // Full corner rule (300+600 / 300 overrun) only for L-shaped (~90°) corners; else use pattanko.
-        const isStartCorner = (!isOpenPolygon || i > 0) && (hasCornerAtStart[i] ?? false);
-        const isEndCorner = (!isOpenPolygon || i < walls.length - 1) && (hasCornerAtEnd[i] ?? false);
-        const isStartLShaped = isStartCorner && (isLShapedAtStart[i] ?? false);
-        const isEndLShaped = isEndCorner && (isLShapedAtEnd[i] ?? false);
+        // Tier-specific corner flags
+        const tHCS = tpd?.hasCornerAtStart ?? hasCornerAtStart;
+        const tHCE = tpd?.hasCornerAtEnd ?? hasCornerAtEnd;
+        const tILS = tpd?.isLShapedAtStart ?? isLShapedAtStart;
+        const tILE = tpd?.isLShapedAtEnd ?? isLShapedAtEnd;
+        const isStartCorner = (!tierIsOpen || localIdx > 0) && (tHCS[localIdx] ?? false);
+        const isEndCorner = (!tierIsOpen || localIdx < tierGroups[tgi].walls.length - 1) && (tHCE[localIdx] ?? false);
+        const isStartLShaped = isStartCorner && (tILS[localIdx] ?? false);
+        const isEndLShaped = isEndCorner && (tILE[localIdx] ?? false);
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
@@ -1242,8 +1306,9 @@ export default function Scaffold3DView({
         // Scale/place wall run. Per 足場コーナー詳細図 (L-shaped only):
         // wall end extends 300mm past corner, then one 600mm span (total +900mm).
         // Wall start at L-corner: first span overruns 300mm so 1800 can go beyond wall and fill gap.
-        const useCornerExtension = walls.length >= 2 && !isOpenPolygon && isEndLShaped;
-        const useStartCornerExtension = walls.length >= 2 && !isOpenPolygon && isStartLShaped;
+        const tierWallCount = tierGroups[tgi]?.walls.length ?? walls.length;
+        const useCornerExtension = tierWallCount >= 2 && !tierIsOpen && isEndLShaped;
+        const useStartCornerExtension = tierWallCount >= 2 && !tierIsOpen && isStartLShaped;
         const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
         const baseLen = Math.max(runLenM, 1e-6);
         let desiredLen = alignedLen;
@@ -1271,15 +1336,18 @@ export default function Scaffold3DView({
         const tx = nearStart.x - cx;
         const tz = nearStart.z - cz;
 
+        // Tier-wall elevation: scaffold starts at baseHeightMm instead of ground
+        const baseYM = ((wall as any).baseHeightMm ?? 0) / 1000;
+
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
         // Row 0: local X → (edgeDirX, 0, edgeDirZ) maps to world XZ
-        // Row 1: local Y → (0, 1, 0) stays up
+        // Row 1: local Y → (0, 1, 0) stays up, offset by tier base height
         // Row 2: local Z → (nx, 0, nz) maps to outward normal
         const matrix = new THREE.Matrix4();
         matrix.set(
           edgeDirX, 0, nx, tx,
-          0,        1, 0,  0,
+          0,        1, 0,  baseYM,
           edgeDirZ, 0, nz, tz,
           0,        0, 0,  1,
         );
@@ -1288,10 +1356,10 @@ export default function Scaffold3DView({
         scene.add(wallRoot);
         wallRenderInfos[i] = { root: wallRoot, postX, widthM, spansMm, startPostIdx };
 
-        // Track extents
+        // Track extents (including tier base height offset)
         const levels = wall.levelCalc.fullLevels;
         const levelsShown = levels;
-        const totalH = GROUND_Y + JACK_H + levelsShown * LEVEL_H + (levelsShown >= levels ? topGuardM : 0);
+        const totalH = baseYM + GROUND_Y + JACK_H + levelsShown * LEVEL_H + (levelsShown >= levels ? topGuardM : 0);
         if (totalH > maxH) maxH = totalH;
 
         const dist = Math.hypot(v1.x - cx, v1.z - cz);
