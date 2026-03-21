@@ -1236,7 +1236,13 @@ function ScaffoldPageContent() {
                     const wallLengthsMm = isIfc
                       ? footprint.wallLengthsMm
                       : (correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm);
-                    const wallHeightsMm = footprint.wallHeightsMm;
+                    // If AI returned pixel-scale wall heights (all < 1800mm), treat buildingHeightMm as authoritative
+                    // and ignore per-wall heights (they'll be overridden by the sanitizer on submit anyway).
+                    const wallHeightsMmRaw = footprint.wallHeightsMm;
+                    const wallHeightsMm = Array.isArray(wallHeightsMmRaw) && wallHeightsMmRaw.length > 0
+                      && wallHeightsMmRaw.every((h) => h < 1800)
+                      ? undefined
+                      : wallHeightsMmRaw;
                     const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
                       footprint.vertices,
                       footprint.buildingHeightMm,
@@ -1647,9 +1653,18 @@ function ScaffoldPageContent() {
                               : { ...pw };
                           });
                         }
+                        // Enforce minimum wall dimensions to prevent 0-level scaffold
+                        // (can happen when AI returns pixel-scale coordinates instead of real mm)
+                        const MIN_WALL_HEIGHT_MM = 1800;
+                        const MIN_WALL_LENGTH_MM = 600;
+                        const sanitizedWalls = finalWalls.map((w) => ({
+                          ...w,
+                          wallHeightMm: Math.max(w.wallHeightMm ?? aiBimPreview.buildingHeightMm, MIN_WALL_HEIGHT_MM),
+                          wallLengthMm: Math.max(w.wallLengthMm, MIN_WALL_LENGTH_MM),
+                        }));
                         const dto = {
                           ...aiBimPreview.dto,
-                          walls: finalWalls,
+                          walls: sanitizedWalls,
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
                           ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };

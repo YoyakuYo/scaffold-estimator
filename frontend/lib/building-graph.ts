@@ -60,27 +60,57 @@ function isLikelyFractionCoords(points: Array<{ x: number; z: number }>): boolea
 /**
  * Normalize footprint to mm. Uses UNIFORM scale for X and Z (same factor) to preserve
  * aspect ratio and avoid distortion. 90° corners in the source are preserved.
+ *
+ * Coordinate detection logic:
+ *  - 0-1 fractions (maxCoord ≤ 1.1): scale to target mm using refLengthMm
+ *  - Real mm (max spread ≥ 3000 OR any wallLengthsMm ≥ 3000): use as-is
+ *  - Pixel-scale (spread 1.1–3000 with no mm hint): scale to target mm (AI returned pixel coords)
  */
 function normalizeFootprintToMm(
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
   refLengthMm?: number,
+  wallLengthsMm?: number[],
 ): Array<{ x: number; z: number }> {
   const raw = vertices.map((v) => ({
     x: 'xFrac' in v ? v.xFrac : v.x,
     z: 'yFrac' in v ? v.yFrac : v.y,
   }));
-  if (!isLikelyFractionCoords(raw)) {
-    return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
-  }
 
   const xs = raw.map((p) => p.x);
   const zs = raw.map((p) => p.z);
   const spreadX = Math.max(...xs) - Math.min(...xs);
   const spreadZ = Math.max(...zs) - Math.min(...zs);
-  const spread = Math.max(spreadX, spreadZ, 0.001);
-  const target = Math.max(6000, refLengthMm ?? 10000);
-  const scale = target / spread;
-  return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
+  const maxSpread = Math.max(spreadX, spreadZ);
+  const maxCoord = Math.max(Math.max(...xs.map(Math.abs)), Math.max(...zs.map(Math.abs)));
+
+  if (isLikelyFractionCoords(raw)) {
+    // 0-1 normalized coords: scale to mm
+    const spread = Math.max(maxSpread, 0.001);
+    const target = Math.max(6000, refLengthMm ?? 10000);
+    const scale = target / spread;
+    return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
+  }
+
+  // If wallLengthsMm hint shows real mm scale (any length >= 3000mm), trust as-is
+  const hasRealMmHint =
+    maxSpread >= 3000 ||
+    (Array.isArray(wallLengthsMm) && wallLengthsMm.some((l) => l >= 3000));
+
+  if (hasRealMmHint) {
+    // Already in mm: use as-is
+    return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
+  }
+
+  // Pixel-scale coords: spread is 1.1–3000, no real-mm hint (AI returned pixel coordinates).
+  // Scale to target mm so the building footprint is at least 6m on its longest side.
+  if (maxCoord > 1.1) {
+    const spread = Math.max(maxSpread, 1);
+    const target = Math.max(6000, refLengthMm ?? 10000);
+    const scale = target / spread;
+    return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
+  }
+
+  return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
 }
 
 export interface BuildGraphOptions {
@@ -102,7 +132,7 @@ export function buildGraphFromFootprint(
   const n = vertices.length;
   if (n < 3) return { nodes: [], edges: [] };
 
-  let mm = normalizeFootprintToMm(vertices, refLengthMm);
+  let mm = normalizeFootprintToMm(vertices, refLengthMm, options?.wallLengthsMm);
 
   // Skip orthogonal correction when coordinates are already in precise mm
   // (e.g. from DXF parse or AI vision with scale). Snapping precise coordinates

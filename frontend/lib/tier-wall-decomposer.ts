@@ -148,30 +148,49 @@ function normalizeTiers(
 }
 
 /**
- * Resolve tier vertices from fractional or absolute coordinates to mm.
+ * Resolve tier vertices from fractional, pixel, or absolute mm coordinates to mm.
  */
 function resolveTierVertices(
   vertices: BuildingMassingTier['vertices'],
   walls: WallInput[],
   avgSide: number,
 ): Array<{ x: number; y: number }> {
-  return vertices.map((v) => {
+  const raw = vertices.map((v) => {
     if ('xFrac' in v && 'yFrac' in v) {
-      return {
-        x: (v as any).xFrac * avgSide * (walls.length / 4),
-        y: (v as any).yFrac * avgSide * (walls.length / 4),
-      };
+      return { x: (v as any).xFrac as number, y: (v as any).yFrac as number, isFrac: true };
     }
     const av = v as { x: number; y: number };
-    // If values look like mm already (>100), use as-is; if fractional (<2), scale
-    if (Math.abs(av.x) < 2 && Math.abs(av.y) < 2) {
-      return {
-        x: av.x * avgSide * (walls.length / 4),
-        y: av.y * avgSide * (walls.length / 4),
-      };
-    }
-    return { x: av.x, y: av.y };
+    return { x: av.x, y: av.y, isFrac: false };
   });
+
+  if (raw.length === 0) return [];
+
+  const xs = raw.map((p) => p.x);
+  const ys = raw.map((p) => p.y);
+  const maxCoord = Math.max(Math.max(...xs.map(Math.abs)), Math.max(...ys.map(Math.abs)));
+  const spreadX = Math.max(...xs) - Math.min(...xs);
+  const spreadY = Math.max(...ys) - Math.min(...ys);
+  const maxSpread = Math.max(spreadX, spreadY);
+
+  const scaleFactor = walls.length > 0 ? Math.max(walls.length / 4, 1) : 1;
+
+  if (maxCoord <= 1.1 && maxSpread <= 1.1) {
+    // 0-1 fractional coords
+    return raw.map((p) => ({
+      x: p.x * avgSide * scaleFactor,
+      y: p.y * avgSide * scaleFactor,
+    }));
+  }
+
+  if (maxSpread > 1.1 && maxSpread < 3000) {
+    // Pixel-scale coordinates: scale to mm using the same approach as wall vertices
+    const target = Math.max(6000, avgSide * scaleFactor * 4);
+    const scale = target / Math.max(maxSpread, 1);
+    return raw.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+  }
+
+  // Already in mm (maxSpread >= 3000)
+  return raw.map((p) => ({ x: p.x, y: p.y }));
 }
 
 /**
