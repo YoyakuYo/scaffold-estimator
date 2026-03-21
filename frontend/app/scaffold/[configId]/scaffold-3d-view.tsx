@@ -23,6 +23,7 @@ import {
   computeInnerParallelWallSkipSet,
   type FacadeTierPolyMeta,
 } from '@/lib/scaffold-facade-outer-filter';
+import { normaliseMassingVerticesToFootprintMeters } from '@/lib/bim-massing-footprint-verts';
 
 /**
  * 3D Scaffold View — Closed Polygon
@@ -1172,6 +1173,41 @@ export default function Scaffold3DView({
       // Center the polygon
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
       const cz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
+
+      // AI BIM: upper-tier footprints from massing vertices (real setbacks), not synthetic rectangles.
+      // Also disables centroid shifting below so straight shared walls (e.g. back) stay colinear.
+      const massingTiersSorted =
+        independentExternalWallRuns && Array.isArray((result as any)?.massingTiers)
+          ? ([...(result as any).massingTiers] as Array<{
+              vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+              topHeightMm: number;
+              baseHeightMm?: number;
+            }>)
+              .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
+              .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0))
+          : [];
+      const rawOutlineVertsForScale: Array<{ x: number; z: number }> =
+        Array.isArray(storedVerts) && storedVerts.length >= 3
+          ? storedVerts.map((v: any) => ({
+              x: v.xFrac ?? v.x ?? 0,
+              z: v.yFrac ?? v.y ?? 0,
+            }))
+          : [];
+      if (massingTiersSorted.length > 0 && rawOutlineVertsForScale.length >= 3) {
+        for (let tgi = 0; tgi < tierGroups.length; tgi++) {
+          const tg = tierGroups[tgi];
+          if (tg.tierIndex === 0) continue; // ground footprint stays wall-length + polygonVertices
+          const mt = massingTiersSorted[tg.tierIndex];
+          if (!mt?.vertices || mt.vertices.length < 3) continue;
+          const nv = normaliseMassingVerticesToFootprintMeters(mt.vertices, verts, rawOutlineVertsForScale);
+          if (nv.length >= 3 && nv.every((p) => Number.isFinite(p.x) && Number.isFinite(p.z))) {
+            tierPolygons[tgi] = { verts: nv };
+          }
+        }
+      }
+
+      const alignTierCentroidToGround = hasTiers && !independentExternalWallRuns;
+
       const signedAreaXZ = (pts: Array<{ x: number; z: number }>): number => {
         let area = 0;
         for (let i = 0; i < pts.length; i++) {
@@ -1267,6 +1303,7 @@ export default function Scaffold3DView({
         groundCentroidX: cx,
         groundCentroidZ: cz,
         groundTierVerts: groundFootprintForFilter,
+        tierCentroidShift: alignTierCentroidToGround,
         enabled:
           independentExternalWallRuns &&
           tierGroups.length > 1 &&
@@ -1301,12 +1338,12 @@ export default function Scaffold3DView({
         const tpd = tierPolyData[tgi];
         const tierV = tpd?.tierVerts ?? verts;
 
-        // Center upper tier polygons on the same centroid as ground tier
-        // so all tiers are visually aligned
+        // Legacy: center synthetic tier polygons on ground centroid. AI BIM: off — massing verts
+        // already share footprint space; shifting breaks straight shared walls (e.g. back façade).
         const tierCx = tierV.reduce((s, v) => s + v.x, 0) / tierV.length;
         const tierCz = tierV.reduce((s, v) => s + v.z, 0) / tierV.length;
-        const tierOffX = hasTiers ? (cx - tierCx) : 0;
-        const tierOffZ = hasTiers ? (cz - tierCz) : 0;
+        const tierOffX = alignTierCentroidToGround ? (cx - tierCx) : 0;
+        const tierOffZ = alignTierCentroidToGround ? (cz - tierCz) : 0;
 
         const v1 = { x: tierV[localIdx].x + tierOffX, z: tierV[localIdx].z + tierOffZ };
         const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
@@ -1341,13 +1378,19 @@ export default function Scaffold3DView({
         const tierNearStart = tierNearRow[localIdx];
         const tierNearEndIdx = tierIsOpen ? localIdx + 1 : ((localIdx + 1) % tierNearRow.length);
         const tierNearEnd = tierNearRow[tierNearEndIdx];
+        const tierCxNear = tierV.reduce((s, v) => s + v.x, 0) / tierV.length;
+        const tierCzNear = tierV.reduce((s, v) => s + v.z, 0) / tierV.length;
         const nearStart = tierNearStart
-          ? { x: tierNearStart.x + (hasTiers ? (cx - (tierV.reduce((s, v) => s + v.x, 0) / tierV.length)) : 0),
-              z: tierNearStart.z + (hasTiers ? (cz - (tierV.reduce((s, v) => s + v.z, 0) / tierV.length)) : 0) }
+          ? {
+              x: tierNearStart.x + (alignTierCentroidToGround ? (cx - tierCxNear) : 0),
+              z: tierNearStart.z + (alignTierCentroidToGround ? (cz - tierCzNear) : 0),
+            }
           : fallbackStart;
         const nearEnd = tierNearEnd
-          ? { x: tierNearEnd.x + (hasTiers ? (cx - (tierV.reduce((s, v) => s + v.x, 0) / tierV.length)) : 0),
-              z: tierNearEnd.z + (hasTiers ? (cz - (tierV.reduce((s, v) => s + v.z, 0) / tierV.length)) : 0) }
+          ? {
+              x: tierNearEnd.x + (alignTierCentroidToGround ? (cx - tierCxNear) : 0),
+              z: tierNearEnd.z + (alignTierCentroidToGround ? (cz - tierCzNear) : 0),
+            }
           : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
         const nearDz = nearEnd.z - nearStart.z;
@@ -1473,56 +1516,54 @@ export default function Scaffold3DView({
         (clickMesh as any).userData = { wallIndex: i };
         scene.add(clickMesh);
 
-        // ── Dimension lines (span sizes + height) ──
-        const dimGroup = new THREE.Group();
-        const dimOffset = standoffM + wallWidthM + 0.4;
-        const startX = v1.x - cx + nx * dimOffset;
-        const startZ = v1.z - cz + nz * dimOffset;
-        const endX = v2.x - cx + nx * dimOffset;
-        const endZ = v2.z - cz + nz * dimOffset;
-        const dimY = GROUND_Y - 0.15;
+        // Dimension lines + text sprites — clutter AI BIM view ("star" noise); keep for default mode.
+        if (!independentExternalWallRuns) {
+          const dimGroup = new THREE.Group();
+          const dimOffset = standoffM + wallWidthM + 0.4;
+          const startX = v1.x - cx + nx * dimOffset;
+          const startZ = v1.z - cz + nz * dimOffset;
+          const endX = v2.x - cx + nx * dimOffset;
+          const endZ = v2.z - cz + nz * dimOffset;
+          const dimY = GROUND_Y - 0.15;
 
-        // Span dimension lines along wall length
-        const spans = spansMm ?? wall.spans ?? [];
-        let accum = 0;
-        const wallLenM = edgeLen;
-        const totalSpanMm = spans.reduce((s: number, v: number) => s + v, 0) || 1;
-        for (let si = 0; si < spans.length; si++) {
-          const t1 = accum / totalSpanMm;
-          accum += spans[si];
-          const t2 = accum / totalSpanMm;
-          const p1 = new THREE.Vector3(
-            startX + (endX - startX) * t1, dimY,
-            startZ + (endZ - startZ) * t1,
+          const spans = spansMm ?? wall.spans ?? [];
+          let accum = 0;
+          const totalSpanMm = spans.reduce((s: number, v: number) => s + v, 0) || 1;
+          for (let si = 0; si < spans.length; si++) {
+            const t1 = accum / totalSpanMm;
+            accum += spans[si];
+            const t2 = accum / totalSpanMm;
+            const p1 = new THREE.Vector3(
+              startX + (endX - startX) * t1, dimY,
+              startZ + (endZ - startZ) * t1,
+            );
+            const p2 = new THREE.Vector3(
+              startX + (endX - startX) * t2, dimY,
+              startZ + (endZ - startZ) * t2,
+            );
+            addDimLine(dimGroup, p1, p2, `${spans[si]}`, 0.08);
+          }
+
+          const totalDimY = dimY - 0.5;
+          addDimLine(
+            dimGroup,
+            new THREE.Vector3(startX, totalDimY, startZ),
+            new THREE.Vector3(endX, totalDimY, endZ),
+            `${(wall.wallLengthMm ?? 0).toLocaleString()}mm`,
+            0.1,
           );
-          const p2 = new THREE.Vector3(
-            startX + (endX - startX) * t2, dimY,
-            startZ + (endZ - startZ) * t2,
+
+          const hx = v1.x - cx + nx * dimOffset;
+          const hz = v1.z - cz + nz * dimOffset;
+          addDimLine(
+            dimGroup,
+            new THREE.Vector3(hx, GROUND_Y, hz),
+            new THREE.Vector3(hx, totalH, hz),
+            `${Math.round(totalH * 1000).toLocaleString()}mm`,
+            0.1,
           );
-          addDimLine(dimGroup, p1, p2, `${spans[si]}`, 0.08);
+          scene.add(dimGroup);
         }
-
-        // Total length line (below span lines)
-        const totalDimY = dimY - 0.5;
-        addDimLine(
-          dimGroup,
-          new THREE.Vector3(startX, totalDimY, startZ),
-          new THREE.Vector3(endX, totalDimY, endZ),
-          `${(wall.wallLengthMm ?? 0).toLocaleString()}mm`,
-          0.1,
-        );
-
-        // Height line (vertical, at start of wall)
-        const hx = v1.x - cx + nx * dimOffset;
-        const hz = v1.z - cz + nz * dimOffset;
-        addDimLine(
-          dimGroup,
-          new THREE.Vector3(hx, GROUND_Y, hz),
-          new THREE.Vector3(hx, totalH, hz),
-          `${Math.round(totalH * 1000).toLocaleString()}mm`,
-          0.1,
-        );
-        scene.add(dimGroup);
 
         wallObjectsRef.current[i] = {
           root: wallRoot,

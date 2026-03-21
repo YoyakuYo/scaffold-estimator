@@ -64,6 +64,8 @@ export function computeInnerParallelWallSkipSet(params: {
   groundCentroidZ: number;
   /** Ground-tier footprint; used to drop edges perpendicular to main 4 walls (step returns). */
   groundTierVerts?: Array<{ x: number; z: number }>;
+  /** When false, tier polygons are already in shared world space (no centroid shift). */
+  tierCentroidShift?: boolean;
   enabled: boolean;
 }): Set<number> {
   const skip = new Set<number>();
@@ -76,6 +78,7 @@ export function computeInnerParallelWallSkipSet(params: {
     groundCentroidX,
     groundCentroidZ,
     groundTierVerts,
+    tierCentroidShift = true,
   } = params;
 
   if (tierGroups.length <= 1 || wallCount <= 4) return skip;
@@ -85,7 +88,7 @@ export function computeInnerParallelWallSkipSet(params: {
       ? groundFacadeUnitTangents(groundTierVerts)
       : [];
 
-  const hasTierOffset = tierGroups.length > 1;
+  const hasTierOffset = tierGroups.length > 1 && tierCentroidShift;
   type Bucket = Array<{ wallIndex: number; outwardScore: number }>;
   const buckets = new Map<string, Bucket>();
 
