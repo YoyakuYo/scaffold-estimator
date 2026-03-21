@@ -137,6 +137,8 @@ type IfcPreviewMesh = {
   vertices: Float32Array;
   indices: Uint32Array;
   color: { r: number; g: number; b: number; a: number };
+  elementType: import('@/lib/ifc-loader').IfcElementType;
+  expressID: number;
 };
 
 const IFC_PREVIEW_MESH_CACHE = new Map<string, IfcPreviewMesh[]>();
@@ -464,6 +466,7 @@ function Building3DPreview({
 
       // Optional: overlay actual IFC mesh in preview (same footprint frame).
       const ifcSource = ifcArrayBuffer || ifcFileUrl;
+      let previewBimMats: any = null;
       if (ifcSource) {
         (async () => {
           try {
@@ -540,15 +543,23 @@ function Building3DPreview({
               geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
               geo.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
 
-              const mat = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(meshData.color.r, meshData.color.g, meshData.color.b),
-                transparent: true,
-                opacity: Math.max(0.35, Math.min(0.92, meshData.color.a)),
-                side: THREE.DoubleSide,
-                roughness: 0.75,
-                metalness: 0.1,
-              });
-              ifcGroup.add(new THREE.Mesh(geo, mat));
+              let mat: THREE.Material;
+              try {
+                const { createBimMaterialSet, getMaterialForElement } = await import('@/lib/ifc-bim-materials');
+                if (!previewBimMats) previewBimMats = createBimMaterialSet(THREE);
+                mat = getMaterialForElement(previewBimMats, meshData.elementType, meshData.expressID) as THREE.Material;
+              } catch {
+                mat = new THREE.MeshStandardMaterial({
+                  color: new THREE.Color(meshData.color.r, meshData.color.g, meshData.color.b),
+                  transparent: true,
+                  opacity: Math.max(0.35, Math.min(0.92, meshData.color.a)),
+                  side: THREE.DoubleSide, roughness: 0.75, metalness: 0.1,
+                });
+              }
+              if (meshData.elementType === 'opening') continue;
+              const m = new THREE.Mesh(geo, mat);
+              m.castShadow = true; m.receiveShadow = true;
+              ifcGroup.add(m);
             }
             if (disposed) return;
             scene.add(ifcGroup);

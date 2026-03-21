@@ -1707,133 +1707,158 @@ export default function Scaffold3DView({
           }
         };
 
-        if (isAiBim) {
-          const fc = (result as any)?.bimFacadeColors as
-            | { lowerHex?: string; upperHex?: string; roofHex?: string; windowHex?: string; sillHex?: string }
-            | undefined;
-          const steppedMat = new THREE.MeshBasicMaterial({
-            color: bimHexToNumber(fc?.lowerHex, 0xc9b89a),
-            side: THREE.DoubleSide,
+        // ── Realistic building rendering with brick/concrete/roof materials ──
+        {
+          const fc = isAiBim
+            ? ((result as any)?.bimFacadeColors as
+                | { lowerHex?: string; upperHex?: string; roofHex?: string; windowHex?: string; sillHex?: string }
+                | undefined)
+            : undefined;
+
+          // Procedural brick texture for walls
+          const brickCanvas = (() => {
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 256;
+            const ctx = c.getContext('2d')!;
+            const rows = 8, cols = 4, mw = 2;
+            const bH = Math.floor(256 / rows), bW = Math.floor(256 / cols);
+            ctx.fillStyle = '#8b6a4a';
+            ctx.fillRect(0, 0, 256, 256);
+            for (let r = 0; r < rows; r++) {
+              const y = r * bH;
+              const off = (r % 2) * (bW / 2);
+              for (let col = -1; col <= cols; col++) {
+                const x = col * bW + off;
+                const rv = 140 + Math.floor(Math.random() * 50);
+                const gv = 85 + Math.floor(Math.random() * 35);
+                const bv = 55 + Math.floor(Math.random() * 25);
+                ctx.fillStyle = `rgb(${rv},${gv},${bv})`;
+                ctx.fillRect(x + mw, y + mw, bW - mw * 2, bH - mw * 2);
+                ctx.fillStyle = `rgba(0,0,0,${0.02 + Math.random() * 0.06})`;
+                ctx.fillRect(x + mw + 2, y + mw + 2, bW - mw * 2 - 4, bH - mw * 2 - 4);
+              }
+            }
+            ctx.strokeStyle = '#a09080'; ctx.lineWidth = mw;
+            for (let r = 0; r <= rows; r++) { ctx.beginPath(); ctx.moveTo(0, r * bH); ctx.lineTo(256, r * bH); ctx.stroke(); }
+            for (let r = 0; r < rows; r++) {
+              const y = r * bH, off = (r % 2) * (bW / 2);
+              for (let col = 0; col <= cols + 1; col++) { const x = col * bW + off; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + bH); ctx.stroke(); }
+            }
+            return c;
+          })();
+          const brickTex = new THREE.CanvasTexture(brickCanvas);
+          brickTex.wrapS = THREE.RepeatWrapping; brickTex.wrapT = THREE.RepeatWrapping;
+          brickTex.repeat.set(3, 3);
+
+          // Roof tile texture
+          const roofCanvas = (() => {
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 256;
+            const ctx = c.getContext('2d')!;
+            ctx.fillStyle = '#2a2a30'; ctx.fillRect(0, 0, 256, 256);
+            const tRows = 12, tCols = 8;
+            const tH = 256 / tRows, tW = 256 / tCols;
+            for (let r = 0; r < tRows; r++) {
+              const y = r * tH, off = (r % 2) * (tW / 2);
+              for (let col = -1; col <= tCols; col++) {
+                const x = col * tW + off;
+                const v = 38 + Math.floor(Math.random() * 18);
+                ctx.fillStyle = `rgb(${v},${v},${v + 4})`;
+                ctx.fillRect(x + 1, y + 1, tW - 2, tH - 2);
+                ctx.fillStyle = `rgba(255,255,255,${0.03 + Math.random() * 0.04})`;
+                ctx.fillRect(x + 1, y + 1, tW - 2, 2);
+              }
+            }
+            return c;
+          })();
+          const roofTex = new THREE.CanvasTexture(roofCanvas);
+          roofTex.wrapS = THREE.RepeatWrapping; roofTex.wrapT = THREE.RepeatWrapping;
+          roofTex.repeat.set(4, 4);
+
+          const wallMatBrick = new THREE.MeshStandardMaterial({
+            map: brickTex,
+            color: fc ? bimHexToNumber(fc.lowerHex, 0xc4886a) : 0xc4886a,
+            roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide,
           });
+          const wallMatUpper = new THREE.MeshStandardMaterial({
+            map: brickTex,
+            color: fc ? bimHexToNumber(fc.upperHex, 0xb07848) : 0xb07848,
+            roughness: 0.82, metalness: 0.0, side: THREE.DoubleSide,
+          });
+          const roofMatReal = new THREE.MeshStandardMaterial({
+            map: roofTex,
+            color: fc ? bimHexToNumber(fc.roofHex, 0x2c2c34) : 0x2c2c34,
+            roughness: 0.7, metalness: 0.05, side: THREE.DoubleSide,
+          });
+          const slabMat = new THREE.MeshStandardMaterial({
+            color: 0xd4ccc0, roughness: 0.8, metalness: 0.02, side: THREE.DoubleSide,
+          });
+
           if (hasMassingTiers) {
-            addMassingTiers(steppedMat, 0x0a0a0a, 1);
+            addMassingTiers(wallMatBrick, 0x0a0a0a, 1);
           } else if (hasSteppedWallHeights) {
-            addSteppedWallPanels(steppedMat, 0x0a0a0a, 1);
+            addSteppedWallPanels(wallMatBrick, 0x0a0a0a, 1);
           } else {
             const lowerH = buildingH * 0.48;
             const upperH = buildingH * 0.52;
-            const lowerGeo = new THREE.ExtrudeGeometry(shape, { depth: lowerH, bevelEnabled: false });
-            const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
-            const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
-
-            const lowerMat = new THREE.MeshBasicMaterial({
-              color: bimHexToNumber(fc?.lowerHex, 0xc9b89a),
-              side: THREE.DoubleSide,
-            });
-            const upperMat = new THREE.MeshBasicMaterial({
-              color: bimHexToNumber(fc?.upperHex, 0x3d3d42),
-              side: THREE.DoubleSide,
-            });
-            const roofMat = new THREE.MeshBasicMaterial({
-              color: bimHexToNumber(fc?.roofHex, 0x2f7a48),
-              side: THREE.DoubleSide,
-            });
-
             const baseY = GROUND_Y + 0.02;
-            const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat);
+
+            const lowerGeo = new THREE.ExtrudeGeometry(shape, { depth: lowerH, bevelEnabled: false });
+            const lowerMesh = new THREE.Mesh(lowerGeo, wallMatBrick);
             lowerMesh.rotation.x = -Math.PI / 2;
             lowerMesh.position.y = baseY;
+            lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
             lowerMesh.userData = { noClip: true };
             scene.add(lowerMesh);
             addBlackEdges(lowerGeo, baseY);
 
-            const upperMesh = new THREE.Mesh(upperGeo, upperMat);
+            const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
+            const upperMesh = new THREE.Mesh(upperGeo, wallMatUpper);
             upperMesh.rotation.x = -Math.PI / 2;
             upperMesh.position.y = baseY + lowerH;
+            upperMesh.castShadow = true; upperMesh.receiveShadow = true;
             upperMesh.userData = { noClip: true };
             scene.add(upperMesh);
             addBlackEdges(upperGeo, baseY + lowerH);
 
             const roofTopY = baseY + lowerH + upperH;
-            const roofMesh = new THREE.Mesh(roofGeo, roofMat);
-            roofMesh.rotation.x = -Math.PI / 2;
-            roofMesh.position.y = roofTopY;
-            roofMesh.userData = { noClip: true };
-            scene.add(roofMesh);
+            const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+            const roofMeshObj = new THREE.Mesh(roofGeo, roofMatReal);
+            roofMeshObj.rotation.x = -Math.PI / 2;
+            roofMeshObj.position.y = roofTopY;
+            roofMeshObj.castShadow = true; roofMeshObj.receiveShadow = true;
+            roofMeshObj.userData = { noClip: true };
+            scene.add(roofMeshObj);
             addBlackEdges(roofGeo, roofTopY);
 
+            // Floor slab lines
             for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
-              const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, baseY + floorY, v.z));
-              floorPts.push(floorPts[0].clone());
-              const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-              const floorLine = new THREE.Line(
-                floorGeo,
-                new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: false, opacity: 1 }),
-              );
-              floorLine.userData = { noClip: true };
-              scene.add(floorLine);
-            }
-          }
-        } else {
-          const buildingMat = new THREE.MeshStandardMaterial({
-            color: 0xd5cfc7, metalness: 0.05, roughness: 0.8,
-            transparent: true, opacity: 0.55, side: THREE.DoubleSide,
-          });
-          if (hasMassingTiers) {
-            addMassingTiers(buildingMat, 0x9ca3af, 0.8);
-          } else if (hasSteppedWallHeights) {
-            addSteppedWallPanels(buildingMat, 0x9ca3af, 0.8);
-          } else {
-            const buildingGeo = new THREE.ExtrudeGeometry(shape, { depth: buildingH, bevelEnabled: false });
-            const buildingMesh = new THREE.Mesh(buildingGeo, buildingMat);
-            buildingMesh.rotation.x = -Math.PI / 2;
-            buildingMesh.position.y = GROUND_Y + 0.02;
-            buildingMesh.userData = { noClip: true };
-            scene.add(buildingMesh);
-
-            const buildingEdgesGeo = new THREE.EdgesGeometry(buildingGeo);
-            const buildingEdges = new THREE.LineSegments(buildingEdgesGeo, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
-            buildingEdges.rotation.x = -Math.PI / 2;
-            buildingEdges.position.y = GROUND_Y + 0.02;
-            buildingEdges.userData = { noClip: true };
-            scene.add(buildingEdges);
-
-            for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
-              const floorPts = centeredVerts.map(v => new THREE.Vector3(v.x, GROUND_Y + 0.02 + floorY, v.z));
-              floorPts.push(floorPts[0].clone());
-              const floorGeo = new THREE.BufferGeometry().setFromPoints(floorPts);
-              const floorLine = new THREE.Line(floorGeo, new THREE.LineBasicMaterial({ color: 0x8b95a3, transparent: true, opacity: 0.6 }));
-              floorLine.userData = { noClip: true };
-              scene.add(floorLine);
+              const slabGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.08, bevelEnabled: false });
+              const slabObj = new THREE.Mesh(slabGeo, slabMat);
+              slabObj.rotation.x = -Math.PI / 2;
+              slabObj.position.y = baseY + floorY;
+              slabObj.userData = { noClip: true };
+              scene.add(slabObj);
             }
           }
         }
 
         if (!hasMassingTiers) {
-          // Window pattern on each facade
+          // Window pattern on each facade (glass panes + dark frames)
           const fcWin = isAiBim
             ? ((result as any)?.bimFacadeColors as { windowHex?: string; sillHex?: string } | undefined)
             : undefined;
-          const windowMat = isAiBim
-            ? new THREE.MeshBasicMaterial({
-                color: bimHexToNumber(fcWin?.windowHex, 0x6baed6),
-                transparent: true,
-                opacity: 0.92,
-                side: THREE.DoubleSide,
-              })
-            : new THREE.MeshStandardMaterial({
-                color: 0x7cb8d4, metalness: 0.3, roughness: 0.4,
-                transparent: true, opacity: 0.5, side: THREE.DoubleSide,
-              });
-          const windowSillMat = isAiBim
-            ? new THREE.MeshBasicMaterial({
-                color: bimHexToNumber(fcWin?.sillHex, 0x2d3748),
-                side: THREE.DoubleSide,
-              })
-            : new THREE.MeshStandardMaterial({
-                color: 0x4a5568, metalness: 0.2, roughness: 0.6,
-                transparent: true, opacity: 0.5,
-              });
+          const windowMat = new THREE.MeshPhysicalMaterial({
+            color: bimHexToNumber(fcWin?.windowHex, 0x88bbdd),
+            roughness: 0.05, metalness: 0.1,
+            transparent: true, opacity: 0.5,
+            side: THREE.DoubleSide,
+            envMapIntensity: 1.2,
+          });
+          const windowFrameMat = new THREE.MeshStandardMaterial({
+            color: bimHexToNumber(fcWin?.sillHex, 0x2d3748),
+            roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide,
+          });
           const windowH = floorH * 0.45;
           const windowBottomOffset = floorH * 0.3;
 
@@ -1861,24 +1886,43 @@ export default function Scaffold3DView({
 
               for (let wi = 0; wi < nWindows; wi++) {
                 const t = (startOffset + wi * windowSpacing) / edgeLen;
-                const wx = v1.x + edgeDx * t + normalX * 0.01;
-                const wz = v1.z + edgeDz * t + normalZ * 0.01;
-
-                const windowGeo = new THREE.PlaneGeometry(windowW, windowH);
-                const windowMesh = new THREE.Mesh(windowGeo, windowMat);
-                windowMesh.position.set(wx, wMid, wz);
+                const wx = v1.x + edgeDx * t + normalX * 0.015;
+                const wz = v1.z + edgeDz * t + normalZ * 0.015;
                 const angle = Math.atan2(normalX, normalZ);
-                windowMesh.rotation.y = angle;
-                windowMesh.userData = { noClip: true };
-                scene.add(windowMesh);
 
-                // Sill (bottom bar)
-                const sillGeo = new THREE.PlaneGeometry(windowW + 0.08, 0.06);
-                const sillMesh = new THREE.Mesh(sillGeo, windowSillMat);
-                sillMesh.position.set(wx, wBot - 0.01, wz);
-                sillMesh.rotation.y = angle;
-                sillMesh.userData = { noClip: true };
-                scene.add(sillMesh);
+                // Glass pane
+                const windowGeo = new THREE.PlaneGeometry(windowW, windowH);
+                const windowMeshObj = new THREE.Mesh(windowGeo, windowMat);
+                windowMeshObj.position.set(wx, wMid, wz);
+                windowMeshObj.rotation.y = angle;
+                windowMeshObj.userData = { noClip: true };
+                scene.add(windowMeshObj);
+
+                // Window frame (4 bars around glass)
+                const frameThick = 0.04;
+                const frameDepth = 0.03;
+                const frameOffset = normalX * 0.005;
+                const frameOffsetZ = normalZ * 0.005;
+
+                // Top frame bar
+                const topBar = new THREE.Mesh(
+                  new THREE.BoxGeometry(windowW + frameThick, frameThick, frameDepth),
+                  windowFrameMat,
+                );
+                topBar.position.set(wx + frameOffset, wBot + windowH, wz + frameOffsetZ);
+                topBar.rotation.y = angle;
+                topBar.userData = { noClip: true };
+                scene.add(topBar);
+
+                // Bottom sill (thicker)
+                const sillBar = new THREE.Mesh(
+                  new THREE.BoxGeometry(windowW + frameThick * 2, frameThick * 1.5, frameDepth * 1.5),
+                  windowFrameMat,
+                );
+                sillBar.position.set(wx + frameOffset, wBot - frameThick * 0.5, wz + frameOffsetZ);
+                sillBar.rotation.y = angle;
+                sillBar.userData = { noClip: true };
+                scene.add(sillBar);
               }
             }
           }
@@ -2047,24 +2091,27 @@ export default function Scaffold3DView({
       setReady(true);
 
       // ── IFC Model Loading (when ifcFileUrl is available) ──
+      // Renders the actual BIM model with element-type-aware materials
+      // (brick walls, dark slate roofs, blue glass windows, concrete slabs)
       const ifcFileUrl = result?.ifcFileUrl;
       if (ifcFileUrl && typeof ifcFileUrl === 'string') {
         (async () => {
           try {
             const { parseIfcToMeshes } = await import('@/lib/ifc-loader');
+            const { createBimMaterialSet, getMaterialForElement, disposeBimMaterials } = await import('@/lib/ifc-bim-materials');
             const response = await fetch(ifcFileUrl);
             if (!response.ok) return;
             const arrayBuffer = await response.arrayBuffer();
             const meshes = await parseIfcToMeshes(arrayBuffer);
             if (disposed || meshes.length === 0) return;
 
+            const bimMaterials = createBimMaterialSet(THREE);
             const ifcGroup = new THREE.Group();
-            ifcGroup.userData = { noClip: true, isIfcModel: true };
+            ifcGroup.userData = { noClip: true, isIfcModel: true, bimMaterials };
 
-            // Compute IFC model bounding box for alignment
-            let minX = Infinity, maxX = -Infinity;
-            let minY = Infinity, maxY = -Infinity;
-            let minZ = Infinity, maxZ = -Infinity;
+            let ifcMinX = Infinity, ifcMaxX = -Infinity;
+            let ifcMinY = Infinity, ifcMaxY = -Infinity;
+            let ifcMinZ = Infinity, ifcMaxZ = -Infinity;
 
             for (const mesh of meshes) {
               const stride = 6;
@@ -2073,19 +2120,18 @@ export default function Scaffold3DView({
                 const x = mesh.vertices[vi * stride];
                 const y = mesh.vertices[vi * stride + 1];
                 const z = mesh.vertices[vi * stride + 2];
-                if (x < minX) minX = x; if (x > maxX) maxX = x;
-                if (y < minY) minY = y; if (y > maxY) maxY = y;
-                if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+                if (x < ifcMinX) ifcMinX = x; if (x > ifcMaxX) ifcMaxX = x;
+                if (y < ifcMinY) ifcMinY = y; if (y > ifcMaxY) ifcMaxY = y;
+                if (z < ifcMinZ) ifcMinZ = z; if (z > ifcMaxZ) ifcMaxZ = z;
               }
             }
 
-            const ifcSizeX = maxX - minX;
-            const ifcSizeY = maxY - minY;
-            const ifcSizeZ = maxZ - minZ;
-            const ifcCenterX = (minX + maxX) / 2;
-            const ifcCenterZ = (minZ + maxZ) / 2;
+            const ifcSizeX = ifcMaxX - ifcMinX;
+            const ifcSizeY = ifcMaxY - ifcMinY;
+            const ifcSizeZ = ifcMaxZ - ifcMinZ;
+            const ifcCenterX = (ifcMinX + ifcMaxX) / 2;
+            const ifcCenterZ = (ifcMinZ + ifcMaxZ) / 2;
 
-            // Scale IFC model to match scaffold building size
             const buildingExtentX = Math.max(...verts.map(v => v.x - cx)) - Math.min(...verts.map(v => v.x - cx));
             const buildingExtentZ = Math.max(...verts.map(v => v.z - cz)) - Math.min(...verts.map(v => v.z - cz));
             const scaleX = ifcSizeX > 0.01 ? buildingExtentX / ifcSizeX : 1;
@@ -2094,6 +2140,8 @@ export default function Scaffold3DView({
             const scaleY = ifcSizeY > 0.01 ? maxH / ifcSizeY : uniformScale;
 
             for (const meshData of meshes) {
+              if (meshData.elementType === 'opening') continue;
+
               const stride = 6;
               const vertCount = meshData.vertices.length / stride;
               const positions = new Float32Array(vertCount * 3);
@@ -2101,7 +2149,7 @@ export default function Scaffold3DView({
 
               for (let vi = 0; vi < vertCount; vi++) {
                 positions[vi * 3]     = (meshData.vertices[vi * stride] - ifcCenterX) * uniformScale;
-                positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - minY) * scaleY + GROUND_Y;
+                positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - ifcMinY) * scaleY + GROUND_Y;
                 positions[vi * 3 + 2] = (meshData.vertices[vi * stride + 2] - ifcCenterZ) * uniformScale;
                 normals[vi * 3]     = meshData.vertices[vi * stride + 3];
                 normals[vi * 3 + 1] = meshData.vertices[vi * stride + 4];
@@ -2113,17 +2161,12 @@ export default function Scaffold3DView({
               geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
               geo.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
 
-              const mat = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(meshData.color.r, meshData.color.g, meshData.color.b),
-                transparent: meshData.color.a < 0.99,
-                opacity: Math.max(0.3, meshData.color.a),
-                side: THREE.DoubleSide,
-                metalness: 0.1,
-                roughness: 0.7,
-              });
+              const mat = getMaterialForElement(bimMaterials, meshData.elementType, meshData.expressID);
 
-              const m = new THREE.Mesh(geo, mat);
-              m.userData = { noClip: true };
+              const m = new THREE.Mesh(geo, mat as any);
+              m.castShadow = meshData.elementType !== 'window' && meshData.elementType !== 'curtainWall';
+              m.receiveShadow = true;
+              m.userData = { noClip: true, ifcType: meshData.elementType };
               ifcGroup.add(m);
             }
 
