@@ -180,7 +180,23 @@ Polygon rules — follow these exactly:
 2. CONCAVE HULL (no bounding box): Trace the real perimeter. L-shaped buildings need 6 vertices (not 4).
    Interior corners (indents, notches) must each be a vertex. Never simplify to a rectangle if the plan shows an L, U, or stepped outline.
 
-3. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
+3. ARCHITECTURAL FLOOR PLANS (detailed room layouts) — CRITICAL:
+   If the image shows interior rooms, furniture, bathrooms, staircases, corridors, or partitions, it is a detailed architectural floor plan (平面図/間取り図). Apply these rules:
+   - IGNORE everything inside the building: room walls, partition walls, bathroom fixtures, staircases, furniture, columns, doors between rooms, windows in interior walls.
+   - FIND THE OUTERMOST BOUNDARY: Look for the thickest walls at the very edge of the drawing — these form the exterior shell. The outer perimeter is the silhouette of the whole building seen from above.
+   - EXTERIOR WALLS are typically drawn thicker/bolder than interior partition walls.
+   - The exterior perimeter is a single closed polygon. All interior elements are INSIDE this polygon and must be ignored.
+   - For an L-shaped floor plan: the outer boundary has 6 vertices. The "missing" corner (the interior notch) creates the 2 inward-turning vertices.
+   - For a rectangular floor plan with a protruding section: the outer boundary has 6–8 vertices.
+   - IGNORE any small protrusions for entrance steps, bay windows, or utility boxes smaller than 500mm — round them into the nearest straight wall.
+   - The final polygon should look like the silhouette you would see if you held the floor plan at arm's length and traced the outer edge with a marker.
+   STEP-BY-STEP for floor plans:
+   a) Find the leftmost exterior edge, rightmost exterior edge, topmost exterior edge, and bottommost exterior edge.
+   b) Walk the outer boundary clockwise, placing a vertex only at TRUE OUTSIDE CORNERS (corners where the exterior wall changes direction).
+   c) Never place a vertex where an interior wall meets the exterior wall — that is NOT an exterior corner.
+   d) The result should be 4–10 vertices for most buildings.
+
+3b. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
    Japanese scaffold drawings use color coding that you must understand:
    - BLUE FILLED/HATCHED ZONE: this is the scaffold overhang area (the zone between the building wall and the outer scaffold edge). DO NOT trace its outer boundary.
    - BLUE PERIMETER LINE (the inner boundary of the blue zone, adjacent to the building): this IS the building wall face. TRACE THIS LINE as your polygon.
@@ -228,6 +244,7 @@ Self-check before outputting (fix issues silently — never output the check its
 - if the image is a 3D view: your polygon should be a plan-view shape (rectangle, L, U), NOT a silhouette/trapezoid
 - if the image is a 3D view and the building has visible setbacks, wings, or L/U/T shape: you MUST output 6+ vertices (NOT 4). Outputting a rectangle for a non-rectangular building is the #1 most common error.
 - JAPANESE PLAN FINAL CHECK: Did you trace the building wall (the GRAY/UNCOLORED outer wall of the building, which is the INNER boundary of the blue scaffold zone)? If your traced polygon is outside the blue zone, you traced the wrong line.
+- FLOOR PLAN FINAL CHECK: If the image shows rooms/furniture/interior layout — is your polygon the OUTERMOST SILHOUETTE of the building, with no interior walls or partitions included as vertices? If any vertex of your polygon is at a point where an interior partition meets an exterior wall (rather than a true exterior corner), remove that vertex. The polygon should be the building's footprint as seen from directly above, as if you erased all interior elements.
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
@@ -773,7 +790,7 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v2:${modelForKey}:${hash}`;
+      const cacheKey = `vision-bim:v3:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
