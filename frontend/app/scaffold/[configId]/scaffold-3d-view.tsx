@@ -306,11 +306,41 @@ export default function Scaffold3DView({
   const isAiBim = complianceMode === 'ai_bim';
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
-  const walls: WallCalculationResult[] = Array.isArray(result?.walls)
+  const rawWalls: WallCalculationResult[] = Array.isArray(result?.walls)
     ? result.walls
     : Array.isArray((result as any)?.result?.walls)
       ? (result as any).result.walls
       : [];
+
+  // Patch: when walls have different wallHeightMm but identical fullLevels,
+  // recalculate per-wall levels so the scaffold follows the stepped building profile.
+  const walls: WallCalculationResult[] = (() => {
+    if (rawWalls.length < 2) return rawWalls;
+    const heights = rawWalls.map((w) => w.wallHeightMm).filter((h): h is number => typeof h === 'number' && h >= 1000);
+    const uniqueHeights = new Set(heights.map((h) => Math.round(h / 100)));
+    if (uniqueHeights.size <= 1) return rawWalls;
+    const levels = rawWalls.map((w) => w.levelCalc?.fullLevels ?? 0);
+    const uniqueLevels = new Set(levels);
+    if (uniqueLevels.size > 1) return rawWalls;
+    const scaffoldType: 'kusabi' | 'wakugumi' =
+      (result?.scaffoldType ?? (result as any)?.scaffold_type ?? 'kusabi') as any;
+    const levelH = scaffoldType === 'wakugumi' ? (result?.frameSizeMm || 1700) : 1800;
+    return rawWalls.map((w) => {
+      const wh = w.wallHeightMm;
+      if (typeof wh !== 'number' || !Number.isFinite(wh) || wh < 1000) return w;
+      const newLevels = Math.max(1, Math.ceil(wh / levelH));
+      if (newLevels === w.levelCalc?.fullLevels) return w;
+      return {
+        ...w,
+        levelCalc: {
+          ...w.levelCalc,
+          fullLevels: newLevels,
+          topPlankHeightMm: newLevels * levelH,
+          totalScaffoldHeightMm: newLevels * levelH + (w.levelCalc?.topGuardHeightMm ?? 900),
+        },
+      };
+    });
+  })();
 
   function setOpacityRecursive(obj: any, opacity: number) {
     obj.traverse((child: any) => {
@@ -1570,7 +1600,7 @@ export default function Scaffold3DView({
         const floorH = 3.0;
         const centeredVerts = verts.map(v => ({ x: v.x - cx, z: v.z - cz }));
         const fallbackWallHeightM = Math.max(maxH * 0.85, 2);
-        const wallHeightsM = walls.map((wall) => {
+        const wallHeightsAllM = walls.map((wall) => {
           const explicitMm = wall.wallHeightMm;
           if (typeof explicitMm === 'number' && Number.isFinite(explicitMm) && explicitMm >= 1000) {
             return explicitMm / 1000;
@@ -1581,7 +1611,24 @@ export default function Scaffold3DView({
           }
           return fallbackWallHeightM;
         });
-        const buildingH = Math.max(...wallHeightsM, fallbackWallHeightM);
+        // For building rendering, use ground-tier walls only (matching centeredVerts count)
+        const groundTierWalls = hasTiers
+          ? walls.filter((w) => ((w as any).tierIndex ?? 0) === 0)
+          : walls;
+        const wallHeightsM = groundTierWalls.length === centeredVerts.length
+          ? groundTierWalls.map((wall) => {
+              const explicitMm = wall.wallHeightMm;
+              if (typeof explicitMm === 'number' && Number.isFinite(explicitMm) && explicitMm >= 1000) {
+                return explicitMm / 1000;
+              }
+              const topPlankMm = wall.levelCalc?.topPlankHeightMm;
+              if (typeof topPlankMm === 'number' && Number.isFinite(topPlankMm) && topPlankMm >= 1000) {
+                return topPlankMm / 1000;
+              }
+              return fallbackWallHeightM;
+            })
+          : wallHeightsAllM.slice(0, centeredVerts.length);
+        const buildingH = Math.max(...wallHeightsAllM, fallbackWallHeightM);
         const hasSteppedWallHeights =
           wallHeightsM.length === centeredVerts.length &&
           new Set(wallHeightsM.map((h) => Math.round(h * 1000))).size > 1;

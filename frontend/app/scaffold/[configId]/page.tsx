@@ -138,12 +138,13 @@ function ScaffoldResultPage() {
     }
     if (!config?.walls?.length) return base;
     const levelH = base.scaffoldType === 'wakugumi' ? (base.frameSizeMm ?? 1800) : 1800;
-    const levels = Math.max(1, Math.floor((config.buildingHeightMm ?? 3000) / levelH));
     const topGuardMm = base.topGuardHeightMm ?? 900;
     const scaffoldWidthMm = config.scaffoldWidthMm ?? base.scaffoldWidthMm ?? 900;
     const minimalWalls: WallCalculationResult[] = config.walls
       .filter((w) => w.enabled !== false)
       .map((w) => {
+        const wallH = w.wallHeightMm ?? config.buildingHeightMm ?? 3000;
+        const wallLevels = Math.max(1, Math.floor(wallH / levelH));
         const stairAccessCount = w.stairAccessCount ?? 0;
         const needsExtBay = scaffoldWidthMm <= 600 && stairAccessCount > 0;
         return {
@@ -159,12 +160,15 @@ function ScaffoldResultPage() {
           components: [],
           scaffoldWidthMm,
           layoutMode: 'double_post' as const,
+          baseHeightMm: (w as any).baseHeightMm,
+          tierGroup: (w as any).tierGroup,
+          tierIndex: (w as any).tierIndex,
           levelCalc: {
-            fullLevels: levels,
+            fullLevels: wallLevels,
             jackBaseAdjustmentMm: 0,
-            topPlankHeightMm: levels * levelH,
+            topPlankHeightMm: wallLevels * levelH,
             topGuardHeightMm: topGuardMm,
-            totalScaffoldHeightMm: levels * levelH + topGuardMm,
+            totalScaffoldHeightMm: wallLevels * levelH + topGuardMm,
             mainPostsPerLine: 2,
             mainPostHeightMm: levelH,
             topGuardPostHeightMm: topGuardMm,

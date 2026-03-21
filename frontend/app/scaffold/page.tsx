@@ -1678,9 +1678,19 @@ function ScaffoldPageContent() {
                             aiBimPreview.massingTiers,
                             aiBimPreview.buildingHeightMm,
                           );
-                          if (decomposed.length > aiBimPreview.dto.walls.length) {
+                          if (decomposed.length > 0 && decomposed !== aiBimPreview.dto.walls) {
                             finalWalls = decomposed;
                           }
+                        }
+                        // When walls still have uniform max height but isStepped,
+                        // ensure per-wall heights from the preview are preserved
+                        if (aiBimPreview.isStepped && finalWalls === aiBimPreview.dto.walls) {
+                          finalWalls = aiBimPreview.walls.map((pw) => {
+                            const match = finalWalls.find((fw) => fw.side === pw.side);
+                            return match
+                              ? { ...match, wallHeightMm: pw.wallHeightMm }
+                              : { ...pw };
+                          });
                         }
                         const dto = {
                           ...aiBimPreview.dto,
