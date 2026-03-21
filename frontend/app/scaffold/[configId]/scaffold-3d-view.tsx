@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus } from 'lucide-react';
+import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus, Camera } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { WallCalculationResult, CalculatedComponent } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
@@ -2389,6 +2389,37 @@ export default function Scaffold3DView({
     URL.revokeObjectURL(url);
   };
 
+  const handleScreenshot = () => {
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+    setExporting('png');
+    try {
+      const renderer = rendererRef.current;
+      const canvas = renderer.domElement;
+      const prevW = canvas.width;
+      const prevH = canvas.height;
+      const hiResW = Math.min(prevW * 2, 3840);
+      const hiResH = Math.min(prevH * 2, 2160);
+
+      renderer.setSize(hiResW, hiResH, false);
+      renderer.render(sceneRef.current, cameraRef.current);
+
+      const dataUrl = canvas.toDataURL('image/png');
+
+      renderer.setSize(prevW, prevH, false);
+      renderer.render(sceneRef.current, cameraRef.current);
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `scaffold_3d_${configId.slice(0, 8)}.png`;
+      a.click();
+    } catch (error) {
+      alert(t('result', 'exportFailed') || 'Export failed');
+      console.error('Screenshot error:', error);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const handleExportPdf = async () => {
     if (!wrapperRef.current) return;
     setExporting('pdf');
@@ -2578,6 +2609,11 @@ export default function Scaffold3DView({
             <Download className="h-3.5 w-3.5 inline mr-0.5" />
             Export:
           </span>
+          <button onClick={handleScreenshot} disabled={!!exporting || !ready}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 hover:bg-gray-800 text-white transition-colors disabled:opacity-50"
+            title="Screenshot — High-res PNG image">
+            <Camera className="h-3.5 w-3.5" /> {exporting === 'png' ? '...' : 'PNG'}
+          </button>
           <button onClick={handleExportPdf} disabled={!!exporting || !ready}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50">
             <FileText className="h-3.5 w-3.5" /> {exporting === 'pdf' ? '...' : 'PDF'}

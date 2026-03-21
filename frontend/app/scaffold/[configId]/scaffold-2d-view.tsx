@@ -4,7 +4,7 @@ import { useState, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 import { WallCalculationResult, scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
-import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight, Layers, Camera } from 'lucide-react';
 
 // ─── Constants ──────────────────────────────────────────────────
 const LEVEL_H_KUSABI = 1800; // mm between levels (kusabi fixed)
@@ -58,6 +58,7 @@ export default function Scaffold2DView({ result }: Props) {
   const walls: WallCalculationResult[] = result?.walls ?? [];
   const [scale, setScale] = useState(SCALE_DEFAULT);
   const [activeWallIdx, setActiveWallIdx] = useState(0);
+  const [showAllWalls, setShowAllWalls] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -71,15 +72,14 @@ export default function Scaffold2DView({ result }: Props) {
   const topGuardMm = result.topGuardHeightMm ?? 900;
   const wall = walls[activeWallIdx] || walls[0];
 
-  // ─── Performance: cap spans for very large walls ────────
-  const MAX_2D_SPANS = 200; // SVG can handle more than 3D, but still cap for sanity
-  const isSimplified2D = wall.spans.length > MAX_2D_SPANS;
+  const MAX_2D_SPANS = 200;
+  const isSimplified2D = !showAllWalls && wall.spans.length > MAX_2D_SPANS;
 
-  // ─── Calculate wall data ────────────────────────────────
-  const wallData = useMemo(() => {
-    const rawSpans = wall.spans;
+  // ─── Shared wall data computation ─────────────────────────
+  const computeWallData = (w: WallCalculationResult) => {
+    const rawSpans = w.spans;
     const spans = rawSpans.length > MAX_2D_SPANS ? rawSpans.slice(0, MAX_2D_SPANS) : rawSpans;
-    const levels = wall.levelCalc.fullLevels;
+    const levels = w.levelCalc.fullLevels;
     const totalLengthMm = spans.reduce((a: number, b: number) => a + b, 0);
     const totalHeightMm = levels * LEVEL_H + topGuardMm + JACK_BASE_H;
 
@@ -91,10 +91,10 @@ export default function Scaffold2DView({ result }: Props) {
     }
 
     let stairPositions: number[] = [];
-    if (wall.kaidanSpanIndices && wall.kaidanSpanIndices.length > 0) {
-      stairPositions = wall.kaidanSpanIndices;
+    if (w.kaidanSpanIndices && w.kaidanSpanIndices.length > 0) {
+      stairPositions = w.kaidanSpanIndices;
     } else {
-      const count = wall.stairAccessCount || 0;
+      const count = w.stairAccessCount || 0;
       if (count > 0 && spans.length > 0) {
         if (count === 1) {
           stairPositions = [Math.floor(spans.length / 2)];
@@ -112,38 +112,80 @@ export default function Scaffold2DView({ result }: Props) {
       }
     }
 
-    const widthMm = wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
-    const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && (stairPositions.length > 0));
+    const widthMm = w.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
+    const needsExtendedBay = w.needsExtendedBay ?? (widthMm <= 600 && (stairPositions.length > 0));
 
-    return { wall, spans, levels, totalLengthMm, totalHeightMm, postXPositions, stairPositions, needsExtendedBay };
-  }, [wall, topGuardMm, result]);
+    return { wall: w, spans, levels, totalLengthMm, totalHeightMm, postXPositions, stairPositions, needsExtendedBay };
+  };
+
+  const wallData = useMemo(() => computeWallData(wall), [wall, topGuardMm, result]);
+
+  const allWallsData = useMemo(() => {
+    if (!showAllWalls) return [];
+    return walls.map(w => computeWallData(w));
+  }, [walls, showAllWalls, topGuardMm, result]);
+
+  // ─── Direction label for wall side ────────────────────────
+  const DIRECTION_MAP: Record<string, { jp: string; en: string; arrow: string }> = {
+    north: { jp: '北面', en: 'North', arrow: '↑ N' },
+    south: { jp: '南面', en: 'South', arrow: '↓ S' },
+    east:  { jp: '東面', en: 'East',  arrow: '→ E' },
+    west:  { jp: '西面', en: 'West',  arrow: '← W' },
+  };
+  const getDirectionLabel = (side: string) => {
+    const base = side.replace(/-T\d+$/, '').toLowerCase();
+    const dir = DIRECTION_MAP[base];
+    const tierMatch = side.match(/-T(\d+)$/);
+    const tierSuffix = tierMatch ? ` (T${tierMatch[1]})` : '';
+    if (dir) return `${dir.arrow} ${dir.jp}${tierSuffix}`;
+    return side;
+  };
 
   // ─── SVG dimensions ─────────────────────────────────────
   const PAD_LEFT = 100;
   const PAD_RIGHT = 40;
   const PAD_TOP = 50;
   const PAD_BOTTOM = 80;
+  const ALL_WALLS_GAP = 60;
+  const ALL_WALLS_HEADER = 50;
 
-  const svgW = wallData.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT;
-  const svgH = wallData.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM;
+  const singleSvgW = wallData.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT;
+  const singleSvgH = wallData.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM;
+
+  const allWallsSvgW = showAllWalls
+    ? Math.max(...allWallsData.map(wd => wd.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT), 600)
+    : singleSvgW;
+  const allWallsSvgH = showAllWalls
+    ? allWallsData.reduce((sum, wd) => sum + wd.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM + ALL_WALLS_GAP + ALL_WALLS_HEADER, 0)
+    : singleSvgH;
+
+  const svgW = showAllWalls ? allWallsSvgW : singleSvgW;
+  const svgH = showAllWalls ? allWallsSvgH : singleSvgH;
 
   const x = (mm: number) => PAD_LEFT + mm * scale;
   const y = (mm: number) => PAD_TOP + (wallData.totalHeightMm - mm) * scale;
 
-  // ─── Render wall ────────────────────────────────────────
-  const renderWall = () => {
-    const { spans, levels, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wallData;
+  // ─── Render wall (parameterized for single and all-walls modes) ───
+  const renderWallContent = (
+    wd: ReturnType<typeof computeWallData>,
+    xFn: (mm: number) => number,
+    yFn: (mm: number) => number,
+    keyPrefix = '',
+  ) => {
+    const { spans, levels, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wd;
+    const x = xFn;
+    const y = yFn;
     const elements: JSX.Element[] = [];
 
     // Grid (subtle, for technical clarity)
     const gridStep = 1000;
     for (let gx = 0; gx <= totalLengthMm; gx += gridStep) {
       elements.push(
-        <line key={`gv-${gx}`} x1={x(gx)} y1={y(0)} x2={x(gx)} y2={y(wallData.totalHeightMm)}
+        <line key={`gv-${gx}`} x1={x(gx)} y1={y(0)} x2={x(gx)} y2={y(wd.totalHeightMm)}
           stroke={COL.grid} strokeWidth={0.5} />
       );
     }
-    for (let gy = 0; gy <= wallData.totalHeightMm; gy += gridStep) {
+    for (let gy = 0; gy <= wd.totalHeightMm; gy += gridStep) {
       elements.push(
         <line key={`gh-${gy}`} x1={x(0)} y1={y(gy)} x2={x(totalLengthMm)} y2={y(gy)}
           stroke={COL.grid} strokeWidth={0.5} />
@@ -503,13 +545,13 @@ export default function Scaffold2DView({ result }: Props) {
     const hDx = PAD_LEFT - 45;
     elements.push(
       <g key="dim-height">
-        <line x1={hDx} y1={y(0)} x2={hDx} y2={y(wallData.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
+        <line x1={hDx} y1={y(0)} x2={hDx} y2={y(wd.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
         <line x1={hDx - 5} y1={y(0)} x2={hDx + 5} y2={y(0)} stroke={COL.dim} strokeWidth={1} />
-        <line x1={hDx - 5} y1={y(wallData.totalHeightMm)} x2={hDx + 5} y2={y(wallData.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
-        <text x={hDx - 6} y={(y(0) + y(wallData.totalHeightMm)) / 2}
+        <line x1={hDx - 5} y1={y(wd.totalHeightMm)} x2={hDx + 5} y2={y(wd.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
+        <text x={hDx - 6} y={(y(0) + y(wd.totalHeightMm)) / 2}
           textAnchor="middle" fontSize={10} fontWeight="bold" fill={COL.dimText}
-          transform={`rotate(-90, ${hDx - 6}, ${(y(0) + y(wallData.totalHeightMm)) / 2})`}>
-          {wallData.totalHeightMm.toLocaleString()}mm
+          transform={`rotate(-90, ${hDx - 6}, ${(y(0) + y(wd.totalHeightMm)) / 2})`}>
+          {wd.totalHeightMm.toLocaleString()}mm
         </text>
       </g>
     );
@@ -523,11 +565,14 @@ export default function Scaffold2DView({ result }: Props) {
     const svgData = new XMLSerializer().serializeToString(svgRef.current);
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
+    const title = showAllWalls
+      ? `全壁面 (${walls.length}面) — 2D組立図`
+      : `${wall.sideJp} — 2D組立図`;
     const win = window.open('', '_blank');
     if (win) {
       win.document.write(`
         <!DOCTYPE html>
-        <html><head><title>${wall.sideJp} — 2D組立図</title>
+        <html><head><title>${title}</title>
         <style>
           body { margin: 0; display: flex; justify-content: center; align-items: flex-start; }
           img { max-width: 100%; height: auto; }
@@ -550,7 +595,9 @@ export default function Scaffold2DView({ result }: Props) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `scaffold_2d_${wall.side}_${configId.slice(0, 8)}.pdf`;
+      a.download = showAllWalls
+        ? `scaffold_2d_all_walls_${configId.slice(0, 8)}.pdf`
+        : `scaffold_2d_${wall.side}_${configId.slice(0, 8)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -579,6 +626,52 @@ export default function Scaffold2DView({ result }: Props) {
     }
   };
 
+  const handleScreenshot = () => {
+    if (!svgRef.current) return;
+    setExporting('png');
+    try {
+      const svgData = new XMLSerializer().serializeToString(svgRef.current);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const dpr = 2;
+        canvas.width = img.naturalWidth * dpr;
+        canvas.height = img.naturalHeight * dpr;
+        const ctx = canvas.getContext('2d')!;
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, img.naturalWidth, img.naturalHeight);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = showAllWalls
+              ? `scaffold_2d_all_walls_${configId.slice(0, 8)}.png`
+              : `scaffold_2d_${wall.side}_${configId.slice(0, 8)}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+          setExporting(null);
+        }, 'image/png');
+        URL.revokeObjectURL(svgUrl);
+      };
+      img.onerror = () => {
+        alert(t('result', 'exportFailed') || 'Export failed');
+        setExporting(null);
+        URL.revokeObjectURL(svgUrl);
+      };
+      img.src = svgUrl;
+    } catch (error) {
+      alert(t('result', 'exportFailed') || 'Export failed');
+      console.error('Screenshot error:', error);
+      setExporting(null);
+    }
+  };
+
   const accentColor = WALL_ACCENT[activeWallIdx % WALL_ACCENT.length];
 
   return (
@@ -586,8 +679,20 @@ export default function Scaffold2DView({ result }: Props) {
       {/* Wall selector tabs */}
       <div className="flex items-center gap-1 px-3 py-2 bg-gray-100 border-b border-gray-200 overflow-x-auto">
         <button
+          onClick={() => { setShowAllWalls(true); }}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-shrink-0 whitespace-nowrap ${
+            showAllWalls
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <Layers className="h-3.5 w-3.5 inline mr-1" />
+          全壁面
+        </button>
+        <span className="text-gray-300 mx-1">|</span>
+        <button
           onClick={() => setActiveWallIdx(i => Math.max(0, i - 1))}
-          disabled={activeWallIdx === 0}
+          disabled={activeWallIdx === 0 || showAllWalls}
           className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 flex-shrink-0"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -595,26 +700,26 @@ export default function Scaffold2DView({ result }: Props) {
         {walls.map((w, i) => (
           <button
             key={w.side}
-            onClick={() => setActiveWallIdx(i)}
+            onClick={() => { setShowAllWalls(false); setActiveWallIdx(i); }}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-shrink-0 whitespace-nowrap ${
-              i === activeWallIdx
+              !showAllWalls && i === activeWallIdx
                 ? 'text-white shadow-sm'
                 : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
             }`}
-            style={i === activeWallIdx ? { backgroundColor: WALL_ACCENT[i % WALL_ACCENT.length] } : undefined}
+            style={!showAllWalls && i === activeWallIdx ? { backgroundColor: WALL_ACCENT[i % WALL_ACCENT.length] } : undefined}
           >
-            {w.sideJp} ({(w.wallLengthMm / 1000).toFixed(1)}m)
+            {getDirectionLabel(w.side)} ({(w.wallLengthMm / 1000).toFixed(1)}m)
           </button>
         ))}
         <button
           onClick={() => setActiveWallIdx(i => Math.min(walls.length - 1, i + 1))}
-          disabled={activeWallIdx === walls.length - 1}
+          disabled={activeWallIdx === walls.length - 1 || showAllWalls}
           className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 flex-shrink-0"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
         <span className="ml-auto text-xs text-gray-400 flex-shrink-0">
-          {activeWallIdx + 1} / {walls.length}
+          {showAllWalls ? `全 ${walls.length} 面` : `${activeWallIdx + 1} / ${walls.length}`}
         </span>
       </div>
 
@@ -622,11 +727,16 @@ export default function Scaffold2DView({ result }: Props) {
       <div className="p-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <div className="text-sm font-medium text-gray-600">
-            {t('result', 'view2dLabel')} — <span style={{ color: accentColor, fontWeight: 700 }}>{wall.sideJp}</span>
+            {t('result', 'view2dLabel')} — {showAllWalls
+              ? <span className="text-indigo-600 font-bold">全壁面 ({walls.length}面)</span>
+              : <span style={{ color: accentColor, fontWeight: 700 }}>{getDirectionLabel(wall.side)}</span>
+            }
           </div>
-          <span className="text-xs text-gray-400">
-            {wall.wallLengthMm.toLocaleString()}mm × {wallData.levels}{t('result', 'levelsUnit')} · {wallData.spans.length} spans
-          </span>
+          {!showAllWalls && (
+            <span className="text-xs text-gray-400">
+              {wall.wallLengthMm.toLocaleString()}mm × {wallData.levels}{t('result', 'levelsUnit')} · {wallData.spans.length} spans
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setScale(s => Math.min(s * 1.25, 0.2))} className="p-1.5 rounded hover:bg-gray-200" title="Zoom In">
@@ -643,9 +753,15 @@ export default function Scaffold2DView({ result }: Props) {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50">
             <FileText className="h-4 w-4" /> {exporting === 'pdf' ? '...' : 'PDF'}
           </button>
-          <button onClick={handleExportCad} disabled={!!exporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50">
+          <button onClick={handleExportCad} disabled={!!exporting || showAllWalls}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+            title={showAllWalls ? 'DXF export per single wall only' : undefined}>
             <FileCode className="h-4 w-4" /> {exporting === 'cad' ? '...' : 'DXF'}
+          </button>
+          <button onClick={handleScreenshot} disabled={!!exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-800 text-white transition-colors disabled:opacity-50"
+            title="Screenshot — High-res PNG image">
+            <Camera className="h-4 w-4" /> {exporting === 'png' ? '...' : 'PNG'}
           </button>
         </div>
       </div>
@@ -663,7 +779,7 @@ export default function Scaffold2DView({ result }: Props) {
       )}
 
       {/* SVG Canvas */}
-      <div className="overflow-auto" style={{ maxHeight: '700px' }}>
+      <div className="overflow-auto" style={{ maxHeight: showAllWalls ? '900px' : '700px' }}>
         <svg
           ref={svgRef}
           width={svgW}
@@ -673,44 +789,140 @@ export default function Scaffold2DView({ result }: Props) {
           className="block"
           style={{ background: COL.bg, minWidth: svgW }}
         >
-          {/* Title */}
-          <text x={svgW / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
-            {isWakugumi ? '【枠組】' : '【くさび】'} {wall.sideJp} — {wall.wallLengthMm.toLocaleString()}mm × {wallData.levels}段
-          </text>
+          {showAllWalls ? (
+            <>
+              {(() => {
+                const elements: JSX.Element[] = [];
+                let offsetY = 0;
+                allWallsData.forEach((wd, wi) => {
+                  const wallW = wd.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT;
+                  const wallH = wd.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM;
+                  const color = WALL_ACCENT[wi % WALL_ACCENT.length];
+                  const dirLabel = getDirectionLabel(wd.wall.side);
 
-          {renderWall()}
+                  // Direction banner
+                  elements.push(
+                    <g key={`banner-${wi}`} transform={`translate(0, ${offsetY})`}>
+                      <rect x={0} y={0} width={svgW} height={ALL_WALLS_HEADER}
+                        fill={color} opacity={0.12} />
+                      <rect x={0} y={0} width={6} height={ALL_WALLS_HEADER}
+                        fill={color} />
+                      <text x={20} y={ALL_WALLS_HEADER / 2 + 6}
+                        fontSize={16} fontWeight="bold" fill={color}>
+                        {dirLabel}
+                      </text>
+                      <text x={20 + dirLabel.length * 12 + 20} y={ALL_WALLS_HEADER / 2 + 5}
+                        fontSize={12} fill="#6b7280">
+                        {wd.wall.wallLengthMm.toLocaleString()}mm × {wd.levels}段 · {wd.spans.length} spans
+                      </text>
+                      <text x={svgW - 20} y={ALL_WALLS_HEADER / 2 + 5}
+                        textAnchor="end" fontSize={11} fill="#9ca3af">
+                        {isWakugumi ? '枠組足場' : 'くさび式足場'} — Wall {wi + 1}/{walls.length}
+                      </text>
+                    </g>
+                  );
 
-          {/* Legend */}
-          <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
-            {(isWakugumi ? [
-              { color: COL.post, label: '建枠' },
-              { color: COL.brace, label: 'ブレス' },
-              { color: COL.shitasan, label: '下桟' },
-              { color: COL.plank, label: '踏板' },
-              { color: COL.habaki, label: '巾木' },
-              { color: COL.endStopper, label: '端部' },
-              { color: COL.yokoji, label: '根がらみ' },
-              { color: COL.topGuard, label: '上部手摺' },
-              { color: COL.jackBase, label: 'ジャッキ' },
-              { color: COL.stair, label: '階段' },
-            ] : [
-              { color: COL.post, label: t('result', 'legendPost') || '支柱' },
-              { color: COL.brace, label: t('result', 'legendBrace') || 'ブレス' },
-              { color: COL.tesuri, label: t('result', 'legendTesuri') || '手摺' },
-              { color: COL.plank, label: t('result', 'legendPlank') || '踏板' },
-              { color: COL.habaki, label: t('result', 'legendHabaki') || '巾木' },
-              { color: COL.endStopper, label: '端部手摺' },
-              { color: COL.yokoji, label: t('result', 'legendYokoji') || '根がらみ' },
-              { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
-              { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },
-              { color: COL.stair, label: t('result', 'legendStair') || '階段' },
-            ]            ).map((item, i) => (
-              <g key={i} transform={`translate(${i * 78}, 0)`}>
-                <rect x={0} y={-10} width={16} height={5} fill={item.color} rx={1} stroke="#e2e8f0" strokeWidth={0.5} />
-                <text x={20} y={-5} fontSize={10} fill={COL.dimText} fontWeight={500}>{item.label}</text>
+                  // Wall content, offset below the banner
+                  const wallOffsetY = offsetY + ALL_WALLS_HEADER;
+                  const xFn = (mm: number) => PAD_LEFT + mm * scale;
+                  const yFn = (mm: number) => wallOffsetY + PAD_TOP + (wd.totalHeightMm - mm) * scale;
+
+                  elements.push(
+                    <g key={`wall-${wi}`}>
+                      {renderWallContent(wd, xFn, yFn, `w${wi}-`)}
+                    </g>
+                  );
+
+                  // Separator line
+                  const sectionBottom = wallOffsetY + wallH;
+                  if (wi < allWallsData.length - 1) {
+                    elements.push(
+                      <line key={`sep-${wi}`}
+                        x1={10} y1={sectionBottom + ALL_WALLS_GAP / 2}
+                        x2={svgW - 10} y2={sectionBottom + ALL_WALLS_GAP / 2}
+                        stroke="#d1d5db" strokeWidth={1} strokeDasharray="8,4" />
+                    );
+                  }
+
+                  offsetY = sectionBottom + ALL_WALLS_GAP;
+                });
+                return elements;
+              })()}
+
+              {/* Legend at the bottom */}
+              <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
+                {(isWakugumi ? [
+                  { color: COL.post, label: '建枠' },
+                  { color: COL.brace, label: 'ブレス' },
+                  { color: COL.shitasan, label: '下桟' },
+                  { color: COL.plank, label: '踏板' },
+                  { color: COL.habaki, label: '巾木' },
+                  { color: COL.endStopper, label: '端部' },
+                  { color: COL.yokoji, label: '根がらみ' },
+                  { color: COL.topGuard, label: '上部手摺' },
+                  { color: COL.jackBase, label: 'ジャッキ' },
+                  { color: COL.stair, label: '階段' },
+                ] : [
+                  { color: COL.post, label: t('result', 'legendPost') || '支柱' },
+                  { color: COL.brace, label: t('result', 'legendBrace') || 'ブレス' },
+                  { color: COL.tesuri, label: t('result', 'legendTesuri') || '手摺' },
+                  { color: COL.plank, label: t('result', 'legendPlank') || '踏板' },
+                  { color: COL.habaki, label: t('result', 'legendHabaki') || '巾木' },
+                  { color: COL.endStopper, label: '端部手摺' },
+                  { color: COL.yokoji, label: t('result', 'legendYokoji') || '根がらみ' },
+                  { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
+                  { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },
+                  { color: COL.stair, label: t('result', 'legendStair') || '階段' },
+                ]).map((item, i) => (
+                  <g key={i} transform={`translate(${i * 78}, 0)`}>
+                    <rect x={0} y={-10} width={16} height={5} fill={item.color} rx={1} stroke="#e2e8f0" strokeWidth={0.5} />
+                    <text x={20} y={-5} fontSize={10} fill={COL.dimText} fontWeight={500}>{item.label}</text>
+                  </g>
+                ))}
               </g>
-            ))}
-          </g>
+            </>
+          ) : (
+            <>
+              {/* Title */}
+              <text x={svgW / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
+                {isWakugumi ? '【枠組】' : '【くさび】'} {getDirectionLabel(wall.side)} — {wall.wallLengthMm.toLocaleString()}mm × {wallData.levels}段
+              </text>
+
+              {renderWallContent(wallData, x, y)}
+
+              {/* Legend */}
+              <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
+                {(isWakugumi ? [
+                  { color: COL.post, label: '建枠' },
+                  { color: COL.brace, label: 'ブレス' },
+                  { color: COL.shitasan, label: '下桟' },
+                  { color: COL.plank, label: '踏板' },
+                  { color: COL.habaki, label: '巾木' },
+                  { color: COL.endStopper, label: '端部' },
+                  { color: COL.yokoji, label: '根がらみ' },
+                  { color: COL.topGuard, label: '上部手摺' },
+                  { color: COL.jackBase, label: 'ジャッキ' },
+                  { color: COL.stair, label: '階段' },
+                ] : [
+                  { color: COL.post, label: t('result', 'legendPost') || '支柱' },
+                  { color: COL.brace, label: t('result', 'legendBrace') || 'ブレス' },
+                  { color: COL.tesuri, label: t('result', 'legendTesuri') || '手摺' },
+                  { color: COL.plank, label: t('result', 'legendPlank') || '踏板' },
+                  { color: COL.habaki, label: t('result', 'legendHabaki') || '巾木' },
+                  { color: COL.endStopper, label: '端部手摺' },
+                  { color: COL.yokoji, label: t('result', 'legendYokoji') || '根がらみ' },
+                  { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
+                  { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },
+                  { color: COL.stair, label: t('result', 'legendStair') || '階段' },
+                ]).map((item, i) => (
+                  <g key={i} transform={`translate(${i * 78}, 0)`}>
+                    <rect x={0} y={-10} width={16} height={5} fill={item.color} rx={1} stroke="#e2e8f0" strokeWidth={0.5} />
+                    <text x={20} y={-5} fontSize={10} fill={COL.dimText} fontWeight={500}>{item.label}</text>
+                  </g>
+                ))}
+              </g>
+            </>
+          )}
         </svg>
       </div>
     </div>
