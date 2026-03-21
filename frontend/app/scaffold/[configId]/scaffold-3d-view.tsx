@@ -402,17 +402,31 @@ export default function Scaffold3DView({
     let canvasElement: HTMLElement | null = null;
 
     import('three').then(async (THREE) => {
-      if (disposed || !canvasContainerRef.current) return;
+      if (disposed || !canvasContainerRef.current) {
+        setReady(true);
+        return;
+      }
 
       const textures = await loadScaffoldTextures(THREE);
-      if (disposed || !canvasContainerRef.current) return;
+      if (disposed || !canvasContainerRef.current) {
+        setReady(true);
+        return;
+      }
+
+      // Wait for tab/layout so the canvas has non-zero size (avoids NaN camera aspect / blank WebGL).
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      if (disposed || !canvasContainerRef.current) {
+        setReady(true);
+        return;
+      }
 
       while (canvasContainer.firstChild) {
         canvasContainer.removeChild(canvasContainer.firstChild);
       }
 
-      const w = canvasContainer.clientWidth;
-      const h = canvasContainer.clientHeight;
+      const w = Math.max(1, canvasContainer.clientWidth);
+      const h = Math.max(1, canvasContainer.clientHeight);
 
       // ── Scene (clean white BIM-style background, no fog) ──
       const scene = new THREE.Scene();
@@ -1239,17 +1253,50 @@ export default function Scaffold3DView({
         tierPolygons.push({ verts: tverts, footprintFromMassing });
       }
 
-      // Upper tiers with no valid polygon (edge cases / API mismatch) would crash on tierV[localIdx].
-      // Fall back to ground footprint so the viewer always initializes.
-      for (let tgi = 1; tgi < tierPolygons.length; tgi++) {
+      // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
+      const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
+      for (let tgi = 0; tgi < tierPolygons.length; tgi++) {
         const tp = tierPolygons[tgi];
         const tg = tierGroups[tgi];
-        if (!tg?.walls?.length) continue;
-        if (!tp.verts || tp.verts.length < 2) {
-          tp.verts = verts.map((v) => ({ x: v.x, z: v.z }));
-          tp.footprintFromMassing = false;
+        const nW = tg.walls.length;
+        if (nW === 0) continue;
+        const pv = tp.verts?.length ?? 0;
+        const finite =
+          pv >= 2 &&
+          pv === nW &&
+          tp.verts!.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+        if (finite) continue;
+
+        const sv = tgi === 0 ? storedVerts : undefined;
+        let fixed = buildFootprintPolygonXZ(tg.walls, sv);
+        let ok =
+          fixed.length >= 2 &&
+          fixed.length === nW &&
+          fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+        if (!ok && sv && sv.length > 0) {
+          fixed = buildFootprintPolygonXZ(tg.walls, undefined);
+          ok =
+            fixed.length >= 2 &&
+            fixed.length === nW &&
+            fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
         }
+        if (ok) {
+          tp.verts = fixed;
+          tp.footprintFromMassing = false;
+          continue;
+        }
+        const gv = groundFootprint();
+        if (gv.length >= 2 && gv.length === nW) {
+          tp.verts = gv.map((v) => ({ x: v.x, z: v.z }));
+          tp.footprintFromMassing = false;
+          continue;
+        }
+        // Degenerate: drop footprint; wall loop will skip bad edges rather than crash
+        tp.verts = [];
+        tp.footprintFromMassing = false;
       }
+
+      verts = tierPolygons[0]?.verts ?? verts;
 
       // (verts already set from tier 0)
       let vertsOk = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
@@ -1259,6 +1306,7 @@ export default function Scaffold3DView({
             ? 'No wall data. Run calculation for this configuration to see the 3D view.'
             : '3D viewer error: wall geometry is invalid (missing/NaN lengths). Recalculate or edit wall lengths.',
         );
+        setReady(true);
         return;
       }
 
@@ -1384,9 +1432,15 @@ export default function Scaffold3DView({
           tierOffZ = minGz - minTz;
         }
 
-        const v1 = { x: tierV[localIdx].x + tierOffX, z: tierV[localIdx].z + tierOffZ };
+        if (tierV.length < 2 || localIdx < 0 || localIdx >= tierV.length) continue;
         const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
-        const v2 = { x: tierV[v2Idx].x + tierOffX, z: tierV[v2Idx].z + tierOffZ };
+        if (tpd?.isOpen && (v2Idx < 0 || v2Idx >= tierV.length)) continue;
+        const p1 = tierV[localIdx];
+        const p2 = tierV[v2Idx];
+        if (!p1 || !p2) continue;
+
+        const v1 = { x: p1.x + tierOffX, z: p1.z + tierOffZ };
+        const v2 = { x: p2.x + tierOffX, z: p2.z + tierOffZ };
 
         // Edge direction on XZ plane
         const dx = v2.x - v1.x;
