@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus, Camera } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
-import type { WallCalculationResult, CalculatedComponent } from '@/lib/api/scaffold-configs';
+import type { WallCalculationResult, CalculatedComponent, BuildingMassingTier } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
 import html2canvas from 'html2canvas';
 import {
@@ -18,6 +18,7 @@ import {
   BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
+import { normaliseMassingTierVerticesToGroundFootprint } from '@/lib/bim-tier-footprint-normalize';
 import { bimHexToNumber } from '@/lib/bim-facade-colors';
 
 /**
@@ -1125,21 +1126,78 @@ export default function Scaffold3DView({
         result?.polygonVertices ?? (result as any)?.polygonVertices;
 
       // For tier-aware rendering: build a polygon per tier group.
-      // Ground tier (tierIndex 0) uses storedVerts if available; upper tiers use wall lengths only.
-      const tierPolygons: Array<{ verts: PointXZ[] }> = [];
-      for (const tg of tierGroups) {
-        const sv = tg.tierIndex === 0 ? storedVerts : undefined;
-        let tverts = buildFootprintPolygonXZ(tg.walls, sv);
+      // Ground tier uses storedVerts if available. Upper tiers prefer `massingTiers` vertices
+      // (same coordinate system as the plan) so setbacks stay on the correct side — centroid
+      // alignment of length-only polygons caused fake “stairs” on flush façades.
+      const massingTiersSorted: BuildingMassingTier[] = Array.isArray((result as any)?.massingTiers)
+        ? ([...(result as any).massingTiers] as BuildingMassingTier[])
+            .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
+            .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm)
+        : [];
+
+      const tierPolygons: Array<{ verts: PointXZ[]; footprintFromMassing: boolean }> = [];
+
+      {
+        const tg0 = tierGroups[0];
+        const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
+        let tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
         let tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-        if (!tok && sv && sv.length > 0) {
-          tverts = buildFootprintPolygonXZ(tg.walls, undefined);
+        if (!tok && sv0 && sv0.length > 0) {
+          tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
           tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
         }
-        tierPolygons.push({ verts: tok ? tverts : [] });
+        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: false });
       }
 
       // Primary polygon = ground tier (or first valid tier)
       let verts = tierPolygons[0]?.verts ?? [];
+
+      const rawBaseVertsForMassing: Array<{ x: number; z: number }> = Array.isArray(storedVerts)
+        ? storedVerts.map((v) => ({
+            x: (v as any).xFrac ?? (v as any).x ?? 0,
+            z: (v as any).yFrac ?? (v as any).y ?? 0,
+          }))
+        : [];
+
+      for (let gi = 1; gi < tierGroups.length; gi++) {
+        const tg = tierGroups[gi];
+        const nW = tg.walls.length;
+        let footprintFromMassing = false;
+        let tverts: PointXZ[] = [];
+
+        const byBase = massingTiersSorted.find(
+          (m) => Math.abs((m.baseHeightMm ?? 0) - (tg.baseHeightMm ?? 0)) <= 2,
+        );
+        const byIdx = massingTiersSorted[tg.tierIndex];
+        const candidate =
+          byBase && byBase.vertices.length === nW
+            ? byBase
+            : byIdx && byIdx.vertices.length === nW
+              ? byIdx
+              : undefined;
+
+        if (candidate && verts.length >= 2) {
+          const mapped = normaliseMassingTierVerticesToGroundFootprint(
+            candidate.vertices,
+            verts,
+            rawBaseVertsForMassing,
+          );
+          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+            tverts = mapped;
+            footprintFromMassing = true;
+          }
+        }
+
+        if (!footprintFromMassing) {
+          tverts = buildFootprintPolygonXZ(tg.walls, undefined);
+          const tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          if (!tok) tverts = [];
+        }
+
+        tierPolygons.push({ verts: tverts, footprintFromMassing });
+      }
+
+      // (verts already set from tier 0)
       let vertsOk = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
       if (!vertsOk) {
         setError(
@@ -1255,13 +1313,21 @@ export default function Scaffold3DView({
         }
         const tpd = tierPolyData[tgi];
         const tierV = tpd?.tierVerts ?? verts;
+        const footprintFromMassing = tierPolygons[tgi]?.footprintFromMassing ?? false;
 
-        // Center upper tier polygons on the same centroid as ground tier
-        // so all tiers are visually aligned
-        const tierCx = tierV.reduce((s, v) => s + v.x, 0) / tierV.length;
-        const tierCz = tierV.reduce((s, v) => s + v.z, 0) / tierV.length;
-        const tierOffX = hasTiers ? (cx - tierCx) : 0;
-        const tierOffZ = hasTiers ? (cz - tierCz) : 0;
+        // Upper tiers from wall-length-only polygons start near origin; align their bbox
+        // minimum to the ground footprint minimum so one straight back/side stays flush.
+        // Massing-tier vertices are already in ground footprint space — no offset.
+        let tierOffX = 0;
+        let tierOffZ = 0;
+        if (hasTiers && tgi > 0 && !footprintFromMassing && tierV.length >= 1) {
+          const minGx = Math.min(...verts.map((v) => v.x));
+          const minGz = Math.min(...verts.map((v) => v.z));
+          const minTx = Math.min(...tierV.map((v) => v.x));
+          const minTz = Math.min(...tierV.map((v) => v.z));
+          tierOffX = minGx - minTx;
+          tierOffZ = minGz - minTz;
+        }
 
         const v1 = { x: tierV[localIdx].x + tierOffX, z: tierV[localIdx].z + tierOffZ };
         const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
@@ -1297,12 +1363,10 @@ export default function Scaffold3DView({
         const tierNearEndIdx = tierIsOpen ? localIdx + 1 : ((localIdx + 1) % tierNearRow.length);
         const tierNearEnd = tierNearRow[tierNearEndIdx];
         const nearStart = tierNearStart
-          ? { x: tierNearStart.x + (hasTiers ? (cx - (tierV.reduce((s, v) => s + v.x, 0) / tierV.length)) : 0),
-              z: tierNearStart.z + (hasTiers ? (cz - (tierV.reduce((s, v) => s + v.z, 0) / tierV.length)) : 0) }
+          ? { x: tierNearStart.x + tierOffX, z: tierNearStart.z + tierOffZ }
           : fallbackStart;
         const nearEnd = tierNearEnd
-          ? { x: tierNearEnd.x + (hasTiers ? (cx - (tierV.reduce((s, v) => s + v.x, 0) / tierV.length)) : 0),
-              z: tierNearEnd.z + (hasTiers ? (cz - (tierV.reduce((s, v) => s + v.z, 0) / tierV.length)) : 0) }
+          ? { x: tierNearEnd.x + tierOffX, z: tierNearEnd.z + tierOffZ }
           : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
         const nearDz = nearEnd.z - nearStart.z;
