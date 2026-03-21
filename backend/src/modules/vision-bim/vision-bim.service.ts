@@ -309,6 +309,14 @@ export class VisionBimService {
 
   /**
    * Parse DXF buffer and extract building footprint (closed polyline or bounding outline) and height.
+   *
+   * Strategy (in order):
+   * 1. Collect all closed LWPOLYLINEs/POLYLINEs, score each as a building candidate.
+   *    Reject shapes that look like circles (equal edge lengths, high vertex count),
+   *    title blocks (extreme aspect ratio), or annotation borders.
+   *    Prefer orthogonal (rectilinear) shapes on building layers.
+   * 2. If no good polyline found, try LINE-based polygon detection.
+   * 3. Last resort: bounding box of all LINE entities.
    */
   async processDxf(buffer: Buffer): Promise<VisionFootprintResult> {
     try {
@@ -321,10 +329,88 @@ export class VisionBimService {
       }
       const unit = this.detectDxfUnit(dxf);
       const scaleToMm = unit === 'm' ? 1000 : unit === 'cm' ? 10 : 1;
-      let bestVertices: Array<{ x: number; y: number }> = [];
-      let bestArea = 0;
       let buildingHeightMm = 3000;
       const dimensions: Array<{ value: number; vertical: boolean }> = [];
+
+      // Building-related layer name keywords (Japanese + English)
+      const BUILDING_LAYER_KEYWORDS = [
+        '壁', 'wall', 'building', 'arch', '建物', '外壁', 'outline', 'outer',
+        'perimeter', '輪郭', '外形', 'structure', 'gaibu', 'exterior',
+      ];
+      const isBuildingLayer = (layer: string | undefined): boolean => {
+        if (!layer) return false;
+        const l = layer.toLowerCase();
+        return BUILDING_LAYER_KEYWORDS.some((k) => l.includes(k));
+      };
+
+      /**
+       * Score a candidate polyline as building footprint.
+       * Higher = better candidate. Returns -Infinity to reject outright.
+       */
+      const scorePolyline = (pts: Array<{ x: number; y: number }>, layer?: string): number => {
+        const n = pts.length;
+        if (n < 3) return -Infinity;
+
+        // Reject obvious title blocks / frames: extremely large aspect ratio (>20:1)
+        const xs = pts.map((p) => p.x);
+        const ys = pts.map((p) => p.y);
+        const w = Math.max(...xs) - Math.min(...xs);
+        const h = Math.max(...ys) - Math.min(...ys);
+        if (w < 1 || h < 1) return -Infinity;
+        const aspectRatio = Math.max(w, h) / Math.min(w, h);
+        if (aspectRatio > 25) return -Infinity;
+
+        // Compute edge lengths
+        const edgeLens: number[] = [];
+        for (let i = 0; i < n; i++) {
+          const a = pts[i];
+          const b = pts[(i + 1) % n];
+          edgeLens.push(Math.hypot(b.x - a.x, b.y - a.y));
+        }
+        const maxEdge = Math.max(...edgeLens);
+        const minEdge = Math.min(...edgeLens);
+        const avgEdge = edgeLens.reduce((s, v) => s + v, 0) / n;
+
+        // Reject circles / regular polygons: all edges nearly equal AND many vertices
+        // A circle approximated with N segments has maxEdge/minEdge ≈ 1.
+        const edgeVariance = maxEdge / (minEdge + 1e-9);
+        const looksLikeCircle = edgeVariance < 1.3 && n >= 8;
+        if (looksLikeCircle) return -Infinity;
+
+        // Reject very small shapes (annotation symbols, door swings, etc.)
+        // Minimum meaningful building perimeter: 4m (floor plan scale)
+        const perimeterMm = edgeLens.reduce((s, v) => s + v, 0);
+        if (perimeterMm < 4000) return -Infinity;
+
+        // Count orthogonal corners (turns close to 90°)
+        let orthoCorners = 0;
+        for (let i = 0; i < n; i++) {
+          const a = pts[(i - 1 + n) % n];
+          const b = pts[i];
+          const c = pts[(i + 1) % n];
+          const abx = b.x - a.x; const aby = b.y - a.y;
+          const bcx = c.x - b.x; const bcy = c.y - b.y;
+          const dot = abx * bcx + aby * bcy;
+          const cross = abx * bcy - aby * bcx;
+          const angle = Math.abs(Math.atan2(Math.abs(cross), dot) * 180 / Math.PI);
+          if (angle > 70 && angle < 110) orthoCorners++;
+        }
+        const orthoRatio = orthoCorners / n;
+
+        const area = Math.abs(this.polygonArea(pts));
+
+        // Score: prefer large area, high ortho ratio, building layers, reasonable vertex count
+        let score = Math.log(area + 1);
+        score += orthoRatio * 5;          // strongly prefer rectangular buildings
+        score -= Math.max(0, n - 30) * 0.5; // penalise very high vertex counts
+        if (isBuildingLayer(layer)) score += 10;
+        if (looksLikeCircle) score = -Infinity;
+
+        return score;
+      };
+
+      // Collect all candidate closed polylines with scores
+      const candidates: Array<{ pts: Array<{ x: number; y: number }>; score: number; area: number }> = [];
 
       for (const entity of dxf.entities) {
         if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
@@ -334,10 +420,12 @@ export class VisionBimService {
           }));
           const closed = entity.shape === true || (entity as any).closed === true || (entity as any).closed === 1;
           if (pts.length >= 3 && closed) {
-            const area = Math.abs(this.polygonArea(pts));
-            if (area > bestArea) {
-              bestArea = area;
-              bestVertices = pts;
+            const layer: string | undefined = (entity as any).layer;
+            const score = scorePolyline(pts, layer);
+            if (score > -Infinity) {
+              candidates.push({ pts, score, area: Math.abs(this.polygonArea(pts)) });
+            } else {
+              this.logger.debug?.(`DXF: rejected polyline layer=${layer} n=${pts.length} (circle/title/small)`);
             }
           }
         }
@@ -347,34 +435,46 @@ export class VisionBimService {
           dimensions.push({ value: dim.measurement * scaleToMm, vertical });
         }
       }
+
       const maxVerticalDim = dimensions.filter((d) => d.vertical).map((d) => d.value).reduce((a, b) => Math.max(a, b), 0);
       if (maxVerticalDim > 500) buildingHeightMm = Math.round(maxVerticalDim);
 
-      let vertices = bestVertices;
+      // Pick the best candidate: highest score (prefer ortho + building layer),
+      // but among equally-scored, prefer larger area.
+      candidates.sort((a, b) => b.score - a.score || b.area - a.area);
+      let vertices: Array<{ x: number; y: number }> = candidates.length > 0 ? candidates[0].pts : [];
+
+      this.logger.log(
+        candidates.length > 0
+          ? `DXF: picked LWPOLYLINE n=${vertices.length}, score=${candidates[0].score.toFixed(2)}, area=${candidates[0].area.toFixed(0)} (${candidates.length} candidates)`
+          : `DXF: no valid LWPOLYLINE found`,
+      );
+
       if (vertices.length < 3) {
-        // Try LINE-based polygon detection (concave hull) instead of bounding box
+        // Try LINE-based polygon detection (concave hull)
         const linePoly = this.detectPolygonFromLines(dxf.entities, scaleToMm);
         if (linePoly.length >= 3) {
           vertices = linePoly;
-          this.logger.log(`DXF: extracted polygon from ${linePoly.length} LINE segments (no LWPOLYLINE)`);
+          this.logger.log(`DXF: extracted polygon from LINE segments (${linePoly.length} verts)`);
         } else {
-          // Fallback: bounding box only when LINE-based detection fails
+          // Last resort: bounding box of all LINE entities
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           for (const e of dxf.entities) {
             if (e.type === 'LINE' && e.start && e.end) {
               const s = e.start as { x: number; y: number };
               const en = e.end as { x: number; y: number };
-              minX = Math.min(minX, s.x, en.x); maxX = Math.max(maxX, s.x, en.x);
-              minY = Math.min(minY, s.y, en.y); maxY = Math.max(maxY, s.y, en.y);
+              minX = Math.min(minX, s.x * scaleToMm, en.x * scaleToMm);
+              maxX = Math.max(maxX, s.x * scaleToMm, en.x * scaleToMm);
+              minY = Math.min(minY, s.y * scaleToMm, en.y * scaleToMm);
+              maxY = Math.max(maxY, s.y * scaleToMm, en.y * scaleToMm);
             }
           }
           if (minX !== Infinity && maxX - minX > 100 && maxY - minY > 100) {
             vertices = [
-              { x: minX * scaleToMm, y: minY * scaleToMm },
-              { x: maxX * scaleToMm, y: minY * scaleToMm },
-              { x: maxX * scaleToMm, y: maxY * scaleToMm },
-              { x: minX * scaleToMm, y: maxY * scaleToMm },
+              { x: minX, y: minY }, { x: maxX, y: minY },
+              { x: maxX, y: maxY }, { x: minX, y: maxY },
             ];
+            this.logger.log(`DXF: using bounding box fallback ${(maxX - minX).toFixed(0)}×${(maxY - minY).toFixed(0)}mm`);
           }
         }
       }
@@ -394,9 +494,14 @@ export class VisionBimService {
   }
 
   /**
-   * Build closed polygon from LINE entities (concave hull).
-   * Uses adjacency + loop walking; selects largest-area loop.
-   * Avoids bounding box when a real perimeter can be traced.
+   * Build closed polygon from LINE entities.
+   *
+   * Strategy:
+   * 1. Snap all endpoints to a grid to merge near-coincident points.
+   * 2. Build an adjacency graph of connected endpoints.
+   * 3. Walk loops using a "rightmost turn" heuristic (follows outer boundary).
+   *    This naturally traces the outer perimeter of concave shapes (L, U, T).
+   * 4. Score loops by area; reject circles; return the best building candidate.
    */
   private detectPolygonFromLines(
     entities: any[],
@@ -407,70 +512,136 @@ export class VisionBimService {
       if (e.type === 'LINE' && e.start && e.end) {
         const s = e.start as { x: number; y: number };
         const en = e.end as { x: number; y: number };
-        segments.push({
-          x1: s.x * scaleToMm,
-          y1: s.y * scaleToMm,
-          x2: en.x * scaleToMm,
-          y2: en.y * scaleToMm,
-        });
+        const x1 = s.x * scaleToMm; const y1 = s.y * scaleToMm;
+        const x2 = en.x * scaleToMm; const y2 = en.y * scaleToMm;
+        // Skip degenerate (zero-length) segments
+        if (Math.hypot(x2 - x1, y2 - y1) > 1) {
+          segments.push({ x1, y1, x2, y2 });
+        }
       }
     }
     if (segments.length < 3) return [];
 
-    const snap = 5;
-    const key = (x: number, y: number) =>
-      `${Math.round(x / snap) * snap},${Math.round(y / snap) * snap}`;
-    const adj = new Map<string, string[]>();
-    const add = (a: string, b: string) => {
-      if (a === b) return;
-      if (!adj.has(a)) adj.set(a, []);
-      if (!adj.get(a)!.includes(b)) adj.get(a)!.push(b);
+    // Adaptive snap tolerance: ~0.5% of bounding extent, min 1mm, max 100mm
+    const allX = segments.flatMap((s) => [s.x1, s.x2]);
+    const allY = segments.flatMap((s) => [s.y1, s.y2]);
+    const extentX = Math.max(...allX) - Math.min(...allX);
+    const extentY = Math.max(...allY) - Math.min(...allY);
+    const snap = Math.max(1, Math.min(100, Math.max(extentX, extentY) * 0.005));
+
+    const snapCoord = (v: number) => Math.round(v / snap) * snap;
+    const key = (x: number, y: number) => `${snapCoord(x)},${snapCoord(y)}`;
+    const keyToXY = (k: string): { x: number; y: number } => {
+      const [x, y] = k.split(',').map(Number);
+      return { x, y };
     };
+
+    // Build directed edge list: for each (from→to) store the direction angle
+    type DirEdge = { to: string; angle: number };
+    const adj = new Map<string, DirEdge[]>();
+    const addEdge = (fromKey: string, toKey: string, angle: number) => {
+      if (fromKey === toKey) return;
+      if (!adj.has(fromKey)) adj.set(fromKey, []);
+      adj.get(fromKey)!.push({ to: toKey, angle });
+    };
+
     for (const seg of segments) {
       const k1 = key(seg.x1, seg.y1);
       const k2 = key(seg.x2, seg.y2);
-      add(k1, k2);
-      add(k2, k1);
+      const angle12 = Math.atan2(seg.y2 - seg.y1, seg.x2 - seg.x1);
+      const angle21 = Math.atan2(seg.y1 - seg.y2, seg.x1 - seg.x2);
+      addEdge(k1, k2, angle12);
+      addEdge(k2, k1, angle21);
     }
 
-    const polygons: Array<{ points: Array<{ x: number; y: number }>; area: number }> = [];
+    if (adj.size < 3) return [];
 
-    const walkLoop = (start: string): string[] | null => {
-      const path: string[] = [start];
-      let cur = start;
-      const maxSteps = adj.size + 5;
+    // Walk outer boundary using "most clockwise turn" heuristic.
+    // At each node, choose the neighbor that makes the rightmost (most CW) turn
+    // relative to the incoming direction. This traces the outer perimeter.
+    const walkOuterLoop = (startKey: string, startAngle: number): string[] | null => {
+      const path: string[] = [startKey];
+      const visited = new Set<string>([`${startKey}@${startAngle.toFixed(4)}`]);
+      let curKey = startKey;
+      let incomingAngle = startAngle;
+      const maxSteps = adj.size * 2 + 10;
+
       for (let step = 0; step < maxSteps; step++) {
-        const nexts = adj.get(cur) ?? [];
-        let found = false;
-        for (const n of nexts) {
-          if (n === start && path.length >= 3) return path;
-          if (!path.includes(n)) {
-            path.push(n);
-            cur = n;
-            found = true;
-            break;
+        const neighbors = adj.get(curKey) ?? [];
+        if (neighbors.length === 0) return null;
+
+        // Find the neighbor that makes the most clockwise turn from the reverse incoming direction
+        // (reverse = we came FROM that direction, so reverse = incomingAngle + π)
+        const reverseAngle = incomingAngle + Math.PI;
+        let bestAngleDiff = Infinity;
+        let bestNeighbor: DirEdge | null = null;
+
+        for (const nb of neighbors) {
+          if (path.length > 1 && nb.to === path[path.length - 2]) continue; // don't go back
+          // Angular difference: how much we turn right from reverseAngle
+          let diff = nb.angle - reverseAngle;
+          while (diff <= 0) diff += 2 * Math.PI;
+          while (diff > 2 * Math.PI) diff -= 2 * Math.PI;
+          if (diff < bestAngleDiff) {
+            bestAngleDiff = diff;
+            bestNeighbor = nb;
           }
         }
-        if (!found) return null;
+
+        if (!bestNeighbor) return null;
+
+        if (bestNeighbor.to === startKey && path.length >= 3) {
+          return path; // closed loop found
+        }
+
+        const visitKey = `${bestNeighbor.to}@${bestNeighbor.angle.toFixed(4)}`;
+        if (visited.has(visitKey)) return null; // loop detected (not closed)
+        visited.add(visitKey);
+        path.push(bestNeighbor.to);
+        incomingAngle = bestNeighbor.angle;
+        curKey = bestNeighbor.to;
       }
       return null;
     };
 
-    for (const [node] of adj) {
-      const loop = walkLoop(node);
-      if (loop && loop.length >= 3) {
-        const pts = loop.map((k) => {
-          const [x, y] = k.split(',').map(Number);
-          return { x, y };
-        });
+    const candidates: Array<{ points: Array<{ x: number; y: number }>; area: number; score: number }> = [];
+
+    for (const [startKey, edges] of adj) {
+      for (const startEdge of edges) {
+        const loop = walkOuterLoop(startKey, startEdge.angle);
+        if (!loop || loop.length < 3) continue;
+        const pts = loop.map(keyToXY);
         const area = Math.abs(this.polygonArea(pts));
-        if (area > 1) polygons.push({ points: pts, area });
+        if (area < 100) continue; // too small
+
+        // Score: same as polyline scoring — reject circles, prefer ortho
+        const n = pts.length;
+        const edgeLens: number[] = pts.map((p, i) => Math.hypot(pts[(i+1)%n].x - p.x, pts[(i+1)%n].y - p.y));
+        const maxEdge = Math.max(...edgeLens);
+        const minEdge = Math.min(...edgeLens);
+        const edgeVariance = maxEdge / (minEdge + 1e-9);
+        if (edgeVariance < 1.3 && n >= 8) continue; // circle
+
+        let orthoCorners = 0;
+        for (let i = 0; i < n; i++) {
+          const a = pts[(i-1+n)%n]; const b = pts[i]; const c = pts[(i+1)%n];
+          const abx = b.x-a.x; const aby = b.y-a.y;
+          const bcx = c.x-b.x; const bcy = c.y-b.y;
+          const cross = Math.abs(abx*bcy - aby*bcx);
+          const dot = abx*bcx + aby*bcy;
+          const angle = Math.abs(Math.atan2(cross, dot) * 180 / Math.PI);
+          if (angle > 70 && angle < 110) orthoCorners++;
+        }
+        const score = Math.log(area + 1) + (orthoCorners / n) * 5;
+        candidates.push({ points: pts, area, score });
       }
     }
 
-    if (polygons.length === 0) return [];
-    polygons.sort((a, b) => b.area - a.area);
-    return polygons[0].points;
+    if (candidates.length === 0) return [];
+    candidates.sort((a, b) => b.score - a.score || b.area - a.area);
+    const best = candidates[0];
+    this.logger.log(`DXF LINE-based: best loop n=${best.points.length} area=${best.area.toFixed(0)} score=${best.score.toFixed(2)}`);
+    return best.points;
   }
 
   /**
