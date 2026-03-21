@@ -35,6 +35,10 @@ export interface VisionFootprintResult {
   wallHeightsMm?: number[];
   /** Optional stacked building masses for setback / terrace buildings. */
   massingTiers?: VisionMassingTier[];
+  /** Confidence in the extracted building height: 'high', 'medium', or 'low'. */
+  heightConfidence?: 'high' | 'medium' | 'low';
+  /** Type of drawing: 'plan', '3d', 'elevation', 'section'. */
+  drawingType?: 'plan' | '3d' | 'elevation' | 'section';
   /** URL to the stored IFC file for frontend 3D rendering. */
   ifcFileUrl?: string;
   /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */

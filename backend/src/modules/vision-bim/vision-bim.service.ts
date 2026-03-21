@@ -51,6 +51,19 @@ export interface VisionFootprintResult {
   /** URL to the stored IFC file for frontend 3D rendering (set by controller after storage upload). */
   ifcFileUrl?: string;
   /**
+   * Confidence in the extracted building height.
+   * 'high' = explicit height annotation or elevation drawing.
+   * 'medium' = estimated from floor count on a 3D view.
+   * 'low' = floor plan (no height info visible); floorCount heuristic used.
+   */
+  heightConfidence?: 'high' | 'medium' | 'low';
+  /**
+   * Type of drawing detected.
+   * 'plan' = top-down floor plan, 'elevation' = side elevation,
+   * '3d' = 3D perspective/isometric, 'section' = cross-section.
+   */
+  drawingType?: 'plan' | '3d' | 'elevation' | 'section';
+  /**
    * Optional obstacles / special areas that affect scaffold layout (clearance, Buragetto).
    * Balconies and AC (outdoor unit) areas reduce clearance and may trigger single-pole + bracket layout.
    * Pillars (columns) near the perimeter trigger Single-Pole + Buragetto when scaffold path intersects.
@@ -100,6 +113,8 @@ Required fields:
 - buildingHeightMm: total building height in mm (ground to highest point/eaves/top). If not shown, use typical 3000mm per story.
 
 Optional fields (read from dimension lines and annotations):
+- drawingType: "plan" (top-down floor plan), "3d" (perspective/isometric/BIM render), "elevation" (side view), or "section" (cross-section). ALWAYS set this field.
+- heightConfidence: "high" if building height is read from explicit dimension annotation or elevation drawing, "medium" if estimated from floor count in a 3D view, "low" if this is a plan view with no height information visible. CRITICAL: For top-down floor plans, height is NEVER visible — set heightConfidence to "low".
 - wallHeightsMm: array of heights in mm, one per edge, same count as vertices.
   For STEPPED / TIERED / SETBACK buildings where different facade sections have different heights:
   * A stepped building (like a wedding cake or cascading tower) has wings or sections at different roof levels.
@@ -140,11 +155,17 @@ Optional fields (read from dimension lines and annotations):
 - groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
 - floorCount: number of visible floors/stories (count them). Use for height estimation when no explicit height is given.
-- obstacles: optional array of special areas that affect scaffold clearance and layout.
+- obstacles: array of special areas that affect scaffold clearance and layout.
   Balconies/AC: { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] }
   Pillars/columns: { "type": "pillar", "center": { x, y } or { xFrac, yFrac }, "radiusMm": number }
   Doors/entrances: { "type": "door", "wallIndex": number, "positionMm": number, "widthMm": number }
-  Omit obstacles if none are clearly visible or labeled.
+  DOOR DETECTION (critical for scaffold beam frame placement):
+  * In floor plans, doors are shown as arcs (quarter-circle swing lines) attached to wall openings. Count EVERY door swing arc that touches an EXTERIOR wall.
+  * Interior doors (between rooms inside the building) should be IGNORED — only count doors on exterior walls.
+  * Sliding doors, terrace doors, and entrance doors on exterior walls all count.
+  * Common locations: main entrance, terrace/balcony access, service entrance, emergency exits.
+  * Each door needs a beam frame bracket on the scaffold — missing doors means incorrect scaffold layout.
+  Omit obstacles only if truly none are visible.
 
 =============== ARCHITECTURAL FLOOR PLANS (detailed room layouts) — READ THIS FIRST ===============
 If the image shows interior rooms, furniture, bathrooms, staircases, corridors, or partitions, it is a detailed architectural floor plan. Apply these rules in order:
@@ -157,19 +178,24 @@ STEP 1 — IDENTIFY THE EXTERIOR SHELL:
 STEP 2 — DETECT ALL PROTRUDING SECTIONS (CRITICAL — most common extraction error):
 A floor plan may have sections that protrude OUTWARD from the main rectangular body.
 
-INCLUDE in the polygon:
+INCLUDE in the polygon (these are structural and need scaffold):
   * Enclosed rooms / wings that protrude outward — they have thick structural walls on ALL sides forming a closed boundary.
   * Enclosed entrance halls, enclosed vestibules, or structural stairwells with thick outer walls.
+  * STAIRWELL ENCLOSURES: Look for staircase symbols (parallel lines representing steps, or spiral stairs) near the building perimeter. If the stairwell has thick structural walls on its exterior sides, it is a protruding wing — INCLUDE it. Stairwells are very commonly missed.
+  * Elevator shafts or service cores that protrude beyond the main rectangle.
+  * ANY section with thick exterior walls, even if small (down to ~1500mm wide), is structural.
 
 EXCLUDE from the polygon (these are NOT structural walls — scaffold cannot attach):
-  * OPEN TERRACES / DECKS / PATIOS — areas labeled "Terrace", "Deck", "テラス" that show NO enclosing structural walls on the outer edge (only railings, posts, columns, or open air). If the outer boundary of the terrace is drawn with thin lines, dashed lines, or shows railings/posts instead of solid thick walls → EXCLUDE it.
+  * OPEN TERRACES / DECKS / PATIOS — areas labeled "Terrace", "Deck", "テラス", "Patio" that show NO enclosing structural walls on the outer edge (only railings, posts, columns, or open air). If the outer boundary of the terrace is drawn with thin lines, dashed lines, or shows railings/posts instead of solid thick walls → EXCLUDE it.
+  * HOWEVER: If the building has walls ABOVE an open terrace (e.g. multi-story building where upper floors extend over the terrace), the wall extends the full length — use the FULL building dimension including the terrace zone for that side's wall length.
   * Covered walkways, open balconies, canopies, or carports with pillars but no walls.
-  * External staircases that are outside the building envelope.
+  * External staircases that are outside the building envelope (open-air metal stairs).
   * Small protrusions < 500mm (entrance steps, bay windows, utility boxes).
 
 DETECTION RULE: Look at the OUTER edge of the protruding section:
   * If it has the SAME thick wall lines as the main building → INCLUDE (it is a structural wing).
   * If it has thin lines, dashed lines, railing symbols, column dots, or is open → EXCLUDE (it is a deck/terrace).
+  * If you see stairs/steps inside a thick-walled enclosure near the building edge → INCLUDE as protruding stairwell.
 
 DIMENSION RULE: For the side of the building where a structural protrusion exists, the overall dimension arrow spanning the FULL side (including the protrusion) gives the total length.
 CRITICAL: Use the overall dimension line that runs along the building's STRUCTURAL EXTERIOR WALL. If there is a separate smaller dimension for a terrace/deck beyond the structural wall, do NOT add it to the wall length.
@@ -867,7 +893,7 @@ JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the S
 
 VERTEX COUNT GUIDE: rectangle=4, trapezoid=4, L-shape=6. If you output 5+ vertices for a simple box building, you are WRONG — go back and output 4.
 
-Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence.`,
+Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).`,
               },
             ],
           },
@@ -951,6 +977,19 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       // Fix: collapse to the 4-vertex rectangle (A,B,A,B).
       parsed.vertices = this.fixPerspectiveHexagon(parsed);
 
+      // Normalize drawingType
+      const rawDrawingType = (parsed as any).drawingType;
+      if (['plan', '3d', 'elevation', 'section'].includes(rawDrawingType)) {
+        parsed.drawingType = rawDrawingType;
+      }
+
+      // Normalize heightConfidence from AI response
+      const rawHeightConf = (parsed as any).heightConfidence;
+      if (['high', 'medium', 'low'].includes(rawHeightConf)) {
+        parsed.heightConfidence = rawHeightConf;
+      }
+
+      const heightWasExplicit = parsed.buildingHeightMm && parsed.buildingHeightMm >= 1000;
       if (!parsed.buildingHeightMm || parsed.buildingHeightMm < 1000) {
         const floors = typeof (parsed as any).floorCount === 'number' && (parsed as any).floorCount >= 1
           ? (parsed as any).floorCount
@@ -960,6 +999,27 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       if (typeof (parsed as any).floorCount === 'number' && (parsed as any).floorCount >= 1) {
         parsed.floorCount = (parsed as any).floorCount;
       }
+
+      // Infer heightConfidence when AI didn't set it or when we used fallback
+      if (!parsed.heightConfidence) {
+        if (parsed.drawingType === 'plan') {
+          parsed.heightConfidence = 'low';
+        } else if (parsed.drawingType === 'elevation' || parsed.drawingType === 'section') {
+          parsed.heightConfidence = heightWasExplicit ? 'high' : 'medium';
+        } else if (parsed.drawingType === '3d') {
+          parsed.heightConfidence = heightWasExplicit ? 'medium' : 'low';
+        } else {
+          parsed.heightConfidence = heightWasExplicit ? 'medium' : 'low';
+        }
+      }
+      // Plan views can never have high height confidence — override if AI claimed high
+      if (parsed.drawingType === 'plan' && parsed.heightConfidence === 'high') {
+        parsed.heightConfidence = 'low';
+      }
+
+      this.logger.log(
+        `Height: ${parsed.buildingHeightMm}mm, confidence=${parsed.heightConfidence}, drawingType=${parsed.drawingType ?? 'unknown'}`,
+      );
       const n = parsed.vertices.length;
       let wallLengths = Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === n
         ? parsed.wallLengthsMm as number[]
@@ -1158,8 +1218,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     // L/U/T shapes have 6-8 vertices; multi-wing buildings may have 10-16.
     // Grid-tracing artifacts produce runs of 3+ equal-length edges on a straight wall.
     // Only simplify when there are clearly too many vertices.
-    // Preserve at least 75% of original vertices to avoid over-simplification.
-    const minVertices = Math.max(4, Math.ceil(verts.length * 0.75));
+    // For small polygons (≤8 vertices), preserve all — these are valid L/U/T shapes.
+    // For larger polygons, preserve at least 80% to avoid over-simplification.
+    const minVertices = verts.length <= 8
+      ? verts.length
+      : Math.max(4, Math.ceil(verts.length * 0.80));
 
     const isMm = 'x' in verts[0];
 
@@ -2023,27 +2086,31 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     }
 
     // --- Pattern 3: Bounding box is nearly rectangular but too many vertices ---
-    const xs = pts.map((p) => p.x);
-    const ys = pts.map((p) => p.y);
-    const bboxW = Math.max(...xs) - Math.min(...xs);
-    const bboxH = Math.max(...ys) - Math.min(...ys);
-    const bboxArea = bboxW * bboxH;
-    if (bboxArea > 0 && n >= 5) {
-      // Compute polygon area using shoelace formula
-      let polyArea = 0;
-      for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        polyArea += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
-      }
-      polyArea = Math.abs(polyArea) / 2;
-      const fillRatio = polyArea / bboxArea;
-      // If polygon fills >90% of its bounding box with 5+ vertices, it's a perspective distortion of a rectangle
-      // (Real L-shapes fill ~75%, cut-corners fill ~95% but we only collapse 5+ vertex polygons)
-      if (fillRatio > 0.90 && n >= 5) {
-        this.logger.warn(
-          `Detected near-rectangular polygon (${n} vertices, fill ratio ${(fillRatio * 100).toFixed(1)}%). Collapsing to rectangle.`,
-        );
-        return this.buildRectFromDimensions(parsed, verts, edges);
+    // SKIP for floor plans with dimension text — they produce accurate L/T/U shapes
+    // that should NOT be collapsed. Only apply to 3D views where perspective distortion
+    // creates near-rectangular polygons with extra vertices.
+    const hasReliableDimText = parsed.wallLengthsFromDimText === true;
+    const isFloorPlan = (parsed as any).drawingType === 'plan';
+    if (!hasReliableDimText && !isFloorPlan) {
+      const xs = pts.map((p) => p.x);
+      const ys = pts.map((p) => p.y);
+      const bboxW = Math.max(...xs) - Math.min(...xs);
+      const bboxH = Math.max(...ys) - Math.min(...ys);
+      const bboxArea = bboxW * bboxH;
+      if (bboxArea > 0 && n >= 5) {
+        let polyArea = 0;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          polyArea += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+        }
+        polyArea = Math.abs(polyArea) / 2;
+        const fillRatio = polyArea / bboxArea;
+        if (fillRatio > 0.90 && n >= 5) {
+          this.logger.warn(
+            `Detected near-rectangular polygon (${n} vertices, fill ratio ${(fillRatio * 100).toFixed(1)}%). Collapsing to rectangle.`,
+          );
+          return this.buildRectFromDimensions(parsed, verts, edges);
+        }
       }
     }
 

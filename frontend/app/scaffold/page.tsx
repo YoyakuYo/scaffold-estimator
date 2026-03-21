@@ -860,6 +860,8 @@ function ScaffoldPageContent() {
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
     wallLengthsFromDimText?: boolean;
+    heightConfidence?: 'high' | 'medium' | 'low';
+    drawingType?: 'plan' | '3d' | 'elevation' | 'section';
     ifcFileUrl?: string;
     ifcArrayBuffer?: ArrayBuffer;
     isStepped?: boolean;
@@ -1298,6 +1300,8 @@ function ScaffoldPageContent() {
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
+                      heightConfidence: footprint.heightConfidence,
+                      drawingType: footprint.drawingType,
                       ifcFileUrl: footprint.ifcFileUrl,
                       ifcArrayBuffer,
                       isStepped,
@@ -1376,6 +1380,22 @@ function ScaffoldPageContent() {
                     <p className="text-xs text-gray-500 mt-0.5">
                       {(aiBimPreview.buildingHeightMm / 1000).toFixed(1)} m
                     </p>
+                    {aiBimPreview.heightConfidence === 'low' && (
+                      <div className="mt-1.5 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 border border-amber-200">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-800">
+                          {aiBimPreview.drawingType === 'plan'
+                            ? '平面図から建物高さを読み取ることはできません。高さはフロア数から推定しています。正確な高さを手動で入力してください。'
+                            : '建物高さは推定値です。正確な高さを入力してください。'}
+                        </p>
+                      </div>
+                    )}
+                    {aiBimPreview.heightConfidence === 'medium' && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        高さはフロア数から推定 — 確認をお勧めします
+                      </p>
+                    )}
                     {aiBimPreview.isStepped && (
                       <p className="text-xs text-violet-600 mt-1 flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-full bg-violet-500" />
