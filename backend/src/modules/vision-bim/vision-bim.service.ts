@@ -120,7 +120,16 @@ Optional fields (read from dimension lines and annotations):
 - wallLengthsMm: array of lengths in mm, one per edge, same count as vertices.
   Edge i = vertex[i] → vertex[i+1]; last edge = last vertex → first vertex (closes polygon).
   Read dimension annotations: "2945", "10@1829=18290" means 18290mm.
-  IMPORTANT: Always output in mm. If plan shows metres (e.g. "7.200 m") multiply by 1000. If centimetres (e.g. "720 cm") multiply by 10.
+  UNIT CONVERSION — always output in mm:
+  * Metres: "7.200 m" or "7200" with m label → multiply by 1000 → 7200mm
+  * Centimetres: "720 cm" → multiply by 10 → 7200mm
+  * Feet-inches (imperial): Convert using 1 foot = 304.8mm, 1 inch = 25.4mm.
+    Examples: "27'-0\"" = 27 × 304.8 = 8229.6mm ≈ 8230mm
+              "11'-6\"" = 11 × 304.8 + 6 × 25.4 = 3353mm + 152mm = 3505mm
+              "4'-4\"" = 4 × 304.8 + 4 × 25.4 = 1219mm + 102mm = 1321mm
+    When BOTH metric (m) and imperial (ft/in) dimensions appear on the same drawing,
+    use the metric value — it is exact, while imperial may be rounded.
+  * Grid notation: "10@1829=18290" means 10 spans × 1829mm = 18290mm total
   Only omit if no dimension annotations are visible at all.
 - wallLengthsFromDimText: true if wallLengthsMm was read from explicit dimension lines; false/omit if only estimated from proportions.
 - scaffoldTypeHint: "wakugumi" for 枠組足場 or imperial spans (1829/914/1219/1524); "kusabi" for くさび式 or metric spans (600/900/1200/1500/1800). Omit if unclear.
@@ -200,6 +209,7 @@ Polygon rules — follow these exactly:
    - The exterior perimeter is a single closed polygon. All interior elements are INSIDE this polygon and must be ignored.
    - For an L-shaped floor plan: the outer boundary has 6 vertices. The "missing" corner (the interior notch) creates the 2 inward-turning vertices.
    - For a rectangular floor plan with a protruding section: the outer boundary has 6–8 vertices.
+   - TERRACES, BALCONIES, EXTERNAL PLATFORMS: A terrace or outdoor platform that is ATTACHED to the building and enclosed by structural walls IS part of the exterior perimeter — include it as vertices. Only exclude terraces if they are clearly open decks with no enclosing walls (i.e. just a slab with railings).
    - IGNORE any small protrusions for entrance steps, bay windows, or utility boxes smaller than 500mm — round them into the nearest straight wall.
    - The final polygon should look like the silhouette you would see if you held the floor plan at arm's length and traced the outer edge with a marker.
    STEP-BY-STEP for floor plans:
@@ -207,6 +217,7 @@ Polygon rules — follow these exactly:
    b) Walk the outer boundary clockwise, placing a vertex only at TRUE OUTSIDE CORNERS (corners where the exterior wall changes direction).
    c) Never place a vertex where an interior wall meets the exterior wall — that is NOT an exterior corner.
    d) The result should be 4–10 vertices for most buildings.
+   e) DIMENSION READING: Read all numeric labels near dimension lines on the exterior boundary. For each edge, find the closest matching dimension annotation. Prefer the metric value when both metric and imperial are shown.
 
 3b. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
    Japanese scaffold drawings use color coding that you must understand:
