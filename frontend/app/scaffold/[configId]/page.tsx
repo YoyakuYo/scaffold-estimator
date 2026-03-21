@@ -127,13 +127,16 @@ function ScaffoldResultPage() {
     if (!base) return base;
     if (Array.isArray(base.walls) && base.walls.length > 0) {
       const configWalls = config?.walls?.filter((w) => w.enabled !== false) ?? [];
-      const mergedWalls = base.walls.map((wall: WallCalculationResult, index: number) => ({
-        ...wall,
-        wallHeightMm:
-          wall.wallHeightMm ??
-          configWalls.find((cfg) => cfg.side === wall.side)?.wallHeightMm ??
-          configWalls[index]?.wallHeightMm,
-      }));
+      const mergedWalls = base.walls.map((wall: WallCalculationResult, index: number) => {
+        const cfgMatch = configWalls.find((cfg) => cfg.side === wall.side) ?? configWalls[index];
+        return {
+          ...wall,
+          wallHeightMm: wall.wallHeightMm ?? cfgMatch?.wallHeightMm,
+          baseHeightMm: (wall as any).baseHeightMm ?? (cfgMatch as any)?.baseHeightMm,
+          tierGroup: (wall as any).tierGroup ?? (cfgMatch as any)?.tierGroup,
+          tierIndex: (wall as any).tierIndex ?? (cfgMatch as any)?.tierIndex,
+        };
+      });
       return { ...base, walls: mergedWalls };
     }
     if (!config?.walls?.length) return base;

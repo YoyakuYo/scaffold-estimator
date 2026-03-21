@@ -221,16 +221,23 @@ function buildPolygonFromWalls(
 export default function ScaffoldPlanView({ result }: Props) {
   const { t, locale } = useI18n();
   const svgRef = useRef<SVGSVGElement>(null);
-  const walls: WallCalculationResult[] = result?.walls ?? [];
+  const allWalls: WallCalculationResult[] = result?.walls ?? [];
   const [scale, setScale] = useState(1);
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
 
   const scaffoldWidthMm = result?.scaffoldWidthMm ?? 600;
 
-  if (walls.length === 0) {
+  if (allWalls.length === 0) {
     return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
   }
+
+  // For tier-aware buildings (stepped/setback), use only ground-tier walls for
+  // the plan polygon. Upper tiers stack vertically and share the same plan footprint.
+  const hasTiers = allWalls.some((w) => ((w as any).tierIndex ?? 0) > 0);
+  const walls = hasTiers
+    ? allWalls.filter((w) => ((w as any).tierIndex ?? 0) === 0)
+    : allWalls;
 
   const storedVertices: Array<Record<string, any>> | undefined =
     Array.isArray(result?.polygonVertices) ? result.polygonVertices : undefined;

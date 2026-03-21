@@ -59,6 +59,9 @@ export class ScaffoldConfigService {
       kaidanOffsets: w.kaidanOffsets,
       segments: w.segments,
       scaffoldWidthMm: w.scaffoldWidthMm,
+      baseHeightMm: w.baseHeightMm,
+      tierGroup: w.tierGroup,
+      tierIndex: w.tierIndex,
     }));
 
     // ── Step 2: Run parametric pipeline when we have buildingOutline + (obstacles or widthBySide) ──
@@ -268,6 +271,9 @@ export class ScaffoldConfigService {
       kaidanOffsets: w.kaidanOffsets,
       segments: w.segments,
       scaffoldWidthMm: w.scaffoldWidthMm,
+      baseHeightMm: w.baseHeightMm,
+      tierGroup: w.tierGroup,
+      tierIndex: w.tierIndex,
     }));
 
     const hasOutline = dto.buildingOutline && dto.buildingOutline.length >= 3;
