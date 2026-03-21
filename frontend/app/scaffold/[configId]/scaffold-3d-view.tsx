@@ -19,6 +19,7 @@ import {
 } from '@/lib/scaffold-3d-components';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
 import { normaliseMassingTierVerticesToGroundFootprint } from '@/lib/bim-tier-footprint-normalize';
+import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { bimHexToNumber } from '@/lib/bim-facade-colors';
 
 /**
@@ -1135,18 +1136,50 @@ export default function Scaffold3DView({
             .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm)
         : [];
 
+      const groundWallLensMm =
+        tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
+      const bimPlan =
+        isAiBim &&
+        massingTiersSorted.length > 0 &&
+        Array.isArray(storedVerts) &&
+        storedVerts.length >= 3
+          ? computeBimPreviewPlanToM({
+              outline: storedVerts as any[],
+              massingTiers: massingTiersSorted,
+              wallLengthsMm:
+                groundWallLensMm.length > 0 ? groundWallLensMm : walls.map((w) => w.wallLengthMm ?? 0),
+            })
+          : null;
+
       const tierPolygons: Array<{ verts: PointXZ[]; footprintFromMassing: boolean }> = [];
 
       {
         const tg0 = tierGroups[0];
-        const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
-        let tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
-        let tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-        if (!tok && sv0 && sv0.length > 0) {
-          tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
-          tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+        const n0 = tg0.walls.length;
+        let tverts: PointXZ[] = [];
+        let tok = false;
+        let footprint0FromPlan = false;
+
+        if (bimPlan && storedVerts && storedVerts.length >= n0) {
+          tverts = bimPlan.toPlanM(storedVerts.slice(0, n0) as any);
+          tok =
+            tverts.length === n0 &&
+            tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          footprint0FromPlan = tok;
         }
-        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: false });
+
+        if (!tok) {
+          const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
+          tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
+          tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          if (!tok && sv0 && sv0.length > 0) {
+            tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
+            tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          }
+          footprint0FromPlan = false;
+        }
+
+        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: footprint0FromPlan });
       }
 
       // Primary polygon = ground tier (or first valid tier)
@@ -1176,7 +1209,15 @@ export default function Scaffold3DView({
               ? byIdx
               : undefined;
 
-        if (candidate && verts.length >= 2) {
+        if (bimPlan && candidate && candidate.vertices.length === nW) {
+          const mapped = bimPlan.toPlanM(candidate.vertices as any);
+          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+            tverts = mapped;
+            footprintFromMassing = true;
+          }
+        }
+
+        if (!footprintFromMassing && candidate && verts.length >= 2 && !bimPlan) {
           const mapped = normaliseMassingTierVerticesToGroundFootprint(
             candidate.vertices,
             verts,
@@ -1320,7 +1361,8 @@ export default function Scaffold3DView({
         // Massing-tier vertices are already in ground footprint space — no offset.
         let tierOffX = 0;
         let tierOffZ = 0;
-        if (hasTiers && tgi > 0 && !footprintFromMassing && tierV.length >= 1) {
+        // Min-corner nudge only for non–AI-BIM massing paths; BIM uses preview-aligned coords (bimPlan).
+        if (hasTiers && tgi > 0 && !footprintFromMassing && tierV.length >= 1 && !bimPlan) {
           const minGx = Math.min(...verts.map((v) => v.x));
           const minGz = Math.min(...verts.map((v) => v.z));
           const minTx = Math.min(...tierV.map((v) => v.x));
@@ -1845,7 +1887,7 @@ export default function Scaffold3DView({
             .filter((tier) => Array.isArray(tier.vertices) && tier.vertices.length >= 3)
             .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
           for (const tier of sortedTiers) {
-            const tierVerts = normaliseTierVerts(tier.vertices);
+            const tierVerts = bimPlan ? bimPlan.toPlanM(tier.vertices) : normaliseTierVerts(tier.vertices);
             if (tierVerts.length < 3) continue;
             const shapeTier = new THREE.Shape();
             shapeTier.moveTo(tierVerts[0].x - cx, -(tierVerts[0].z - cz));

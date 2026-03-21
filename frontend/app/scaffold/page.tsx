@@ -39,6 +39,7 @@ import {
   extractBimFacadeColorsFromImageFile,
   isRasterImageUpload,
 } from '@/lib/bim-facade-colors';
+import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 
 // Dynamic import for PerimeterTracer (uses browser APIs)
 const PerimeterTracer = dynamic(
@@ -234,47 +235,11 @@ function Building3DPreview({
       container.appendChild(renderer.domElement);
       rendererRef.current = renderer;
 
-      // Normalize outline/tier vertices to meters in one shared coordinate frame.
-      const allPlanVerts = [
-        ...outline,
-        ...(massingTiers?.flatMap((tier) =>
-          tier.vertices.map((v) =>
-            'xFrac' in v
-              ? { xFrac: v.xFrac, yFrac: v.yFrac }
-              : { xFrac: v.x, yFrac: v.y },
-          ),
-        ) ?? []),
-      ];
-      const xs = allPlanVerts.map((p) => p.xFrac);
-      const ys = allPlanVerts.map((p) => p.yFrac);
-      const minX = Math.min(...xs);
-      const minY = Math.min(...ys);
-      const maxX = Math.max(...xs);
-      const maxY = Math.max(...ys);
-      const spanX = Math.max(maxX - minX, 1e-6);
-      const spanY = Math.max(maxY - minY, 1e-6);
-
-      // If vertices look like mm (large values), scale to meters; if fractions, use wallLengths for reference
-      const maxCoord = Math.max(spanX, spanY);
-      let toM: number;
-      if (maxCoord > 500) {
-        toM = 0.001;
-      } else if (maxCoord > 5) {
-        toM = 1;
-      } else {
-        const perimeter = wallLengthsMm?.reduce((s, l) => s + l, 0) ?? 40000;
-        toM = (perimeter * 0.001) / (2 * (spanX + spanY));
-      }
-
-      const toPlanM = (verts: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>) =>
-        verts.map((p) => {
-          const px = p.xFrac ?? p.x ?? 0;
-          const py = p.yFrac ?? p.y ?? 0;
-          return {
-            x: (px - minX) * toM,
-            z: (py - minY) * toM,
-          };
-        });
+      const { toPlanM, planSpanXM, planSpanZM } = computeBimPreviewPlanToM({
+        outline,
+        massingTiers,
+        wallLengthsMm,
+      });
 
       const pts2D = toPlanM(outline);
       const cx = pts2D.reduce((s, p) => s + p.x, 0) / pts2D.length;
@@ -443,7 +408,7 @@ function Building3DPreview({
       scene.add(outlineLine);
 
       // Ground plane
-      const extent = Math.max(spanX * toM, spanY * toM, heightM) * 2;
+      const extent = Math.max(planSpanXM, planSpanZM, heightM) * 2;
       const groundGeo = new THREE.PlaneGeometry(extent * 3, extent * 3);
       const groundMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.9 });
       const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -515,8 +480,8 @@ function Building3DPreview({
             const ifcSpanX = rawSpanX * rawToM;
             const ifcSpanY = rawSpanY * rawToM;
             const ifcSpanZ = rawSpanZ * rawToM;
-            const targetSpanX = Math.max(spanX * toM, 1e-6);
-            const targetSpanZ = Math.max(spanY * toM, 1e-6);
+            const targetSpanX = Math.max(planSpanXM, 1e-6);
+            const targetSpanZ = Math.max(planSpanZM, 1e-6);
             const scaleXY = Math.min(targetSpanX / ifcSpanX, targetSpanZ / ifcSpanZ);
             const scaleY = ifcSpanY > 1e-6 ? (heightM / ifcSpanY) : scaleXY;
 
