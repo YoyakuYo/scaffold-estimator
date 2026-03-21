@@ -19,6 +19,10 @@ import {
 } from '@/lib/scaffold-3d-components';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
 import { bimHexToNumber } from '@/lib/bim-facade-colors';
+import {
+  computeInnerParallelWallSkipSet,
+  type FacadeTierPolyMeta,
+} from '@/lib/scaffold-facade-outer-filter';
 
 /**
  * 3D Scaffold View — Closed Polygon
@@ -303,8 +307,8 @@ export default function Scaffold3DView({
   // Scene info refs (set inside useEffect, read by UI)
   const maxLevelsRef = useRef(1);
   const maxHeightRef = useRef(5);
-  const wallObjectsRef = useRef<Array<{ root: any; label: any; edge: any }>>([]);
-  const wallFocusRef = useRef<Array<{ x: number; y: number; z: number }>>([]);
+  const wallObjectsRef = useRef<Array<{ root: any; label: any; edge: any } | null>>([]);
+  const wallFocusRef = useRef<Array<{ x: number; y: number; z: number } | null>>([]);
   const clickTargetsRef = useRef<any[]>([]);
   const componentMeshesRef = useRef<any[]>([]);
   const controlsRef = useRef<any>(null);
@@ -364,8 +368,11 @@ export default function Scaffold3DView({
 
   function applyWallVisibility(mode: ViewMode, focusedIdx: number) {
     const entries = wallObjectsRef.current;
-    if (!entries.length) return;
-    entries.forEach((entry, i) => {
+    if (!entries.length && walls.length === 0) return;
+    const n = Math.max(walls.length, entries.length);
+    for (let i = 0; i < n; i++) {
+      const entry = entries[i];
+      if (!entry?.root) continue;
       const selected = mode === 'all' || i === focusedIdx;
       const scaffoldOpacity = selected ? 1 : 0.18;
       const labelOpacity = selected ? 1 : 0.2;
@@ -380,7 +387,7 @@ export default function Scaffold3DView({
         entry.edge.material.transparent = edgeOpacity < 1;
         entry.edge.material.needsUpdate = true;
       }
-    });
+    }
   }
 
   function focusCameraOnWall(index: number) {
@@ -1249,8 +1256,35 @@ export default function Scaffold3DView({
       const isLShapedAtStart = tierPolyData[0]?.isLShapedAtStart ?? [];
       const isLShapedAtEnd = tierPolyData[0]?.isLShapedAtEnd ?? [];
 
+      // Stepped buildings: drop inner parallel façades (same cardinal per tier slab).
+      // Keeps one external strip per face direction per tier — not a solid block of runs.
+      const innerParallelWallSkip = computeInnerParallelWallSkipSet({
+        wallCount: walls.length,
+        tierGroups,
+        tierPolyData: tierPolyData as FacadeTierPolyMeta[],
+        groundCentroidX: cx,
+        groundCentroidZ: cz,
+        enabled:
+          independentExternalWallRuns &&
+          tierGroups.length > 1 &&
+          walls.length > 4,
+      });
+
+      wallObjectsRef.current = new Array(walls.length).fill(null) as Array<{
+        root: any;
+        label: any;
+        edge: any;
+      } | null>;
+      wallFocusRef.current = new Array(walls.length).fill(null) as Array<{
+        x: number;
+        y: number;
+        z: number;
+      } | null>;
+      const clickMeshesForWallPick: any[] = [];
+
       // Render scaffold for each wall, using the correct tier polygon
       for (let i = 0; i < walls.length; i++) {
+        if (innerParallelWallSkip.has(i)) continue;
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
@@ -1487,18 +1521,19 @@ export default function Scaffold3DView({
         );
         scene.add(dimGroup);
 
-        wallObjectsRef.current.push({
+        wallObjectsRef.current[i] = {
           root: wallRoot,
           label: null,
           edge: edgeLine,
-        });
-        wallFocusRef.current.push({
+        };
+        wallFocusRef.current[i] = {
           x: (v1.x + v2.x) / 2 - cx + nx * (standoffM + wallWidthM * 1.1),
           y: Math.max(totalH * 0.45, 2.2),
           z: (v1.z + v2.z) / 2 - cz + nz * (standoffM + wallWidthM * 1.1),
-        });
-        clickTargetsRef.current.push(clickMesh);
+        };
+        clickMeshesForWallPick.push(clickMesh);
       }
+      clickTargetsRef.current = clickMeshesForWallPick;
       maxHeightRef.current = maxH;
 
       // ── Corner connection (reference: 足場コーナー詳細図) ─
