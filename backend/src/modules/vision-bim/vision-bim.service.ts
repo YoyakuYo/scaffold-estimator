@@ -238,6 +238,14 @@ Polygon rules:
 6. CURVED FACADES: represent with ONE or TWO straight segments. Do NOT use many short segments.
 7. Angled/chamfered corners must each be a separate vertex.
 
+=============== ANGLED / NON-ORTHOGONAL BUILDINGS ===============
+Some floor plans have walls at angles other than 90°. For these buildings:
+- Each straight wall segment (even if angled) is ONE edge with ONE length.
+- Read the dimension annotation on EACH exterior wall segment — even angled walls usually have a dimension line showing their true length (measured along the wall, not horizontal/vertical projection).
+- Do NOT project angled walls onto horizontal/vertical axes — use the actual wall length.
+- wallLengthsMm MUST have different values for different-length walls. If you return the SAME value for all walls, that is WRONG — it means you failed to read individual dimensions. Go back and read each wall's dimension annotation carefully.
+- If an angled wall has no direct dimension annotation, compute its length from the X and Y offsets at its endpoints using the Pythagorean theorem and nearby dimensions.
+
 CRITICAL — structural grid vs. building edge:
 Construction plans show internal structural grids (Y1/Y2/Y3/Y4 lines, column circles). These are NOT building edges.
 - NEVER place a vertex where a grid line crosses an exterior wall. A straight exterior wall is ONE edge.
@@ -987,6 +995,27 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         // Discard if any value is still below minimum scaffold wall (600mm)
         if (!wallLengths.every((l) => typeof l === 'number' && l >= 600)) {
           wallLengths = undefined;
+        }
+        // Anomaly: all values identical (e.g. all 600) — AI failed to extract real dimensions
+        if (wallLengths && wallLengths.length >= 3) {
+          const uniqueVals = new Set(wallLengths);
+          if (uniqueVals.size === 1) {
+            this.logger.warn(
+              `wallLengthsMm: all ${wallLengths.length} values identical (${wallLengths[0]}mm) — discarding as extraction failure`,
+            );
+            wallLengths = undefined;
+          }
+        }
+        // Anomaly: total perimeter implausibly small for the number of walls
+        if (wallLengths) {
+          const totalPerimeter = wallLengths.reduce((s, l) => s + l, 0);
+          const minReasonablePerimeter = wallLengths.length * 900;
+          if (totalPerimeter < minReasonablePerimeter) {
+            this.logger.warn(
+              `wallLengthsMm: total perimeter ${totalPerimeter}mm too small for ${wallLengths.length} walls (min ${minReasonablePerimeter}mm) — discarding`,
+            );
+            wallLengths = undefined;
+          }
         }
       }
       parsed.wallLengthsMm = wallLengths;
