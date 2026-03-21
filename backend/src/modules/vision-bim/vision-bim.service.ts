@@ -139,20 +139,31 @@ Optional fields (read from dimension lines and annotations):
 
 ═══ 3D BIM RENDERS / ISOMETRIC / PERSPECTIVE VIEWS (CRITICAL) ═══
 If the image is a 3D rendering, isometric view, perspective view, or BIM screenshot (e.g. from Revit, ArchiCAD, Tekla, SketchUp):
-- You are seeing the building from an ANGLE, not from above. The visible outline in the image is a 2D projection of a 3D object — it is NOT the plan footprint.
-- You MUST mentally "look down" from above and reconstruct the TOP-DOWN plan footprint of the building.
-- DETECT COMPLEX SHAPES: Look carefully for L-shaped, U-shaped, or T-shaped buildings. In 3D views, these shapes have visible setbacks, wings, or recesses. Key indicators:
-  * An L-shaped building has TWO WINGS meeting at a corner — one wing is shorter/narrower than the other. From above, this is 6 vertices.
-  * A U-shaped building has a central courtyard or recess. From above, this is 8 vertices.
-  * A T-shaped building has a protruding central section. From above, this is 8 vertices.
-  * IMPORTANT: If you can see that one part of the building extends further than another in any direction, or there is a visible step/setback in the facade, it is NOT a simple rectangle. Output the correct number of vertices for the actual shape.
-- For a rectangular building (all walls flush, no setbacks) seen in perspective/isometric: output 4 vertices forming a RECTANGLE.
-- For an L-shaped building in 3D: output 6 vertices tracing the L from above. Estimate the wing proportions from the visible geometry.
-- Use the visible proportions (width vs depth vs height) to estimate the plan shape.
-- Count visible floors to estimate height: typical floor height is 3000–4000mm per story. If you see 3 floors, buildingHeightMm ≈ 9000–12000.
-- Do NOT trace the perspective outline (silhouette) of the 3D view — that gives wrong shapes (hexagons, trapezoids). Reconstruct the PLAN footprint.
-- When the building shape is unclear but is definitely not rectangular, output your best L/U/T approximation rather than defaulting to a rectangle.
+
+THE #1 RULE: You are seeing the building from an ANGLE, not from above. You MUST mentally "look down" and reconstruct the TOP-DOWN plan footprint. The visible outline in the image is a perspective projection — it is NOT the footprint.
+
+STEP 1 — DETERMINE IF THE BUILDING IS A SIMPLE RECTANGLE:
+Most buildings are rectangular boxes. A rectangular building seen in 3D perspective appears as a trapezoid/hexagon — but the real plan footprint is a RECTANGLE with exactly 4 vertices and 4 walls.
+- Ask: "Does every wall face of this building align with the same rectangular box?"
+- Ask: "Are all walls flush — no wing sticking out, no setback, no courtyard?"
+- If YES to both → output EXACTLY 4 vertices forming a rectangle. NEVER output 5 or 6 vertices for a rectangular building.
+- The rectangle has only 2 unique dimensions: width (W) and depth (D). Output: [{x:0,y:0}, {x:W,y:0}, {x:W,y:D}, {x:0,y:D}].
+- Estimate W and D from the 3D proportions (e.g. the front face looks ~2x wider than the side face → W ≈ 2×D).
+- IGNORE terraces, entrance ramps, canopies, balconies, AC units, and ground slabs — they are NOT part of the building footprint. Only trace the main structural walls.
+
+PERSPECTIVE ILLUSION WARNING:
+A rectangular box seen from a 3/4 angle shows 3 visible faces. The visible outline has 6 edges forming a hexagon. THIS IS AN OPTICAL ILLUSION — the real footprint is still a 4-vertex rectangle. NEVER trace this hexagonal silhouette as the footprint. If you output 6 walls with alternating lengths (e.g. 12000, 5500, 12000, 5500, 12000, 5500), you traced the silhouette — WRONG. The correct output is 4 walls: 12000, 5500, 12000, 5500.
+
+STEP 2 — IF NOT RECTANGULAR, determine the actual shape:
+- L-shaped: TWO WINGS meeting at a corner → 6 vertices from above.
+- U-shaped: central courtyard or recess → 8 vertices from above.
+- T-shaped: protruding central section → 8 vertices from above.
+- Indicators: one part of the building extends further than another, or there is a visible step/setback in the facade.
+
+OTHER 3D VIEW RULES:
+- Count visible floors to estimate height: typical floor height is 3000–4000mm per story.
 - Set wallLengthsFromDimText: false and confidence: 0.5–0.7 (lower than for dimensioned plans).
+- When shape is unclear but definitely not rectangular, output your best L/U/T approximation.
 
 ═══ STEPPED / TIERED / CASCADING BUILDINGS (CRITICAL FOR HEIGHT) ═══
 Many buildings have DIFFERENT heights on different sides — stepped rooflines, cascading floors, or wings of varying height.
@@ -241,8 +252,9 @@ Self-check before outputting (fix issues silently — never output the check its
 - polygon must NOT be a regular polygon (equal sides + equal angles) unless the building genuinely is one
 - DIAGONAL WALL CHECK: if you have 4+ consecutive edges all going in roughly the same diagonal direction, collapse them into ONE straight edge. A diagonal wall is one edge, period.
 - SHAPE SANITY: a typical urban building is a rectangle or trapezoid (4-6 vertices). If you output 7+ vertices, double-check that each vertex represents a REAL corner of the building wall (not a grid intersection or scaffold strip corner).
-- if the image is a 3D view: your polygon should be a plan-view shape (rectangle, L, U), NOT a silhouette/trapezoid
-- if the image is a 3D view and the building has visible setbacks, wings, or L/U/T shape: you MUST output 6+ vertices (NOT 4). Outputting a rectangle for a non-rectangular building is the #1 most common error.
+- 3D VIEW SILHOUETTE CHECK (critical): If the image is a 3D view and you have 6 walls with alternating lengths (A, B, A, B, A, B), you traced the perspective silhouette — WRONG. A rectangular building is 4 walls (A, B, A, B). Go back and output 4 vertices.
+- 3D VIEW RECTANGLE CHECK: If the image is a 3D view and the building is a simple box (all walls flush), output EXACTLY 4 vertices. More than 4 means you are tracing the perspective outline.
+- 3D VIEW COMPLEX CHECK: If the image is a 3D view and the building has visible setbacks, wings, or L/U/T shape: output 6+ vertices (NOT 4). Outputting a rectangle for a non-rectangular building is wrong.
 - JAPANESE PLAN FINAL CHECK: Did you trace the building wall (the GRAY/UNCOLORED outer wall of the building, which is the INNER boundary of the blue scaffold zone)? If your traced polygon is outside the blue zone, you traced the wrong line.
 - FLOOR PLAN FINAL CHECK: If the image shows rooms/furniture/interior layout — is your polygon the OUTERMOST SILHOUETTE of the building, with no interior walls or partitions included as vertices? If any vertex of your polygon is at a point where an interior partition meets an exterior wall (rather than a true exterior corner), remove that vertex. The polygon should be the building's footprint as seen from directly above, as if you erased all interior elements.
 
@@ -790,7 +802,7 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v3:${modelForKey}:${hash}`;
+      const cacheKey = `vision-bim:v4:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
@@ -915,6 +927,13 @@ Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same co
       if (!parsed.vertices || !Array.isArray(parsed.vertices) || parsed.vertices.length < 3) {
         throw new Error('Vision returned invalid footprint vertices');
       }
+
+      // Post-processing: detect "perspective silhouette hexagon" pattern from 3D views.
+      // When AI traces a 3D perspective view of a rectangular building, it often returns
+      // 6 vertices with alternating edge lengths (A,B,A,B,A,B) — the visible hexagonal outline.
+      // Fix: collapse to the 4-vertex rectangle (A,B,A,B).
+      parsed.vertices = this.fixPerspectiveHexagon(parsed);
+
       if (!parsed.buildingHeightMm || parsed.buildingHeightMm < 1000) {
         const floors = typeof (parsed as any).floorCount === 'number' && (parsed as any).floorCount >= 1
           ? (parsed as any).floorCount
@@ -1636,6 +1655,94 @@ Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same co
       if (Math.abs(cross) > tolerance) result.push(curr);
     }
     return result.length >= 3 ? result : pts;
+  }
+
+  /**
+   * Detect and fix the "perspective silhouette hexagon" pattern.
+   * A rectangular building seen in 3D at a 3/4 angle has 3 visible faces,
+   * producing a 6-edge hexagonal outline. The AI sometimes traces this
+   * instead of outputting the correct 4-vertex rectangle.
+   *
+   * Detection: exactly 6 vertices with edge lengths forming an A,B,A,B,A,B
+   * pattern (3 pairs of roughly equal alternating lengths).
+   * Fix: take the two unique dimensions and output a 4-vertex rectangle.
+   */
+  private fixPerspectiveHexagon(
+    parsed: VisionFootprintResult,
+  ): VisionFootprintResult['vertices'] {
+    const verts = parsed.vertices;
+    if (verts.length !== 6) return verts;
+
+    const getCoord = (v: any): { x: number; y: number } => ({
+      x: 'xFrac' in v ? v.xFrac : v.x,
+      y: 'yFrac' in v ? v.yFrac : v.y,
+    });
+
+    const edges: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = getCoord(verts[i]);
+      const b = getCoord(verts[(i + 1) % 6]);
+      edges.push(Math.hypot(b.x - a.x, b.y - a.y));
+    }
+
+    // Check alternating pattern: edges[0]≈edges[2]≈edges[4] and edges[1]≈edges[3]≈edges[5]
+    const tol = 0.15; // 15% tolerance
+    const groupA = [edges[0], edges[2], edges[4]];
+    const groupB = [edges[1], edges[3], edges[5]];
+    const avgA = groupA.reduce((s, v) => s + v, 0) / 3;
+    const avgB = groupB.reduce((s, v) => s + v, 0) / 3;
+
+    const aMatches = groupA.every((e) => Math.abs(e - avgA) / avgA < tol);
+    const bMatches = groupB.every((e) => Math.abs(e - avgB) / avgB < tol);
+
+    if (!aMatches || !bMatches) return verts;
+
+    // Also verify the two groups are meaningfully different (not a regular hexagon)
+    const ratio = Math.max(avgA, avgB) / Math.min(avgA, avgB);
+    if (ratio < 1.3) return verts; // Nearly regular hexagon — not a perspective artifact
+
+    this.logger.warn(
+      `Detected perspective silhouette hexagon (edges: ${edges.map((e) => Math.round(e)).join(', ')}). ` +
+      `Collapsing to rectangle.`,
+    );
+
+    // Build a rectangle using the two dimensions (longer = width, shorter = depth)
+    const width = Math.max(avgA, avgB);
+    const depth = Math.min(avgA, avgB);
+
+    // Use mm if coords are in mm, fractions if in fractions
+    const isXfrac = 'xFrac' in verts[0];
+    if (isXfrac) {
+      return [
+        { xFrac: 0, yFrac: 0 },
+        { xFrac: width, yFrac: 0 },
+        { xFrac: width, yFrac: depth },
+        { xFrac: 0, yFrac: depth },
+      ] as any;
+    }
+
+    // Use wallLengthsMm if available to build a properly sized rectangle
+    const wl = parsed.wallLengthsMm;
+    if (wl && wl.length === 6) {
+      const wlA = Math.round((wl[0] + wl[2] + wl[4]) / 3);
+      const wlB = Math.round((wl[1] + wl[3] + wl[5]) / 3);
+      const w = Math.max(wlA, wlB);
+      const d = Math.min(wlA, wlB);
+      parsed.wallLengthsMm = [w, d, w, d];
+      return [
+        { x: 0, y: 0 },
+        { x: w, y: 0 },
+        { x: w, y: d },
+        { x: 0, y: d },
+      ] as any;
+    }
+
+    return [
+      { x: 0, y: 0 },
+      { x: Math.round(width), y: 0 },
+      { x: Math.round(width), y: Math.round(depth) },
+      { x: 0, y: Math.round(depth) },
+    ] as any;
   }
 
   private getFallbackFootprint(): VisionFootprintResult {
