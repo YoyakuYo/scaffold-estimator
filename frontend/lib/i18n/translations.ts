@@ -737,6 +737,7 @@ export const translations = {
 
   // ─── Scaffold Input Extras ──────────────────────────────────
   scaffoldExtra: {
+    manualInput: { ja: '手動入力', en: 'Manual Input', fr: 'Manual Input' },
     drawingUpload: { ja: '図面アップロード', en: 'Drawing Upload', fr: 'Drawing Upload' },
     quickBuilder: { ja: 'クイックビルダー', en: 'Quick Shape Builder', fr: 'Quick Shape Builder' },
     scaffoldType: { ja: '足場タイプ', en: 'Scaffold Type', fr: 'Scaffold Type' },

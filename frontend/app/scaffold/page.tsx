@@ -863,6 +863,7 @@ function ScaffoldPageContent() {
 
   // ─── Input Mode ────────────────────────────────────────
   const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_bim'>('drawing');
+  const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>('drawing');
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
   /** After AI extract: show for double-check before creating config. */
@@ -1171,34 +1172,23 @@ function ScaffoldPageContent() {
           </h1>
           <p className="mt-1 text-sm text-gray-600">{t('scaffold', 'subtitle')}</p>
 
-          {/* ─── Mode Selector ─── */}
+          {/* ─── Mode Selector (2 sections) ─── */}
           {!editConfigId && (
             <div className="flex gap-3 mt-4">
               <button
                 onClick={() => setInputMode('drawing')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
-                  inputMode === 'drawing'
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  inputMode !== 'ai_bim'
                     ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
                     : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
                 <PenTool className="h-4 w-4" />
-                {t('scaffoldExtra', 'drawingUpload')}
-              </button>
-              <button
-                onClick={() => setInputMode('quick')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
-                  inputMode === 'quick'
-                    ? 'border-green-500 bg-green-50 text-green-700 shadow-sm'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <Zap className="h-4 w-4" />
-                {t('scaffoldExtra', 'quickBuilder')}
+                {t('scaffoldExtra', 'manualInput')}
               </button>
               <button
                 onClick={() => setInputMode('ai_bim')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                   inputMode === 'ai_bim'
                     ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
                     : 'border-gray-200 text-gray-500 hover:border-gray-300'
@@ -1718,9 +1708,41 @@ function ScaffoldPageContent() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
-          QUICK SHAPE BUILDER MODE
+          MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
-      {inputMode === 'quick' && !editConfigId && (
+      {(inputMode !== 'ai_bim' || editConfigId) && (<>
+      {/* Sub-tab selector */}
+      {!editConfigId && (
+        <div className="max-w-[1600px] mx-auto px-4 mb-4">
+          <div className="inline-flex rounded-lg bg-gray-100 p-1">
+            <button
+              onClick={() => { setManualSubTab('drawing'); setInputMode('drawing'); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                manualSubTab === 'drawing'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <PenTool className="h-3.5 w-3.5" />
+              {t('scaffoldExtra', 'drawingUpload')}
+            </button>
+            <button
+              onClick={() => { setManualSubTab('quick'); setInputMode('quick'); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                manualSubTab === 'quick'
+                  ? 'bg-white text-green-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {t('scaffoldExtra', 'quickBuilder')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Shape Builder */}
+      {manualSubTab === 'quick' && !editConfigId && (
         <div className="max-w-[1200px] mx-auto px-4 pb-8">
           <QuickShapeBuilder
             onSubmit={handleQuickShapeSubmit}
@@ -1735,10 +1757,8 @@ function ScaffoldPageContent() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════
-          PERIMETER TRACER — Full-Width Split Screen (Drawing Mode)
-         ═══════════════════════════════════════════════════════ */}
-      {(inputMode === 'drawing' || editConfigId) && (<>
+      {/* Drawing Upload — Perimeter Tracer */}
+      {(manualSubTab === 'drawing' || editConfigId) && (<>
       <div className="max-w-[1600px] mx-auto px-4 mb-6">
         <PerimeterTracer
           perimeterModel={perimeterModel}
@@ -2457,6 +2477,7 @@ function ScaffoldPageContent() {
         </button>
       </div>
       )}
+      </>)}
       </>)}
     </div>
   );
