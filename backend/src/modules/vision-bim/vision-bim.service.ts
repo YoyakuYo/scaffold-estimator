@@ -439,43 +439,63 @@ export class VisionBimService {
       const maxVerticalDim = dimensions.filter((d) => d.vertical).map((d) => d.value).reduce((a, b) => Math.max(a, b), 0);
       if (maxVerticalDim > 500) buildingHeightMm = Math.round(maxVerticalDim);
 
-      // Pick the best candidate: highest score (prefer ortho + building layer),
-      // but among equally-scored, prefer larger area.
+      // Pick the best LWPOLYLINE candidate
       candidates.sort((a, b) => b.score - a.score || b.area - a.area);
-      let vertices: Array<{ x: number; y: number }> = candidates.length > 0 ? candidates[0].pts : [];
-
+      const bestPolyline = candidates.length > 0 ? candidates[0] : null;
       this.logger.log(
-        candidates.length > 0
-          ? `DXF: picked LWPOLYLINE n=${vertices.length}, score=${candidates[0].score.toFixed(2)}, area=${candidates[0].area.toFixed(0)} (${candidates.length} candidates)`
+        bestPolyline
+          ? `DXF: best LWPOLYLINE n=${bestPolyline.pts.length}, score=${bestPolyline.score.toFixed(2)}, area=${bestPolyline.area.toFixed(0)}`
           : `DXF: no valid LWPOLYLINE found`,
       );
 
+      // ALWAYS also try LINE-based polygon detection — many architectural DXFs
+      // draw walls as individual LINE entities, not as closed LWPOLYLINEs.
+      const linePoly = this.detectPolygonFromLines(dxf.entities, scaleToMm);
+      this.logger.log(linePoly.length >= 3
+        ? `DXF: LINE-based polygon: ${linePoly.length} verts, area=${Math.abs(this.polygonArea(linePoly)).toFixed(0)}`
+        : `DXF: LINE-based polygon: none found`,
+      );
+
+      // Choose the better result: LINE-based wins when:
+      //  a) no valid LWPOLYLINE exists, OR
+      //  b) LINE polygon has more area (captures more of the real building), OR
+      //  c) LINE polygon has more orthogonal corners (more building-like)
+      let vertices: Array<{ x: number; y: number }> = [];
+
+      if (linePoly.length >= 3 && bestPolyline) {
+        const lineArea = Math.abs(this.polygonArea(linePoly));
+        const polyArea = bestPolyline.area;
+        // LINE polygon wins if it's larger AND has a high ortho ratio
+        const lineScore = scorePolyline(linePoly);
+        vertices = lineScore >= bestPolyline.score ? linePoly : bestPolyline.pts;
+        this.logger.log(`DXF: chose ${lineScore >= bestPolyline.score ? 'LINE' : 'LWPOLYLINE'} (lineScore=${lineScore.toFixed(2)} vs polyScore=${bestPolyline.score.toFixed(2)}, lineArea=${lineArea.toFixed(0)} vs polyArea=${polyArea.toFixed(0)})`);
+      } else if (linePoly.length >= 3) {
+        vertices = linePoly;
+        this.logger.log('DXF: using LINE-based polygon (no valid LWPOLYLINE)');
+      } else if (bestPolyline) {
+        vertices = bestPolyline.pts;
+        this.logger.log('DXF: using LWPOLYLINE (no LINE polygon)');
+      }
+
+      // Last resort: bounding box of all LINE + LWPOLYLINE endpoints
       if (vertices.length < 3) {
-        // Try LINE-based polygon detection (concave hull)
-        const linePoly = this.detectPolygonFromLines(dxf.entities, scaleToMm);
-        if (linePoly.length >= 3) {
-          vertices = linePoly;
-          this.logger.log(`DXF: extracted polygon from LINE segments (${linePoly.length} verts)`);
-        } else {
-          // Last resort: bounding box of all LINE entities
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          for (const e of dxf.entities) {
-            if (e.type === 'LINE' && e.start && e.end) {
-              const s = e.start as { x: number; y: number };
-              const en = e.end as { x: number; y: number };
-              minX = Math.min(minX, s.x * scaleToMm, en.x * scaleToMm);
-              maxX = Math.max(maxX, s.x * scaleToMm, en.x * scaleToMm);
-              minY = Math.min(minY, s.y * scaleToMm, en.y * scaleToMm);
-              maxY = Math.max(maxY, s.y * scaleToMm, en.y * scaleToMm);
-            }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const e of dxf.entities) {
+          if (e.type === 'LINE' && e.start && e.end) {
+            const s = e.start as { x: number; y: number };
+            const en = e.end as { x: number; y: number };
+            minX = Math.min(minX, s.x * scaleToMm, en.x * scaleToMm);
+            maxX = Math.max(maxX, s.x * scaleToMm, en.x * scaleToMm);
+            minY = Math.min(minY, s.y * scaleToMm, en.y * scaleToMm);
+            maxY = Math.max(maxY, s.y * scaleToMm, en.y * scaleToMm);
           }
-          if (minX !== Infinity && maxX - minX > 100 && maxY - minY > 100) {
-            vertices = [
-              { x: minX, y: minY }, { x: maxX, y: minY },
-              { x: maxX, y: maxY }, { x: minX, y: maxY },
-            ];
-            this.logger.log(`DXF: using bounding box fallback ${(maxX - minX).toFixed(0)}×${(maxY - minY).toFixed(0)}mm`);
-          }
+        }
+        if (minX !== Infinity && maxX - minX > 100 && maxY - minY > 100) {
+          vertices = [
+            { x: minX, y: minY }, { x: maxX, y: minY },
+            { x: maxX, y: maxY }, { x: minX, y: maxY },
+          ];
+          this.logger.log(`DXF: using bounding box fallback ${(maxX - minX).toFixed(0)}×${(maxY - minY).toFixed(0)}mm`);
         }
       }
 
@@ -507,19 +527,37 @@ export class VisionBimService {
     entities: any[],
     scaleToMm: number,
   ): Array<{ x: number; y: number }> {
-    const segments: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-    for (const e of entities) {
-      if (e.type === 'LINE' && e.start && e.end) {
-        const s = e.start as { x: number; y: number };
-        const en = e.end as { x: number; y: number };
-        const x1 = s.x * scaleToMm; const y1 = s.y * scaleToMm;
-        const x2 = en.x * scaleToMm; const y2 = en.y * scaleToMm;
-        // Skip degenerate (zero-length) segments
-        if (Math.hypot(x2 - x1, y2 - y1) > 1) {
-          segments.push({ x1, y1, x2, y2 });
+    // Outer wall layer keywords — try these first, fall back to all layers
+    const OUTER_LAYER_KW = [
+      '外壁', 'wall', 'outer', 'exterior', 'building', '建物', 'outline',
+      'perimeter', '輪郭', '外形', 'arch', 'structure', 'gaibu',
+      // common CAD layer names for outer walls
+      'a-wall', 'a_wall', 's-wall', 's_wall', '0',
+    ];
+    const isOuterLayer = (layer: string | undefined): boolean => {
+      if (!layer) return true; // include if no layer info
+      const l = layer.toLowerCase();
+      return OUTER_LAYER_KW.some((k) => l.includes(k));
+    };
+
+    const buildSegments = (layerFilter: boolean): Array<{ x1: number; y1: number; x2: number; y2: number }> => {
+      const segs: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+      for (const e of entities) {
+        if (e.type === 'LINE' && e.start && e.end) {
+          if (layerFilter && !isOuterLayer((e as any).layer)) continue;
+          const s = e.start as { x: number; y: number };
+          const en = e.end as { x: number; y: number };
+          const x1 = s.x * scaleToMm; const y1 = s.y * scaleToMm;
+          const x2 = en.x * scaleToMm; const y2 = en.y * scaleToMm;
+          if (Math.hypot(x2 - x1, y2 - y1) > 1) segs.push({ x1, y1, x2, y2 });
         }
       }
-    }
+      return segs;
+    };
+
+    // Try outer-layer lines first; if insufficient, fall back to all lines
+    let segments = buildSegments(true);
+    if (segments.length < 6) segments = buildSegments(false);
     if (segments.length < 3) return [];
 
     // Adaptive snap tolerance: ~0.5% of bounding extent, min 1mm, max 100mm
