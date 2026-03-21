@@ -55,6 +55,7 @@ export function decomposeTierWalls(
   if (tiers.length === 0) return walls;
 
   const result: WallInput[] = [];
+  let tierWallSeq = 0;
 
   for (let ti = 0; ti < tiers.length; ti++) {
     const tier = tiers[ti];
@@ -70,7 +71,9 @@ export function decomposeTierWalls(
       const tierLabel = tiers.length > 1 ? `-T${ti + 1}` : '';
 
       result.push({
-        side: `${baseSide}${tierLabel}`,
+        // Unique ids: several tier edges can match the same ground wall (same baseSide);
+        // duplicate `side` values break plan labels (辺4 twice) and config keys.
+        side: `edge-${tierWallSeq++}`,
         wallLengthMm: Math.round(edge.lengthMm),
         wallHeightMm: tierHeight,
         stairAccessCount: ti === 0 ? (matchedWall?.stairAccessCount ?? 0) : 0,
@@ -78,7 +81,7 @@ export function decomposeTierWalls(
         kaidanOffsets: ti === 0 ? matchedWall?.kaidanOffsets : undefined,
         scaffoldWidthMm: matchedWall?.scaffoldWidthMm,
         baseHeightMm: tier.baseHeightMm,
-        tierGroup: baseSide,
+        tierGroup: `${baseSide}${tierLabel}`,
         tierIndex: ti,
       });
     }

@@ -156,9 +156,10 @@ A rectangular box seen from a 3/4 angle shows 3 visible faces. The visible outli
 
 STEP 2 — IF NOT RECTANGULAR, determine the actual shape:
 - L-shaped: TWO WINGS meeting at a corner → 6 vertices from above.
-- U-shaped: central courtyard or recess → 8 vertices from above.
+- U-shaped: TWO PARALLEL WINGS with a COURTYARD / OPEN RECESS between them (horseshoe) → **8 vertices** from above (never collapse to 6). Trace the full outer perimeter including both wing tips and both inner corners of the recess.
 - T-shaped: protruding central section → 8 vertices from above.
 - Indicators: one part of the building extends further than another, or there is a visible step/setback in the facade.
+- BIM / aerial screenshots: if you clearly see a gap or lower roof between two wings, that is a U — use 8 vertices, not an L.
 
 OTHER 3D VIEW RULES:
 - Count visible floors to estimate height: typical floor height is 3000–4000mm per story.
@@ -1077,6 +1078,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       } else {
         parsed.obstacles = undefined;
       }
+      // 3D BIM screenshot: 6-vertex convex "hex" is often a perspective illusion of a rectangular box.
+      this.maybeCollapsePerspectiveSilhouette(parsed);
       // Remove collinear intermediate vertices caused by grid-line tracing.
       this.cleanupPolygon(parsed);
       // Save to cache after successful parse/cleanup.
@@ -1297,15 +1300,41 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       const spanZ = maxZ - minZ;
       const maxSpan = Math.max(spanX, spanY, spanZ);
       const toMm = maxSpan < 500 ? 1000 : 1;
-      const buildingHeightMm = Math.max(1000, Math.round(spanZ * toMm));
-      const pointsMm = xyzPoints.map((p) => ({ x: p.x * toMm, y: p.y * toMm, z: p.z * toMm }));
-      const minZMm = minZ * toMm;
-      const maxZMm = maxZ * toMm;
+
+      // IFC models may be Z-up (footprint in XY) or Y-up (footprint in XZ) or X-up (YZ).
+      // Projecting onto the wrong plane collapses a U/L building into a wrong outline.
+      const plane = this.selectIfcFootprintPlane(xyzPoints);
+      const fp2d = xyzPoints.map((p) => plane.toFootprintXY(p));
+      const vertVals = xyzPoints.map((p) => plane.vertical(p));
+      let minFx = Infinity,
+        minFy = Infinity,
+        maxFx = -Infinity,
+        maxFy = -Infinity;
+      for (const q of fp2d) {
+        minFx = Math.min(minFx, q.x);
+        maxFx = Math.max(maxFx, q.x);
+        minFy = Math.min(minFy, q.y);
+        maxFy = Math.max(maxFy, q.y);
+      }
+      const minVert = Math.min(...vertVals);
+      const maxVert = Math.max(...vertVals);
+      const spanVert = maxVert - minVert;
+      const buildingHeightMm = Math.max(1000, Math.round(spanVert * toMm));
+
+      const pointsMm = xyzPoints.map((p, i) => ({
+        x: fp2d[i].x * toMm,
+        y: fp2d[i].y * toMm,
+        z: vertVals[i] * toMm,
+      }));
+      const minZMm = minVert * toMm;
+      const maxZMm = maxVert * toMm;
+
+      this.logger.log(
+        `IFC footprint plane=${plane.kind} (convex-hull area proxy), heightAxis span=${spanVert.toFixed(3)}`,
+      );
 
       // Try grid-based footprint extraction (captures L/U/T and complex shapes)
-      const footprint = this.extractFootprintFromXY(
-        xyzPoints.map((p) => ({ x: p.x, y: p.y })), minX, minY, maxX, maxY, toMm,
-      );
+      const footprint = this.extractFootprintFromXY(fp2d, minFx, minFy, maxFx, maxFy, toMm);
       if (footprint && footprint.length >= 3) {
         const n = footprint.length;
         const wallLengthsMm = footprint.map((v, i) => {
@@ -1334,15 +1363,15 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         };
       }
 
-      // Fallback: bounding box rectangle
-      const x0 = Math.round(minX * toMm);
-      const y0 = Math.round(minY * toMm);
-      const x1 = Math.round(maxX * toMm);
-      const y1 = Math.round(maxY * toMm);
-      const wX = Math.round(spanX * toMm);
-      const wY = Math.round(spanY * toMm);
+      // Fallback: bounding box rectangle in the chosen footprint plane
+      const x0 = Math.round(minFx * toMm);
+      const y0 = Math.round(minFy * toMm);
+      const x1 = Math.round(maxFx * toMm);
+      const y1 = Math.round(maxFy * toMm);
+      const wX = Math.round((maxFx - minFx) * toMm);
+      const wY = Math.round((maxFy - minFy) * toMm);
       this.logger.log(
-        `IFC fallback bbox: ${spanX.toFixed(1)}×${spanY.toFixed(1)}×${spanZ.toFixed(1)}, ` +
+        `IFC fallback bbox: plane=${plane.kind} ${(maxFx - minFx).toFixed(1)}×${(maxFy - minFy).toFixed(1)}×${spanVert.toFixed(1)}, ` +
         `toMm=${toMm}, height=${buildingHeightMm}mm`,
       );
       return {
@@ -1372,6 +1401,176 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
   // ═══════════════════════════════════════════════════════════
   // Grid-based footprint extraction for IFC models
   // ═══════════════════════════════════════════════════════════
+
+  /** Subsample for O(n) convex hull on large IFC meshes. */
+  private subsampleIfcPoints<T>(arr: T[], max: number): T[] {
+    if (arr.length <= max) return arr;
+    const step = Math.ceil(arr.length / max);
+    const out: T[] = [];
+    for (let i = 0; i < arr.length; i += step) out.push(arr[i]);
+    return out;
+  }
+
+  private convexHullArea2D(pts: Array<{ x: number; y: number }>): number {
+    if (pts.length < 3) return 0;
+    const sorted = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (
+      o: { x: number; y: number },
+      a: { x: number; y: number },
+      b: { x: number; y: number },
+    ) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+    const lower: typeof pts = [];
+    for (const p of sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+        lower.pop();
+      }
+      lower.push(p);
+    }
+    const upper: typeof pts = [];
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const p = sorted[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+        upper.pop();
+      }
+      upper.push(p);
+    }
+    const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+    if (hull.length < 3) return 0;
+    let a = 0;
+    for (let i = 0; i < hull.length; i++) {
+      const j = (i + 1) % hull.length;
+      a += hull[i].x * hull[j].y - hull[j].x * hull[i].y;
+    }
+    return Math.abs(a / 2);
+  }
+
+  /**
+   * Pick horizontal vs vertical axes: footprint should have the largest 2D convex hull
+   * when projected onto the ground plane (side-elevation projections are thin).
+   */
+  private selectIfcFootprintPlane(xyzPoints: Array<{ x: number; y: number; z: number }>): {
+    kind: 'xy' | 'xz' | 'yz';
+    toFootprintXY: (p: { x: number; y: number; z: number }) => { x: number; y: number };
+    vertical: (p: { x: number; y: number; z: number }) => number;
+  } {
+    const sample = this.subsampleIfcPoints(xyzPoints, 8000);
+    const areas: Array<{
+      kind: 'xy' | 'xz' | 'yz';
+      area: number;
+      toFootprintXY: (p: { x: number; y: number; z: number }) => { x: number; y: number };
+      vertical: (p: { x: number; y: number; z: number }) => number;
+    }> = [
+      {
+        kind: 'xy',
+        area: this.convexHullArea2D(sample.map((p) => ({ x: p.x, y: p.y }))),
+        toFootprintXY: (p) => ({ x: p.x, y: p.y }),
+        vertical: (p) => p.z,
+      },
+      {
+        kind: 'xz',
+        area: this.convexHullArea2D(sample.map((p) => ({ x: p.x, y: p.z }))),
+        toFootprintXY: (p) => ({ x: p.x, y: p.z }),
+        vertical: (p) => p.y,
+      },
+      {
+        kind: 'yz',
+        area: this.convexHullArea2D(sample.map((p) => ({ x: p.y, y: p.z }))),
+        toFootprintXY: (p) => ({ x: p.y, y: p.z }),
+        vertical: (p) => p.x,
+      },
+    ];
+    areas.sort((u, v) => v.area - u.area);
+    const best = areas[0];
+    return { kind: best.kind, toFootprintXY: best.toFootprintXY, vertical: best.vertical };
+  }
+
+  /**
+   * When vision returns 6 vertices with alternating equal edge lengths and a convex loop,
+   * it is usually a 3/4 perspective view of a rectangular prism — collapse to 4 vertices.
+   */
+  private maybeCollapsePerspectiveSilhouette(parsed: VisionFootprintResult): void {
+    const verts = parsed.vertices;
+    if (!Array.isArray(verts) || verts.length !== 6) return;
+
+    const first = verts[0] as Record<string, unknown>;
+    const isMm =
+      !('xFrac' in first) && typeof first.x === 'number' && typeof first.y === 'number';
+    const pts = verts.map((v: { x?: number; y?: number; xFrac?: number; yFrac?: number }) =>
+      isMm
+        ? { x: Number(v.x), y: Number(v.y) }
+        : { x: Number(v.xFrac), y: Number(v.yFrac) },
+    );
+
+    let edgeLens: number[];
+    if (Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === 6) {
+      edgeLens = parsed.wallLengthsMm.map((l) => Math.round(Number(l)));
+    } else {
+      edgeLens = Array.from({ length: 6 }, (_, i) => {
+        const a = pts[i];
+        const b = pts[(i + 1) % 6];
+        return Math.round(Math.hypot(b.x - a.x, b.y - a.y) * (isMm ? 1 : 10000));
+      });
+    }
+
+    const [a, b, c, d, e, f] = edgeLens;
+    if (![a, b, c, d, e, f].every((x) => typeof x === 'number' && x > 0)) return;
+
+    const tol = 0.14;
+    const near = (u: number, v: number) => Math.abs(u - v) / Math.max(u, v) <= tol;
+    if (!(near(a, c) && near(c, e) && near(b, d) && near(d, f))) return;
+
+    if (!this.isStrictlyConvexPolygon2D(pts)) return;
+
+    const W = Math.round((a + c + e) / 3);
+    const D = Math.round((b + d + f) / 3);
+    if (W < 2500 || D < 2500) return;
+
+    if (isMm) {
+      parsed.vertices = [
+        { x: 0, y: 0 },
+        { x: W, y: 0 },
+        { x: W, y: D },
+        { x: 0, y: D },
+      ] as VisionFootprintResult['vertices'];
+    } else {
+      parsed.vertices = [
+        { xFrac: 0, yFrac: 0 },
+        { xFrac: 1, yFrac: 0 },
+        { xFrac: 1, yFrac: 1 },
+        { xFrac: 0, yFrac: 1 },
+      ] as VisionFootprintResult['vertices'];
+    }
+    parsed.wallLengthsMm = [W, D, W, D];
+    parsed.wallHeightsMm = undefined;
+    parsed.wallLengthsFromDimText = false;
+    if (typeof parsed.confidence === 'number') {
+      parsed.confidence = Math.min(0.65, parsed.confidence);
+    }
+    this.logger.log(
+      `maybeCollapsePerspectiveSilhouette: 6-vertex box silhouette → ${W}×${D}mm rectangle (4 vertices)`,
+    );
+  }
+
+  private isStrictlyConvexPolygon2D(pts: Array<{ x: number; y: number }>): boolean {
+    const n = pts.length;
+    if (n < 3) return false;
+    const cross = (i: number) => {
+      const o = pts[(i - 1 + n) % n];
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    };
+    let sign = 0;
+    for (let i = 0; i < n; i++) {
+      const cr = cross(i);
+      if (Math.abs(cr) < 1e-12) return false;
+      const s = cr > 0 ? 1 : -1;
+      if (sign === 0) sign = s;
+      else if (s !== sign) return false;
+    }
+    return true;
+  }
 
   /**
    * Project all mesh vertices to XY, build an occupancy grid,
