@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 
@@ -104,175 +104,154 @@ Optional fields (read from dimension lines and annotations):
   For STEPPED / TIERED / SETBACK buildings where different facade sections have different heights:
   * A stepped building (like a wedding cake or cascading tower) has wings or sections at different roof levels.
   * Each polygon edge (wall) should get the height of the roof/eaves above THAT specific wall section.
-  * Example: A building with a 5-story wing (15000mm) on the left and a 12-story tower (36000mm) on the right → the left-side walls get 15000, the right-side walls get 36000.
+  * Example: A building with a 5-story wing (15000mm) on the left and a 12-story tower (36000mm) on the right — the left-side walls get 15000, the right-side walls get 36000.
   * For walls connecting sections of different height (transition walls), use the TALLER adjacent section's height.
   * IMPORTANT: if a long straight facade contains multiple height zones along its length, SPLIT that facade into multiple consecutive edges at the height-change points. Those split vertices may be perfectly collinear and are intentional.
   * If ALL walls have the same height (simple box), you may omit this field — buildingHeightMm alone is sufficient.
-  * CRITICAL for 3D BIM renders: If you can see that parts of the building are taller than others (stepped roofline, cascading floors, different wing heights), you MUST output wallHeightsMm with the correct per-wall height for each edge. This is the #1 most important new field for scaffold estimation accuracy on complex buildings.
+  * CRITICAL for 3D BIM renders: If you can see that parts of the building are taller than others (stepped roofline, cascading floors, different wing heights), you MUST output wallHeightsMm with the correct per-wall height for each edge.
 - massingTiers: optional array for buildings whose upper floors step inward or have smaller footprints than the base.
-  * Use this when the building is a terrace / wedding-cake / podium+tower shape and a single base polygon plus wallHeightsMm is not enough to show the real 3D mass.
+  * Use this when the building is a terrace / wedding-cake / podium+tower shape.
   * Each tier: { vertices, topHeightMm, baseHeightMm? }.
   * vertices = footprint of that tier in the same coordinate system as the main vertices.
   * topHeightMm = cumulative top elevation of that tier above ground.
-  * baseHeightMm = optional bottom elevation; omit for the first tier and it defaults to ground / previous tier top.
+  * baseHeightMm = optional bottom elevation; defaults to previous tier top.
   * Include one tier per major setback, ordered from lowest to highest.
 - scaleDenominator: scale from drawing (e.g. 100 for S=1/100, 200 for S=1/200).
 - wallLengthsMm: array of lengths in mm, one per edge, same count as vertices.
-  Edge i = vertex[i] → vertex[i+1]; last edge = last vertex → first vertex (closes polygon).
+  Edge i = vertex[i] to vertex[i+1]; last edge = last vertex to first vertex (closes polygon).
   Read dimension annotations: "2945", "10@1829=18290" means 18290mm.
   UNIT CONVERSION — always output in mm:
-  * Metres: "7.200 m" or "7200" with m label → multiply by 1000 → 7200mm
-  * Centimetres: "720 cm" → multiply by 10 → 7200mm
+  * Metres: "7.200 m" or "7200" with m label — multiply by 1000 — 7200mm
+  * Centimetres: "720 cm" — multiply by 10 — 7200mm
   * Feet-inches (imperial): Convert using 1 foot = 304.8mm, 1 inch = 25.4mm.
-    Examples: "27'-0\"" = 27 × 304.8 = 8229.6mm ≈ 8230mm
-              "11'-6\"" = 11 × 304.8 + 6 × 25.4 = 3353mm + 152mm = 3505mm
-              "4'-4\"" = 4 × 304.8 + 4 × 25.4 = 1219mm + 102mm = 1321mm
+    Examples: "27'-0" = 27 x 304.8 = 8229.6mm rounded to 8230mm
+              "51'-0" = 51 x 304.8 = 15544.8mm rounded to 15545mm
+              "11'-6" = 11 x 304.8 + 6 x 25.4 = 3505mm
+              "4'-4" = 4 x 304.8 + 4 x 25.4 = 1321mm
     When BOTH metric (m) and imperial (ft/in) dimensions appear on the same drawing,
-    use the metric value — it is exact, while imperial may be rounded.
-  * Grid notation: "10@1829=18290" means 10 spans × 1829mm = 18290mm total
+    ALWAYS use the metric value — it is exact. Convert imperial only when no metric is shown.
+  * Grid notation: "10@1829=18290" means 10 spans x 1829mm = 18290mm total
   Only omit if no dimension annotations are visible at all.
+  DIMENSION ASSIGNMENT RULE: Each exterior edge gets the dimension line that runs PARALLEL to it and is closest to it on the outside. The overall span dimension (the long arrow spanning the full side of the building including any attached terrace/extension) is the correct value for that full side, not sub-dimensions of interior partitions.
 - wallLengthsFromDimText: true if wallLengthsMm was read from explicit dimension lines; false/omit if only estimated from proportions.
-- scaffoldTypeHint: "wakugumi" for 枠組足場 or imperial spans (1829/914/1219/1524); "kusabi" for くさび式 or metric spans (600/900/1200/1500/1800). Omit if unclear.
+- scaffoldTypeHint: "wakugumi" for frame scaffold or imperial spans (1829/914/1219/1524); "kusabi" for wedge scaffold or metric spans (600/900/1200/1500/1800). Omit if unclear.
 - spanSizeMm: main span in mm if visible (1829, 914, 900, 1200, etc.).
-- frameSizeMm: for 枠組足場 only — 1700, 1800, or 1900 if shown.
+- frameSizeMm: for frame scaffold only — 1700, 1800, or 1900 if shown.
 - groundLineY, eavesLineY: optional y coordinates if visible.
 - confidence: 0-1.
 - floorCount: number of visible floors/stories (count them). Use for height estimation when no explicit height is given.
 - obstacles: optional array of special areas that affect scaffold clearance and layout.
-  Balconies/AC: { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] } — closed polygon in same units as vertices.
-  Pillars/columns: { "type": "pillar", "center": { x, y } or { xFrac, yFrac }, "radiusMm": number } — circular or square columns near the perimeter.
-  Doors/entrances: { "type": "door", "wallIndex": number, "positionMm": number, "widthMm": number } — ground-level openings that need a 梁枠 (beam frame / hariwaku) in the scaffold. wallIndex = which wall edge (0-based), positionMm = distance along that wall from start, widthMm = opening width (typically 1800-5500mm).
-  When a scaffold path (600/900/1200mm from wall) would intersect a pillar, the system switches to Single-Pole + Buragetto (bracket) layout.
-  Balconies: protruding floor areas. AC: outdoor unit areas. Pillars: 柱, コラム, circular or square structural columns at building corners or along walls. Doors: entrances, exits, loading bays, garage openings at ground level.
+  Balconies/AC: { "type": "balcony" | "ac", "vertices": [ { x, y } or { xFrac, yFrac } ] }
+  Pillars/columns: { "type": "pillar", "center": { x, y } or { xFrac, yFrac }, "radiusMm": number }
+  Doors/entrances: { "type": "door", "wallIndex": number, "positionMm": number, "widthMm": number }
   Omit obstacles if none are clearly visible or labeled.
 
-═══ 3D BIM RENDERS / ISOMETRIC / PERSPECTIVE VIEWS (CRITICAL) ═══
-If the image is a 3D rendering, isometric view, perspective view, or BIM screenshot (e.g. from Revit, ArchiCAD, Tekla, SketchUp):
+=============== ARCHITECTURAL FLOOR PLANS (detailed room layouts) — READ THIS FIRST ===============
+If the image shows interior rooms, furniture, bathrooms, staircases, corridors, or partitions, it is a detailed architectural floor plan. Apply these rules in order:
 
-THE #1 RULE: You are seeing the building from an ANGLE, not from above. You MUST mentally "look down" and reconstruct the TOP-DOWN plan footprint. The visible outline in the image is a perspective projection — it is NOT the footprint.
+STEP 1 — IDENTIFY THE EXTERIOR SHELL:
+- IGNORE everything inside the building: room walls, partition walls, bathroom fixtures, staircases, furniture, columns, doors between rooms, windows in interior walls.
+- FIND THE OUTERMOST BOUNDARY: the thickest walls at the very edge of the drawing form the exterior shell.
+- EXTERIOR WALLS are drawn thicker/bolder than interior partition walls.
 
-STEP 1 — DETERMINE IF THE BUILDING IS A SIMPLE RECTANGLE:
-Most buildings are rectangular boxes. A rectangular building seen in 3D perspective appears as a trapezoid/hexagon — but the real plan footprint is a RECTANGLE with exactly 4 vertices and 4 walls.
+STEP 2 — DETECT ALL PROTRUDING SECTIONS (CRITICAL — most common extraction error):
+A floor plan may have sections that protrude OUTWARD from the main rectangular body.
+DETECTION — look for:
+  * Thick exterior walls that extend BEYOND the main rectangular envelope.
+  * Labeled areas: "Terrace", "Balcony", "Deck", "テラス", "バルコニー", "Entrance" — any such area with thick outer walls extending outward IS part of the exterior perimeter.
+  * A dimension line specifically labeling the width/depth of that protruding section.
+RULE: If a section has a thick outer wall visible in the plan AND is labeled with a name or dimension — ALWAYS include it in the polygon. Its outermost corners are vertices.
+RULE: For the side of the building where a protrusion exists, the overall dimension arrow spanning the FULL side (including the protrusion) gives the total length — use that value, not the shorter sub-dimension of only the main body.
+COMMON MISTAKE: Using the interior partition wall between the main room and terrace as the outer boundary — this cuts the terrace out of the polygon. WRONG. The outermost wall of the terrace is the outer boundary.
+EXAMPLE: If the plan shows a main 9m x 11m rectangle with a 9m x 4m terrace attached at the bottom, the full building height is 11 + 4 = 15m, and the outer perimeter has 8 vertices forming a T-shape (or rectangle if the terrace spans the full width).
+
+STEP 3 — TRACE THE OUTER PERIMETER:
+Walk the outer boundary CLOCKWISE. Place a vertex only at TRUE OUTSIDE CORNERS (where the exterior wall changes direction from one direction to another).
+- For a plain rectangle: 4 vertices.
+- For a plan with a protruding terrace on one side (same width as main body): the left and right sides are continuous straight lines — it is still 4 vertices (rectangle).
+- For a plan with a narrower terrace protruding from the center of the bottom side: 8 vertices forming an inverted T.
+- For an L-shaped plan (corner notch): 6 vertices.
+NEVER place a vertex where an interior partition meets the exterior wall — that is NOT an exterior corner.
+The result should be 4–12 vertices for most buildings.
+
+STEP 4 — ASSIGN DIMENSIONS:
+For each edge in the polygon, find the dimension line that runs PARALLEL to it on the OUTSIDE of the building.
+  * The outermost/longest dimension line for a given side = the total length of that full side.
+  * Sub-dimensions inside the building (showing room widths) do NOT apply to exterior edges.
+  * When both metric and imperial are shown for the same dimension, use the metric value.
+  * When a wall segment has NO dimension line, derive it from the parallel dimension on the opposite side or from the overall minus sub-dimensions.
+  * CROSS-CHECK: the sum of all edge lengths should equal the building's total perimeter.
+
+FLOOR PLAN SELF-CHECK:
+- Does the sum of vertical edges equal the total height shown by the overall dimension? If not, re-read the dimensions.
+- Is any labeled terrace/balcony/deck section with thick outer walls INCLUDED in the polygon? If not, add it.
+- Is the polygon the outermost silhouette — the shape you would see if you erased all interior elements?
+
+=============== 3D BIM RENDERS / ISOMETRIC / PERSPECTIVE VIEWS ===============
+If the image is a 3D rendering, isometric view, perspective view, or BIM screenshot:
+
+THE #1 RULE: You are seeing the building from an ANGLE, not from above. Mentally "look down" and reconstruct the TOP-DOWN plan footprint. The visible outline in the image is a perspective projection — it is NOT the footprint.
+
+SIMPLE RECTANGLE CHECK:
 - Ask: "Does every wall face of this building align with the same rectangular box?"
 - Ask: "Are all walls flush — no wing sticking out, no setback, no courtyard?"
-- If YES to both → output EXACTLY 4 vertices forming a rectangle. NEVER output 5 or 6 vertices for a rectangular building.
+- If YES to both — output EXACTLY 4 vertices. NEVER output 5 or 6 vertices for a rectangular building.
 - The rectangle has only 2 unique dimensions: width (W) and depth (D). Output: [{x:0,y:0}, {x:W,y:0}, {x:W,y:D}, {x:0,y:D}].
-- Estimate W and D from the 3D proportions (e.g. the front face looks ~2x wider than the side face → W ≈ 2×D).
-- IGNORE terraces, entrance ramps, canopies, balconies, AC units, and ground slabs — they are NOT part of the building footprint. Only trace the main structural walls.
+- IGNORE terraces, entrance ramps, canopies, balconies, AC units, and ground slabs. Only trace the main structural walls.
 
 PERSPECTIVE ILLUSION WARNING:
-A rectangular box seen from a 3/4 angle shows 3 visible faces. The visible outline has 6 edges forming a hexagon. THIS IS AN OPTICAL ILLUSION — the real footprint is still a 4-vertex rectangle. NEVER trace this hexagonal silhouette as the footprint. If you output 6 walls with alternating lengths (e.g. 12000, 5500, 12000, 5500, 12000, 5500), you traced the silhouette — WRONG. The correct output is 4 walls: 12000, 5500, 12000, 5500.
+A rectangular box seen from a 3/4 angle shows 3 visible faces forming a hexagon silhouette. THIS IS AN OPTICAL ILLUSION — the real footprint is still a 4-vertex rectangle. NEVER trace this hexagonal silhouette.
 
-STEP 2 — IF NOT RECTANGULAR, determine the actual shape:
-- L-shaped: TWO WINGS meeting at a corner → 6 vertices from above.
-- U-shaped: TWO PARALLEL WINGS with a COURTYARD / OPEN RECESS between them (horseshoe) → **8 vertices** from above (never collapse to 6). Trace the full outer perimeter including both wing tips and both inner corners of the recess.
-- T-shaped: protruding central section → 8 vertices from above.
-- Indicators: one part of the building extends further than another, or there is a visible step/setback in the facade.
-- BIM / aerial screenshots: if you clearly see a gap or lower roof between two wings, that is a U — use 8 vertices, not an L.
+IF NOT RECTANGULAR:
+- L-shaped: 6 vertices from above.
+- U-shaped (courtyard): 8 vertices from above.
+- T-shaped (protruding central section): 8 vertices from above.
 
 OTHER 3D VIEW RULES:
 - Count visible floors to estimate height: typical floor height is 3000–4000mm per story.
-- Set wallLengthsFromDimText: false and confidence: 0.5–0.7 (lower than for dimensioned plans).
-- When shape is unclear but definitely not rectangular, output your best L/U/T approximation.
+- Set wallLengthsFromDimText: false and confidence: 0.5–0.7.
 
-═══ STEPPED / TIERED / CASCADING BUILDINGS (CRITICAL FOR HEIGHT) ═══
+=============== STEPPED / TIERED / CASCADING BUILDINGS ===============
 Many buildings have DIFFERENT heights on different sides — stepped rooflines, cascading floors, or wings of varying height.
-Examples: a building that steps down from 15 stories to 10 to 5 (like a staircase/pyramid), or a low podium with a tall tower.
 When you detect this:
 1. Set buildingHeightMm to the MAXIMUM height (tallest point).
-2. MUST output wallHeightsMm: an array with one height per polygon edge, matching the height of each facade section.
-   - Count floors visible above each wall section. Each floor ≈ 3000–4000mm.
-   - Walls facing the tall part get the tall height; walls facing the short part get the short height.
-   - Transition walls (connecting tall to short) get the TALLER adjacent height.
-3. For the footprint polygon: trace the FULL base outline as seen from above (the ground-level footprint).
-   The stepped nature is primarily captured in wallHeightsMm.
-   If a straight facade changes height partway along its run, add split vertices at those change points so each edge can carry its own wall height. These split vertices may be collinear and must be preserved.
-   If sections have different plan outlines at ground level (e.g. tower on a podium where the tower is narrower), DO add the setback vertices in the polygon.
-4. DETECTION CUES in 3D views:
-   - Visible horizontal rooflines at different levels = stepped building.
-   - One side has more floors visible than another = different heights.
-   - "Wedding cake" or "pyramid" profile = cascading tiers.
-   - If the building looks like stairs from the side, it IS stepped — output wallHeightsMm.
+2. Output wallHeightsMm: one height per polygon edge matching the facade height at each wall section.
+3. For the footprint polygon: trace the FULL base outline.
 
-Polygon rules — follow these exactly:
-1. CLOSED polygon: the last edge must connect back to vertex[0]. Do NOT add a duplicate of vertex[0] at the end.
-   The scaffold wraps the entire building without gaps — explicitly close the loop.
+Polygon rules:
+1. CLOSED polygon: the last edge connects back to vertex[0]. Do NOT duplicate vertex[0] at the end.
+2. CONCAVE HULL: Trace the real perimeter. L-shaped buildings need 6 vertices (not 4). Never simplify to a rectangle if the plan shows an L, U, or T outline.
+3. Vertex order: clockwise or counter-clockwise — be consistent.
+4. wallLengthsMm count must equal vertices count exactly.
+5. ORTHOGONAL: For walls intended to be perpendicular, vertices should form 90 degree angles.
+6. CURVED FACADES: represent with ONE or TWO straight segments. Do NOT use many short segments.
+7. Angled/chamfered corners must each be a separate vertex.
 
-2. CONCAVE HULL (no bounding box): Trace the real perimeter. L-shaped buildings need 6 vertices (not 4).
-   Interior corners (indents, notches) must each be a vertex. Never simplify to a rectangle if the plan shows an L, U, or stepped outline.
+CRITICAL — structural grid vs. building edge:
+Construction plans show internal structural grids (Y1/Y2/Y3/Y4 lines, column circles). These are NOT building edges.
+- NEVER place a vertex where a grid line crosses an exterior wall. A straight exterior wall is ONE edge.
+- NEVER trace a diagonal edge as a staircase of horizontal/vertical steps.
+- WARNING SIGN: 3+ consecutive edges with the same length = you are following a grid line, not the building perimeter.
+- Typical buildings: 4–8 vertices. Complex multi-wing buildings: 10–16 vertices. More than 20 almost always means grid-tracing errors.
 
-3. ARCHITECTURAL FLOOR PLANS (detailed room layouts) — CRITICAL:
-   If the image shows interior rooms, furniture, bathrooms, staircases, corridors, or partitions, it is a detailed architectural floor plan (平面図/間取り図). Apply these rules:
-   - IGNORE everything inside the building: room walls, partition walls, bathroom fixtures, staircases, furniture, columns, doors between rooms, windows in interior walls.
-   - FIND THE OUTERMOST BOUNDARY: Look for the thickest walls at the very edge of the drawing — these form the exterior shell. The outer perimeter is the silhouette of the whole building seen from above.
-   - EXTERIOR WALLS are typically drawn thicker/bolder than interior partition walls.
-   - The exterior perimeter is a single closed polygon. All interior elements are INSIDE this polygon and must be ignored.
-   - For an L-shaped floor plan: the outer boundary has 6 vertices. The "missing" corner (the interior notch) creates the 2 inward-turning vertices.
-   - For a rectangular floor plan with a protruding section: the outer boundary has 6–8 vertices.
-   - TERRACES, BALCONIES, EXTERNAL PLATFORMS: A terrace or outdoor platform that is ATTACHED to the building and enclosed by structural walls IS part of the exterior perimeter — include it as vertices. Only exclude terraces if they are clearly open decks with no enclosing walls (i.e. just a slab with railings).
-   - IGNORE any small protrusions for entrance steps, bay windows, or utility boxes smaller than 500mm — round them into the nearest straight wall.
-   - The final polygon should look like the silhouette you would see if you held the floor plan at arm's length and traced the outer edge with a marker.
-   STEP-BY-STEP for floor plans:
-   a) Find the leftmost exterior edge, rightmost exterior edge, topmost exterior edge, and bottommost exterior edge.
-   b) Walk the outer boundary clockwise, placing a vertex only at TRUE OUTSIDE CORNERS (corners where the exterior wall changes direction).
-   c) Never place a vertex where an interior wall meets the exterior wall — that is NOT an exterior corner.
-   d) The result should be 4–10 vertices for most buildings.
-   e) DIMENSION READING: Read all numeric labels near dimension lines on the exterior boundary. For each edge, find the closest matching dimension annotation. Prefer the metric value when both metric and imperial are shown.
+JAPANESE SCAFFOLD PLANS (blue lines):
+- BLUE FILLED/HATCHED ZONE = scaffold overhang area. DO NOT trace its outer boundary.
+- BLUE PERIMETER LINE (inner boundary of the blue zone, adjacent to building) = building wall face. TRACE THIS LINE.
+- Dimension strings on the plan should match the edges you are tracing.
 
-3b. JAPANESE SCAFFOLD PLANS (仮設計画図) — blue lines:
-   Japanese scaffold drawings use color coding that you must understand:
-   - BLUE FILLED/HATCHED ZONE: this is the scaffold overhang area (the zone between the building wall and the outer scaffold edge). DO NOT trace its outer boundary.
-   - BLUE PERIMETER LINE (the inner boundary of the blue zone, adjacent to the building): this IS the building wall face. TRACE THIS LINE as your polygon.
-   - Confirm: the dimension strings on the plan (e.g. "10@1829=18290") should match the edges you are tracing. If a long dimension string aligns with your traced edge, you have the right line.
-   - DIAGONAL / ANGLED WALLS: If the building has a wall that is neither horizontal nor vertical (e.g. a slanted or cut corner), trace it as a SINGLE straight edge between its two endpoints. DO NOT break it into horizontal+vertical steps.
-   - BUILDING SHAPE DETECTION for scaffold plans: The colored scaffold strip (blue/yellow/green rectangle) wraps around the building. The building itself is the uncolored area INSIDE the scaffold strip. Identify the building outline (the inner edge of the scaffold strip, not the outer edge), and trace it accurately including any diagonal corners.
-   For non-scaffold plans (architectural cross-sections, photos): trace the visible outer wall boundary.
-
-4. SHAPE REALITY CHECK — Most buildings are elongated rectangles or simple polygons. Common real shapes:
-   - RECTANGLE: 4 vertices, 4 edges (most common)
-   - TRAPEZOID (台形): 4 vertices — rectangle with ONE diagonal/slanted side instead of a straight right or left wall. This is VERY COMMON in Japanese urban buildings that face a diagonal street. Example: top-left, top-right, bottom-right-shifted, bottom-left. USE ONLY 4 VERTICES.
-   - L-SHAPE: 6 vertices (rectangular notch cut from one corner)
-   - RECTANGLE WITH CUT CORNER (面取り): 5 vertices (one diagonal chamfer at a corner — this creates ONE extra vertex, NOT multiple)
-   If your polygon looks like a NARROW DIAMOND, ARROW, or has many equal-length sides, you almost certainly traced the scaffold strip outline or grid lines instead of the building wall. Re-examine and extract the correct plan shape.
-   ANTI-PATTERN — the most common error: drawing a diagonal wall as multiple short steps following grid lines. A diagonal wall going from point A to point B is ALWAYS one straight edge with exactly 2 endpoints, even if 10 structural grid lines cross it.
-
-5. CURVED FACADES — If the plan shows ONE curved exterior wall (e.g. a long convex curve along the top): represent it with ONE or TWO straight segments connecting the same endpoints. Do NOT approximate the curve with many short segments; that creates a zigzag and wrong sharp angles. Output 4–6 vertices total: left, bottom, right, and the curved side as one or two segments (e.g. top-left and top-right). The result must look like an elongated rectangle with one gently bent side, not a narrow V or arrowhead.
-
-6. Angled corners and cut corners must each be a separate vertex (do not simplify to a rectangle if the plan shows a notch or diagonal).
-
-7. Vertex order: clockwise or counter-clockwise — be consistent around the whole perimeter.
-
-8. wallLengthsMm count must equal vertices count exactly (one length per edge). Use dimension strings (e.g. 11'-6", 3500) to set a single global scale for both X and Y axes so the 3D model proportions match real-world measurements.
-
-9. ORTHOGONAL: For walls intended to be perpendicular, vertices should form 90° angles — avoid "squashed" or narrow looks.
-
-CRITICAL — structural grid vs. building edge (most common error):
-Construction plans show internal structural grids (e.g. Y1/Y2/Y3/Y4/Y5 lines spaced 7200 mm, X1/X2 lines, column circles). These are NOT building edges.
-- NEVER place an extra vertex where a grid line crosses an exterior wall. A straight or diagonal exterior wall is ONE edge (2 vertices: start and end), even if 4 grid lines cross it.
-- NEVER trace a diagonal edge as a staircase of alternating horizontal/vertical steps. A slanted wall = one straight edge.
-- WARNING SIGN: if you have 3 or more consecutive edges with the same length (e.g. four × 7200 mm in a row), you are following a grid, not the building perimeter. Replace those segments with the single outer wall they belong to.
-- Typical buildings have 4–8 vertices. Complex multi-wing buildings (hospitals, schools, offices) may have 10–16 vertices. More than 20 almost always means grid-line tracing errors — review and remove spurious vertices before outputting.
-- MULTI-WING BUILDINGS: Large institutional/commercial buildings often have multiple connected wings forming complex shapes. Trace the OUTER perimeter of the entire connected structure as ONE polygon. Each wing junction creates 2+ vertices. Common patterns: H-shape (12 vertices), E-shape (12 vertices), courtyard buildings (8+ vertices).
-
-Self-check before outputting (fix issues silently — never output the check itself):
-- edges count == vertices count (not vertices count + 1)
+Self-check before outputting (fix silently):
+- edges count == vertices count
 - no duplicate consecutive vertices
 - no self-intersecting edges
-- if wallLengthsMm provided: sum of lengths is a plausible building perimeter (>4 m, <2000 m)
-- total of wallLengthsMm matches the plan's dimension string sums as closely as possible
-- no run of 3+ consecutive edges with the same length unless the building genuinely has those equal-length faces
-- polygon must NOT be a regular polygon (equal sides + equal angles) unless the building genuinely is one
-- DIAGONAL WALL CHECK: if you have 4+ consecutive edges all going in roughly the same diagonal direction, collapse them into ONE straight edge. A diagonal wall is one edge, period.
-- SHAPE SANITY: a typical urban building is a rectangle or trapezoid (4-6 vertices). If you output 7+ vertices, double-check that each vertex represents a REAL corner of the building wall (not a grid intersection or scaffold strip corner).
-- 3D VIEW SILHOUETTE CHECK (critical): If the image is a 3D view and you have 6 walls with alternating lengths (A, B, A, B, A, B), you traced the perspective silhouette — WRONG. A rectangular building is 4 walls (A, B, A, B). Go back and output 4 vertices.
-- 3D VIEW RECTANGLE CHECK: If the image is a 3D view and the building is a simple box (all walls flush), output EXACTLY 4 vertices. More than 4 means you are tracing the perspective outline.
-- 3D VIEW COMPLEX CHECK: If the image is a 3D view and the building has visible setbacks, wings, or L/U/T shape: output 6+ vertices (NOT 4). Outputting a rectangle for a non-rectangular building is wrong.
-- JAPANESE PLAN FINAL CHECK: Did you trace the building wall (the GRAY/UNCOLORED outer wall of the building, which is the INNER boundary of the blue scaffold zone)? If your traced polygon is outside the blue zone, you traced the wrong line.
-- FLOOR PLAN FINAL CHECK: If the image shows rooms/furniture/interior layout — is your polygon the OUTERMOST SILHOUETTE of the building, with no interior walls or partitions included as vertices? If any vertex of your polygon is at a point where an interior partition meets an exterior wall (rather than a true exterior corner), remove that vertex. The polygon should be the building's footprint as seen from directly above, as if you erased all interior elements.
+- if wallLengthsMm provided: sum of lengths > 4m and < 2000m
+- FLOOR PLAN: any labeled "Terrace" / "Balcony" / "Deck" with thick outer walls is INCLUDED in the polygon
+- FLOOR PLAN: the overall dimension line on each side matches the total length of polygon edges on that side
+- 3D VIEW SILHOUETTE CHECK: if you have 6 walls A,B,A,B,A,B you traced the silhouette — WRONG. Rectangular building = 4 walls A,B,A,B.
+- 3D VIEW: simple box = exactly 4 vertices. Complex (L/U/T shape) = 6+ vertices.
+- JAPANESE PLAN: polygon is the inner boundary of the blue scaffold zone (not the outer boundary).
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
-
 @Injectable()
 export class VisionBimService {
   private readonly logger = new Logger(VisionBimService.name);
