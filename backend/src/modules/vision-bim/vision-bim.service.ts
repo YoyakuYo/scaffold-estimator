@@ -802,7 +802,7 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v4:${modelForKey}:${hash}`;
+      const cacheKey = `vision-bim:v5:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
@@ -840,21 +840,24 @@ export class VisionBimService {
               },
               {
                 type: 'text',
-                text: `Extract the exterior building footprint as a CLOSED polygon.
+                text: `Extract the exterior building footprint as a CLOSED polygon (top-down plan view).
+
+CRITICAL — IS THIS A 3D VIEW?
+If this image shows a building in perspective, isometric, or 3D (you can see walls, a roof, and depth):
+- You MUST reconstruct the TOP-DOWN plan footprint — NOT trace the visible outline/silhouette.
+- A rectangular building in 3D perspective looks like a hexagon or pentagon — but the real footprint is a RECTANGLE with EXACTLY 4 vertices and 4 walls.
+- Ask yourself: "Is this building a simple box?" If yes → output exactly 4 vertices: [{x:0,y:0}, {x:W,y:0}, {x:W,y:D}, {x:0,y:D}].
+- Estimate W (width) and D (depth) from proportions. A 2-story house ~12m long and ~6m deep = vertices in mm.
+- IGNORE terraces, ramps, canopies — they are NOT the building footprint.
+- NEVER output 5 or 6 vertices for a rectangular building. That means you traced the perspective outline.
 
 COORDINATE SYSTEM: x increases RIGHT, y increases DOWNWARD (image pixel coords). Top-left = {x:0,y:0}.
 
-JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the SCAFFOLD AREA, NOT the building. The building wall is the INNER edge of the blue zone (where blue meets the gray/white building interior). Trace THIS inner edge.
+JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the SCAFFOLD AREA, NOT the building. Trace the INNER edge (building wall face).
 
-TRAPEZOID BUILDINGS (very common in Japan): Many urban buildings are trapezoids — a rectangle where one side (often the right wall) is diagonal/slanted. This is 4 vertices: top-left, top-right, bottom-right (shifted), bottom-left. Do NOT add extra vertices along the diagonal wall for grid line intersections.
+VERTEX COUNT GUIDE: rectangle=4, trapezoid=4, L-shape=6. If you output 5+ vertices for a simple box building, you are WRONG — go back and output 4.
 
-DIAGONAL WALL RULE: A slanted wall from point A to point B = exactly ONE straight edge, 2 vertices only. Structural grid lines (Y1, Y2, Y3...) crossing a diagonal wall are NOT building corners. Never trace a diagonal as steps.
-
-VERTEX COUNT GUIDE: rectangle=4, trapezoid=4, rectangle-with-cut-corner=5, L-shape=6. If you output 7+ vertices, verify each is a real wall corner (not a grid crossing).
-
-Read dimension strings for wall lengths: "10@1829=18290" means 18290mm. "S=1/100" means scale 1:100.
-
-Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount.`,
+Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence.`,
               },
             ],
           },
@@ -1658,90 +1661,161 @@ Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same co
   }
 
   /**
-   * Detect and fix the "perspective silhouette hexagon" pattern.
-   * A rectangular building seen in 3D at a 3/4 angle has 3 visible faces,
-   * producing a 6-edge hexagonal outline. The AI sometimes traces this
-   * instead of outputting the correct 4-vertex rectangle.
+   * Detect and fix perspective silhouette artifacts from 3D BIM views.
    *
-   * Detection: exactly 6 vertices with edge lengths forming an A,B,A,B,A,B
-   * pattern (3 pairs of roughly equal alternating lengths).
-   * Fix: take the two unique dimensions and output a 4-vertex rectangle.
+   * When an AI traces a 3D perspective/isometric view of a rectangular building,
+   * it often returns 5–6 vertices instead of 4 — tracing the visible outline.
+   * Patterns detected:
+   * 1. 6-vertex hexagon with alternating edge lengths (A,B,A,B,A,B)
+   * 2. 5-vertex pentagon with one abnormally long "diagonal" edge
+   * 3. Any polygon where the bounding box suggests a rectangle but vertices > 4
+   *
+   * Fix: collapse to the 4-vertex bounding rectangle.
    */
   private fixPerspectiveHexagon(
     parsed: VisionFootprintResult,
   ): VisionFootprintResult['vertices'] {
     const verts = parsed.vertices;
-    if (verts.length !== 6) return verts;
+    if (verts.length < 5 || verts.length > 8) return verts;
 
     const getCoord = (v: any): { x: number; y: number } => ({
       x: 'xFrac' in v ? v.xFrac : v.x,
       y: 'yFrac' in v ? v.yFrac : v.y,
     });
 
+    const pts = verts.map(getCoord);
+    const n = pts.length;
+
     const edges: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const a = getCoord(verts[i]);
-      const b = getCoord(verts[(i + 1) % 6]);
+    for (let i = 0; i < n; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
       edges.push(Math.hypot(b.x - a.x, b.y - a.y));
     }
 
-    // Check alternating pattern: edges[0]≈edges[2]≈edges[4] and edges[1]≈edges[3]≈edges[5]
-    const tol = 0.15; // 15% tolerance
-    const groupA = [edges[0], edges[2], edges[4]];
-    const groupB = [edges[1], edges[3], edges[5]];
-    const avgA = groupA.reduce((s, v) => s + v, 0) / 3;
-    const avgB = groupB.reduce((s, v) => s + v, 0) / 3;
+    // --- Pattern 1: 6-vertex alternating hexagon ---
+    if (n === 6) {
+      const tol = 0.15;
+      const groupA = [edges[0], edges[2], edges[4]];
+      const groupB = [edges[1], edges[3], edges[5]];
+      const avgA = groupA.reduce((s, v) => s + v, 0) / 3;
+      const avgB = groupB.reduce((s, v) => s + v, 0) / 3;
+      const aMatches = avgA > 0 && groupA.every((e) => Math.abs(e - avgA) / avgA < tol);
+      const bMatches = avgB > 0 && groupB.every((e) => Math.abs(e - avgB) / avgB < tol);
+      const ratio = Math.max(avgA, avgB) / Math.min(avgA, avgB);
+      if (aMatches && bMatches && ratio >= 1.3) {
+        this.logger.warn(`Detected perspective hexagon (A,B,A,B,A,B). Collapsing to rectangle.`);
+        return this.buildRectFromDimensions(parsed, verts, edges);
+      }
+    }
 
-    const aMatches = groupA.every((e) => Math.abs(e - avgA) / avgA < tol);
-    const bMatches = groupB.every((e) => Math.abs(e - avgB) / avgB < tol);
+    // --- Pattern 2: One edge is abnormally long (>2.5x median) ---
+    const sorted = [...edges].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const maxEdge = sorted[sorted.length - 1];
+    if (maxEdge > median * 2.5 && n >= 5) {
+      this.logger.warn(
+        `Detected perspective silhouette: longest edge ${Math.round(maxEdge)} is >${Math.round(median * 2.5)} (2.5× median ${Math.round(median)}). Collapsing to rectangle.`,
+      );
+      return this.buildRectFromDimensions(parsed, verts, edges);
+    }
 
-    if (!aMatches || !bMatches) return verts;
+    // --- Pattern 3: Bounding box is nearly rectangular but too many vertices ---
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const bboxW = Math.max(...xs) - Math.min(...xs);
+    const bboxH = Math.max(...ys) - Math.min(...ys);
+    const bboxArea = bboxW * bboxH;
+    if (bboxArea > 0 && n >= 5) {
+      // Compute polygon area using shoelace formula
+      let polyArea = 0;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        polyArea += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+      }
+      polyArea = Math.abs(polyArea) / 2;
+      const fillRatio = polyArea / bboxArea;
+      // If polygon fills >90% of its bounding box with 5+ vertices, it's a perspective distortion of a rectangle
+      // (Real L-shapes fill ~75%, cut-corners fill ~95% but we only collapse 5+ vertex polygons)
+      if (fillRatio > 0.90 && n >= 5) {
+        this.logger.warn(
+          `Detected near-rectangular polygon (${n} vertices, fill ratio ${(fillRatio * 100).toFixed(1)}%). Collapsing to rectangle.`,
+        );
+        return this.buildRectFromDimensions(parsed, verts, edges);
+      }
+    }
 
-    // Also verify the two groups are meaningfully different (not a regular hexagon)
-    const ratio = Math.max(avgA, avgB) / Math.min(avgA, avgB);
-    if (ratio < 1.3) return verts; // Nearly regular hexagon — not a perspective artifact
+    return verts;
+  }
 
-    this.logger.warn(
-      `Detected perspective silhouette hexagon (edges: ${edges.map((e) => Math.round(e)).join(', ')}). ` +
-      `Collapsing to rectangle.`,
-    );
-
-    // Build a rectangle using the two dimensions (longer = width, shorter = depth)
-    const width = Math.max(avgA, avgB);
-    const depth = Math.min(avgA, avgB);
-
-    // Use mm if coords are in mm, fractions if in fractions
+  private buildRectFromDimensions(
+    parsed: VisionFootprintResult,
+    verts: VisionFootprintResult['vertices'],
+    edges: number[],
+  ): VisionFootprintResult['vertices'] {
     const isXfrac = 'xFrac' in verts[0];
+    const getCoord = (v: any): { x: number; y: number } => ({
+      x: isXfrac ? v.xFrac : v.x,
+      y: isXfrac ? v.yFrac : v.y,
+    });
+    const pts = verts.map(getCoord);
+
+    // Use bounding box of the polygon as the rectangle
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const bboxW = maxX - minX;
+    const bboxH = maxY - minY;
+
+    // Use wallLengthsMm if available — cluster into two groups for W and D
+    const wl = parsed.wallLengthsMm;
+    if (wl && wl.length >= 4) {
+      const sorted = [...wl].sort((a, b) => a - b);
+      const medianLen = sorted[Math.floor(sorted.length / 2)];
+      // Remove outlier edges (>2x median) that are perspective diagonals
+      const reasonable = wl.filter((l) => l <= medianLen * 2.2);
+      if (reasonable.length >= 2) {
+        // Cluster remaining into "short" and "long" groups
+        const rSorted = [...reasonable].sort((a, b) => a - b);
+        const mid = (rSorted[0] + rSorted[rSorted.length - 1]) / 2;
+        const shorts = rSorted.filter((l) => l <= mid);
+        const longs = rSorted.filter((l) => l > mid);
+        const avgShort = shorts.length > 0
+          ? Math.round(shorts.reduce((s, v) => s + v, 0) / shorts.length) : Math.round(rSorted[0]);
+        const avgLong = longs.length > 0
+          ? Math.round(longs.reduce((s, v) => s + v, 0) / longs.length) : Math.round(rSorted[rSorted.length - 1]);
+        const width = Math.max(avgShort, avgLong);
+        const depth = Math.min(avgShort, avgLong);
+        parsed.wallLengthsMm = [width, depth, width, depth];
+        this.logger.log(`Rectangle from wallLengthsMm: ${width}×${depth}mm`);
+        if (isXfrac) {
+          return [
+            { xFrac: 0, yFrac: 0 }, { xFrac: width, yFrac: 0 },
+            { xFrac: width, yFrac: depth }, { xFrac: 0, yFrac: depth },
+          ] as any;
+        }
+        return [
+          { x: 0, y: 0 }, { x: width, y: 0 },
+          { x: width, y: depth }, { x: 0, y: depth },
+        ] as any;
+      }
+    }
+
+    // Fallback: use bounding box dimensions
+    const width = Math.round(Math.max(bboxW, bboxH));
+    const depth = Math.round(Math.min(bboxW, bboxH));
     if (isXfrac) {
       return [
-        { xFrac: 0, yFrac: 0 },
-        { xFrac: width, yFrac: 0 },
-        { xFrac: width, yFrac: depth },
-        { xFrac: 0, yFrac: depth },
+        { xFrac: 0, yFrac: 0 }, { xFrac: width, yFrac: 0 },
+        { xFrac: width, yFrac: depth }, { xFrac: 0, yFrac: depth },
       ] as any;
     }
-
-    // Use wallLengthsMm if available to build a properly sized rectangle
-    const wl = parsed.wallLengthsMm;
-    if (wl && wl.length === 6) {
-      const wlA = Math.round((wl[0] + wl[2] + wl[4]) / 3);
-      const wlB = Math.round((wl[1] + wl[3] + wl[5]) / 3);
-      const w = Math.max(wlA, wlB);
-      const d = Math.min(wlA, wlB);
-      parsed.wallLengthsMm = [w, d, w, d];
-      return [
-        { x: 0, y: 0 },
-        { x: w, y: 0 },
-        { x: w, y: d },
-        { x: 0, y: d },
-      ] as any;
-    }
-
     return [
-      { x: 0, y: 0 },
-      { x: Math.round(width), y: 0 },
-      { x: Math.round(width), y: Math.round(depth) },
-      { x: 0, y: Math.round(depth) },
+      { x: 0, y: 0 }, { x: width, y: 0 },
+      { x: width, y: depth }, { x: 0, y: depth },
     ] as any;
   }
 
