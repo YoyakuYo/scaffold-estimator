@@ -1,10 +1,9 @@
 /**
  * For stepped / multi-tier footprints, tier decomposition creates a full perimeter
- * per slab. Setback façades often produce several parallel edges with the same
- * outward direction (e.g. multiple "east" lines at different depths). For external
- * scaffold visualization we keep only the outermost edge per (tier × cardinal),
- * so the 3D view shows one strip per building face per tier — not a solid block of
- * parallel runs toward the interior.
+ * per slab. That includes:
+ * 1) Parallel inset façades (same cardinal, different depth) → keep outermost per tier.
+ * 2) Step / terrace "riser" edges perpendicular to the main 4 façades → skip in 3D
+ *    (user wants gaibu only on the same directions as the ground footprint walls).
  */
 
 export type FacadeTierPolyMeta = {
@@ -22,8 +21,40 @@ function cardinalKeyFromNormal(nx: number, nz: number): string {
   return nz >= 0 ? '+Z' : '-Z';
 }
 
+/** Unit tangents along ground footprint edges (one per distinct direction, ± merged). */
+function groundFacadeUnitTangents(verts: Array<{ x: number; z: number }>): Array<{ tx: number; tz: number }> {
+  const n = verts.length;
+  const raw: Array<{ tx: number; tz: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const v1 = verts[i]!;
+    const v2 = verts[(i + 1) % n]!;
+    const dx = v2.x - v1.x;
+    const dz = v2.z - v1.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-6) continue;
+    raw.push({ tx: dx / len, tz: dz / len });
+  }
+  const cosDup = Math.cos((4 * Math.PI) / 180);
+  const unique: Array<{ tx: number; tz: number }> = [];
+  for (const t of raw) {
+    const dup = unique.some((u) => Math.abs(u.tx * t.tx + u.tz * t.tz) >= cosDup);
+    if (!dup) unique.push(t);
+  }
+  return unique;
+}
+
+function isParallelToGroundFacets(
+  edgeTx: number,
+  edgeTz: number,
+  groundTans: Array<{ tx: number; tz: number }>,
+): boolean {
+  const cosMin = Math.cos((24 * Math.PI) / 180);
+  return groundTans.some((g) => Math.abs(edgeTx * g.tx + edgeTz * g.tz) >= cosMin);
+}
+
 /**
- * @returns wall indices to skip when rendering (inner / duplicate parallel façades).
+ * @returns wall indices to skip when rendering (step risers not parallel to ground
+ * façades, plus inner duplicate parallel façades per tier).
  */
 export function computeInnerParallelWallSkipSet(params: {
   wallCount: number;
@@ -31,6 +62,8 @@ export function computeInnerParallelWallSkipSet(params: {
   tierPolyData: FacadeTierPolyMeta[];
   groundCentroidX: number;
   groundCentroidZ: number;
+  /** Ground-tier footprint; used to drop edges perpendicular to main 4 walls (step returns). */
+  groundTierVerts?: Array<{ x: number; z: number }>;
   enabled: boolean;
 }): Set<number> {
   const skip = new Set<number>();
@@ -42,9 +75,15 @@ export function computeInnerParallelWallSkipSet(params: {
     tierPolyData,
     groundCentroidX,
     groundCentroidZ,
+    groundTierVerts,
   } = params;
 
   if (tierGroups.length <= 1 || wallCount <= 4) return skip;
+
+  const groundTans =
+    groundTierVerts && groundTierVerts.length >= 3
+      ? groundFacadeUnitTangents(groundTierVerts)
+      : [];
 
   const hasTierOffset = tierGroups.length > 1;
   type Bucket = Array<{ wallIndex: number; outwardScore: number }>;
@@ -84,6 +123,14 @@ export function computeInnerParallelWallSkipSet(params: {
     const dz = v2.z - v1.z;
     const edgeLen = Math.hypot(dx, dz);
     if (edgeLen < 1e-6) continue;
+
+    const edgeTx = dx / edgeLen;
+    const edgeTz = dz / edgeLen;
+    // Drop step / terrace edges that run perpendicular to the main building façades.
+    if (groundTans.length >= 1 && !isParallelToGroundFacets(edgeTx, edgeTz, groundTans)) {
+      skip.add(wi);
+      continue;
+    }
 
     let nx = tierNormSign * (-dz / edgeLen);
     let nz = tierNormSign * (dx / edgeLen);

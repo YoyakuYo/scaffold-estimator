@@ -1258,12 +1258,15 @@ export default function Scaffold3DView({
 
       // Stepped buildings: drop inner parallel façades (same cardinal per tier slab).
       // Keeps one external strip per face direction per tier — not a solid block of runs.
+      const groundFootprintForFilter =
+        (tierPolyData[0]?.tierVerts?.length ?? 0) >= 3 ? tierPolyData[0]!.tierVerts : verts;
       const innerParallelWallSkip = computeInnerParallelWallSkipSet({
         wallCount: walls.length,
         tierGroups,
         tierPolyData: tierPolyData as FacadeTierPolyMeta[],
         groundCentroidX: cx,
         groundCentroidZ: cz,
+        groundTierVerts: groundFootprintForFilter,
         enabled:
           independentExternalWallRuns &&
           tierGroups.length > 1 &&
