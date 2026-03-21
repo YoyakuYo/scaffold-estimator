@@ -132,7 +132,7 @@ Optional fields (read from dimension lines and annotations):
     ALWAYS use the metric value — it is exact. Convert imperial only when no metric is shown.
   * Grid notation: "10@1829=18290" means 10 spans x 1829mm = 18290mm total
   Only omit if no dimension annotations are visible at all.
-  DIMENSION ASSIGNMENT RULE: Each exterior edge gets the dimension line that runs PARALLEL to it and is closest to it on the outside. The overall span dimension (the long arrow spanning the full side of the building including any attached terrace/extension) is the correct value for that full side, not sub-dimensions of interior partitions.
+  DIMENSION ASSIGNMENT RULE: Each exterior edge gets the dimension line that runs PARALLEL to it and is closest to it on the outside. The overall dimension for a side = the total structural wall length (do NOT include open terraces/decks beyond the structural wall). Use the dimension arrow that measures the building's structural envelope, not sub-dimensions of interior partitions.
 - wallLengthsFromDimText: true if wallLengthsMm was read from explicit dimension lines; false/omit if only estimated from proportions.
 - scaffoldTypeHint: "wakugumi" for frame scaffold or imperial spans (1829/914/1219/1524); "kusabi" for wedge scaffold or metric spans (600/900/1200/1500/1800). Omit if unclear.
 - spanSizeMm: main span in mm if visible (1829, 914, 900, 1200, etc.).
@@ -156,14 +156,24 @@ STEP 1 — IDENTIFY THE EXTERIOR SHELL:
 
 STEP 2 — DETECT ALL PROTRUDING SECTIONS (CRITICAL — most common extraction error):
 A floor plan may have sections that protrude OUTWARD from the main rectangular body.
-DETECTION — look for:
-  * Thick exterior walls that extend BEYOND the main rectangular envelope.
-  * Labeled areas: "Terrace", "Balcony", "Deck", "テラス", "バルコニー", "Entrance" — any such area with thick outer walls extending outward IS part of the exterior perimeter.
-  * A dimension line specifically labeling the width/depth of that protruding section.
-RULE: If a section has a thick outer wall visible in the plan AND is labeled with a name or dimension — ALWAYS include it in the polygon. Its outermost corners are vertices.
-RULE: For the side of the building where a protrusion exists, the overall dimension arrow spanning the FULL side (including the protrusion) gives the total length — use that value, not the shorter sub-dimension of only the main body.
-COMMON MISTAKE: Using the interior partition wall between the main room and terrace as the outer boundary — this cuts the terrace out of the polygon. WRONG. The outermost wall of the terrace is the outer boundary.
-EXAMPLE: If the plan shows a main 9m x 11m rectangle with a 9m x 4m terrace attached at the bottom, the full building height is 11 + 4 = 15m, and the outer perimeter has 8 vertices forming a T-shape (or rectangle if the terrace spans the full width).
+
+INCLUDE in the polygon:
+  * Enclosed rooms / wings that protrude outward — they have thick structural walls on ALL sides forming a closed boundary.
+  * Enclosed entrance halls, enclosed vestibules, or structural stairwells with thick outer walls.
+
+EXCLUDE from the polygon (these are NOT structural walls — scaffold cannot attach):
+  * OPEN TERRACES / DECKS / PATIOS — areas labeled "Terrace", "Deck", "テラス" that show NO enclosing structural walls on the outer edge (only railings, posts, columns, or open air). If the outer boundary of the terrace is drawn with thin lines, dashed lines, or shows railings/posts instead of solid thick walls → EXCLUDE it.
+  * Covered walkways, open balconies, canopies, or carports with pillars but no walls.
+  * External staircases that are outside the building envelope.
+  * Small protrusions < 500mm (entrance steps, bay windows, utility boxes).
+
+DETECTION RULE: Look at the OUTER edge of the protruding section:
+  * If it has the SAME thick wall lines as the main building → INCLUDE (it is a structural wing).
+  * If it has thin lines, dashed lines, railing symbols, column dots, or is open → EXCLUDE (it is a deck/terrace).
+
+DIMENSION RULE: For the side of the building where a structural protrusion exists, the overall dimension arrow spanning the FULL side (including the protrusion) gives the total length.
+CRITICAL: Use the overall dimension line that runs along the building's STRUCTURAL EXTERIOR WALL. If there is a separate smaller dimension for a terrace/deck beyond the structural wall, do NOT add it to the wall length.
+EXAMPLE: If the plan shows a main 9m x 11m rectangle with a 9m x 4m ENCLOSED wing at the bottom (thick walls on all sides), the full building height is 11 + 4 = 15m. But if the 4m section is an OPEN terrace (thin lines, no structural walls on outer edge), the building is just 9m x 11m (4 vertices).
 
 STEP 3 — TRACE THE OUTER PERIMETER:
 Walk the outer boundary CLOCKWISE. Place a vertex only at TRUE OUTSIDE CORNERS (where the exterior wall changes direction from one direction to another).
@@ -183,9 +193,10 @@ For each edge in the polygon, find the dimension line that runs PARALLEL to it o
   * CROSS-CHECK: the sum of all edge lengths should equal the building's total perimeter.
 
 FLOOR PLAN SELF-CHECK:
-- Does the sum of vertical edges equal the total height shown by the overall dimension? If not, re-read the dimensions.
-- Is any labeled terrace/balcony/deck section with thick outer walls INCLUDED in the polygon? If not, add it.
-- Is the polygon the outermost silhouette — the shape you would see if you erased all interior elements?
+- Does the sum of vertical edges equal the total height shown by the overall structural-wall dimension? If not, re-read the dimensions.
+- Are OPEN terraces/decks/patios (no thick enclosing walls on outer edge) EXCLUDED from the polygon? If you included an open deck, remove it.
+- Are ENCLOSED wings (thick walls on all sides) INCLUDED? If not, add them.
+- Is the polygon the outermost silhouette of the STRUCTURAL WALLS — ignoring open decks, railings, and non-structural elements?
 
 =============== 3D BIM RENDERS / ISOMETRIC / PERSPECTIVE VIEWS ===============
 If the image is a 3D rendering, isometric view, perspective view, or BIM screenshot:
@@ -244,7 +255,7 @@ Self-check before outputting (fix silently):
 - no duplicate consecutive vertices
 - no self-intersecting edges
 - if wallLengthsMm provided: sum of lengths > 4m and < 2000m
-- FLOOR PLAN: any labeled "Terrace" / "Balcony" / "Deck" with thick outer walls is INCLUDED in the polygon
+- FLOOR PLAN: OPEN terraces/decks (no enclosing structural walls) are EXCLUDED; ENCLOSED wings are INCLUDED
 - FLOOR PLAN: the overall dimension line on each side matches the total length of polygon edges on that side
 - 3D VIEW SILHOUETTE CHECK: if you have 6 walls A,B,A,B,A,B you traced the silhouette — WRONG. Rectangular building = 4 walls A,B,A,B.
 - 3D VIEW: simple box = exactly 4 vertices. Complex (L/U/T shape) = 6+ vertices.
