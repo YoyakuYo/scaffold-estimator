@@ -393,6 +393,7 @@ export default function Scaffold3DView({
     }
 
     setReady(false);
+    setError(null);
 
     const canvasContainer = canvasContainerRef.current;
     let disposed = false;
@@ -1236,6 +1237,18 @@ export default function Scaffold3DView({
         }
 
         tierPolygons.push({ verts: tverts, footprintFromMassing });
+      }
+
+      // Upper tiers with no valid polygon (edge cases / API mismatch) would crash on tierV[localIdx].
+      // Fall back to ground footprint so the viewer always initializes.
+      for (let tgi = 1; tgi < tierPolygons.length; tgi++) {
+        const tp = tierPolygons[tgi];
+        const tg = tierGroups[tgi];
+        if (!tg?.walls?.length) continue;
+        if (!tp.verts || tp.verts.length < 2) {
+          tp.verts = verts.map((v) => ({ x: v.x, z: v.z }));
+          tp.footprintFromMassing = false;
+        }
       }
 
       // (verts already set from tier 0)
@@ -2420,8 +2433,9 @@ export default function Scaffold3DView({
         }
       };
     }).catch((err) => {
-      console.error('Failed to load Three.js:', err);
-      setError(err?.message || 'Failed to load 3D viewer');
+      console.error('3D viewer error:', err);
+      setError(err instanceof Error ? err.message : String(err || 'Failed to load 3D viewer'));
+      setReady(true);
     });
 
     return () => { disposed = true; };
