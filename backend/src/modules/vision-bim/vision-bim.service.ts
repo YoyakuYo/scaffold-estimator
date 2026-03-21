@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 
@@ -812,7 +812,7 @@ export class VisionBimService {
         'claude-sonnet-4-6';
       const message = await client.messages.create({
         model,
-        max_tokens: 2048,
+        max_tokens: 4096,
         // Reduce randomness to avoid shape changes between identical uploads
         // (Anthropic supports temperature on messages.create).
         temperature: 0,
@@ -921,6 +921,10 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       if (!parsed.vertices || !Array.isArray(parsed.vertices) || parsed.vertices.length < 3) {
         throw new Error('Vision returned invalid footprint vertices');
       }
+
+      // Snapshot original vertices before perspective correction so we can
+      // re-normalise massingTiers coordinates if the outline is relocated.
+      const originalVertices = parsed.vertices.map((v: any) => ({ ...v }));
 
       // Post-processing: detect "perspective silhouette hexagon" pattern from 3D views.
       // When AI traces a 3D perspective view of a rectangular building, it often returns
@@ -1072,6 +1076,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       this.maybeCollapsePerspectiveSilhouette(parsed);
       // Remove collinear intermediate vertices caused by grid-line tracing.
       this.cleanupPolygon(parsed);
+      // Re-normalise massingTiers vertices to match the (possibly relocated) outline.
+      this.normalizeMassingTiersToOutline(parsed, originalVertices);
       // Save to cache after successful parse/cleanup.
       VisionBimService.imageCache.set(cacheKey, {
         savedAtMs: Date.now(),
@@ -1231,6 +1237,73 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       }
       parsed.wallHeightsMm = newHeights;
     }
+  }
+
+  /**
+   * After fixPerspectiveHexagon / maybeCollapsePerspectiveSilhouette / cleanupPolygon
+   * may have relocated the outline to {0,0}..{W,D}, massingTier vertices still use the
+   * original coordinate space. Re-map them so the tiers align with the new outline.
+   */
+  private normalizeMassingTiersToOutline(
+    parsed: VisionFootprintResult,
+    originalVertices: VisionFootprintResult['vertices'],
+  ): void {
+    if (!Array.isArray(parsed.massingTiers) || parsed.massingTiers.length === 0) return;
+    if (!originalVertices || originalVertices.length < 3 || parsed.vertices.length < 3) return;
+
+    const getCoord = (v: any): { x: number; y: number } => ({
+      x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
+      y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
+    });
+
+    const origPts = originalVertices.map(getCoord);
+    const newPts = parsed.vertices.map(getCoord);
+
+    const bbox = (pts: Array<{ x: number; y: number }>) => {
+      let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+      for (const p of pts) {
+        if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x;
+        if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y;
+      }
+      return { minX: mnx, minY: mny, maxX: mxx, maxY: mxy };
+    };
+
+    const origBbox = bbox(origPts);
+    const newBbox = bbox(newPts);
+    const origW = Math.max(origBbox.maxX - origBbox.minX, 1e-9);
+    const origH = Math.max(origBbox.maxY - origBbox.minY, 1e-9);
+    const newW = Math.max(newBbox.maxX - newBbox.minX, 1e-9);
+    const newH = Math.max(newBbox.maxY - newBbox.minY, 1e-9);
+
+    // Skip if coordinates didn't change significantly
+    const scaleX = newW / origW;
+    const scaleY = newH / origH;
+    if (
+      Math.abs(scaleX - 1) < 0.01 && Math.abs(scaleY - 1) < 0.01 &&
+      Math.abs(origBbox.minX - newBbox.minX) < 1 && Math.abs(origBbox.minY - newBbox.minY) < 1
+    ) {
+      return;
+    }
+
+    const newVertsAreMm = 'x' in parsed.vertices[0];
+
+    for (const tier of parsed.massingTiers) {
+      tier.vertices = tier.vertices.map((tv: any) => {
+        const tc = getCoord(tv);
+        const nx = newBbox.minX + ((tc.x - origBbox.minX) / origW) * newW;
+        const ny = newBbox.minY + ((tc.y - origBbox.minY) / origH) * newH;
+        if (newVertsAreMm) {
+          return { x: Math.round(nx), y: Math.round(ny) };
+        }
+        return { xFrac: nx, yFrac: ny };
+      });
+    }
+
+    this.logger.log(
+      `normalizeMassingTiersToOutline: remapped ${parsed.massingTiers.length} tiers ` +
+      `from [${origBbox.minX.toFixed(0)},${origBbox.minY.toFixed(0)}..${ origBbox.maxX.toFixed(0)},${origBbox.maxY.toFixed(0)}] ` +
+      `to [${newBbox.minX.toFixed(0)},${newBbox.minY.toFixed(0)}..${newBbox.maxX.toFixed(0)},${newBbox.maxY.toFixed(0)}]`,
+    );
   }
 
   /**
@@ -1993,15 +2066,27 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       }
     }
 
-    // Fallback: use bounding box dimensions
-    const width = Math.round(Math.max(bboxW, bboxH));
-    const depth = Math.round(Math.min(bboxW, bboxH));
+    // Fallback: use bounding box dimensions.
+    // For fractional coordinates (0-1), Math.round would produce 0/1 → degenerate polygon.
+    // Instead, estimate real dimensions from building height and aspect ratio.
     if (isXfrac) {
+      const aspect = bboxW > 1e-9 && bboxH > 1e-9 ? bboxW / bboxH : 1.5;
+      const estimatedPerimeter = (parsed.buildingHeightMm ?? 30000) * 2;
+      const W = Math.round(estimatedPerimeter * aspect / (2 * (1 + aspect)));
+      const D = Math.round(estimatedPerimeter / (2 * (1 + aspect)));
+      const width = Math.max(W, D, 3000);
+      const depth = Math.max(Math.min(W, D), 3000);
+      parsed.wallLengthsMm = [width, depth, width, depth];
+      parsed.wallLengthsFromDimText = false;
+      this.logger.log(`Rectangle from fractional bbox (aspect ${aspect.toFixed(2)}): ${width}×${depth}mm`);
       return [
-        { xFrac: 0, yFrac: 0 }, { xFrac: width, yFrac: 0 },
-        { xFrac: width, yFrac: depth }, { xFrac: 0, yFrac: depth },
+        { x: 0, y: 0 }, { x: width, y: 0 },
+        { x: width, y: depth }, { x: 0, y: depth },
       ] as any;
     }
+    const width = Math.max(Math.round(Math.max(bboxW, bboxH)), 3000);
+    const depth = Math.max(Math.round(Math.min(bboxW, bboxH)), 3000);
+    parsed.wallLengthsMm = [width, depth, width, depth];
     return [
       { x: 0, y: 0 }, { x: width, y: 0 },
       { x: width, y: depth }, { x: 0, y: depth },

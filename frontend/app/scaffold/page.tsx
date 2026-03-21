@@ -211,11 +211,13 @@ function Building3DPreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<any>(null);
   const animFrameRef = useRef<number>(0);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || outline.length < 3) return;
     let disposed = false;
     const cleanupFns: Array<() => void> = [];
+    setPreviewError(null);
 
     import('three').then((THREE) => {
       if (disposed || !containerRef.current) return;
@@ -244,6 +246,14 @@ function Building3DPreview({
       const pts2D = toPlanM(outline);
       const cx = pts2D.reduce((s, p) => s + p.x, 0) / pts2D.length;
       const cz = pts2D.reduce((s, p) => s + p.z, 0) / pts2D.length;
+
+      // Validate that the outline has non-zero area (degenerate → invisible geometry)
+      const spreadX = Math.max(...pts2D.map(p => p.x)) - Math.min(...pts2D.map(p => p.x));
+      const spreadZ = Math.max(...pts2D.map(p => p.z)) - Math.min(...pts2D.map(p => p.z));
+      if (spreadX < 0.01 && spreadZ < 0.01) {
+        setPreviewError('建物形状が小さすぎて3D描画できません。壁面長を確認してください。');
+        return;
+      }
 
       const heightM = buildingHeightMm * 0.001;
       const hasSteppedHeights = Array.isArray(wallHeightsMm) && wallHeightsMm.length === outline.length
@@ -612,6 +622,9 @@ function Building3DPreview({
       });
       ro.observe(container);
       cleanupFns.push(() => ro.disconnect());
+    }).catch((err) => {
+      console.error('[Building3DPreview] render error:', err);
+      setPreviewError('3D プレビューの描画に失敗しました');
     });
 
     return () => {
@@ -626,6 +639,13 @@ function Building3DPreview({
   }, [outline, buildingHeightMm, wallLengthsMm, wallHeightsMm, massingTiers, ifcFileUrl, ifcArrayBuffer]);
 
   if (outline.length < 3) return <div className={className} style={style} />;
+  if (previewError) {
+    return (
+      <div className={`flex items-center justify-center text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg ${className ?? ''}`} style={style}>
+        {previewError}
+      </div>
+    );
+  }
   return <div ref={containerRef} className={className} style={style} />;
 }
 

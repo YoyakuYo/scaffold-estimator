@@ -63,7 +63,12 @@ export function computeBimPreviewPlanToM(params: {
     toM = 1;
   } else {
     const perimeter = wallLengthsMm?.reduce((s, l) => s + (typeof l === 'number' ? l : 0), 0) ?? 40000;
-    toM = (perimeter * 0.001) / (2 * (spanX + spanY));
+    const denominator = 2 * (spanX + spanY);
+    toM = denominator > 1e-6
+      ? (perimeter * 0.001) / denominator
+      : perimeter * 0.001;
+    // Cap to prevent astronomically large scale when spans are near-zero
+    toM = Math.min(toM, 100000);
   }
 
   const toPlanM = (verts: BimPreviewVertex[]) =>
