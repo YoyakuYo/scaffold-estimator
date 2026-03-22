@@ -150,6 +150,40 @@ export function ensureClosedLoop(pts: Point2D[], tolMm: number = 1): Point2D[] {
   return [...pts, { x: first.x, y: first.y }];
 }
 
+/**
+ * Detect whether a polygon has many non-orthogonal turns (angled walls).
+ * For such buildings, rebuildFromDimensions accumulates positional drift
+ * across edges and severely distorts the shape.
+ */
+function isNonOrthogonalPolygon(pts: Point2D[], tolDeg: number = 15): boolean {
+  const n = pts.length;
+  if (n < 4) return false;
+
+  let nonOrthoCount = 0;
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+
+    const len1 = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+    const len2 = Math.hypot(next.x - curr.x, next.y - curr.y);
+    if (len1 < 1e-6 || len2 < 1e-6) continue;
+
+    const angle1 = Math.atan2(curr.y - prev.y, curr.x - prev.x);
+    const angle2 = Math.atan2(next.y - curr.y, next.x - curr.x);
+    let turn = angle2 - angle1;
+    while (turn > Math.PI) turn -= 2 * Math.PI;
+    while (turn < -Math.PI) turn += 2 * Math.PI;
+
+    const turnDeg = Math.abs((turn * 180) / Math.PI);
+    const mod90 = turnDeg % 90;
+    const isNear90 = mod90 < tolDeg || mod90 > 90 - tolDeg;
+    if (!isNear90) nonOrthoCount++;
+  }
+
+  return nonOrthoCount > n / 3;
+}
+
 export interface ContourExtractionOptions {
   /** Skip orthogonal correction (useful when vertices are already in precise mm coordinates) */
   skipOrthoCorrection?: boolean;
@@ -159,7 +193,7 @@ export interface ContourExtractionOptions {
  * Full contour extraction pipeline:
  * 1. Apply orthogonal correction (90° snap) — unless mm coords are already precise
  * 2. Scale from wallLengthsMm if provided (single global scale)
- * 3. Rebuild from dimensions if lengths provided
+ * 3. Rebuild from dimensions if lengths provided (orthogonal buildings only)
  * 4. Ensure closed loop
  */
 export function applyContourExtraction(
@@ -176,7 +210,11 @@ export function applyContourExtraction(
   }
 
   if (wallLengthsMm && wallLengthsMm.length === pts.length) {
-    pts = rebuildFromDimensions(pts, wallLengthsMm);
+    if (isNonOrthogonalPolygon(pts)) {
+      pts = scaleFromDimensions(pts, wallLengthsMm);
+    } else {
+      pts = rebuildFromDimensions(pts, wallLengthsMm);
+    }
   } else if (wallLengthsMm && wallLengthsMm.length > 0) {
     pts = scaleFromDimensions(pts, wallLengthsMm.slice(0, pts.length));
   }
