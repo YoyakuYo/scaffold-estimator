@@ -1362,6 +1362,50 @@ function ScaffoldPageContent() {
                       refMm,
                       { wallLengthsMm, wallHeightsMm },
                     );
+                    // Normalize massingTier vertices to mm (same coordinate space as buildingOutline).
+                    // The building graph pipeline converts footprint.vertices → mm, but massingTiers
+                    // stay in the AI's original coordinate system (fractional/pixel). Re-map them
+                    // using the bounding box transformation from original → mm outline.
+                    const normalizedMassingTiers = (() => {
+                      if (!footprint.massingTiers || footprint.massingTiers.length === 0) return undefined;
+                      if (!buildingOutline || buildingOutline.length < 3) return footprint.massingTiers;
+                      const getC = (v: any) => ({
+                        x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
+                        y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
+                      });
+                      const origPts = footprint.vertices.map(getC);
+                      const newPts = buildingOutline.map((v: any) => ({
+                        x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
+                        y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
+                      }));
+                      const bboxOf = (pts: Array<{ x: number; y: number }>) => {
+                        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+                        for (const p of pts) {
+                          if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x;
+                          if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y;
+                        }
+                        return { mnx, mny, mxx, mxy };
+                      };
+                      const ob = bboxOf(origPts);
+                      const nb = bboxOf(newPts);
+                      const oW = Math.max(ob.mxx - ob.mnx, 1e-9);
+                      const oH = Math.max(ob.mxy - ob.mny, 1e-9);
+                      const nW = Math.max(nb.mxx - nb.mnx, 1e-9);
+                      const nH = Math.max(nb.mxy - nb.mny, 1e-9);
+                      if (Math.abs(oW - nW) < 1 && Math.abs(oH - nH) < 1 &&
+                          Math.abs(ob.mnx - nb.mnx) < 1 && Math.abs(ob.mny - nb.mny) < 1) {
+                        return footprint.massingTiers;
+                      }
+                      return footprint.massingTiers.map((tier: any) => ({
+                        ...tier,
+                        vertices: tier.vertices.map((v: any) => {
+                          const c = getC(v);
+                          const nx = nb.mnx + ((c.x - ob.mnx) / oW) * nW;
+                          const ny = nb.mny + ((c.y - ob.mny) / oH) * nH;
+                          return { x: Math.round(nx), y: Math.round(ny) };
+                        }),
+                      }));
+                    })();
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
                     const frameSize = scaffoldType === 'wakugumi' ? (footprint.frameSizeMm ?? 1800) : undefined;
@@ -1376,7 +1420,7 @@ function ScaffoldPageContent() {
                       topGuardHeightMm: defaults.topGuardHeightMm,
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
-                      ...(footprint.massingTiers && footprint.massingTiers.length > 0 && { massingTiers: footprint.massingTiers }),
+                      ...(normalizedMassingTiers && normalizedMassingTiers.length > 0 && { massingTiers: normalizedMassingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
                       ...(footprint.ifcFileUrl && { ifcFileUrl: footprint.ifcFileUrl }),
@@ -1387,7 +1431,7 @@ function ScaffoldPageContent() {
                       buildingHeightMm: footprint.buildingHeightMm,
                       walls,
                       buildingOutline,
-                      massingTiers: footprint.massingTiers,
+                      massingTiers: normalizedMassingTiers,
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,

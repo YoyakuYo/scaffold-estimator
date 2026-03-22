@@ -1157,11 +1157,62 @@ export default function Scaffold3DView({
       // Ground tier uses storedVerts if available. Upper tiers prefer `massingTiers` vertices
       // (same coordinate system as the plan) so setbacks stay on the correct side — centroid
       // alignment of length-only polygons caused fake “stairs” on flush façades.
-      const massingTiersSorted: BuildingMassingTier[] = Array.isArray((result as any)?.massingTiers)
-        ? ([...(result as any).massingTiers] as BuildingMassingTier[])
-            .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
-            .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm)
-        : [];
+      const massingTiersSorted: BuildingMassingTier[] = (() => {
+        const raw: BuildingMassingTier[] = Array.isArray((result as any)?.massingTiers)
+          ? ([...(result as any).massingTiers] as BuildingMassingTier[])
+              .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
+              .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm)
+          : [];
+        if (raw.length === 0 || !storedVerts || storedVerts.length < 3) return raw;
+
+        // Detect coordinate mismatch: storedVerts in mm but massingTier vertices
+        // still in fractional/pixel coords (legacy data saved before normalization fix).
+        const getV = (v: any) => ({
+          x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
+          y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
+        });
+        const outlinePts = storedVerts.map(getV);
+        const outlineSpread = Math.max(
+          Math.max(...outlinePts.map((p) => p.x)) - Math.min(...outlinePts.map((p) => p.x)),
+          Math.max(...outlinePts.map((p) => p.y)) - Math.min(...outlinePts.map((p) => p.y)),
+        );
+        const allTierVerts = raw.flatMap((t) => t.vertices.map(getV));
+        const tierSpread = Math.max(
+          Math.max(...allTierVerts.map((p) => p.x)) - Math.min(...allTierVerts.map((p) => p.x)),
+          Math.max(...allTierVerts.map((p) => p.y)) - Math.min(...allTierVerts.map((p) => p.y)),
+        );
+        // If outline is in mm (spread > 500) but tier vertices are small (spread < 10),
+        // re-map tier vertices to the outline's coordinate space.
+        if (outlineSpread > 500 && tierSpread < 10 && tierSpread > 1e-9) {
+          const ob = {
+            mnx: Math.min(...allTierVerts.map((p) => p.x)),
+            mny: Math.min(...allTierVerts.map((p) => p.y)),
+            mxx: Math.max(...allTierVerts.map((p) => p.x)),
+            mxy: Math.max(...allTierVerts.map((p) => p.y)),
+          };
+          const nb = {
+            mnx: Math.min(...outlinePts.map((p) => p.x)),
+            mny: Math.min(...outlinePts.map((p) => p.y)),
+            mxx: Math.max(...outlinePts.map((p) => p.x)),
+            mxy: Math.max(...outlinePts.map((p) => p.y)),
+          };
+          const oW = Math.max(ob.mxx - ob.mnx, 1e-9);
+          const oH = Math.max(ob.mxy - ob.mny, 1e-9);
+          const nW = Math.max(nb.mxx - nb.mnx, 1e-9);
+          const nH = Math.max(nb.mxy - nb.mny, 1e-9);
+          return raw.map((tier) => ({
+            ...tier,
+            vertices: tier.vertices.map((v: any) => {
+              const c = getV(v);
+              return {
+                x: Math.round(nb.mnx + ((c.x - ob.mnx) / oW) * nW),
+                y: Math.round(nb.mny + ((c.y - ob.mny) / oH) * nH),
+              };
+            }),
+          }));
+        }
+        return raw;
+      })();
 
       const groundWallLensMm =
         tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
