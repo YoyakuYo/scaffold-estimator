@@ -19,25 +19,25 @@ export function normaliseMassingTierVerticesToGroundFootprint(
   if (rawTierVerts.length < 3) return [];
 
   const builtBaseMinX = Math.min(...groundBuiltVerts.map((v) => v.x));
+  const builtBaseMaxX = Math.max(...groundBuiltVerts.map((v) => v.x));
   const builtBaseMinZ = Math.min(...groundBuiltVerts.map((v) => v.z));
-  const builtBaseSpan = Math.max(
-    Math.max(...groundBuiltVerts.map((v) => v.x)) - builtBaseMinX,
-    Math.max(...groundBuiltVerts.map((v) => v.z)) - builtBaseMinZ,
-    1e-6,
-  );
+  const builtBaseMaxZ = Math.max(...groundBuiltVerts.map((v) => v.z));
+  const builtSpanX = Math.max(builtBaseMaxX - builtBaseMinX, 1e-6);
+  const builtSpanZ = Math.max(builtBaseMaxZ - builtBaseMinZ, 1e-6);
 
   if (rawBaseVerts.length >= 3) {
     const rawBaseMinX = Math.min(...rawBaseVerts.map((v) => v.x));
+    const rawBaseMaxX = Math.max(...rawBaseVerts.map((v) => v.x));
     const rawBaseMinZ = Math.min(...rawBaseVerts.map((v) => v.z));
-    const rawBaseSpan = Math.max(
-      Math.max(...rawBaseVerts.map((v) => v.x)) - rawBaseMinX,
-      Math.max(...rawBaseVerts.map((v) => v.z)) - rawBaseMinZ,
-      1e-6,
-    );
-    const scale = builtBaseSpan / rawBaseSpan;
+    const rawBaseMaxZ = Math.max(...rawBaseVerts.map((v) => v.z));
+    const rawSpanX = Math.max(rawBaseMaxX - rawBaseMinX, 1e-6);
+    const rawSpanZ = Math.max(rawBaseMaxZ - rawBaseMinZ, 1e-6);
+
+    const scaleX = builtSpanX / rawSpanX;
+    const scaleZ = builtSpanZ / rawSpanZ;
     return rawTierVerts.map((v) => ({
-      x: builtBaseMinX + (v.x - rawBaseMinX) * scale,
-      z: builtBaseMinZ + (v.z - rawBaseMinZ) * scale,
+      x: builtBaseMinX + (v.x - rawBaseMinX) * scaleX,
+      z: builtBaseMinZ + (v.z - rawBaseMinZ) * scaleZ,
     }));
   }
 

@@ -64,7 +64,8 @@ function isLikelyFractionCoords(points: Array<{ x: number; z: number }>): boolea
  * Coordinate detection logic:
  *  - 0-1 fractions (maxCoord ≤ 1.1): scale to target mm using refLengthMm
  *  - Real mm (max spread ≥ 3000 OR any wallLengthsMm ≥ 3000): use as-is
- *  - Pixel-scale (spread 1.1–3000 with no mm hint): scale to target mm (AI returned pixel coords)
+ *  - Metres (spread 1.1–200, wallLengths confirm ratio ~1000): multiply by 1000
+ *  - Pixel-scale (spread 1.1–3000 with no mm hint): scale to target mm
  */
 function normalizeFootprintToMm(
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
@@ -83,40 +84,62 @@ function normalizeFootprintToMm(
   const maxSpread = Math.max(spreadX, spreadZ);
   const maxCoord = Math.max(Math.max(...xs.map(Math.abs)), Math.max(...zs.map(Math.abs)));
 
+  let vPerimeter = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const j = (i + 1) % raw.length;
+    vPerimeter += Math.hypot(raw[j].x - raw[i].x, raw[j].z - raw[i].z);
+  }
+  const wPerimeter = Array.isArray(wallLengthsMm) && wallLengthsMm.length > 0
+    ? wallLengthsMm.reduce((a, b) => a + b, 0)
+    : 0;
+  const wallLengthsAreMm = wPerimeter >= 3000;
+
   if (isLikelyFractionCoords(raw)) {
-    // 0-1 normalized coords: scale to mm
     const spread = Math.max(maxSpread, 0.001);
     const target = Math.max(6000, refLengthMm ?? 10000);
     const scale = target / spread;
     return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
   }
 
-  // Vertices already in real mm (spread >= 3000mm)
   if (maxSpread >= 3000) {
+    // Likely real mm already — but verify against wallLengths if available.
+    // If vertex perimeter is ~1000x wall perimeter, coords are in some other
+    // large unit (shouldn't happen, but guard against it).
+    if (wallLengthsAreMm && vPerimeter > 0) {
+      const ratio = wPerimeter / vPerimeter;
+      if (ratio > 0.2 && ratio < 5) {
+        return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
+      }
+    }
     return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
   }
 
-  // Vertices in meters: wallLengthsMm are in mm (>= 3000) but vertex spread is < 200.
-  // The AI returned meter-scale coordinates (e.g. 8.25 for 8.25m) → multiply by 1000.
-  // We confirm by comparing vertex-derived perimeter with wallLengthsMm sum.
-  const wallLengthsAreMm = Array.isArray(wallLengthsMm) && wallLengthsMm.some((l) => l >= 3000);
-  if (wallLengthsAreMm && maxSpread > 1.1 && maxSpread < 200) {
-    let vPerimeter = 0;
-    for (let i = 0; i < raw.length; i++) {
-      const j = (i + 1) % raw.length;
-      vPerimeter += Math.hypot(raw[j].x - raw[i].x, raw[j].z - raw[i].z);
+  // Metres detection: spread 1.1–200, check perimeter ratio against wallLengths.
+  // Also detect when no wallLengths are present but coords are clearly in metres
+  // (spread 2–200 with refLength suggesting the same scale).
+  if (maxSpread > 1.1 && maxSpread < 200) {
+    if (wallLengthsAreMm && vPerimeter > 0) {
+      const ratio = wPerimeter / vPerimeter;
+      if (ratio > 500 && ratio < 2000) {
+        return raw.map((p) => ({ x: p.x * 1000, z: p.z * 1000 }));
+      }
+      // Use ratio directly as the scale factor for better precision
+      if (ratio > 100) {
+        return raw.map((p) => ({ x: p.x * ratio, z: p.z * ratio }));
+      }
     }
-    const wPerimeter = wallLengthsMm!.reduce((a, b) => a + b, 0);
-    if (vPerimeter > 0 && wPerimeter / vPerimeter > 500) {
+    // No wall lengths but refLength suggests metres
+    if (!wallLengthsAreMm && refLengthMm && refLengthMm > 3000 && maxSpread < 100) {
       return raw.map((p) => ({ x: p.x * 1000, z: p.z * 1000 }));
     }
   }
 
-  // Pixel-scale coords: spread is 1.1–3000, no real-mm hint (AI returned pixel coordinates).
-  // Scale to target mm so the building footprint is at least 6m on its longest side.
+  // Pixel-scale coords: spread is 1.1–3000, scale to target mm
   if (maxCoord > 1.1) {
     const spread = Math.max(maxSpread, 1);
-    const target = Math.max(6000, refLengthMm ?? 10000);
+    const target = wallLengthsAreMm
+      ? wPerimeter / (raw.length > 2 ? raw.length : 4)
+      : Math.max(6000, refLengthMm ?? 10000);
     const scale = target / spread;
     return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
   }

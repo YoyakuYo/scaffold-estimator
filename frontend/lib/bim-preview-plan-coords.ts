@@ -63,11 +63,16 @@ export function computeBimPreviewPlanToM(params: {
     toM = 1;
   } else {
     const perimeter = wallLengthsMm?.reduce((s, l) => s + (typeof l === 'number' ? l : 0), 0) ?? 40000;
-    const denominator = 2 * (spanX + spanY);
+    // Compute vertex perimeter to get a more accurate scale ratio
+    let vPerimeter = 0;
+    for (let i = 0; i < xyPairs.length; i++) {
+      const j = (i + 1) % xyPairs.length;
+      vPerimeter += Math.hypot(xyPairs[j].x - xyPairs[i].x, xyPairs[j].y - xyPairs[i].y);
+    }
+    const denominator = vPerimeter > 1e-6 ? vPerimeter : 2 * (spanX + spanY);
     toM = denominator > 1e-6
       ? (perimeter * 0.001) / denominator
       : perimeter * 0.001;
-    // Cap to prevent astronomically large scale when spans are near-zero
     toM = Math.min(toM, 100000);
   }
 

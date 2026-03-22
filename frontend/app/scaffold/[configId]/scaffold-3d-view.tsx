@@ -1712,7 +1712,7 @@ export default function Scaffold3DView({
         if (useCornerExtension) desiredLen += cornerExtensionM;
         if (useStartCornerExtension) desiredLen += CORNER_OVERRUN_M;
         const rawScale = desiredLen / baseLen;
-        const fitScale = Number.isFinite(rawScale) ? Math.max(0.25, Math.min(4, rawScale)) : 1;
+        const fitScale = Number.isFinite(rawScale) ? Math.max(0.5, Math.min(2, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
@@ -2025,21 +2025,17 @@ export default function Scaffold3DView({
             }))
           : [];
         const builtBaseMinX = Math.min(...verts.map((v) => v.x));
+        const builtBaseMaxX = Math.max(...verts.map((v) => v.x));
         const builtBaseMinZ = Math.min(...verts.map((v) => v.z));
-        const builtBaseSpan = Math.max(
-          Math.max(...verts.map((v) => v.x)) - builtBaseMinX,
-          Math.max(...verts.map((v) => v.z)) - builtBaseMinZ,
-          1e-6,
-        );
+        const builtBaseMaxZ = Math.max(...verts.map((v) => v.z));
+        const builtSpanX = Math.max(builtBaseMaxX - builtBaseMinX, 1e-6);
+        const builtSpanZ = Math.max(builtBaseMaxZ - builtBaseMinZ, 1e-6);
         const rawBaseMinX = rawBaseVerts.length > 0 ? Math.min(...rawBaseVerts.map((v) => v.x)) : 0;
+        const rawBaseMaxX = rawBaseVerts.length > 0 ? Math.max(...rawBaseVerts.map((v) => v.x)) : 1e-6;
         const rawBaseMinZ = rawBaseVerts.length > 0 ? Math.min(...rawBaseVerts.map((v) => v.z)) : 0;
-        const rawBaseSpan = rawBaseVerts.length > 0
-          ? Math.max(
-              Math.max(...rawBaseVerts.map((v) => v.x)) - rawBaseMinX,
-              Math.max(...rawBaseVerts.map((v) => v.z)) - rawBaseMinZ,
-              1e-6,
-            )
-          : 1;
+        const rawBaseMaxZ = rawBaseVerts.length > 0 ? Math.max(...rawBaseVerts.map((v) => v.z)) : 1e-6;
+        const rawSpanX = Math.max(rawBaseMaxX - rawBaseMinX, 1e-6);
+        const rawSpanZ = Math.max(rawBaseMaxZ - rawBaseMinZ, 1e-6);
         const normaliseTierVerts = (
           tierVerts: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
         ) => {
@@ -2049,10 +2045,11 @@ export default function Scaffold3DView({
           }));
           if (rawTierVerts.length < 3) return [];
           if (rawBaseVerts.length >= 3) {
-            const scale = builtBaseSpan / rawBaseSpan;
+            const scaleX = builtSpanX / rawSpanX;
+            const scaleZ = builtSpanZ / rawSpanZ;
             return rawTierVerts.map((v) => ({
-              x: builtBaseMinX + (v.x - rawBaseMinX) * scale,
-              z: builtBaseMinZ + (v.z - rawBaseMinZ) * scale,
+              x: builtBaseMinX + (v.x - rawBaseMinX) * scaleX,
+              z: builtBaseMinZ + (v.z - rawBaseMinZ) * scaleZ,
             }));
           }
           const maxCoord = Math.max(...rawTierVerts.map((v) => Math.max(Math.abs(v.x), Math.abs(v.z))));

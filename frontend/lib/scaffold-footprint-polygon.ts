@@ -200,7 +200,7 @@ export function buildFootprintPolygonXZ(
     }
   }
 
-  // ── Stored outline: scale raw vertices to meters, then walk n-1 edges forward from verts[0] ──
+  // ── Stored outline: scale raw vertices to meters, preserving polygon shape ──
   if (storedVertices && storedVertices.length >= n) {
     const raw = storedVertices.slice(0, n).map(normaliseVertex);
     const xs = raw.map((v) => v.x);
@@ -227,6 +227,28 @@ export function buildFootprintPolygonXZ(
         Math.max(...verts.map((v) => v.z)) - Math.min(...verts.map((v) => v.z)),
       );
       if (spreadM > 0.01) {
+        // Perimeter-ratio approach: scale the entire polygon uniformly so the
+        // total perimeter matches the sum of wall lengths. This preserves vertex
+        // relationships and prevents cumulative drift from per-edge correction.
+        let rawPerimeter = 0;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          rawPerimeter += Math.hypot(verts[j].x - verts[i].x, verts[j].z - verts[i].z);
+        }
+        const targetPerimeter = walls.reduce(
+          (s, w) => s + Math.max((w.wallLengthMm ?? 600), 600) / 1000, 0,
+        );
+        const perimScale = rawPerimeter > 1e-6 ? targetPerimeter / rawPerimeter : 1;
+        const centX = verts.reduce((s, v) => s + v.x, 0) / n;
+        const centZ = verts.reduce((s, v) => s + v.z, 0) / n;
+        const scaled: FootprintVertexXZ[] = verts.map((v) => ({
+          x: centX + (v.x - centX) * perimScale,
+          z: centZ + (v.z - centZ) * perimScale,
+        }));
+
+        if (scaled.length === n && hasPlausiblePolygonEdges(scaled, walls)) return scaled;
+
+        // Fallback: per-edge correction for cases where perimeter scale doesn't fit
         const corrected: FootprintVertexXZ[] = [{ ...verts[0] }];
         for (let i = 0; i < n - 1; i++) {
           const rawDx = verts[i + 1].x - verts[i].x;
