@@ -23,7 +23,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export function SuperAdminDashboardContent() {
   const router = useRouter();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
@@ -86,18 +86,16 @@ export function SuperAdminDashboardContent() {
     );
   }
 
-  const t = (_key: string, en: string, ja: string) => (locale === 'ja' ? ja : en);
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <Shield className="h-8 w-8 text-indigo-600" />
-            {t('adminTitle', 'Super Admin', '管理者ダッシュボード')}
+            {t('adminDashboard', 'title')}
           </h1>
           <p className="mt-1 text-gray-500">
-            {t('adminSubtitle', 'Platform overview and user management', 'プラットフォーム全体の管理')}
+            {t('adminDashboard', 'subtitle')}
           </p>
         </div>
 
@@ -115,35 +113,35 @@ export function SuperAdminDashboardContent() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center gap-2 text-gray-500 text-sm">
                 <Users className="h-5 w-5" />
-                {t('statUsers', 'Total Users', '総ユーザー数')}
+                {t('adminDashboard', 'totalUsers')}
               </div>
               <p className="mt-2 text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center gap-2 text-gray-500 text-sm">
                 <Clock className="h-5 w-5" />
-                {t('statPending', 'Pending Approval', '承認待ち')}
+                {t('adminDashboard', 'pendingApproval')}
               </div>
               <p className="mt-2 text-2xl font-bold text-amber-600">{stats.pendingUsers}</p>
               <Link
                 href="/users?filter=pending"
                 className="mt-2 inline-flex items-center text-sm text-blue-600 hover:text-blue-700"
               >
-                {t('viewAll', 'View all', '一覧へ')}
+                {t('adminDashboard', 'viewAll')}
                 <ArrowRight className="h-4 w-4 ml-1" />
               </Link>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center gap-2 text-gray-500 text-sm">
                 <Building2 className="h-5 w-5" />
-                {t('statCompanies', 'Companies', '会社数')}
+                {t('adminDashboard', 'companies')}
               </div>
               <p className="mt-2 text-2xl font-bold text-gray-900">{stats.totalCompanies}</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center gap-2 text-gray-500 text-sm">
                 <UserCheck className="h-5 w-5" />
-                {t('statOnline', 'Online Now', 'オンライン')}
+                {t('adminDashboard', 'onlineNow')}
               </div>
               <p className="mt-2 text-2xl font-bold text-green-600">{stats.onlineCount}</p>
             </div>
@@ -155,10 +153,10 @@ export function SuperAdminDashboardContent() {
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <UserCheck className="h-5 w-5 text-green-500" />
-                {t('onlineNow', 'Online Now', 'オンライン中')}
+                {t('adminDashboard', 'onlineNowLive')}
               </h2>
               <span className="text-sm text-gray-500">
-                {onlineLoading ? '…' : `${onlineUsers?.length ?? 0} ${t('users', 'users', '人')}`}
+                {onlineLoading ? '…' : `${onlineUsers?.length ?? 0} ${t('adminDashboard', 'usersCount')}`}
               </span>
             </div>
             <div className="max-h-64 overflow-y-auto">
@@ -178,12 +176,12 @@ export function SuperAdminDashboardContent() {
                         </p>
                         <p className="text-sm text-gray-500">{u.email}</p>
                       </div>
-                      <span className="h-2 w-2 rounded-full bg-green-500" title="Online" />
+                        <span className="h-2 w-2 rounded-full bg-green-500" title={t('adminDashboard', 'onlineNow')} />
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="p-6 text-gray-500 text-sm">{t('noOnline', 'No users online', 'オンラインのユーザーはいません')}</p>
+                <p className="p-6 text-gray-500 text-sm">{t('adminDashboard', 'noOnlineUsers')}</p>
               )}
             </div>
           </div>
@@ -192,18 +190,18 @@ export function SuperAdminDashboardContent() {
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Clock className="h-5 w-5 text-amber-500" />
-                {t('pendingApprovals', 'Pending Approvals', '承認待ち')}
+                {t('adminDashboard', 'pendingApprovals')}
               </h2>
               <Link
                 href="/users?filter=pending"
                 className="text-sm text-blue-600 hover:text-blue-700"
               >
-                {t('viewAll', 'View all', '一覧へ')}
+                {t('adminDashboard', 'viewAll')}
               </Link>
             </div>
             <div className="max-h-64 overflow-y-auto">
               {pendingUsers.length === 0 ? (
-                <p className="p-6 text-gray-500 text-sm">{t('noPending', 'No pending approvals', '承認待ちはいません')}</p>
+                <p className="p-6 text-gray-500 text-sm">{t('adminDashboard', 'noPendingApprovals')}</p>
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {pendingUsers.slice(0, 10).map((u) => (
@@ -224,7 +222,7 @@ export function SuperAdminDashboardContent() {
                           }}
                           disabled={approvingId === u.id}
                           className="p-2 rounded-lg text-green-600 hover:bg-green-50 disabled:opacity-50"
-                          title={locale === 'ja' ? '承認' : 'Approve'}
+                          title={t('adminDashboard', 'approve')}
                         >
                           {approvingId === u.id ? (
                             <Loader2 className="h-5 w-5 animate-spin" />
@@ -239,7 +237,7 @@ export function SuperAdminDashboardContent() {
                           }}
                           disabled={approvingId === u.id}
                           className="p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          title={locale === 'ja' ? '拒否' : 'Reject'}
+                          title={t('adminDashboard', 'reject')}
                         >
                           <XCircle className="h-5 w-5" />
                         </button>
@@ -258,21 +256,21 @@ export function SuperAdminDashboardContent() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
           >
             <Users className="h-5 w-5" />
-            {t('manageUsers', 'Manage Users', 'ユーザー管理')}
+            {t('adminDashboard', 'manageUsers')}
           </Link>
           <Link
             href="/admin/messages"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
           >
             <MessageSquare className="h-5 w-5" />
-            {t('supportMessages', 'Support Messages', 'サポートメッセージ')}
+            {t('adminDashboard', 'supportMessages')}
           </Link>
           <Link
             href="/superadmin/subscribers"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
           >
             <CreditCard className="h-5 w-5" />
-            {t('subscribers', 'Subscribers', '購読者')}
+            {t('adminDashboard', 'subscribers')}
           </Link>
         </div>
       </div>

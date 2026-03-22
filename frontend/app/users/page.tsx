@@ -25,10 +25,10 @@ import {
   MapPin,
 } from 'lucide-react';
 
-const ROLE_CONFIG: Record<UserRole, { label: string; labelJa: string; color: string; icon: any }> = {
-  superadmin: { label: 'Super Admin', labelJa: 'スーパー管理者', color: 'bg-amber-100 text-amber-700', icon: Shield },
-  estimator: { label: 'Estimator', labelJa: '積算担当', color: 'bg-blue-100 text-blue-700', icon: Calculator },
-  viewer: { label: 'Viewer', labelJa: '閲覧者', color: 'bg-gray-100 text-gray-700', icon: Eye },
+const ROLE_CONFIG: Record<UserRole, { label: string; labelJa: string; labelFr: string; color: string; icon: any }> = {
+  superadmin: { label: 'Super Admin', labelJa: 'スーパー管理者', labelFr: 'Super Admin', color: 'bg-amber-100 text-amber-700', icon: Shield },
+  estimator: { label: 'Estimator', labelJa: '積算担当', labelFr: 'Estimateur', color: 'bg-blue-100 text-blue-700', icon: Calculator },
+  viewer: { label: 'Viewer', labelJa: '閲覧者', labelFr: 'Lecteur', color: 'bg-gray-100 text-gray-700', icon: Eye },
 };
 
 export default function UsersPageWrapper() {
@@ -160,27 +160,21 @@ function UsersPage() {
   };
 
   const handleDeactivate = (user: UserProfile) => {
-    const msg = locale === 'ja'
-      ? `${user.email} を無効化しますか？`
-      : `Deactivate ${user.email}?`;
+    const msg = t('usersAdmin', 'confirmDeactivate').replace('{email}', user.email);
     if (window.confirm(msg)) {
       deactivateMutation.mutate(user.id);
     }
   };
 
   const handleApprove = (user: UserProfile) => {
-    const msg = locale === 'ja'
-      ? `${user.email} を承認しますか？`
-      : `Approve ${user.email}?`;
+    const msg = t('usersAdmin', 'confirmApprove').replace('{email}', user.email);
     if (window.confirm(msg)) {
       approveMutation.mutate(user.id);
     }
   };
 
   const handleReject = (user: UserProfile) => {
-    const msg = locale === 'ja'
-      ? `${user.email} を拒否しますか？`
-      : `Reject ${user.email}?`;
+    const msg = t('usersAdmin', 'confirmReject').replace('{email}', user.email);
     if (window.confirm(msg)) {
       rejectMutation.mutate(user.id);
     }
@@ -212,20 +206,20 @@ function UsersPage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
             <Shield className="h-16 w-16 text-amber-500 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              {locale === 'ja' ? 'アクセス権限がありません' : 'Access Denied'}
+              {t('usersAdmin', 'accessDenied')}
             </h1>
             <p className="text-gray-600 mb-2">
-              {locale === 'ja'
-                ? 'ユーザー管理は管理者または積算担当（招待のみ）が利用できます。'
-                : 'User management is available to administrators or estimators (invite only).'}
+              {t('usersAdmin', 'accessDeniedDesc')}
             </p>
             <p className="text-sm text-gray-500 mb-4">
               {locale === 'ja'
-                ? `現在の権限: ${ROLE_CONFIG[currentUser.role]?.labelJa || currentUser.role}`
-                : `Current role: ${ROLE_CONFIG[currentUser.role]?.label || currentUser.role}`}
+                ? `${t('usersAdmin', 'currentRole')}: ${ROLE_CONFIG[currentUser.role]?.labelJa || currentUser.role}`
+                : locale === 'fr'
+                ? `${t('usersAdmin', 'currentRole')} : ${ROLE_CONFIG[currentUser.role]?.labelFr || currentUser.role}`
+                : `${t('usersAdmin', 'currentRole')}: ${ROLE_CONFIG[currentUser.role]?.label || currentUser.role}`}
             </p>
             <p className="text-xs text-gray-400">
-              {locale === 'ja' ? 'ダッシュボードにリダイレクトします...' : 'Redirecting to dashboard...'}
+              {t('usersAdmin', 'redirecting')}
             </p>
           </div>
         </div>
@@ -241,18 +235,18 @@ function UsersPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
               <Users className="h-8 w-8 text-blue-600" />
-              {locale === 'ja' ? 'ユーザー管理' : 'User Management'}
+              {t('usersAdmin', 'title')}
               {pendingCount && pendingCount.count > 0 && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-semibold">
                   <Clock className="h-4 w-4" />
-                  {pendingCount.count} {locale === 'ja' ? '件の承認待ち' : 'pending'}
+                  {pendingCount.count} {t('usersAdmin', 'pendingBadge')}
                 </span>
               )}
             </h1>
             <p className="text-gray-500 mt-1">
               {isSuperAdmin
-                ? (locale === 'ja' ? '会社・ユーザー一覧・承認・権限管理' : 'Companies, users, approval and permissions')
-                : (locale === 'ja' ? '自社ユーザー一覧・招待' : 'Company users and invites')}
+                ? t('usersAdmin', 'subtitleSuperadmin')
+                : t('usersAdmin', 'subtitleEstimator')}
             </p>
           </div>
         </div>
@@ -263,16 +257,16 @@ function UsersPage() {
             <div className="px-6 py-3 border-b border-gray-200 flex items-center gap-2">
               <Building2 className="h-5 w-5 text-blue-600" />
               <h2 className="text-lg font-semibold text-gray-900">
-                {locale === 'ja' ? '会社一覧（人数・支店）' : 'Companies (user count & branches)'}
+                {t('usersAdmin', 'companiesTitle')}
               </h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{locale === 'ja' ? '会社名' : 'Company'}</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{locale === 'ja' ? 'ユーザー数' : 'Users'}</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{locale === 'ja' ? '支店' : 'Branches'}</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{t('usersAdmin', 'company')}</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{t('usersAdmin', 'users')}</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">{t('usersAdmin', 'branches')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -286,7 +280,7 @@ function UsersPage() {
                           : c.branches.map((b) => (
                               <span key={b.id} className="inline-flex items-center gap-1 mr-2">
                                 <MapPin className="h-3 w-3 text-gray-400" />
-                                {b.name}{b.isHeadquarters ? ` (${locale === 'ja' ? '本社' : 'HQ'})` : ''}
+                                {b.name}{b.isHeadquarters ? ` (${t('usersAdmin', 'headquarters')})` : ''}
                               </span>
                             ))}
                       </td>
@@ -302,10 +296,10 @@ function UsersPage() {
         {isSuperAdmin && users && users.length > 0 && (
           <div className="flex gap-2 mb-6">
             {[
-              { key: 'all' as const, label: locale === 'ja' ? 'すべて' : 'All', count: users.length },
-              { key: 'pending' as const, label: locale === 'ja' ? '承認待ち' : 'Pending', count: users.filter(u => u.approvalStatus === 'pending').length },
-              { key: 'approved' as const, label: locale === 'ja' ? '承認済み' : 'Approved', count: users.filter(u => u.approvalStatus === 'approved').length },
-              { key: 'rejected' as const, label: locale === 'ja' ? '拒否済み' : 'Rejected', count: users.filter(u => u.approvalStatus === 'rejected').length },
+              { key: 'all' as const, label: t('usersAdmin', 'all'), count: users.length },
+              { key: 'pending' as const, label: t('usersAdmin', 'pending'), count: users.filter(u => u.approvalStatus === 'pending').length },
+              { key: 'approved' as const, label: t('usersAdmin', 'approved'), count: users.filter(u => u.approvalStatus === 'approved').length },
+              { key: 'rejected' as const, label: t('usersAdmin', 'rejected'), count: users.filter(u => u.approvalStatus === 'rejected').length },
             ].map((filter) => (
               <button
                 key={filter.key}
@@ -334,16 +328,12 @@ function UsersPage() {
             <div className="text-center py-16">
               <AlertTriangle className="h-12 w-12 text-amber-400 mx-auto mb-3" />
               <p className="text-gray-500 mb-2">
-                {locale === 'ja' ? 'ユーザー一覧の取得に失敗しました。' : 'Failed to load users.'}
+                {t('usersAdmin', 'loadFailed')}
               </p>
               <p className="text-sm text-gray-400">
                 {(error as any)?.response?.status === 403
-                  ? locale === 'ja'
-                    ? '管理者権限が必要です。'
-                    : 'Admin access required.'
-                  : locale === 'ja'
-                  ? 'バックエンドサーバーに接続できません。'
-                  : 'Cannot connect to backend server.'}
+                  ? t('usersAdmin', 'adminRequired')
+                  : t('usersAdmin', 'backendUnavailable')}
               </p>
             </div>
           ) : filteredUsers && filteredUsers.length > 0 ? (
@@ -351,25 +341,25 @@ function UsersPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? '会社 / ユーザー' : 'Company / User'}
+                    {t('usersAdmin', 'companyUser')}
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? 'メール' : 'Email'}
+                    {t('usersAdmin', 'email')}
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? '権限' : 'Role'}
+                    {t('usersAdmin', 'role')}
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? '承認状態' : 'Approval'}
+                    {t('usersAdmin', 'approval')}
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? 'ステータス' : 'Status'}
+                    {t('usersAdmin', 'status')}
                   </th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? '登録日' : 'Created'}
+                    {t('usersAdmin', 'created')}
                   </th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    {locale === 'ja' ? '操作' : 'Actions'}
+                    {t('usersAdmin', 'actions')}
                   </th>
                 </tr>
               </thead>
@@ -391,7 +381,7 @@ function UsersPage() {
                           </div>
                           <div>
                             <p className="font-semibold text-gray-900">
-                              {user.companyName || (locale === 'ja' ? '（会社名なし）' : '(No company)')}
+                              {user.companyName || t('usersAdmin', 'noCompany')}
                             </p>
                             <p className="text-sm text-gray-600 mt-0.5">
                               {user.firstName || user.lastName
@@ -405,24 +395,24 @@ function UsersPage() {
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${roleConfig.color}`}>
                           <RoleIcon className="h-3 w-3" />
-                          {locale === 'ja' ? roleConfig.labelJa : roleConfig.label}
+                          {locale === 'ja' ? roleConfig.labelJa : locale === 'fr' ? roleConfig.labelFr : roleConfig.label}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         {user.approvalStatus === 'pending' ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
                             <Clock className="h-3 w-3" />
-                            {locale === 'ja' ? '承認待ち' : 'Pending'}
+                            {t('usersAdmin', 'pending')}
                           </span>
                         ) : user.approvalStatus === 'approved' ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                             <CheckCircle className="h-3 w-3" />
-                            {locale === 'ja' ? '承認済み' : 'Approved'}
+                            {t('usersAdmin', 'approved')}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
                             <XCircle className="h-3 w-3" />
-                            {locale === 'ja' ? '拒否済み' : 'Rejected'}
+                            {t('usersAdmin', 'rejected')}
                           </span>
                         )}
                       </td>
@@ -430,17 +420,17 @@ function UsersPage() {
                         {user.isActive ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                             <Check className="h-3 w-3" />
-                            {locale === 'ja' ? '有効' : 'Active'}
+                            {t('usersAdmin', 'active')}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
                             <Ban className="h-3 w-3" />
-                            {locale === 'ja' ? '無効' : 'Inactive'}
+                            {t('usersAdmin', 'inactive')}
                           </span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        {new Date(user.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US')}
+                        {new Date(user.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US')}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="relative inline-block">
@@ -461,7 +451,7 @@ function UsersPage() {
                                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
                                   >
                                     <CheckCircle className="h-4 w-4" />
-                                    {locale === 'ja' ? '承認' : 'Approve'}
+                                    {t('usersAdmin', 'approve')}
                                   </button>
                                   <button
                                     onClick={() => { handleReject(user); setOpenMenuId(null); }}
@@ -469,7 +459,7 @@ function UsersPage() {
                                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
                                   >
                                     <XCircle className="h-4 w-4" />
-                                    {locale === 'ja' ? '拒否' : 'Reject'}
+                                    {t('usersAdmin', 'reject')}
                                   </button>
                                   <div className="border-t border-gray-100 my-1" />
                                 </>
@@ -479,14 +469,14 @@ function UsersPage() {
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
                                 <Pencil className="h-4 w-4 text-blue-500" />
-                                {locale === 'ja' ? '編集' : 'Edit'}
+                                {t('usersAdmin', 'edit')}
                               </button>
                               <button
                                 onClick={() => { setResetPasswordUser(user); setOpenMenuId(null); }}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
                                 <Key className="h-4 w-4 text-amber-500" />
-                                {locale === 'ja' ? 'パスワードリセット' : 'Reset Password'}
+                                {t('usersAdmin', 'resetPassword')}
                               </button>
                               <div className="border-t border-gray-100 my-1" />
                               <button
@@ -494,7 +484,7 @@ function UsersPage() {
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                               >
                                 <Ban className="h-4 w-4" />
-                                {locale === 'ja' ? '無効化' : 'Deactivate'}
+                                {t('usersAdmin', 'deactivate')}
                               </button>
                             </div>
                           )}
@@ -509,21 +499,19 @@ function UsersPage() {
                 <div className="text-center py-16">
                   <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-500">
-                    {locale === 'ja'
-                      ? `フィルター条件に一致するユーザーがいません`
-                      : `No users match the filter criteria`}
+                    {t('usersAdmin', 'noFilterResults')}
                   </p>
                   <button
                     onClick={() => setFilterStatus('all')}
                     className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
                   >
-                    {locale === 'ja' ? 'すべて表示' : 'Show all'}
+                    {t('usersAdmin', 'showAll')}
                   </button>
                 </div>
               ) : (
                 <div className="text-center py-16">
                   <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">{locale === 'ja' ? 'ユーザーがいません' : 'No users found'}</p>
+                  <p className="text-gray-500">{t('usersAdmin', 'noUsersFound')}</p>
                 </div>
               )}
         </div>
@@ -535,7 +523,7 @@ function UsersPage() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">
-                {locale === 'ja' ? 'ユーザー編集' : 'Edit User'}
+                {t('usersAdmin', 'editUser')}
               </h2>
               <button onClick={() => setEditingUser(null)} className="p-1 hover:bg-gray-100 rounded-md">
                 <X className="h-5 w-5 text-gray-500" />
@@ -545,7 +533,7 @@ function UsersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {locale === 'ja' ? '姓' : 'Last Name'}
+                    {t('usersAdmin', 'lastName')}
                   </label>
                   <input
                     type="text"
@@ -556,7 +544,7 @@ function UsersPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {locale === 'ja' ? '名' : 'First Name'}
+                    {t('usersAdmin', 'firstName')}
                   </label>
                   <input
                     type="text"
@@ -568,7 +556,7 @@ function UsersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? 'メールアドレス' : 'Email'}
+                  {t('usersAdmin', 'email')}
                 </label>
                 <input
                   type="email"
@@ -579,20 +567,20 @@ function UsersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? '権限' : 'Role'}
+                  {t('usersAdmin', 'role')}
                 </label>
                 <select
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="estimator">{locale === 'ja' ? '積算担当' : 'Estimator'}</option>
-                  <option value="viewer">{locale === 'ja' ? '閲覧者' : 'Viewer'}</option>
+                  <option value="estimator">{t('usersAdmin', 'estimator')}</option>
+                  <option value="viewer">{t('usersAdmin', 'viewer')}</option>
                 </select>
               </div>
               {updateMutation.isError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-                  {(updateMutation.error as any)?.response?.data?.message || (locale === 'ja' ? '更新に失敗しました' : 'Failed to update user')}
+                  {(updateMutation.error as any)?.response?.data?.message || t('usersAdmin', 'updateFailed')}
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-2">
@@ -601,7 +589,7 @@ function UsersPage() {
                   onClick={() => setEditingUser(null)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
-                  {locale === 'ja' ? 'キャンセル' : 'Cancel'}
+                  {t('common', 'cancel')}
                 </button>
                 <button
                   type="submit"
@@ -609,8 +597,8 @@ function UsersPage() {
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {updateMutation.isPending
-                    ? (locale === 'ja' ? '保存中...' : 'Saving...')
-                    : (locale === 'ja' ? '保存' : 'Save')}
+                    ? t('usersAdmin', 'saving')
+                    : t('common', 'save')}
                 </button>
               </div>
             </form>
@@ -624,21 +612,19 @@ function UsersPage() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">
-                {locale === 'ja' ? 'パスワードリセット' : 'Reset Password'}
+                {t('usersAdmin', 'resetPassword')}
               </h2>
               <button onClick={() => setResetPasswordUser(null)} className="p-1 hover:bg-gray-100 rounded-md">
                 <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              {locale === 'ja'
-                ? `${resetPasswordUser.email} のパスワードをリセットします。`
-                : `Reset password for ${resetPasswordUser.email}.`}
+              {t('usersAdmin', 'resetPasswordFor').replace('{email}', resetPasswordUser.email)}
             </p>
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {locale === 'ja' ? '新しいパスワード' : 'New Password'}
+                  {t('usersAdmin', 'newPassword')}
                 </label>
                 <input
                   type="password"
@@ -652,12 +638,12 @@ function UsersPage() {
               </div>
               {resetPasswordMutation.isError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-                  {locale === 'ja' ? 'リセットに失敗しました' : 'Failed to reset password'}
+                  {t('usersAdmin', 'resetFailed')}
                 </div>
               )}
               {resetPasswordMutation.isSuccess && (
                 <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded text-sm">
-                  {locale === 'ja' ? 'パスワードをリセットしました' : 'Password has been reset'}
+                  {t('usersAdmin', 'resetSuccess')}
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-2">
@@ -666,7 +652,7 @@ function UsersPage() {
                   onClick={() => setResetPasswordUser(null)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
-                  {locale === 'ja' ? '閉じる' : 'Close'}
+                  {t('common', 'close')}
                 </button>
                 <button
                   type="submit"
@@ -674,8 +660,8 @@ function UsersPage() {
                   className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
                 >
                   {resetPasswordMutation.isPending
-                    ? (locale === 'ja' ? 'リセット中...' : 'Resetting...')
-                    : (locale === 'ja' ? 'リセット' : 'Reset')}
+                    ? t('usersAdmin', 'resetting')
+                    : t('usersAdmin', 'reset')}
                 </button>
               </div>
             </form>

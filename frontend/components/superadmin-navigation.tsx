@@ -9,28 +9,30 @@ import { useI18n } from '@/lib/i18n';
 export function SuperAdminNavigation() {
   const router = useRouter();
   const pathname = usePathname();
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
-  const toggleLocale = () => setLocale(locale === 'ja' ? 'en' : 'ja');
+  const localeMenuRef = useRef<HTMLDivElement>(null);
+  const localeLabels = { ja: '日本語', en: 'EN', fr: 'FR' } as const;
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMobileOpen(false);
+      const target = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) setMobileOpen(false);
+      if (localeMenuRef.current && !localeMenuRef.current.contains(target)) setLocaleMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const navItems = [
-    { path: '/superadmin/dashboard', matchAlso: ['/dashboard'], label: t('Dashboard', 'ダッシュボード'), icon: Shield },
-    { path: '/users', matchAlso: [] as string[], label: t('Users', 'ユーザー'), icon: Users },
-    { path: '/superadmin/subscribers', matchAlso: [] as string[], label: t('Subscribers', '購読者'), icon: CreditCard },
-    { path: '/admin/messages', matchAlso: [] as string[], label: t('Messages', 'メッセージ'), icon: MessageSquare },
-    { path: '/profile', matchAlso: [] as string[], label: t('Profile', 'プロフィール'), icon: User },
+    { path: '/superadmin/dashboard', matchAlso: ['/dashboard'], label: t('superadminNav', 'dashboard'), icon: Shield },
+    { path: '/users', matchAlso: [] as string[], label: t('superadminNav', 'users'), icon: Users },
+    { path: '/superadmin/subscribers', matchAlso: [] as string[], label: t('superadminNav', 'subscribers'), icon: CreditCard },
+    { path: '/admin/messages', matchAlso: [] as string[], label: t('superadminNav', 'messages'), icon: MessageSquare },
+    { path: '/profile', matchAlso: [] as string[], label: t('superadminNav', 'profile'), icon: User },
   ];
 
   return (
@@ -52,7 +54,7 @@ export function SuperAdminNavigation() {
             onClick={() => router.push('/superadmin/dashboard')}
             className="text-sm font-semibold text-white"
           >
-            {t('Super Admin Console', 'スーパー管理者コンソール')}
+            {t('superadminNav', 'consoleTitle')}
           </button>
           <div className="hidden md:flex items-center gap-1 ml-4">
             {navItems.map((item) => {
@@ -76,21 +78,40 @@ export function SuperAdminNavigation() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            onClick={toggleLocale}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-            title={locale === 'ja' ? 'Switch to English' : '日本語に切り替え'}
-          >
-            <Globe className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{locale === 'ja' ? 'EN' : 'JP'}</span>
-          </button>
+          <div className="relative" ref={localeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setLocaleMenuOpen((o) => !o)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              title={t('common', 'language')}
+              aria-expanded={localeMenuOpen}
+              aria-haspopup="true"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{localeLabels[locale]}</span>
+            </button>
+            {localeMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 py-1 w-28 rounded-md bg-slate-800 border border-slate-700 shadow-lg z-50">
+                {(['ja', 'en', 'fr'] as const).map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => { setLocale(loc); setLocaleMenuOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors ${locale === loc ? 'bg-amber-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+                  >
+                    {localeLabels[loc]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="w-px h-5 bg-slate-700 mx-0.5" />
           <button
             onClick={() => authApi.logout()}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-red-300 hover:bg-slate-800 transition-colors"
           >
             <LogOut className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t('Logout', 'ログアウト')}</span>
+            <span className="hidden sm:inline">{t('common', 'logout')}</span>
           </button>
         </div>
       </div>

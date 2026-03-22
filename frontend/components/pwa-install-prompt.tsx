@@ -8,7 +8,7 @@ import { usePwaInstall } from '@/lib/pwa-install-context';
 export function PwaInstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
   const { canInstall, triggerInstall } = usePwaInstall();
-  const { locale } = useI18n();
+  const { t } = useI18n();
 
   useEffect(() => {
     const saved = sessionStorage.getItem('pwa-install-dismissed');
@@ -33,24 +33,22 @@ export function PwaInstallPrompt() {
       </div>
       <div className="flex-1 min-w-0">
         <p className="font-medium text-gray-900 text-sm">
-          {locale === 'ja' ? 'アプリをインストール' : 'Install App'}
+          {t('pwaPrompt', 'title')}
         </p>
         <p className="text-xs text-gray-500 mt-0.5">
-          {locale === 'ja'
-            ? 'デスクトップにインストールして素早くアクセス'
-            : 'Install to desktop for quick access'}
+          {t('pwaPrompt', 'description')}
         </p>
         <button
           onClick={handleInstall}
           className="mt-2 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
-          {locale === 'ja' ? 'インストール' : 'Install'}
+          {t('pwaPrompt', 'install')}
         </button>
       </div>
       <button
         onClick={handleDismiss}
         className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-        aria-label="Close"
+        aria-label={t('common', 'close')}
       >
         <X className="h-4 w-4" />
       </button>

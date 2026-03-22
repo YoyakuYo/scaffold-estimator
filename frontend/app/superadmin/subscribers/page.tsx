@@ -7,9 +7,8 @@ import { usersApi } from '@/lib/api/users';
 import { Loader2, CreditCard, CalendarClock, CheckCircle2, Ban } from 'lucide-react';
 
 export default function SuperadminSubscribersPage() {
-  const { locale } = useI18n();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
-  const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
 
   const { data: currentUser } = useQuery({
     queryKey: ['profile'],
@@ -51,10 +50,10 @@ export default function SuperadminSubscribersPage() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
             <CreditCard className="h-8 w-8 text-indigo-600" />
-            {t('Subscribers', '購読者管理')}
+            {t('subscribersAdmin', 'title')}
           </h1>
           <p className="text-gray-500 mt-1">
-            {t('View and control all subscriptions and trial access', '全ユーザーの契約・トライアルを管理')}
+            {t('subscribersAdmin', 'subtitle')}
           </p>
         </div>
 
@@ -65,17 +64,17 @@ export default function SuperadminSubscribersPage() {
             </div>
           ) : !subscribers?.length ? (
             <div className="p-10 text-center text-gray-500">
-              {t('No subscribers found', '購読データがありません')}
+              {t('subscribersAdmin', 'empty')}
             </div>
           ) : (
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">User</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Plan</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Trial</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'user')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'plan')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'status')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'trial')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -107,7 +106,7 @@ export default function SuperadminSubscribersPage() {
                       {sub.status === 'trialing' ? (
                         <span className="inline-flex items-center gap-1">
                           <CalendarClock className="h-4 w-4 text-amber-600" />
-                          {t(`${sub.trialDaysRemaining} days left`, `残り${sub.trialDaysRemaining}日`)}
+                          {t('subscribersAdmin', 'daysLeft').replace('{days}', String(sub.trialDaysRemaining))}
                         </span>
                       ) : (
                         '—'
@@ -119,21 +118,21 @@ export default function SuperadminSubscribersPage() {
                           onClick={() => extendTrialMutation.mutate({ userId: sub.userId, days: 14 })}
                           className="px-2.5 py-1.5 text-xs bg-amber-50 border border-amber-300 text-amber-700 rounded hover:bg-amber-100"
                         >
-                          +14d Trial
+                          {t('subscribersAdmin', 'extendTrial14')}
                         </button>
                         <button
                           onClick={() => setAccessMutation.mutate({ userId: sub.userId, access: 'active' })}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs bg-green-50 border border-green-300 text-green-700 rounded hover:bg-green-100"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          Active
+                          {t('subscribersAdmin', 'active')}
                         </button>
                         <button
                           onClick={() => setAccessMutation.mutate({ userId: sub.userId, access: 'canceled' })}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs bg-red-50 border border-red-300 text-red-700 rounded hover:bg-red-100"
                         >
                           <Ban className="h-3.5 w-3.5" />
-                          Cancel
+                          {t('subscribersAdmin', 'cancel')}
                         </button>
                       </div>
                     </td>

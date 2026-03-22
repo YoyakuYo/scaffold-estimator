@@ -66,9 +66,8 @@ export default function DashboardPage() {
 
 function AdminDashboard() {
   const router = useRouter();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const queryClient = useQueryClient();
-  const t = (en: string, ja: string) => (locale === 'ja' ? ja : en);
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -126,9 +125,9 @@ function AdminDashboard() {
   const greeting = () => {
     const h = new Date().getHours();
     const name = profile?.firstName || 'Admin';
-    if (h < 12) return t(`Good morning, ${name}`, `おはようございます、${name}さん`);
-    if (h < 18) return t(`Good afternoon, ${name}`, `こんにちは、${name}さん`);
-    return t(`Good evening, ${name}`, `こんばんは、${name}さん`);
+    if (h < 12) return t('adminDashboard', 'greetingMorning').replace('{name}', name);
+    if (h < 18) return t('adminDashboard', 'greetingAfternoon').replace('{name}', name);
+    return t('adminDashboard', 'greetingEvening').replace('{name}', name);
   };
 
   return (
@@ -138,7 +137,7 @@ function AdminDashboard() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">{greeting()}</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {t('Platform Administration Dashboard', 'プラットフォーム管理ダッシュボード')}
+            {t('adminDashboard', 'platformSubtitle')}
           </p>
         </div>
 
@@ -146,21 +145,21 @@ function AdminDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <KpiCard
             icon={<Users className="h-5 w-5" />}
-            label={t('Total Users', '総ユーザー数')}
+            label={t('adminDashboard', 'totalUsers')}
             value={stats?.totalUsers ?? '—'}
             color="blue"
             loading={statsLoading}
           />
           <KpiCard
             icon={<Building2 className="h-5 w-5" />}
-            label={t('Companies', '企業数')}
+            label={t('adminDashboard', 'companies')}
             value={stats?.totalCompanies ?? '—'}
             color="purple"
             loading={statsLoading}
           />
           <KpiCard
             icon={<Activity className="h-5 w-5" />}
-            label={t('Online Now', 'オンライン')}
+            label={t('adminDashboard', 'onlineNow')}
             value={stats?.onlineCount ?? '—'}
             color="green"
             loading={statsLoading}
@@ -168,7 +167,7 @@ function AdminDashboard() {
           />
           <KpiCard
             icon={<Calculator className="h-5 w-5" />}
-            label={t('Total Calculations', '総計算数')}
+            label={t('adminDashboard', 'totalCalculations')}
             value={configs?.length ?? '—'}
             color="amber"
             loading={!configs}
@@ -185,11 +184,11 @@ function AdminDashboard() {
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-amber-600" />
                     <h2 className="font-semibold text-amber-900">
-                      {t('Pending Approvals', '承認待ち')} ({pendingUsers.length})
+                      {t('adminDashboard', 'pendingApprovals')} ({pendingUsers.length})
                     </h2>
                   </div>
                   <Link href="/users?filter=pending" className="text-sm text-amber-700 hover:underline">
-                    {t('View all', 'すべて見る')} →
+                    {t('adminDashboard', 'viewAll')} →
                   </Link>
                 </div>
                 <div className="divide-y divide-gray-100">
@@ -208,7 +207,7 @@ function AdminDashboard() {
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
-                          {t('Approve', '承認')}
+                          {t('adminDashboard', 'approve')}
                         </button>
                         <button
                           onClick={() => rejectMutation.mutate(u.id)}
@@ -216,7 +215,7 @@ function AdminDashboard() {
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                         >
                           <XCircle className="h-3.5 w-3.5" />
-                          {t('Reject', '拒否')}
+                          {t('adminDashboard', 'reject')}
                         </button>
                       </div>
                     </div>
@@ -231,7 +230,7 @@ function AdminDashboard() {
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-blue-600" />
                   <h2 className="font-semibold text-slate-900">
-                    {t('Support Messages', 'サポートメッセージ')}
+                    {t('adminDashboard', 'supportMessages')}
                   </h2>
                   {totalUnread > 0 && (
                     <span className="h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
@@ -243,7 +242,7 @@ function AdminDashboard() {
                   href="/admin/messages"
                   className="text-sm text-blue-600 hover:underline flex items-center gap-1"
                 >
-                  {t('Open Inbox', '受信箱を開く')} →
+                  {t('adminDashboard', 'openInbox')} →
                 </Link>
               </div>
               <div className="divide-y divide-gray-100">
@@ -251,7 +250,7 @@ function AdminDashboard() {
                   <div className="p-6 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
                 ) : conversations.length === 0 ? (
                   <p className="p-6 text-sm text-gray-400 text-center">
-                    {t('No conversations yet', 'まだ会話はありません')}
+                    {t('adminDashboard', 'noConversations')}
                   </p>
                 ) : (
                   conversations.slice(0, 5).map((c) => (
@@ -273,7 +272,7 @@ function AdminDashboard() {
                               : c.user?.email}
                           </p>
                           <span className="text-xs text-slate-400 flex-shrink-0 ml-2">
-                            {new Date(c.updatedAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { month: 'short', day: 'numeric' })}
+                            {new Date(c.updatedAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', day: 'numeric' })}
                           </span>
                         </div>
                         {c.lastMessage && (
@@ -298,15 +297,15 @@ function AdminDashboard() {
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="font-semibold text-slate-900 flex items-center gap-2">
                   <Activity className="h-5 w-5 text-green-500" />
-                  {t('Online Now', 'オンライン中')}
+                  {t('adminDashboard', 'onlineNowLive')}
                 </h2>
-                <span className="text-xs text-slate-400">{t('Live', 'リアルタイム')}</span>
+                <span className="text-xs text-slate-400">{t('adminDashboard', 'live')}</span>
               </div>
               <div className="p-3">
                 {!onlineUsers ? (
                   <div className="p-4 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
                 ) : onlineUsers.length === 0 ? (
-                  <p className="p-3 text-sm text-gray-400 text-center">{t('No one online', '誰もオンラインではありません')}</p>
+                  <p className="p-3 text-sm text-gray-400 text-center">{t('adminDashboard', 'noOneOnline')}</p>
                 ) : (
                   <div className="space-y-1">
                     {onlineUsers.slice(0, 8).map((u) => (
@@ -457,16 +456,14 @@ function UserDashboard() {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <p className="text-sm text-gray-600">
-                  {locale === 'ja' ? 'サブスクリプション' : 'Subscription'}
+                  {t('dashboard', 'subscription')}
                 </p>
                 <p className="font-semibold text-gray-900">
                   {subscription.plan} / {subscription.status}
                 </p>
                 {subscription.status === 'trialing' && (
                   <p className="text-sm text-amber-700 mt-1">
-                    {locale === 'ja'
-                      ? `無料トライアル残り ${subscription.trialDaysRemaining} 日`
-                      : `Free trial: ${subscription.trialDaysRemaining} day(s) remaining`}
+                    {t('dashboard', 'trialRemaining').replace('{days}', String(subscription.trialDaysRemaining))}
                   </p>
                 )}
               </div>
@@ -475,14 +472,12 @@ function UserDashboard() {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
               >
                 <CreditCard className="h-4 w-4" />
-                {locale === 'ja' ? '請求を管理' : 'Manage Billing'}
+                {t('dashboard', 'manageBilling')}
               </button>
             </div>
             {!hasBillingAccess && (
               <p className="text-sm text-red-700 mt-3">
-                {locale === 'ja'
-                  ? 'トライアル期間が終了しました。請求ページで有料プランを開始してください。'
-                  : 'Your trial has ended. Start a paid plan from Billing to continue using core features.'}
+                {t('dashboard', 'trialEnded')}
               </p>
             )}
           </div>
@@ -553,7 +548,7 @@ function UserDashboard() {
                                 {t('dashboard', 'buildingHeight')}: {cfg.buildingHeightMm.toLocaleString()}mm | {t('dashboard', 'scaffoldWidth')}: {cfg.scaffoldWidthMm}mm
                               </div>
                               <div className="text-sm text-gray-500 truncate">
-                                {wallNames || '—'} | {new Date(cfg.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US')}
+                                {wallNames || '—'} | {new Date(cfg.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US')}
                               </div>
                             </div>
                           </div>

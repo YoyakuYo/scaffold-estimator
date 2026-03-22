@@ -71,7 +71,7 @@ export default function LandingPage() {
                   type="button"
                   onClick={() => setLocaleMenuOpen((o) => !o)}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200"
-                  title={locale === 'ja' ? '言語' : locale === 'fr' ? 'Langue' : 'Language'}
+                  title={t('landing', 'languageTitle')}
                 >
                   <Globe className="h-4 w-4" />
                   <span suppressHydrationWarning>{localeLabels[locale]}</span>

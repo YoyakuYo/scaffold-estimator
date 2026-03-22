@@ -96,7 +96,7 @@ export default function RegisterPage() {
               type="button"
               onClick={() => setLocaleMenuOpen((o) => !o)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors border border-gray-200"
-              title="Language / Langue"
+              title={t('common', 'language')}
             >
               <Globe className="h-4 w-4" />
               <span suppressHydrationWarning>{localeLabels[locale]}</span>
@@ -137,10 +137,10 @@ export default function RegisterPage() {
                   {(() => {
                     const err = registerMutation.error as any;
                     const msg = err?.response?.data?.message;
-                    if (Array.isArray(msg)) return msg.join(locale === 'ja' ? ' / ' : ' / ');
+                    if (Array.isArray(msg)) return msg.join(' / ');
                     if (msg && typeof msg === 'string') return msg;
-                    if (!err?.response) return locale === 'ja' ? '接続できません。バックエンドが起動しているか確認してください。' : 'Could not connect. Check that the backend is running.';
-                    return t('register', 'registerButton') + ' ' + (locale === 'ja' ? 'に失敗しました' : 'failed');
+                    if (!err?.response) return t('register', 'networkError');
+                    return t('register', 'failed');
                   })()}
                 </p>
               </div>

@@ -119,7 +119,7 @@ export function Navigation() {
                     type="button"
                     onClick={() => setLocaleMenuOpen((o) => !o)}
                     className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-                    title="Language / Langue"
+                    title={t('common', 'language')}
                     aria-expanded={localeMenuOpen}
                     aria-haspopup="true"
                   >

@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n';
 import { MessageSquare, Send, Loader2 } from 'lucide-react';
 
 export default function SupportPage() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [body, setBody] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -58,18 +58,15 @@ export default function SupportPage() {
     if (data?.conversation) markReadMutation.mutate();
   }, [data?.conversation?.id]);
 
-  const t = (en: string, ja: string, fr?: string) =>
-    locale === 'ja' ? ja : locale === 'fr' ? (fr ?? en) : en;
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-6">
           <MessageSquare className="h-7 w-7 text-blue-600" />
-          {t('Contact Support', 'サポートに連絡', 'Contacter l\'assistance')}
+          {t('supportPage', 'title')}
         </h1>
         <p className="text-gray-500 mb-6">
-          {t('Send a message to the platform administrator. You will receive a reply here.', '管理者にメッセージを送信できます。返信はこの画面に表示されます。', 'Envoyez un message à l\'administrateur. Vous recevrez une réponse ici.')}
+          {t('supportPage', 'subtitle')}
         </p>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col" style={{ minHeight: '400px' }}>
@@ -80,7 +77,7 @@ export default function SupportPage() {
               </div>
             ) : messages.length === 0 ? (
               <p className="text-center text-gray-500 py-12">
-                {t('No messages yet. Send a message below.', 'まだメッセージはありません。下から送信してください。')}
+                {t('supportPage', 'noMessages')}
               </p>
             ) : (
               messages.map((msg: Message) => {
@@ -98,7 +95,7 @@ export default function SupportPage() {
                       }`}
                     >
                       <p className="text-sm font-medium opacity-80">
-                        {isMe ? t('You', 'あなた', 'Vous') : t('Support', 'サポート', 'Assistance')}
+                        {isMe ? t('messaging', 'you') : t('nav2', 'support')}
                       </p>
                       <p className="whitespace-pre-wrap">{msg.body}</p>
                       <p className="text-xs opacity-70 mt-1">
@@ -117,7 +114,7 @@ export default function SupportPage() {
                 type="text"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder={t('Type your message...', 'メッセージを入力...')}
+                placeholder={t('messaging', 'typeMessage')}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 disabled={sendMutation.isPending}
               />
@@ -131,7 +128,7 @@ export default function SupportPage() {
                 ) : (
                   <Send className="h-5 w-5" />
                 )}
-                {t('Send', '送信', 'Envoyer')}
+                {t('messaging', 'send')}
               </button>
             </div>
           </form>

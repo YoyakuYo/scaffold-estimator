@@ -7,9 +7,7 @@ import { usersApi } from '@/lib/api/users';
 import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield } from 'lucide-react';
 
 export default function BillingPage() {
-  const { locale } = useI18n();
-  const t = (en: string, ja: string, fr?: string) =>
-    locale === 'ja' ? ja : locale === 'fr' ? (fr ?? en) : en;
+  const { locale, t } = useI18n();
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -53,14 +51,10 @@ export default function BillingPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
             <Shield className="h-14 w-14 text-amber-600 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-amber-900 mb-2">
-              {t('Platform owner', 'プラットフォーム管理者', 'Propriétaire de la plateforme')}
+              {t('billing', 'platformOwner')}
             </h1>
             <p className="text-amber-800">
-              {t(
-                'You are not required to subscribe. Your role is to manage the platform and verify user subscriptions.',
-                'ご自身のアカウントでサブスクリプションは不要です。ユーザーの契約・支払いを管理する役割です。',
-                'Vous n\'avez pas besoin de souscrire. Votre rôle est de gérer la plateforme et les abonnements utilisateurs.',
-              )}
+              {t('billing', 'platformOwnerDesc')}
             </p>
           </div>
         </div>
@@ -81,7 +75,7 @@ export default function BillingPage() {
       <div className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-3xl mx-auto bg-white rounded-xl border border-gray-200 p-8 text-center">
           <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-gray-900">{t('Billing unavailable', '請求情報を取得できません')}</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t('billing', 'unavailable')}</h1>
         </div>
       </div>
     );
@@ -94,32 +88,32 @@ export default function BillingPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">{t('Billing', '請求', 'Facturation')}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('billing', 'title')}</h1>
           <p className="text-gray-500 mt-1">
-            {t('Manage your subscription and trial access', 'サブスクリプションとトライアルの管理', 'Gérez votre abonnement et l\'accès d\'essai')}
+            {t('billing', 'subtitle')}
           </p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-sm text-gray-500">{t('Current status', '現在のステータス')}</p>
+              <p className="text-sm text-gray-500">{t('billing', 'currentStatus')}</p>
               <p className="text-xl font-semibold text-gray-900">{subscription.status}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">{t('Current plan', 'プラン')}</p>
+              <p className="text-sm text-gray-500">{t('billing', 'currentPlan')}</p>
               <p className="text-xl font-semibold text-gray-900">{subscription.plan}</p>
             </div>
             <div className="flex items-center gap-2">
               {subscription.hasAccess ? (
                 <>
                   <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="text-green-700 font-medium">{t('Access enabled', '利用可能', 'Accès activé')}</span>
+                  <span className="text-green-700 font-medium">{t('billing', 'accessEnabled')}</span>
                 </>
               ) : (
                 <>
                   <AlertTriangle className="h-5 w-5 text-red-600" />
-                  <span className="text-red-700 font-medium">{t('Access disabled', '利用停止', 'Accès désactivé')}</span>
+                  <span className="text-red-700 font-medium">{t('billing', 'accessDisabled')}</span>
                 </>
               )}
             </div>
@@ -130,14 +124,12 @@ export default function BillingPage() {
               <CalendarDays className="h-5 w-5 text-amber-700 mt-0.5" />
               <div>
                 <p className="font-semibold text-amber-900">
-                  {t('Free trial in progress', '無料トライアル中', 'Essai gratuit en cours')}
+                  {t('billing', 'freeTrialInProgress')}
                 </p>
                 <p className="text-amber-800 text-sm">
-                  {t(
-                    `${subscription.trialDaysRemaining} day(s) remaining out of ${subscription.trialLengthDays} days.`,
-                    `${subscription.trialLengthDays}日中、残り${subscription.trialDaysRemaining}日です。`,
-                    `${subscription.trialDaysRemaining} jour(s) restant(s) sur ${subscription.trialLengthDays} jours.`,
-                  )}
+                  {t('billing', 'trialRemaining')
+                    .replace('{remaining}', String(subscription.trialDaysRemaining))
+                    .replace('{total}', String(subscription.trialLengthDays))}
                 </p>
               </div>
             </div>
@@ -145,7 +137,7 @@ export default function BillingPage() {
 
           {subscription.currentPeriodEnd && (
             <p className="text-sm text-gray-600 mt-4">
-              {t('Current period ends on:', '現在の期間終了日:', 'Fin de la période actuelle :')}{' '}
+              {t('billing', 'currentPeriodEndsOn')}{' '}
               {new Date(subscription.currentPeriodEnd).toLocaleDateString(
                 locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US',
               )}
@@ -155,7 +147,7 @@ export default function BillingPage() {
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            {t('Manage subscription', 'サブスクリプション管理')}
+            {t('billing', 'manageSubscription')}
           </h2>
           <div className="flex gap-3 flex-wrap">
             <button
@@ -168,7 +160,7 @@ export default function BillingPage() {
               ) : (
                 <CreditCard className="h-4 w-4" />
               )}
-              {t('Start Paid Plan', '有料プランを開始', 'Démarrer un forfait payant')}
+              {t('billing', 'startPaidPlan')}
             </button>
             {isActive && (
               <button
@@ -181,17 +173,13 @@ export default function BillingPage() {
                 ) : (
                   <CreditCard className="h-4 w-4" />
                 )}
-                {t('Open Billing Portal', '請求ポータルを開く', 'Ouvrir le portail de facturation')}
+                {t('billing', 'openBillingPortal')}
               </button>
             )}
           </div>
           {!subscription.isStripeConfigured && (
             <p className="text-sm text-amber-700 mt-3">
-              {t(
-                'Stripe is not configured yet. Ask the platform admin to set Stripe environment variables.',
-                'Stripeが未設定です。管理者に環境変数の設定を依頼してください。',
-                'Stripe n\'est pas encore configuré. Demandez à l\'administrateur de définir les variables d\'environnement Stripe.',
-              )}
+              {t('billing', 'stripeNotConfigured')}
             </p>
           )}
         </div>

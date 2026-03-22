@@ -10,7 +10,7 @@ import { useI18n } from '@/lib/i18n';
 
 export default function SuperAdminPage() {
   const router = useRouter();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,13 +31,13 @@ export default function SuperAdminPage() {
         router.push('/superadmin/dashboard');
         return;
       }
-      setError('This account is not allowed to access Super Admin.');
+      setError(t('superadminLogin', 'deniedAccount'));
     },
     onError: (err: any) => {
       setError(
         err.response?.data?.message ||
           err.message ||
-          'Login failed. Make sure the backend is running and the super admin user has been created in the database.',
+          t('superadminLogin', 'fallbackError'),
       );
     },
   });
@@ -62,20 +62,20 @@ export default function SuperAdminPage() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-4">
               <Shield className="h-8 w-8 text-amber-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Super Admin</h1>
-            <p className="mt-1 text-sm text-gray-500">管理者ログイン</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('superadminLogin', 'title')}</h1>
+            <p className="mt-1 text-sm text-gray-500">{t('superadminLogin', 'subtitle')}</p>
           </div>
 
           {error && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2 text-sm">
               <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
               <div className="min-w-0">
-                <p className="font-medium">ログインに失敗しました</p>
+                <p className="font-medium">{t('superadminLogin', 'loginFailed')}</p>
                 <p className="mt-1 text-red-600">{error}</p>
                 {error.includes('normal login') && (
                   <p className="mt-2">
                     <a href="/login" className="font-medium underline hover:text-red-800">
-                      {locale === 'ja' ? '通常ログインへ' : 'Go to normal login'}
+                      {t('superadminLogin', 'normalLogin')}
                     </a>
                   </p>
                 )}
@@ -86,7 +86,7 @@ export default function SuperAdminPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                メールアドレス
+                {t('superadminLogin', 'email')}
               </label>
               <input
                 type="email"
@@ -98,7 +98,7 @@ export default function SuperAdminPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                パスワード
+                {t('superadminLogin', 'password')}
               </label>
               <input
                 type="password"
@@ -116,12 +116,12 @@ export default function SuperAdminPage() {
               {loginMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  ログイン中...
+                  {t('superadminLogin', 'signingIn')}
                 </>
               ) : (
                 <>
                   <LogIn className="h-4 w-4" />
-                  管理者ログイン
+                  {t('superadminLogin', 'loginButton')}
                 </>
               )}
             </button>
@@ -129,11 +129,11 @@ export default function SuperAdminPage() {
 
           <div className="mt-6 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <p className="text-xs text-slate-500 text-center">
-              このページは管理者専用です。既存の管理者アカウントでログインできます。一般ユーザーは
+              {t('superadminLogin', 'helperPrefix')}
               <a href="/login" className="text-blue-600 hover:underline ml-1">
-                通常のログイン
+                {t('superadminLogin', 'helperLink')}
               </a>
-              をご利用ください。
+              {t('superadminLogin', 'helperSuffix')}
             </p>
           </div>
         </div>

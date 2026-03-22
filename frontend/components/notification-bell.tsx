@@ -9,7 +9,7 @@ import { useI18n } from '@/lib/i18n';
 
 export function NotificationBell() {
   const router = useRouter();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -64,7 +64,7 @@ export function NotificationBell() {
       <button
         onClick={() => setOpen(!open)}
         className="relative p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-        title={locale === 'ja' ? 'お知らせ' : 'Notifications'}
+        title={t('notifications', 'title')}
       >
         <Bell className="h-3.5 w-3.5" />
         {unreadCount > 0 && (
@@ -77,14 +77,14 @@ export function NotificationBell() {
         <div className="absolute right-0 mt-1 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50 max-h-[70vh] flex flex-col">
           <div className="p-3 border-b border-gray-200 flex items-center justify-between">
             <span className="font-medium text-gray-900">
-              {locale === 'ja' ? 'お知らせ' : 'Notifications'}
+              {t('notifications', 'title')}
             </span>
             {unreadCount > 0 && (
               <button
                 onClick={() => markAllReadMutation.mutate()}
                 className="text-xs text-blue-600 hover:text-blue-700"
               >
-                {locale === 'ja' ? 'すべて既読' : 'Mark all read'}
+                {t('notifications', 'markAllRead')}
               </button>
             )}
           </div>
@@ -95,7 +95,7 @@ export function NotificationBell() {
               </div>
             ) : !notifications?.length ? (
               <p className="p-4 text-gray-500 text-sm">
-                {locale === 'ja' ? 'お知らせはありません' : 'No notifications'}
+                {t('notifications', 'empty')}
               </p>
             ) : (
               <ul>
@@ -113,7 +113,7 @@ export function NotificationBell() {
                           <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>
                         )}
                         <p className="text-xs text-gray-400 mt-1">
-                          {new Date(n.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', {
+                          {new Date(n.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US', {
                             month: 'short',
                             day: 'numeric',
                             hour: '2-digit',
