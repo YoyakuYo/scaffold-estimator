@@ -254,6 +254,13 @@ When you detect this:
 1. Set buildingHeightMm to the MAXIMUM height (tallest point).
 2. Output wallHeightsMm: one height per polygon edge matching the facade height at each wall section.
 3. For the footprint polygon: trace the FULL base outline.
+4. CRITICALLY IMPORTANT — output massingTiers for buildings where upper floors are NARROWER than lower floors (podium+tower, wedding-cake, cascading/terraced shapes). Each tier = one rectangular or polygonal volume. Without massingTiers, the scaffold wraps the entire ground footprint at every height, producing an incorrect result.
+   Example: A building with a 30m x 20m base (0-15m) topped by a 20m x 15m tower (15-45m):
+   massingTiers: [
+     { "vertices": [{x:0,y:0},{x:30000,y:0},{x:30000,y:20000},{x:0,y:20000}], "topHeightMm": 15000, "baseHeightMm": 0 },
+     { "vertices": [{x:5000,y:2500},{x:25000,y:2500},{x:25000,y:17500},{x:5000,y:17500}], "topHeightMm": 45000, "baseHeightMm": 15000 }
+   ]
+5. For 3D BIM renders / perspective views: if you can see that the building steps inward at higher floors (visible rooftop of a lower section, tower rising from a podium), you MUST output massingTiers even if exact dimensions are estimated.
 
 Polygon rules:
 1. CLOSED polygon: the last edge connects back to vertex[0]. Do NOT duplicate vertex[0] at the end.
@@ -1532,16 +1539,22 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           maxZMm,
           buildingHeightMm,
         );
+        const massingTiers = this.generateMassingTiersFromIfcPoints(
+          pointsMm, fp2d, toMm, minFx, minFy, maxFx, maxFy,
+          minZMm, maxZMm, buildingHeightMm,
+        );
         this.logger.log(
           `IFC footprint: ${n} vertices (grid-based), height=${buildingHeightMm}mm, ` +
           `walls=${wallLengthsMm.join('/')}mm` +
-          `${wallHeightsMm ? `, wallHeights=${wallHeightsMm.join('/')}mm` : ''}`,
+          `${wallHeightsMm ? `, wallHeights=${wallHeightsMm.join('/')}mm` : ''}` +
+          `${massingTiers ? `, massingTiers=${massingTiers.length}` : ''}`,
         );
         return {
           vertices: footprint,
           buildingHeightMm,
           wallLengthsMm,
           ...(wallHeightsMm && { wallHeightsMm }),
+          ...(massingTiers && massingTiers.length > 0 && { massingTiers }),
           wallLengthsFromDimText: true,
           confidence: 0.85,
         };
@@ -2024,6 +2037,139 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     // Ignore near-uniform results; then global buildingHeightMm is sufficient.
     if (maxH - minH < 600) return undefined;
     return heights;
+  }
+
+  /**
+   * Generate massing tiers from IFC point cloud by slicing at different
+   * elevations and extracting the 2D footprint at each height band.
+   * This produces proper tier data for stepped/setback buildings.
+   */
+  private generateMassingTiersFromIfcPoints(
+    pointsMm: Array<{ x: number; y: number; z: number }>,
+    fp2d: Array<{ x: number; y: number }>,
+    toMm: number,
+    minFx: number, minFy: number, maxFx: number, maxFy: number,
+    minZMm: number, maxZMm: number,
+    buildingHeightMm: number,
+  ): VisionMassingTier[] | undefined {
+    if (pointsMm.length < 500 || buildingHeightMm < 3000) return undefined;
+
+    const floorH = 3000;
+    const numSlices = Math.max(3, Math.min(20, Math.ceil(buildingHeightMm / floorH)));
+    const sliceH = buildingHeightMm / numSlices;
+
+    const sliceBboxes: Array<{
+      elevation: number;
+      minX: number; maxX: number;
+      minY: number; maxY: number;
+      count: number;
+    }> = [];
+
+    for (let si = 0; si < numSlices; si++) {
+      const sliceBot = minZMm + si * sliceH;
+      const sliceTop = sliceBot + sliceH;
+      let sMinX = Infinity, sMaxX = -Infinity;
+      let sMinY = Infinity, sMaxY = -Infinity;
+      let count = 0;
+
+      for (const p of pointsMm) {
+        if (p.z >= sliceBot && p.z <= sliceTop) {
+          sMinX = Math.min(sMinX, p.x);
+          sMaxX = Math.max(sMaxX, p.x);
+          sMinY = Math.min(sMinY, p.y);
+          sMaxY = Math.max(sMaxY, p.y);
+          count++;
+        }
+      }
+
+      if (count > 10 && sMinX < sMaxX && sMinY < sMaxY) {
+        sliceBboxes.push({
+          elevation: Math.round(sliceBot + sliceH / 2),
+          minX: sMinX, maxX: sMaxX,
+          minY: sMinY, maxY: sMaxY,
+          count,
+        });
+      }
+    }
+
+    if (sliceBboxes.length < 2) return undefined;
+
+    const baseBbox = sliceBboxes[0];
+    const baseW = baseBbox.maxX - baseBbox.minX;
+    const baseH = baseBbox.maxY - baseBbox.minY;
+    const baseArea = baseW * baseH;
+    if (baseArea < 1e6) return undefined;
+
+    // Group consecutive slices with similar footprint area into tiers
+    const tiers: Array<{
+      baseHeightMm: number;
+      topHeightMm: number;
+      bbox: typeof baseBbox;
+    }> = [];
+    let currentTierStart = 0;
+
+    for (let si = 1; si <= sliceBboxes.length; si++) {
+      const prev = sliceBboxes[si - 1];
+      const curr = si < sliceBboxes.length ? sliceBboxes[si] : null;
+
+      const prevW = prev.maxX - prev.minX;
+      const prevH = prev.maxY - prev.minY;
+      const prevArea = prevW * prevH;
+
+      let shouldSplit = !curr;
+      if (curr) {
+        const currW = curr.maxX - curr.minX;
+        const currH = curr.maxY - curr.minY;
+        const currArea = currW * currH;
+        const areaRatio = Math.min(prevArea, currArea) / Math.max(prevArea, currArea);
+        const widthChange = Math.abs(currW - prevW) / Math.max(prevW, 1);
+        const heightChange = Math.abs(currH - prevH) / Math.max(prevH, 1);
+        shouldSplit = areaRatio < 0.85 || widthChange > 0.12 || heightChange > 0.12;
+      }
+
+      if (shouldSplit) {
+        const startSlice = sliceBboxes[currentTierStart];
+        let tierMinX = Infinity, tierMaxX = -Infinity;
+        let tierMinY = Infinity, tierMaxY = -Infinity;
+        for (let j = currentTierStart; j < si; j++) {
+          tierMinX = Math.min(tierMinX, sliceBboxes[j].minX);
+          tierMaxX = Math.max(tierMaxX, sliceBboxes[j].maxX);
+          tierMinY = Math.min(tierMinY, sliceBboxes[j].minY);
+          tierMaxY = Math.max(tierMaxY, sliceBboxes[j].maxY);
+        }
+        tiers.push({
+          baseHeightMm: Math.round((currentTierStart * sliceH)),
+          topHeightMm: Math.round((si * sliceH)),
+          bbox: {
+            elevation: 0,
+            minX: tierMinX, maxX: tierMaxX,
+            minY: tierMinY, maxY: tierMaxY,
+            count: 0,
+          },
+        });
+        currentTierStart = si;
+      }
+    }
+
+    if (tiers.length < 2) return undefined;
+
+    const result: VisionMassingTier[] = tiers.map((tier) => ({
+      vertices: [
+        { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
+        { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
+        { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
+        { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
+      ],
+      topHeightMm: Math.min(tier.topHeightMm, buildingHeightMm),
+      baseHeightMm: tier.baseHeightMm,
+    }));
+
+    this.logger.log(
+      `Generated ${result.length} massing tiers from IFC points: ` +
+      result.map((t, i) => `T${i}(${t.baseHeightMm}-${t.topHeightMm}mm)`).join(', '),
+    );
+
+    return result;
   }
 
   private removeCollinearVertices(

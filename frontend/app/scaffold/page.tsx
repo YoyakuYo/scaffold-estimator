@@ -1407,6 +1407,47 @@ function ScaffoldPageContent() {
                         }) : tier.vertices,
                       }));
                     })();
+                    // When massingTiers are missing but wallHeightsMm varies, auto-synthesize
+                    // approximate tiers from the outline so decomposeTierWalls can work.
+                    const effectiveMassingTiers = (() => {
+                      if (normalizedMassingTiers && normalizedMassingTiers.length > 0) return normalizedMassingTiers;
+                      if (!Array.isArray(wallHeightsMm) || wallHeightsMm.length === 0) return undefined;
+                      const uniqueH = [...new Set(wallHeightsMm)].sort((a, b) => a - b);
+                      if (uniqueH.length < 2) return undefined;
+                      if (!buildingOutline || buildingOutline.length < 3) return undefined;
+                      const outlineVerts = buildingOutline.map((v: any) => ({
+                        x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
+                        y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
+                      }));
+                      const tiers: VisionMassingTier[] = [];
+                      let prevTop = 0;
+                      for (const h of uniqueH) {
+                        const tierWallIndices = wallHeightsMm
+                          .map((wh, i) => wh >= h ? i : -1)
+                          .filter((i) => i >= 0);
+                        if (tierWallIndices.length === 0) continue;
+                        const tierVerts = tierWallIndices.length === outlineVerts.length
+                          ? outlineVerts
+                          : (() => {
+                              let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+                              for (const wi of tierWallIndices) {
+                                const v1 = outlineVerts[wi];
+                                const v2 = outlineVerts[(wi + 1) % outlineVerts.length];
+                                if (v1) { mnx = Math.min(mnx, v1.x); mny = Math.min(mny, v1.y); mxx = Math.max(mxx, v1.x); mxy = Math.max(mxy, v1.y); }
+                                if (v2) { mnx = Math.min(mnx, v2.x); mny = Math.min(mny, v2.y); mxx = Math.max(mxx, v2.x); mxy = Math.max(mxy, v2.y); }
+                              }
+                              if (!Number.isFinite(mnx)) return outlineVerts;
+                              return [{ x: mnx, y: mny }, { x: mxx, y: mny }, { x: mxx, y: mxy }, { x: mnx, y: mxy }];
+                            })();
+                        tiers.push({
+                          vertices: tierVerts.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) })),
+                          topHeightMm: h,
+                          baseHeightMm: prevTop,
+                        });
+                        prevTop = h;
+                      }
+                      return tiers.length >= 2 ? tiers : undefined;
+                    })();
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
                     const frameSize = scaffoldType === 'wakugumi' ? (footprint.frameSizeMm ?? 1800) : undefined;
@@ -1421,7 +1462,7 @@ function ScaffoldPageContent() {
                       topGuardHeightMm: defaults.topGuardHeightMm,
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
-                      ...(normalizedMassingTiers && normalizedMassingTiers.length > 0 && { massingTiers: normalizedMassingTiers }),
+                      ...(effectiveMassingTiers && effectiveMassingTiers.length > 0 && { massingTiers: effectiveMassingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
                       ...(footprint.ifcFileUrl && { ifcFileUrl: footprint.ifcFileUrl }),
@@ -1432,7 +1473,7 @@ function ScaffoldPageContent() {
                       buildingHeightMm: footprint.buildingHeightMm,
                       walls,
                       buildingOutline,
-                      massingTiers: normalizedMassingTiers,
+                      massingTiers: effectiveMassingTiers,
                       scaffoldType,
                       frameSizeMm: frameSize,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
