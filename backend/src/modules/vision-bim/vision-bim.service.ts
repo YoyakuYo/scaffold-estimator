@@ -1527,8 +1527,32 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         `IFC footprint plane=${plane.kind} (convex-hull area proxy), heightAxis span=${spanVert.toFixed(3)}`,
       );
 
+      // Use ground-level geometry for the footprint so upper-floor overhangs
+      // and setbacks don't inflate the outline beyond the actual building walls.
+      // Filter to the bottom ~30% of the building height (ground + first few floors).
+      const groundCutoff = minVert + spanVert * 0.3;
+      const groundFp2d: Array<{ x: number; y: number }> = [];
+      let gMinFx = Infinity, gMinFy = Infinity, gMaxFx = -Infinity, gMaxFy = -Infinity;
+      for (let i = 0; i < xyzPoints.length; i++) {
+        if (vertVals[i] <= groundCutoff) {
+          const q = fp2d[i];
+          groundFp2d.push(q);
+          gMinFx = Math.min(gMinFx, q.x);
+          gMaxFx = Math.max(gMaxFx, q.x);
+          gMinFy = Math.min(gMinFy, q.y);
+          gMaxFy = Math.max(gMaxFy, q.y);
+        }
+      }
+      // Fall back to all points if ground filter leaves too few
+      const useGround = groundFp2d.length > xyzPoints.length * 0.05;
+      const fpPoints = useGround ? groundFp2d : fp2d;
+      const fpMinFx = useGround ? gMinFx : minFx;
+      const fpMinFy = useGround ? gMinFy : minFy;
+      const fpMaxFx = useGround ? gMaxFx : maxFx;
+      const fpMaxFy = useGround ? gMaxFy : maxFy;
+
       // Try grid-based footprint extraction (captures L/U/T and complex shapes)
-      const footprint = this.extractFootprintFromXY(fp2d, minFx, minFy, maxFx, maxFy, toMm);
+      const footprint = this.extractFootprintFromXY(fpPoints, fpMinFx, fpMinFy, fpMaxFx, fpMaxFy, toMm);
       if (footprint && footprint.length >= 3) {
         const n = footprint.length;
         const wallLengthsMm = footprint.map((v, i) => {
@@ -1563,13 +1587,17 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         };
       }
 
-      // Fallback: bounding box rectangle in the chosen footprint plane
-      const x0 = Math.round(minFx * toMm);
-      const y0 = Math.round(minFy * toMm);
-      const x1 = Math.round(maxFx * toMm);
-      const y1 = Math.round(maxFy * toMm);
-      const wX = Math.round((maxFx - minFx) * toMm);
-      const wY = Math.round((maxFy - minFy) * toMm);
+      // Fallback: bounding box rectangle (use ground-level bounds if available)
+      const bboxMinX = useGround ? fpMinFx : minFx;
+      const bboxMinY = useGround ? fpMinFy : minFy;
+      const bboxMaxX = useGround ? fpMaxFx : maxFx;
+      const bboxMaxY = useGround ? fpMaxFy : maxFy;
+      const x0 = Math.round(bboxMinX * toMm);
+      const y0 = Math.round(bboxMinY * toMm);
+      const x1 = Math.round(bboxMaxX * toMm);
+      const y1 = Math.round(bboxMaxY * toMm);
+      const wX = Math.round((bboxMaxX - bboxMinX) * toMm);
+      const wY = Math.round((bboxMaxY - bboxMinY) * toMm);
       this.logger.log(
         `IFC fallback bbox: plane=${plane.kind} ${(maxFx - minFx).toFixed(1)}×${(maxFy - minFy).toFixed(1)}×${spanVert.toFixed(1)}, ` +
         `toMm=${toMm}, height=${buildingHeightMm}mm`,
@@ -1792,13 +1820,13 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const spanY = (maxY - minY) * toMm;
     if (spanX < 100 || spanY < 100) return null;
 
-    const cellMm = Math.max(250, Math.min(1000,
-      Math.max(spanX, spanY) / 150,
+    const cellMm = Math.max(150, Math.min(750,
+      Math.max(spanX, spanY) / 200,
     ));
     const pad = 2;
     const gw = Math.ceil(spanX / cellMm) + pad * 2;
     const gh = Math.ceil(spanY / cellMm) + pad * 2;
-    if (gw * gh > 200000) return null;
+    if (gw * gh > 500000) return null;
 
     const originXMm = minX * toMm - pad * cellMm;
     const originYMm = minY * toMm - pad * cellMm;
@@ -1812,8 +1840,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       }
     }
 
-    // Keep small gaps closed without over-inflating the footprint into a rectangle.
-    this.dilateGrid(grid, gw, gh, Math.max(1, Math.ceil(600 / cellMm)));
+    // Morphological close (dilate→erode) fills small internal gaps without
+    // expanding the overall footprint boundary beyond the real building walls.
+    const closeRadius = Math.max(1, Math.ceil(400 / cellMm));
+    this.dilateGrid(grid, gw, gh, closeRadius);
+    this.erodeGrid(grid, gw, gh, closeRadius);
     this.floodFillExterior(grid, gw, gh);
 
     const boundary = this.extractBoundaryFromGrid(grid, gw, gh, originXMm, originYMm, cellMm);
@@ -1825,10 +1856,10 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
 
   private dilateGrid(grid: Uint8Array, w: number, h: number, radius: number): void {
     const original = new Uint8Array(grid);
+    const r2 = radius * radius;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!original[y * w + x]) continue;
-        const r2 = radius * radius;
         for (let dy = -radius; dy <= radius; dy++) {
           for (let dx = -radius; dx <= radius; dx++) {
             if (dx * dx + dy * dy > r2) continue;
@@ -1838,6 +1869,27 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
             }
           }
         }
+      }
+    }
+  }
+
+  private erodeGrid(grid: Uint8Array, w: number, h: number, radius: number): void {
+    const original = new Uint8Array(grid);
+    const r2 = radius * radius;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!original[y * w + x]) continue;
+        let fullySupported = true;
+        for (let dy = -radius; dy <= radius && fullySupported; dy++) {
+          for (let dx = -radius; dx <= radius && fullySupported; dx++) {
+            if (dx * dx + dy * dy > r2) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h || !original[ny * w + nx]) {
+              fullySupported = false;
+            }
+          }
+        }
+        if (!fullySupported) grid[y * w + x] = 0;
       }
     }
   }
@@ -2067,24 +2119,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const numSlices = Math.max(3, Math.min(20, Math.ceil(buildingHeightMm / floorH)));
     const sliceH = buildingHeightMm / numSlices;
 
-    const polygonAreaAbs = (pts: Array<{ x: number; y: number }>): number => {
-      if (pts.length < 3) return 0;
-      let area = 0;
-      for (let i = 0; i < pts.length; i++) {
-        const j = (i + 1) % pts.length;
-        area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
-      }
-      return Math.abs(area / 2);
-    };
-
-    const sliceBands: Array<{
+    const sliceBboxes: Array<{
       elevation: number;
       minX: number; maxX: number;
       minY: number; maxY: number;
       count: number;
-      points: Array<{ x: number; y: number }>;
-      footprint?: Array<{ x: number; y: number }>;
-      area: number;
     }> = [];
 
     for (let si = 0; si < numSlices; si++) {
@@ -2093,7 +2132,6 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       let sMinX = Infinity, sMaxX = -Infinity;
       let sMinY = Infinity, sMaxY = -Infinity;
       let count = 0;
-      const slicePoints: Array<{ x: number; y: number }> = [];
 
       for (const p of pointsMm) {
         if (p.z >= sliceBot && p.z <= sliceTop) {
@@ -2102,57 +2140,48 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           sMinY = Math.min(sMinY, p.y);
           sMaxY = Math.max(sMaxY, p.y);
           count++;
-          slicePoints.push({ x: p.x, y: p.y });
         }
       }
 
       if (count > 10 && sMinX < sMaxX && sMinY < sMaxY) {
-        const footprint = this.extractFootprintFromXY(slicePoints, sMinX, sMinY, sMaxX, sMaxY, 1) ?? undefined;
-        const area = footprint
-          ? polygonAreaAbs(footprint)
-          : Math.max((sMaxX - sMinX) * (sMaxY - sMinY), 0);
-        sliceBands.push({
+        sliceBboxes.push({
           elevation: Math.round(sliceBot + sliceH / 2),
           minX: sMinX, maxX: sMaxX,
           minY: sMinY, maxY: sMaxY,
           count,
-          points: slicePoints,
-          footprint,
-          area,
         });
       }
     }
 
-    if (sliceBands.length < 2) return undefined;
+    if (sliceBboxes.length < 2) return undefined;
 
-    const baseBand = sliceBands[0];
-    const baseW = baseBand.maxX - baseBand.minX;
-    const baseH = baseBand.maxY - baseBand.minY;
-    const baseArea = Math.max(baseBand.area, baseW * baseH);
+    const baseBbox = sliceBboxes[0];
+    const baseW = baseBbox.maxX - baseBbox.minX;
+    const baseH = baseBbox.maxY - baseBbox.minY;
+    const baseArea = baseW * baseH;
     if (baseArea < 1e6) return undefined;
 
     // Group consecutive slices with similar footprint area into tiers
     const tiers: Array<{
       baseHeightMm: number;
       topHeightMm: number;
-      footprint: Array<{ x: number; y: number }>;
-      bbox: { minX: number; maxX: number; minY: number; maxY: number };
+      bbox: typeof baseBbox;
     }> = [];
     let currentTierStart = 0;
 
-    for (let si = 1; si <= sliceBands.length; si++) {
-      const prev = sliceBands[si - 1];
-      const curr = si < sliceBands.length ? sliceBands[si] : null;
+    for (let si = 1; si <= sliceBboxes.length; si++) {
+      const prev = sliceBboxes[si - 1];
+      const curr = si < sliceBboxes.length ? sliceBboxes[si] : null;
 
       const prevW = prev.maxX - prev.minX;
       const prevH = prev.maxY - prev.minY;
-      const prevArea = Math.max(prev.area, prevW * prevH);
+      const prevArea = prevW * prevH;
 
       let shouldSplit = !curr;
       if (curr) {
         const currW = curr.maxX - curr.minX;
         const currH = curr.maxY - curr.minY;
-        const currArea = Math.max(curr.area, currW * currH);
+        const currArea = currW * currH;
         const areaRatio = Math.min(prevArea, currArea) / Math.max(prevArea, currArea);
         const widthChange = Math.abs(currW - prevW) / Math.max(prevW, 1);
         const heightChange = Math.abs(currH - prevH) / Math.max(prevH, 1);
@@ -2160,29 +2189,24 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       }
 
       if (shouldSplit) {
+        const startSlice = sliceBboxes[currentTierStart];
         let tierMinX = Infinity, tierMaxX = -Infinity;
         let tierMinY = Infinity, tierMaxY = -Infinity;
-        const tierPoints: Array<{ x: number; y: number }> = [];
         for (let j = currentTierStart; j < si; j++) {
-          tierMinX = Math.min(tierMinX, sliceBands[j].minX);
-          tierMaxX = Math.max(tierMaxX, sliceBands[j].maxX);
-          tierMinY = Math.min(tierMinY, sliceBands[j].minY);
-          tierMaxY = Math.max(tierMaxY, sliceBands[j].maxY);
-          tierPoints.push(...sliceBands[j].points);
+          tierMinX = Math.min(tierMinX, sliceBboxes[j].minX);
+          tierMaxX = Math.max(tierMaxX, sliceBboxes[j].maxX);
+          tierMinY = Math.min(tierMinY, sliceBboxes[j].minY);
+          tierMaxY = Math.max(tierMaxY, sliceBboxes[j].maxY);
         }
-        const tierFootprint =
-          this.extractFootprintFromXY(tierPoints, tierMinX, tierMinY, tierMaxX, tierMaxY, 1) ??
-          [
-            { x: Math.round(tierMinX), y: Math.round(tierMinY) },
-            { x: Math.round(tierMaxX), y: Math.round(tierMinY) },
-            { x: Math.round(tierMaxX), y: Math.round(tierMaxY) },
-            { x: Math.round(tierMinX), y: Math.round(tierMaxY) },
-          ];
         tiers.push({
           baseHeightMm: Math.round((currentTierStart * sliceH)),
           topHeightMm: Math.round((si * sliceH)),
-          footprint: tierFootprint.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })),
-          bbox: { minX: tierMinX, maxX: tierMaxX, minY: tierMinY, maxY: tierMaxY },
+          bbox: {
+            elevation: 0,
+            minX: tierMinX, maxX: tierMaxX,
+            minY: tierMinY, maxY: tierMaxY,
+            count: 0,
+          },
         });
         currentTierStart = si;
       }
@@ -2190,16 +2214,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
 
     if (tiers.length < 2) return undefined;
 
-    const baseTierArea = Math.max(
-      polygonAreaAbs(tiers[0].footprint),
-      (tiers[0].bbox.maxX - tiers[0].bbox.minX) * (tiers[0].bbox.maxY - tiers[0].bbox.minY),
-    );
+    const baseTierArea = (tiers[0].bbox.maxX - tiers[0].bbox.minX) *
+                         (tiers[0].bbox.maxY - tiers[0].bbox.minY);
     const hasRealSetback = tiers.some((tier, idx) => {
       if (idx === 0) return false;
-      const tierArea = Math.max(
-        polygonAreaAbs(tier.footprint),
-        (tier.bbox.maxX - tier.bbox.minX) * (tier.bbox.maxY - tier.bbox.minY),
-      );
+      const tierArea = (tier.bbox.maxX - tier.bbox.minX) * (tier.bbox.maxY - tier.bbox.minY);
       return tierArea / Math.max(baseTierArea, 1) < 0.85;
     });
     if (!hasRealSetback) {
@@ -2208,10 +2227,12 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     }
 
     const result: VisionMassingTier[] = tiers.map((tier) => ({
-      vertices: tier.footprint.map((p) => ({
-        x: Math.round(p.x),
-        y: Math.round(p.y),
-      })),
+      vertices: [
+        { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
+        { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
+        { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
+        { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
+      ],
       topHeightMm: Math.min(tier.topHeightMm, buildingHeightMm),
       baseHeightMm: tier.baseHeightMm,
     }));
