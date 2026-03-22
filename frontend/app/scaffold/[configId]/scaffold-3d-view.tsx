@@ -220,6 +220,86 @@ function buildOffsetPathXZ(
   });
 }
 
+function distancePointToLineXZ(p: PointXZ, a: PointXZ, b: PointXZ): number {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-9) return Math.hypot(p.x - a.x, p.z - a.z);
+  return Math.abs(dx * (a.z - p.z) - (a.x - p.x) * dz) / len;
+}
+
+function segmentsCollinearlyOverlapXZ(a1: PointXZ, a2: PointXZ, b1: PointXZ, b2: PointXZ): boolean {
+  const adx = a2.x - a1.x;
+  const adz = a2.z - a1.z;
+  const bdx = b2.x - b1.x;
+  const bdz = b2.z - b1.z;
+  const aLen = Math.hypot(adx, adz);
+  const bLen = Math.hypot(bdx, bdz);
+  if (aLen < 0.05 || bLen < 0.05) return false;
+
+  const dirCross = Math.abs((adx / aLen) * (bdz / bLen) - (adz / aLen) * (bdx / bLen));
+  if (dirCross > 0.08) return false;
+
+  const lineTol = Math.max(0.15, Math.min(aLen, bLen) * 0.03);
+  if (distancePointToLineXZ(b1, a1, a2) > lineTol || distancePointToLineXZ(b2, a1, a2) > lineTol) {
+    return false;
+  }
+
+  const ux = adx / aLen;
+  const uz = adz / aLen;
+  const projA1 = 0;
+  const projA2 = aLen;
+  const projB1 = (b1.x - a1.x) * ux + (b1.z - a1.z) * uz;
+  const projB2 = (b2.x - a1.x) * ux + (b2.z - a1.z) * uz;
+  const minA = Math.min(projA1, projA2);
+  const maxA = Math.max(projA1, projA2);
+  const minB = Math.min(projB1, projB2);
+  const maxB = Math.max(projB1, projB2);
+  const overlap = Math.min(maxA, maxB) - Math.max(minA, minB);
+  return overlap > Math.max(0.3, Math.min(aLen, bLen) * 0.2);
+}
+
+function findExteriorEdgeRunXZ(
+  tierVerts: PointXZ[],
+  lowerVerts: PointXZ[],
+): { startEdgeIndex: number; edgeCount: number } | null {
+  const currentEdgeCount = tierVerts.length;
+  const lowerEdgeCount = lowerVerts.length;
+  if (currentEdgeCount < 4 || lowerEdgeCount < 3) return null;
+
+  const keep = Array.from({ length: currentEdgeCount }, (_, currentIdx) => {
+    const c1 = tierVerts[currentIdx]!;
+    const c2 = tierVerts[(currentIdx + 1) % currentEdgeCount]!;
+    for (let lowerIdx = 0; lowerIdx < lowerEdgeCount; lowerIdx++) {
+      const l1 = lowerVerts[lowerIdx]!;
+      const l2 = lowerVerts[(lowerIdx + 1) % lowerEdgeCount]!;
+      if (segmentsCollinearlyOverlapXZ(c1, c2, l1, l2)) return true;
+    }
+    return false;
+  });
+
+  const keepCount = keep.filter(Boolean).length;
+  if (keepCount === 0 || keepCount === currentEdgeCount) return null;
+
+  let runStart = -1;
+  let runTransitions = 0;
+  for (let i = 0; i < currentEdgeCount; i++) {
+    const curr = keep[i]!;
+    const prev = keep[(i - 1 + currentEdgeCount) % currentEdgeCount]!;
+    if (curr && !prev) {
+      runTransitions++;
+      if (runStart < 0) runStart = i;
+    }
+  }
+  if (runTransitions !== 1 || runStart < 0) return null;
+
+  let runCount = 0;
+  while (runCount < currentEdgeCount && keep[(runStart + runCount) % currentEdgeCount]) {
+    runCount++;
+  }
+  return runCount >= 2 ? { startEdgeIndex: runStart, edgeCount: runCount } : null;
+}
+
 /** Return the max spans we can afford per wall so the total stays under budget. */
 function computeSpanCaps(walls: WallCalculationResult[], levelH: number) {
   let totalSpanLevels = 0;
@@ -1276,21 +1356,23 @@ export default function Scaffold3DView({
         const nW = tg.walls.length;
         let footprintFromMassing = false;
         let tverts: PointXZ[] = [];
+        const tierVertsMatch = (tier?: BuildingMassingTier) =>
+          !!tier && Array.isArray(tier.vertices) && (tier.vertices.length === nW || tier.vertices.length > nW);
 
         const byBase = massingTiersSorted.find(
           (m) => Math.abs((m.baseHeightMm ?? 0) - (tg.baseHeightMm ?? 0)) <= 2,
         );
         const byIdx = massingTiersSorted[tg.tierIndex];
         const candidate =
-          byBase && byBase.vertices.length === nW
+          tierVertsMatch(byBase)
             ? byBase
-            : byIdx && byIdx.vertices.length === nW
+            : tierVertsMatch(byIdx)
               ? byIdx
               : undefined;
 
-        if (bimPlan && candidate && candidate.vertices.length === nW) {
+        if (bimPlan && candidate) {
           const mapped = bimPlan.toPlanM(candidate.vertices as any);
-          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+          if (mapped.length >= nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
             tverts = mapped;
             footprintFromMassing = true;
           }
@@ -1302,7 +1384,7 @@ export default function Scaffold3DView({
             verts,
             rawBaseVertsForMassing,
           );
-          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+          if (mapped.length >= nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
             tverts = mapped;
             footprintFromMassing = true;
           }
@@ -1320,10 +1402,11 @@ export default function Scaffold3DView({
       // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
       const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
       const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
-        if (poly.length !== wallCount || wallCount < 3) return false;
+        if (poly.length < wallCount || wallCount < 2) return false;
+        const isOpenPath = poly.length > wallCount;
         for (let i = 0; i < wallCount; i++) {
           const p1 = poly[i];
-          const p2 = poly[(i + 1) % wallCount];
+          const p2 = isOpenPath ? poly[i + 1] : poly[(i + 1) % wallCount];
           if (!p1 || !p2) return false;
           const len = Math.hypot(p2.x - p1.x, p2.z - p1.z);
           if (!Number.isFinite(len) || len < 0.05) return false;
@@ -1338,7 +1421,7 @@ export default function Scaffold3DView({
         const pv = tp.verts?.length ?? 0;
         const finite =
           pv >= 2 &&
-          pv === nW &&
+          pv >= nW &&
           tp.verts!.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
           hasUsableTierEdges(tp.verts!, nW);
         if (finite) continue;
@@ -1424,6 +1507,7 @@ export default function Scaffold3DView({
         isOpen: boolean;
         normalSign: number;
         nearRow: PointXZ[];
+        visibleWallLocalIdxs: Set<number> | null;
         hasCornerAtStart: boolean[];
         hasCornerAtEnd: boolean[];
         isLShapedAtStart: boolean[];
@@ -1441,6 +1525,16 @@ export default function Scaffold3DView({
           ? (signedAreaXZ(tv) > 0 ? -1 : 1)
           : 1;
         const tNear = buildOffsetPathXZ(tv, tWalls.length, tSign, standoffM, tOpen);
+        let visibleWallLocalIdxs: Set<number> | null = null;
+        if (!tOpen && tgi > 0 && tv.length === tWalls.length) {
+          const lowerVerts = tierPolygons[tgi - 1]?.verts ?? verts;
+          const exteriorRun = findExteriorEdgeRunXZ(tv, lowerVerts);
+          if (exteriorRun && exteriorRun.edgeCount < tWalls.length) {
+            visibleWallLocalIdxs = new Set(
+              Array.from({ length: exteriorRun.edgeCount }, (_, idx) => (exteriorRun.startEdgeIndex + idx) % tWalls.length),
+            );
+          }
+        }
 
         const hCS: boolean[] = [], hCE: boolean[] = [], iLS: boolean[] = [], iLE: boolean[] = [];
         for (let wi = 0; wi < tWalls.length; wi++) { hCS.push(false); hCE.push(false); iLS.push(false); iLE.push(false); }
@@ -1463,7 +1557,7 @@ export default function Scaffold3DView({
           }
         }
         tierPolyData.push({
-          tierVerts: tv, isOpen: tOpen, normalSign: tSign, nearRow: tNear,
+          tierVerts: tv, isOpen: tOpen, normalSign: tSign, nearRow: tNear, visibleWallLocalIdxs,
           hasCornerAtStart: hCS, hasCornerAtEnd: hCE, isLShapedAtStart: iLS, isLShapedAtEnd: iLE,
         });
       }
@@ -1494,6 +1588,10 @@ export default function Scaffold3DView({
         const tpd = tierPolyData[tgi];
         const tierV = tpd?.tierVerts ?? verts;
         const footprintFromMassing = tierPolygons[tgi]?.footprintFromMassing ?? false;
+        if (tpd?.visibleWallLocalIdxs && !tpd.visibleWallLocalIdxs.has(localIdx)) {
+          skipReasons['interiorSetback'] = (skipReasons['interiorSetback'] ?? 0) + 1;
+          continue;
+        }
 
         // Upper tiers from wall-length-only polygons start near origin; align their bbox
         // minimum to the ground footprint minimum so one straight back/side stays flush.
