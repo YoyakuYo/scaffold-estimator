@@ -1409,6 +1409,7 @@ function ScaffoldPageContent() {
                     })();
                     // When massingTiers are missing but wallHeightsMm varies, auto-synthesize
                     // approximate tiers from the outline so decomposeTierWalls can work.
+                    // Only create tiers when the upper tier has a genuinely SMALLER footprint.
                     const effectiveMassingTiers = (() => {
                       if (normalizedMassingTiers && normalizedMassingTiers.length > 0) return normalizedMassingTiers;
                       if (!Array.isArray(wallHeightsMm) || wallHeightsMm.length === 0) return undefined;
@@ -1419,8 +1420,17 @@ function ScaffoldPageContent() {
                         x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
                         y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
                       }));
+                      let oMnx = Infinity, oMny = Infinity, oMxx = -Infinity, oMxy = -Infinity;
+                      for (const v of outlineVerts) {
+                        oMnx = Math.min(oMnx, v.x); oMny = Math.min(oMny, v.y);
+                        oMxx = Math.max(oMxx, v.x); oMxy = Math.max(oMxy, v.y);
+                      }
+                      const fullW = oMxx - oMnx;
+                      const fullH = oMxy - oMny;
+                      const fullArea = Math.max(fullW * fullH, 1e-6);
                       const tiers: VisionMassingTier[] = [];
                       let prevTop = 0;
+                      let hasRealSetback = false;
                       for (const h of uniqueH) {
                         const tierWallIndices = wallHeightsMm
                           .map((wh, i) => wh >= h ? i : -1)
@@ -1437,6 +1447,11 @@ function ScaffoldPageContent() {
                                 if (v2) { mnx = Math.min(mnx, v2.x); mny = Math.min(mny, v2.y); mxx = Math.max(mxx, v2.x); mxy = Math.max(mxy, v2.y); }
                               }
                               if (!Number.isFinite(mnx)) return outlineVerts;
+                              const bboxW = mxx - mnx;
+                              const bboxH = mxy - mny;
+                              const bboxArea = bboxW * bboxH;
+                              if (bboxArea / fullArea > 0.85) return outlineVerts;
+                              hasRealSetback = true;
                               return [{ x: mnx, y: mny }, { x: mxx, y: mny }, { x: mxx, y: mxy }, { x: mnx, y: mxy }];
                             })();
                         tiers.push({
@@ -1446,6 +1461,7 @@ function ScaffoldPageContent() {
                         });
                         prevTop = h;
                       }
+                      if (!hasRealSetback) return undefined;
                       return tiers.length >= 2 ? tiers : undefined;
                     })();
                     const defaults = getAiBimDefaults();

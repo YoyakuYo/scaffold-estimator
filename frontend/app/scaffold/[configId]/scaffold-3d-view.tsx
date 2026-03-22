@@ -1503,11 +1503,15 @@ export default function Scaffold3DView({
 
       // ══════════════════════════════════════════════════════
       // EXTERIOR-ONLY FILTER — skip upper tier walls whose
-      // scaffold overlaps with a lower tier's scaffold strip.
+      // scaffold strip is genuinely INTERIOR (hidden behind
+      // a wider lower tier). Walls that sit on the same edge
+      // as the lower tier are vertical continuations and must
+      // NOT be skipped.
       // ══════════════════════════════════════════════════════
       const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
       if (hasTiers && tierGroups.length > 1) {
         const scaffoldStripW = standoffM + 1.5;
+        const CO_EDGE_THRESHOLD = 0.15;
         for (let tgi = 1; tgi < tierGroups.length; tgi++) {
           const tg = tierGroups[tgi];
           const tv = tierPolygons[tgi]?.verts ?? [];
@@ -1535,13 +1539,16 @@ export default function Scaffold3DView({
                 const d = pointToSegmentDistXZ(mid, lv[gi], lv[(gi + 1) % lv.length]);
                 if (d < nearDist) { nearDist = d; nearEdge = gi; }
               }
+
+              if (nearDist < CO_EDGE_THRESHOLD) continue;
+
               if (nearDist < scaffoldStripW && nearEdge >= 0 && nearEdge < lowerWalls.length) {
                 const lw = lowerWalls[nearEdge];
                 const lwTopMm =
                   ((lw as any).baseHeightMm ?? 0) +
                   (lw.levelCalc?.fullLevels ?? 1) * LEVEL_H * 1000;
                 const upperBaseMm = (wall as any).baseHeightMm ?? 0;
-                if (lwTopMm >= upperBaseMm) {
+                if (lwTopMm > upperBaseMm + 500) {
                   wallSkipFlags[globalIdx] = true;
                 }
               }
@@ -1835,10 +1842,14 @@ export default function Scaffold3DView({
         });
         clickTargetsRef.current.push(clickMesh);
       }
-      if (renderedWallCount === 0 && walls.length > 0) {
+      const skippedCount = walls.length - renderedWallCount;
+      if (skippedCount > 0) {
         const reasons = Object.entries(skipReasons).map(([k, v]) => `${k}:${v}`).join(', ');
         const tierInfo = tierGroups.map((tg, gi) => `T${gi}(walls=${tg.walls.length},verts=${tierPolygons[gi]?.verts?.length ?? 0},massing=${tierPolygons[gi]?.footprintFromMassing})`).join('; ');
-        console.warn(`[3D] All ${walls.length} walls skipped. Reasons: ${reasons}. Tiers: ${tierInfo}. bimPlan=${!!bimPlan}`);
+        console.warn(`[3D] ${skippedCount}/${walls.length} walls skipped. Reasons: ${reasons}. Tiers: ${tierInfo}. bimPlan=${!!bimPlan}`);
+      }
+      if (renderedWallCount === 0 && walls.length > 0) {
+        const reasons = Object.entries(skipReasons).map(([k, v]) => `${k}:${v}`).join(', ');
         setError(`3D scaffold: ${walls.length} walls configured but all skipped during rendering (${reasons}). Please recalculate this configuration.`);
         setReady(true);
         return;

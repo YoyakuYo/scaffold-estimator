@@ -2124,7 +2124,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const areaRatio = Math.min(prevArea, currArea) / Math.max(prevArea, currArea);
         const widthChange = Math.abs(currW - prevW) / Math.max(prevW, 1);
         const heightChange = Math.abs(currH - prevH) / Math.max(prevH, 1);
-        shouldSplit = areaRatio < 0.85 || widthChange > 0.12 || heightChange > 0.12;
+        shouldSplit = areaRatio < 0.70 || widthChange > 0.20 || heightChange > 0.20;
       }
 
       if (shouldSplit) {
@@ -2152,6 +2152,18 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     }
 
     if (tiers.length < 2) return undefined;
+
+    const baseTierArea = (tiers[0].bbox.maxX - tiers[0].bbox.minX) *
+                         (tiers[0].bbox.maxY - tiers[0].bbox.minY);
+    const hasRealSetback = tiers.some((tier, idx) => {
+      if (idx === 0) return false;
+      const tierArea = (tier.bbox.maxX - tier.bbox.minX) * (tier.bbox.maxY - tier.bbox.minY);
+      return tierArea / Math.max(baseTierArea, 1) < 0.85;
+    });
+    if (!hasRealSetback) {
+      this.logger.log('IFC massing tiers all have similar footprints — skipping tier generation');
+      return undefined;
+    }
 
     const result: VisionMassingTier[] = tiers.map((tier) => ({
       vertices: [
