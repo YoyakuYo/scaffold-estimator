@@ -1181,9 +1181,10 @@ export default function Scaffold3DView({
           Math.max(...allTierVerts.map((p) => p.x)) - Math.min(...allTierVerts.map((p) => p.x)),
           Math.max(...allTierVerts.map((p) => p.y)) - Math.min(...allTierVerts.map((p) => p.y)),
         );
-        // If outline is in mm (spread > 500) but tier vertices are small (spread < 10),
-        // re-map tier vertices to the outline's coordinate space.
-        if (outlineSpread > 500 && tierSpread < 10 && tierSpread > 1e-9) {
+        // If outline is in mm but tier vertices are in a much smaller scale
+        // (fractional 0-1, pixel 50-400, etc.), re-map to the outline's coordinate space.
+        // Ratio-based: tiers < 10% of outline spread = mismatch.
+        if (outlineSpread > 500 && tierSpread > 1e-9 && tierSpread < outlineSpread * 0.1) {
           const ob = {
             mnx: Math.min(...allTierVerts.map((p) => p.x)),
             mny: Math.min(...allTierVerts.map((p) => p.y)),
@@ -1465,6 +1466,8 @@ export default function Scaffold3DView({
       const isLShapedAtEnd = tierPolyData[0]?.isLShapedAtEnd ?? [];
 
       // Render scaffold for each wall, using the correct tier polygon
+      let renderedWallCount = 0;
+      const skipReasons: Record<string, number> = {};
       for (let i = 0; i < walls.length; i++) {
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
@@ -1495,12 +1498,21 @@ export default function Scaffold3DView({
           tierOffZ = minGz - minTz;
         }
 
-        if (tierV.length < 2 || localIdx < 0 || localIdx >= tierV.length) continue;
+        if (tierV.length < 2 || localIdx < 0 || localIdx >= tierV.length) {
+          skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] = (skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] ?? 0) + 1;
+          continue;
+        }
         const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
-        if (tpd?.isOpen && (v2Idx < 0 || v2Idx >= tierV.length)) continue;
+        if (tpd?.isOpen && (v2Idx < 0 || v2Idx >= tierV.length)) {
+          skipReasons['openPolyIdx'] = (skipReasons['openPolyIdx'] ?? 0) + 1;
+          continue;
+        }
         const p1 = tierV[localIdx];
         const p2 = tierV[v2Idx];
-        if (!p1 || !p2) continue;
+        if (!p1 || !p2) {
+          skipReasons['nullVertex'] = (skipReasons['nullVertex'] ?? 0) + 1;
+          continue;
+        }
 
         const v1 = { x: p1.x + tierOffX, z: p1.z + tierOffZ };
         const v2 = { x: p2.x + tierOffX, z: p2.z + tierOffZ };
@@ -1509,7 +1521,10 @@ export default function Scaffold3DView({
         const dx = v2.x - v1.x;
         const dz = v2.z - v1.z;
         const edgeLen = Math.hypot(dx, dz);
-        if (edgeLen < 0.001) continue;
+        if (edgeLen < 0.001) {
+          skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] = (skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] ?? 0) + 1;
+          continue;
+        }
 
         // Use tier-specific polygon data for normals and corners
         const tierIsOpen = tpd?.isOpen ?? isOpenPolygon;
@@ -1543,7 +1558,10 @@ export default function Scaffold3DView({
         const nearDx = nearEnd.x - nearStart.x;
         const nearDz = nearEnd.z - nearStart.z;
         const alignedLen = Math.hypot(nearDx, nearDz);
-        if (alignedLen < 1e-6) continue;
+        if (alignedLen < 1e-6) {
+          skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] = (skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] ?? 0) + 1;
+          continue;
+        }
 
         // Tier-specific corner flags
         const tHCS = tpd?.hasCornerAtStart ?? hasCornerAtStart;
@@ -1621,6 +1639,7 @@ export default function Scaffold3DView({
         wallRoot.applyMatrix4(matrix);
         scene.add(wallRoot);
         wallRenderInfos[i] = { root: wallRoot, postX, widthM, spansMm, startPostIdx };
+        renderedWallCount++;
 
         // Track extents (including tier base height offset)
         const levels = wall.levelCalc.fullLevels;
@@ -1721,6 +1740,14 @@ export default function Scaffold3DView({
           z: (v1.z + v2.z) / 2 - cz + nz * (standoffM + wallWidthM * 1.1),
         });
         clickTargetsRef.current.push(clickMesh);
+      }
+      if (renderedWallCount === 0 && walls.length > 0) {
+        const reasons = Object.entries(skipReasons).map(([k, v]) => `${k}:${v}`).join(', ');
+        const tierInfo = tierGroups.map((tg, gi) => `T${gi}(walls=${tg.walls.length},verts=${tierPolygons[gi]?.verts?.length ?? 0},massing=${tierPolygons[gi]?.footprintFromMassing})`).join('; ');
+        console.warn(`[3D] All ${walls.length} walls skipped. Reasons: ${reasons}. Tiers: ${tierInfo}. bimPlan=${!!bimPlan}`);
+        setError(`3D scaffold: ${walls.length} walls configured but all skipped during rendering (${reasons}). Please recalculate this configuration.`);
+        setReady(true);
+        return;
       }
       setLevelVisCap(threeDLevelsCapped);
       maxHeightRef.current = maxH;

@@ -1273,7 +1273,7 @@ function ScaffoldPageContent() {
                 }`}
               >
                 <ScanLine className="h-4 w-4" />
-                AI BIM Mode
+                {t('scaffold', 'aiBimMode')}
               </button>
             </div>
           )}
@@ -1295,24 +1295,24 @@ function ScaffoldPageContent() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <ScanLine className="h-5 w-5 text-violet-600" />
-              AI BIM Mode — 写真・図面から足場モデル
+              {t('scaffold', 'aiBimModeTitle')}
             </h2>
             <p className="text-sm text-gray-600 mb-6">
               {aiBimPreview
-                ? '抽出結果を確認し、問題なければ「確認して足場モデルを作成」を押してください。'
-                : '写真・青写真・DXF/CAD図面・IFC（BIM）・3D BIMレンダリング画像をアップロードすると、建物の外形と高さを検出し、確認後に足場モデルとBOMを生成します。'}
+                ? t('scaffold', 'aiBimModeReady')
+                : t('scaffold', 'aiBimModeDescription')}
             </p>
             {!aiBimPreview && (
               <p className="text-xs text-violet-700/90 -mt-4 mb-6">
-                PNG/JPEG などの画像では、3Dビューの建物色もアップロード画像から自動サンプリングします（立面・パース向け）。
+                {t('scaffold', 'aiBimColorSamplingHint')}
               </p>
             )}
             {!aiBimPreview && (
             <>
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
-              <span className="text-sm font-medium text-violet-700 mb-1">クリックまたはドラッグでファイルをアップロード</span>
-              <span className="text-xs text-gray-500">PNG, JPEG, DXF, DWG, JWW, IFC（BIM）, PDF (max 50MB). 3D BIMスクリーンショットも対応</span>
+              <span className="text-sm font-medium text-violet-700 mb-1">{t('scaffold', 'aiBimUploadCta')}</span>
+              <span className="text-xs text-gray-500">{t('scaffold', 'aiBimAcceptedFormats')}</span>
               <input
                 type="file"
                 className="hidden"
@@ -1392,8 +1392,14 @@ function ScaffoldPageContent() {
                       const oH = Math.max(ob.mxy - ob.mny, 1e-9);
                       const nW = Math.max(nb.mxx - nb.mnx, 1e-9);
                       const nH = Math.max(nb.mxy - nb.mny, 1e-9);
-                      if (Math.abs(oW - nW) < 1 && Math.abs(oH - nH) < 1 &&
-                          Math.abs(ob.mnx - nb.mnx) < 1 && Math.abs(ob.mny - nb.mny) < 1) {
+                      // Skip normalization only if both coordinate spaces are already
+                      // comparable in scale (ratio-based: within 10x of each other).
+                      const spreadRatio = Math.max(oW, oH) > 1e-9
+                        ? Math.max(nW, nH) / Math.max(oW, oH)
+                        : 1;
+                      if (spreadRatio > 0.1 && spreadRatio < 10 &&
+                          Math.abs(ob.mnx - nb.mnx) < Math.max(oW, nW) * 0.1 &&
+                          Math.abs(ob.mny - nb.mny) < Math.max(oH, nH) * 0.1) {
                         return footprint.massingTiers;
                       }
                       return footprint.massingTiers.map((tier: any) => ({
