@@ -557,7 +557,7 @@ export function PerimeterTracer({
         const ys0 = segs.flatMap(s => [s.start.y, s.end.y]);
         const bw = Math.max(...xs0) - Math.min(...xs0);
         let sc = 1;
-        if (bw > 0 && bw < 100) sc = 1000; // assume meters → mm
+        if (bw > 0 && bw < 200) sc = 1000; // assume meters → mm
         if (sc !== 1) {
           segs = segs.map(s => ({
             start: { x: s.start.x * sc, y: s.start.y * sc },

@@ -91,14 +91,25 @@ function normalizeFootprintToMm(
     return raw.map((p) => ({ x: p.x * scale, z: p.z * scale }));
   }
 
-  // If wallLengthsMm hint shows real mm scale (any length >= 3000mm), trust as-is
-  const hasRealMmHint =
-    maxSpread >= 3000 ||
-    (Array.isArray(wallLengthsMm) && wallLengthsMm.some((l) => l >= 3000));
-
-  if (hasRealMmHint) {
-    // Already in mm: use as-is
+  // Vertices already in real mm (spread >= 3000mm)
+  if (maxSpread >= 3000) {
     return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
+  }
+
+  // Vertices in meters: wallLengthsMm are in mm (>= 3000) but vertex spread is < 200.
+  // The AI returned meter-scale coordinates (e.g. 8.25 for 8.25m) → multiply by 1000.
+  // We confirm by comparing vertex-derived perimeter with wallLengthsMm sum.
+  const wallLengthsAreMm = Array.isArray(wallLengthsMm) && wallLengthsMm.some((l) => l >= 3000);
+  if (wallLengthsAreMm && maxSpread > 1.1 && maxSpread < 200) {
+    let vPerimeter = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const j = (i + 1) % raw.length;
+      vPerimeter += Math.hypot(raw[j].x - raw[i].x, raw[j].z - raw[i].z);
+    }
+    const wPerimeter = wallLengthsMm!.reduce((a, b) => a + b, 0);
+    if (vPerimeter > 0 && wPerimeter / vPerimeter > 500) {
+      return raw.map((p) => ({ x: p.x * 1000, z: p.z * 1000 }));
+    }
   }
 
   // Pixel-scale coords: spread is 1.1–3000, no real-mm hint (AI returned pixel coordinates).
