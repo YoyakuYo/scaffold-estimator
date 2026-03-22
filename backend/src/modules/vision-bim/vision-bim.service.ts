@@ -989,6 +989,14 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         parsed.heightConfidence = rawHeightConf;
       }
 
+      // m→mm conversion for buildingHeightMm: values 1–200 are almost certainly meters
+      if (parsed.buildingHeightMm && parsed.buildingHeightMm > 0 && parsed.buildingHeightMm < 200) {
+        const converted = Math.round(parsed.buildingHeightMm * 1000);
+        this.logger.warn(
+          `buildingHeightMm auto-converted from m→mm: ${parsed.buildingHeightMm} → ${converted}`,
+        );
+        parsed.buildingHeightMm = converted;
+      }
       const heightWasExplicit = parsed.buildingHeightMm && parsed.buildingHeightMm >= 1000;
       if (!parsed.buildingHeightMm || parsed.buildingHeightMm < 1000) {
         const floors = typeof (parsed as any).floorCount === 'number' && (parsed as any).floorCount >= 1
@@ -1026,11 +1034,18 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         : undefined;
 
       if (wallLengths) {
-        const maxVal = Math.max(...wallLengths);
-        // If all values look like metres (max < 100), auto-convert to mm
-        if (maxVal < 100 && wallLengths.every((l) => typeof l === 'number' && l > 0)) {
-          wallLengths = wallLengths.map((l) => Math.round(l * 1000));
-          this.logger.warn(`wallLengthsMm auto-converted from m→mm (max was ${maxVal})`);
+        // Per-value m→mm conversion: values < 200 are almost certainly meters
+        // (200mm = 20cm, impossibly small for any building wall).
+        // Values >= 1000 are almost certainly mm (no building wall is ≥ 1km).
+        // This handles mixed cases where the AI converted some values but not others.
+        const meterLikeCount = wallLengths.filter(
+          (l) => typeof l === 'number' && l > 0 && l < 200,
+        ).length;
+        if (meterLikeCount > 0 && wallLengths.every((l) => typeof l === 'number' && l > 0)) {
+          wallLengths = wallLengths.map((l) => (l < 200 ? Math.round(l * 1000) : l));
+          this.logger.warn(
+            `wallLengthsMm: converted ${meterLikeCount}/${wallLengths.length} values from m→mm (values < 200 treated as meters)`,
+          );
         }
         // Fix 1: one value 3xxx (e.g. 3593) when dimension was 33.593 m – even if another small (e.g. 1733) exists
         const threeK = wallLengths.filter((l) => typeof l === 'number' && l >= 3000 && l < 4000);
@@ -1086,10 +1101,13 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       if (Array.isArray((parsed as any).wallHeightsMm)) {
         let wallHeights = (parsed as any).wallHeightsMm as number[];
         if (wallHeights.length === n && wallHeights.every((h: any) => typeof h === 'number' && h > 0)) {
-          const maxH = Math.max(...wallHeights);
-          if (maxH < 100) {
-            wallHeights = wallHeights.map((h) => Math.round(h * 1000));
-            this.logger.warn(`wallHeightsMm auto-converted from m→mm (max was ${maxH})`);
+          // Per-value m→mm conversion: values < 200 are almost certainly meters
+          const meterLikeH = wallHeights.filter((h) => h > 0 && h < 200).length;
+          if (meterLikeH > 0) {
+            wallHeights = wallHeights.map((h) => (h < 200 ? Math.round(h * 1000) : h));
+            this.logger.warn(
+              `wallHeightsMm: converted ${meterLikeH}/${wallHeights.length} values from m→mm`,
+            );
           }
           if (wallHeights.every((h) => h >= 1000)) {
             parsed.wallHeightsMm = wallHeights;
