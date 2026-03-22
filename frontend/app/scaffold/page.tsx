@@ -1808,7 +1808,6 @@ function ScaffoldPageContent() {
                         const outline = aiBimPreview.buildingOutline;
                         // Auto-decompose walls for stepped/setback buildings
                         let finalWalls = aiBimPreview.dto.walls;
-                        let finalMassingTiers = aiBimPreview.massingTiers;
                         if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 0) {
                           const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
                           const decomposed = decomposeTierWalls(
@@ -1816,11 +1815,8 @@ function ScaffoldPageContent() {
                             aiBimPreview.massingTiers,
                             aiBimPreview.buildingHeightMm,
                           );
-                          if (decomposed.massingTiers && decomposed.massingTiers.length > 0) {
-                            finalMassingTiers = decomposed.massingTiers;
-                          }
-                          if (decomposed.walls.length > 0 && decomposed.walls !== aiBimPreview.dto.walls) {
-                            finalWalls = decomposed.walls;
+                          if (decomposed.length > 0 && decomposed !== aiBimPreview.dto.walls) {
+                            finalWalls = decomposed;
                           }
                         }
                         // When walls still have uniform max height but isStepped,
@@ -1845,7 +1841,6 @@ function ScaffoldPageContent() {
                         const dto = {
                           ...aiBimPreview.dto,
                           walls: sanitizedWalls,
-                          ...(finalMassingTiers && finalMassingTiers.length > 0 && { massingTiers: finalMassingTiers }),
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
                           ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };
