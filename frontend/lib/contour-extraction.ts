@@ -205,7 +205,7 @@ export function applyContourExtraction(
 
   let pts = [...vertices];
 
-  if (!options?.skipOrthoCorrection) {
+  if (!options?.skipOrthoCorrection && !isNonOrthogonalPolygon(pts)) {
     pts = applyOrthogonalCorrection(pts);
   }
 

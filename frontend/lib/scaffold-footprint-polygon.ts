@@ -251,6 +251,29 @@ export function buildFootprintPolygonXZ(
   const orthoResult = tryOrthogonalFallback(walls, n);
   if (orthoResult) return orthoResult;
 
+  // ── Direction-preserving fallback: use actual edge angles from stored vertices ──
+  if (storedVertices && storedVertices.length >= n) {
+    const raw = storedVertices.slice(0, n).map(normaliseVertex);
+    const dirVerts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
+    let dcx = 0, dcz = 0;
+    for (let i = 0; i < n - 1; i++) {
+      const rawDx = raw[(i + 1) % n].x - raw[i].x;
+      const rawDz = raw[(i + 1) % n].z - raw[i].z;
+      const rawLen = Math.hypot(rawDx, rawDz);
+      const lenM = wallLenM(walls, i);
+      if (rawLen > 1e-6) {
+        dcx += (rawDx / rawLen) * lenM;
+        dcz += (rawDz / rawLen) * lenM;
+      } else {
+        const fallbackAngle = i * (2 * Math.PI) / n;
+        dcx += lenM * Math.cos(fallbackAngle);
+        dcz += lenM * Math.sin(fallbackAngle);
+      }
+      dirVerts.push({ x: dcx, z: dcz });
+    }
+    if (dirVerts.length === n && hasPlausiblePolygonEdges(dirVerts, walls)) return dirVerts;
+  }
+
   // ── Last resort: regular n-gon from lengths ──
   const extAngle = (2 * Math.PI) / n;
   const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];

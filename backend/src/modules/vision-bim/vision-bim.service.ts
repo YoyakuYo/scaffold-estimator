@@ -278,6 +278,9 @@ Some floor plans have walls at angles other than 90°. For these buildings:
 - Do NOT project angled walls onto horizontal/vertical axes — use the actual wall length.
 - wallLengthsMm MUST have different values for different-length walls. If you return the SAME value for all walls, that is WRONG — it means you failed to read individual dimensions. Go back and read each wall's dimension annotation carefully.
 - If an angled wall has no direct dimension annotation, compute its length from the X and Y offsets at its endpoints using the Pythagorean theorem and nearby dimensions.
+- VERTEX POSITIONS ARE CRITICAL: For non-orthogonal buildings, the {x, y} vertex coordinates MUST match where walls actually meet in the image. Do NOT guess positions — measure them from the drawing. Wall lengths alone do not define the shape; the angles between walls (determined by vertex positions) are equally important.
+- SELF-CHECK: If your output vertices form a REGULAR polygon (all turn angles approximately equal, like an octagon), but the drawing shows DIFFERENT angles at different corners, your vertex positions are WRONG. Go back and place each vertex at the actual corner location in image pixel coordinates.
+- COMMON MISTAKE: Returning correct wall lengths but placing vertices at equal angular intervals produces a regular n-gon shape that does not match the actual building. The shape of the polygon must match the shape visible in the drawing.
 
 CRITICAL — structural grid vs. building edge:
 Construction plans show internal structural grids (Y1/Y2/Y3/Y4 lines, column circles). These are NOT building edges.
