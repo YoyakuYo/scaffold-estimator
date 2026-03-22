@@ -131,6 +131,29 @@ function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefin
   if (small.length === 1 && large.length === out.length - 1) {
     out = out.map((l) => (l >= 1000 && l < 6000 ? l + 30000 : l));
   }
+  // Case 3: Snap to nearest 50mm — construction dimensions are multiples of 50mm.
+  // Only snap values very close to a 50mm boundary (within 20mm) to avoid
+  // wrong-snapping genuinely odd dimensions like 2121mm diagonals.
+  out = out.map((l) => {
+    const nearest50 = Math.round(l / 50) * 50;
+    return Math.abs(l - nearest50) <= 20 ? nearest50 : l;
+  });
+  // Case 4: Rectangle equalization — for 4-wall buildings, opposite walls should match.
+  // If pairs (0,2) and (1,3) differ by < 100mm, average each pair to nearest 50mm.
+  if (out.length === 4) {
+    const diff02 = Math.abs(out[0] - out[2]);
+    const diff13 = Math.abs(out[1] - out[3]);
+    if (diff02 > 0 && diff02 < 100) {
+      const avg = Math.round((out[0] + out[2]) / 2 / 50) * 50;
+      out[0] = avg;
+      out[2] = avg;
+    }
+    if (diff13 > 0 && diff13 < 100) {
+      const avg = Math.round((out[1] + out[3]) / 2 / 50) * 50;
+      out[1] = avg;
+      out[3] = avg;
+    }
+  }
   return out;
 }
 
