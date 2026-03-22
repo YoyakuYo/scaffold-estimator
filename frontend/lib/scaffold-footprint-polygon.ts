@@ -33,6 +33,22 @@ function wallLenM(walls: Array<{ wallLengthMm?: number }>, i: number): number {
   return safeMm / 1000;
 }
 
+function hasPlausiblePolygonEdges(
+  verts: FootprintVertexXZ[],
+  walls: Array<{ wallLengthMm?: number }>,
+): boolean {
+  const n = walls.length;
+  if (verts.length !== n || n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const p1 = verts[i];
+    const p2 = verts[(i + 1) % n];
+    if (!p1 || !p2) return false;
+    const len = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    if (!Number.isFinite(len) || len < 0.1) return false;
+  }
+  return true;
+}
+
 /**
  * Generate combinations C(n, k): choose k indices from 0..n-1.
  */
@@ -226,7 +242,7 @@ export function buildFootprintPolygonXZ(
           const dz = (rawDz / rawLen) * tgtLen;
           corrected.push({ x: prev.x + dx, z: prev.z + dz });
         }
-        if (corrected.length === n) return corrected;
+        if (corrected.length === n && hasPlausiblePolygonEdges(corrected, walls)) return corrected;
       }
     }
   }

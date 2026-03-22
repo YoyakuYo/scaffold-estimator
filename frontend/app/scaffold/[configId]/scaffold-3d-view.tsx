@@ -1319,6 +1319,17 @@ export default function Scaffold3DView({
 
       // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
       const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
+      const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
+        if (poly.length !== wallCount || wallCount < 3) return false;
+        for (let i = 0; i < wallCount; i++) {
+          const p1 = poly[i];
+          const p2 = poly[(i + 1) % wallCount];
+          if (!p1 || !p2) return false;
+          const len = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+          if (!Number.isFinite(len) || len < 0.05) return false;
+        }
+        return true;
+      };
       for (let tgi = 0; tgi < tierPolygons.length; tgi++) {
         const tp = tierPolygons[tgi];
         const tg = tierGroups[tgi];
@@ -1328,7 +1339,8 @@ export default function Scaffold3DView({
         const finite =
           pv >= 2 &&
           pv === nW &&
-          tp.verts!.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          tp.verts!.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
+          hasUsableTierEdges(tp.verts!, nW);
         if (finite) continue;
 
         const sv = tgi === 0 ? storedVerts : undefined;

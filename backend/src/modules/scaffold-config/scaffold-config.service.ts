@@ -142,6 +142,10 @@ export class ScaffoldConfigService {
         enabled: true,
         stairAccessCount: w.stairAccessCount,
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
+        ...(w.scaffoldWidthMm != null && { scaffoldWidthMm: w.scaffoldWidthMm }),
+        ...(w.baseHeightMm != null && { baseHeightMm: w.baseHeightMm }),
+        ...(w.tierGroup != null && { tierGroup: w.tierGroup }),
+        ...(w.tierIndex != null && { tierIndex: w.tierIndex }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
       // wallStandoffMm omitted from insert until migration 113 is applied; see calculationResult for value
@@ -354,6 +358,10 @@ export class ScaffoldConfigService {
         enabled: true,
         stairAccessCount: w.stairAccessCount,
         ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
+        ...(w.scaffoldWidthMm != null && { scaffoldWidthMm: w.scaffoldWidthMm }),
+        ...(w.baseHeightMm != null && { baseHeightMm: w.baseHeightMm }),
+        ...(w.tierGroup != null && { tierGroup: w.tierGroup }),
+        ...(w.tierIndex != null && { tierIndex: w.tierIndex }),
       })),
       scaffoldWidthMm: dto.scaffoldWidthMm,
       // wallStandoffMm omitted from update until migration 113 is applied
@@ -406,7 +414,18 @@ export class ScaffoldConfigService {
     config.scaffoldType = scaffoldType;
     config.structureType = dto.structureType || '改修工事';
     config.buildingHeightMm = Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0);
-    config.walls = wallsToCalculate.map((w) => ({ side: w.side, wallLengthMm: w.wallLengthMm, wallHeightMm: w.wallHeightMm, enabled: true, stairAccessCount: w.stairAccessCount, ...(w.segments && w.segments.length > 0 && { segments: w.segments }) }));
+    config.walls = wallsToCalculate.map((w) => ({
+      side: w.side,
+      wallLengthMm: w.wallLengthMm,
+      wallHeightMm: w.wallHeightMm,
+      enabled: true,
+      stairAccessCount: w.stairAccessCount,
+      ...(w.segments && w.segments.length > 0 && { segments: w.segments }),
+      ...(w.scaffoldWidthMm != null && { scaffoldWidthMm: w.scaffoldWidthMm }),
+      ...(w.baseHeightMm != null && { baseHeightMm: w.baseHeightMm }),
+      ...(w.tierGroup != null && { tierGroup: w.tierGroup }),
+      ...(w.tierIndex != null && { tierIndex: w.tierIndex }),
+    }));
     config.scaffoldWidthMm = dto.scaffoldWidthMm;
     config.wallStandoffMm = wallStandoffMm;
     config.calculationResult = calculationResult;

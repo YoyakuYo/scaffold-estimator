@@ -121,6 +121,10 @@ export interface ScaffoldConfiguration {
     enabled: boolean;
     stairAccessCount: number;
     segments?: WallSegment[];
+    scaffoldWidthMm?: number;
+    baseHeightMm?: number;
+    tierGroup?: string;
+    tierIndex?: number;
   }>;
   scaffoldWidthMm: number;
   /** Distance from building wall to nearest posts (mm). 250–500. */

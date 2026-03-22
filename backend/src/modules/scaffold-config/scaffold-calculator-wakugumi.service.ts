@@ -549,6 +549,9 @@ export class ScaffoldCalculatorWakugumiService {
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
       doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
+      baseHeightMm: wall.baseHeightMm,
+      tierGroup: wall.tierGroup,
+      tierIndex: wall.tierIndex,
     };
   }
 
