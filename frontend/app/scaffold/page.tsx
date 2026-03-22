@@ -1806,13 +1806,31 @@ function ScaffoldPageContent() {
                       setAiBimConfirming(true);
                       try {
                         const outline = aiBimPreview.buildingOutline;
-                        // Auto-decompose walls for stepped/setback buildings
+                        // Keep scaffold on the exterior envelope by default.
+                        // Inset/setback tiers represent inner terrace faces; decomposing those
+                        // tiers into independent walls makes scaffold run into the interior.
                         let finalWalls = aiBimPreview.dto.walls;
-                        if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 0) {
+                        const massingTiers = Array.isArray(aiBimPreview.massingTiers)
+                          ? aiBimPreview.massingTiers
+                          : [];
+                        const hasMassingTiers = massingTiers.length > 0;
+                        const outlineArea = previewPolygonArea(outline ?? []);
+                        const hasInsetTier = hasMassingTiers && outlineArea > 1e-6
+                          ? massingTiers.some((tier) => {
+                              if (!Array.isArray(tier.vertices) || tier.vertices.length < 3) return false;
+                              const tierArea = previewPolygonArea(tier.vertices as any);
+                              return tierArea > 1e-6 && tierArea < outlineArea * 0.985;
+                            })
+                          : false;
+                        const shouldDecomposeTierWalls =
+                          hasMassingTiers &&
+                          !aiBimPreview.isStepped &&
+                          !hasInsetTier;
+                        if (shouldDecomposeTierWalls) {
                           const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
                           const decomposed = decomposeTierWalls(
                             aiBimPreview.dto.walls,
-                            aiBimPreview.massingTiers,
+                            massingTiers,
                             aiBimPreview.buildingHeightMm,
                           );
                           if (decomposed.length > 0 && decomposed !== aiBimPreview.dto.walls) {
