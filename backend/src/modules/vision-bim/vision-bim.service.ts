@@ -1677,11 +1677,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
    * Pick horizontal vs vertical axes: footprint should have the largest 2D convex hull
    * when projected onto the ground plane (side-elevation projections are thin).
    *
-   * Both plan axes are negated (180° rotation) so the 3D scaffold view's
-   * isometric camera at (+X, +Y, +Z) shows the building with the same
-   * left-right orientation as a standard south-facing elevation view.
-   * IFC Z-up: X=east, Y=north → footprint (-X, -Y) = (west, south)
-   * maps to 3D (x=west, z=south) → camera sees south face with west on left.
+   * The depth axis (Y in Z-up, Z in Y-up) is negated so the 3D scaffold
+   * view's isometric camera at (+X, +Y, +Z) shows the building with the
+   * same left-right orientation as a standard south-facing elevation view.
+   * IFC Z-up: X=east, Y=north → footprint (X, -Y) = (east, south)
+   * maps to 3D (x=east, z=south) → camera sees south face correctly.
    */
   private selectIfcFootprintPlane(xyzPoints: Array<{ x: number; y: number; z: number }>): {
     kind: 'xy' | 'xz' | 'yz';
@@ -1698,19 +1698,19 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       {
         kind: 'xy',
         area: this.convexHullArea2D(sample.map((p) => ({ x: p.x, y: p.y }))),
-        toFootprintXY: (p) => ({ x: -p.x, y: -p.y }),
+        toFootprintXY: (p) => ({ x: p.x, y: -p.y }),
         vertical: (p) => p.z,
       },
       {
         kind: 'xz',
         area: this.convexHullArea2D(sample.map((p) => ({ x: p.x, y: p.z }))),
-        toFootprintXY: (p) => ({ x: -p.x, y: -p.z }),
+        toFootprintXY: (p) => ({ x: p.x, y: -p.z }),
         vertical: (p) => p.y,
       },
       {
         kind: 'yz',
         area: this.convexHullArea2D(sample.map((p) => ({ x: p.y, y: p.z }))),
-        toFootprintXY: (p) => ({ x: -p.y, y: -p.z }),
+        toFootprintXY: (p) => ({ x: p.y, y: -p.z }),
         vertical: (p) => p.x,
       },
     ];
