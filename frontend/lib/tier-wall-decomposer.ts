@@ -21,6 +21,7 @@ interface TierPerimeter {
   tierIndex: number;
   baseHeightMm: number;
   topHeightMm: number;
+  sourceIndex?: number;
   edges: Array<{
     lengthMm: number;
     direction: number; // angle in radians
@@ -28,6 +29,11 @@ interface TierPerimeter {
     startY: number;
   }>;
   vertices: Array<{ x: number; y: number }>;
+}
+
+export interface DecomposedTierWallsResult {
+  walls: WallInput[];
+  massingTiers?: BuildingMassingTier[];
 }
 
 /**
@@ -42,19 +48,23 @@ export function decomposeTierWalls(
   walls: WallInput[],
   massingTiers: BuildingMassingTier[],
   buildingHeightMm: number,
-): WallInput[] {
-  if (!massingTiers || massingTiers.length === 0) return walls;
+): DecomposedTierWallsResult {
+  if (!massingTiers || massingTiers.length === 0) return { walls, massingTiers };
 
   const sorted = [...massingTiers]
     .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
     .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0));
 
-  if (sorted.length === 0) return walls;
+  if (sorted.length === 0) return { walls, massingTiers };
 
   const tiers = normalizeTiers(sorted, walls, buildingHeightMm);
-  if (tiers.length === 0) return walls;
+  if (tiers.length === 0) return { walls, massingTiers: sorted };
 
   const result: WallInput[] = [];
+  const rotatedMassingTiers = sorted.map((tier) => ({
+    ...tier,
+    vertices: Array.isArray(tier.vertices) ? [...tier.vertices] : tier.vertices,
+  }));
   let tierWallSeq = 0;
 
   for (let ti = 0; ti < tiers.length; ti++) {
@@ -62,7 +72,23 @@ export function decomposeTierWalls(
     const tierHeight = tier.topHeightMm - tier.baseHeightMm;
     if (tierHeight <= 0) continue;
 
-    for (let ei = 0; ei < tier.edges.length; ei++) {
+    const previousTier = ti > 0 ? tiers[ti - 1] : undefined;
+    const exteriorRun = previousTier ? findExteriorEdgeRun(tier, previousTier) : null;
+    const edgeOrder = exteriorRun
+      ? Array.from({ length: exteriorRun.edgeCount }, (_, idx) => (exteriorRun.startEdgeIndex + idx) % tier.edges.length)
+      : Array.from({ length: tier.edges.length }, (_, idx) => idx);
+
+    if (
+      exteriorRun &&
+      tier.sourceIndex != null &&
+      tier.sourceIndex >= 0 &&
+      tier.sourceIndex < rotatedMassingTiers.length
+    ) {
+      const sourceTier = rotatedMassingTiers[tier.sourceIndex]!;
+      sourceTier.vertices = rotateArray(sourceTier.vertices, exteriorRun.startEdgeIndex);
+    }
+
+    for (const ei of edgeOrder) {
       const edge = tier.edges[ei];
       if (edge.lengthMm < 300) continue;
 
@@ -87,7 +113,10 @@ export function decomposeTierWalls(
     }
   }
 
-  return result.length > 0 ? result : walls;
+  return {
+    walls: result.length > 0 ? result : walls,
+    massingTiers: rotatedMassingTiers,
+  };
 }
 
 /**
@@ -133,6 +162,7 @@ function normalizeTiers(
       tierIndex: i,
       baseHeightMm: baseH,
       topHeightMm: topH,
+      sourceIndex: i,
       edges,
       vertices: verts,
     });
@@ -285,6 +315,104 @@ function normalizeAngle(a: number): number {
   while (a > Math.PI) a -= 2 * Math.PI;
   while (a < -Math.PI) a += 2 * Math.PI;
   return a;
+}
+
+function rotateArray<T>(items: T[], startIndex: number): T[] {
+  if (items.length === 0) return items;
+  const start = ((startIndex % items.length) + items.length) % items.length;
+  if (start === 0) return [...items];
+  return [...items.slice(start), ...items.slice(0, start)];
+}
+
+function distancePointToLine(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return Math.hypot(p.x - a.x, p.y - a.y);
+  return Math.abs(dx * (a.y - p.y) - (a.x - p.x) * dy) / len;
+}
+
+function segmentsCollinearlyOverlap(
+  a1: { x: number; y: number },
+  a2: { x: number; y: number },
+  b1: { x: number; y: number },
+  b2: { x: number; y: number },
+): boolean {
+  const adx = a2.x - a1.x;
+  const ady = a2.y - a1.y;
+  const bdx = b2.x - b1.x;
+  const bdy = b2.y - b1.y;
+  const aLen = Math.hypot(adx, ady);
+  const bLen = Math.hypot(bdx, bdy);
+  if (aLen < 1 || bLen < 1) return false;
+
+  const dirCross = Math.abs((adx / aLen) * (bdy / bLen) - (ady / aLen) * (bdx / bLen));
+  if (dirCross > 0.08) return false;
+
+  const lineTol = Math.max(150, Math.min(aLen, bLen) * 0.03);
+  if (distancePointToLine(b1, a1, a2) > lineTol || distancePointToLine(b2, a1, a2) > lineTol) {
+    return false;
+  }
+
+  const ux = adx / aLen;
+  const uy = ady / aLen;
+  const projA1 = 0;
+  const projA2 = aLen;
+  const projB1 = (b1.x - a1.x) * ux + (b1.y - a1.y) * uy;
+  const projB2 = (b2.x - a1.x) * ux + (b2.y - a1.y) * uy;
+  const minA = Math.min(projA1, projA2);
+  const maxA = Math.max(projA1, projA2);
+  const minB = Math.min(projB1, projB2);
+  const maxB = Math.max(projB1, projB2);
+  const overlap = Math.min(maxA, maxB) - Math.max(minA, minB);
+  return overlap > Math.max(300, Math.min(aLen, bLen) * 0.2);
+}
+
+function findExteriorEdgeRun(
+  tier: TierPerimeter,
+  lowerTier: TierPerimeter,
+): { startEdgeIndex: number; edgeCount: number } | null {
+  const currentEdgeCount = tier.vertices.length;
+  const lowerEdgeCount = lowerTier.vertices.length;
+  if (currentEdgeCount < 4 || lowerEdgeCount < 3) return null;
+
+  const keep = Array.from({ length: currentEdgeCount }, (_, currentIdx) => {
+    const c1 = tier.vertices[currentIdx]!;
+    const c2 = tier.vertices[(currentIdx + 1) % currentEdgeCount]!;
+    for (let lowerIdx = 0; lowerIdx < lowerEdgeCount; lowerIdx++) {
+      const l1 = lowerTier.vertices[lowerIdx]!;
+      const l2 = lowerTier.vertices[(lowerIdx + 1) % lowerEdgeCount]!;
+      if (segmentsCollinearlyOverlap(c1, c2, l1, l2)) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  const keepCount = keep.filter(Boolean).length;
+  if (keepCount === 0 || keepCount === currentEdgeCount) return null;
+
+  let runStart = -1;
+  let runCount = 0;
+  let runTransitions = 0;
+  for (let i = 0; i < currentEdgeCount; i++) {
+    const curr = keep[i]!;
+    const prev = keep[(i - 1 + currentEdgeCount) % currentEdgeCount]!;
+    if (curr && !prev) {
+      runTransitions++;
+      if (runStart < 0) runStart = i;
+    }
+  }
+  if (runTransitions !== 1 || runStart < 0) return null;
+
+  while (runCount < currentEdgeCount && keep[(runStart + runCount) % currentEdgeCount]) {
+    runCount++;
+  }
+  return runCount >= 2 ? { startEdgeIndex: runStart, edgeCount: runCount } : null;
 }
 
 /**

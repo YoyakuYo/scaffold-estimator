@@ -1276,21 +1276,23 @@ export default function Scaffold3DView({
         const nW = tg.walls.length;
         let footprintFromMassing = false;
         let tverts: PointXZ[] = [];
+        const tierVertsMatch = (tier?: BuildingMassingTier) =>
+          !!tier && Array.isArray(tier.vertices) && (tier.vertices.length === nW || tier.vertices.length > nW);
 
         const byBase = massingTiersSorted.find(
           (m) => Math.abs((m.baseHeightMm ?? 0) - (tg.baseHeightMm ?? 0)) <= 2,
         );
         const byIdx = massingTiersSorted[tg.tierIndex];
         const candidate =
-          byBase && byBase.vertices.length === nW
+          tierVertsMatch(byBase)
             ? byBase
-            : byIdx && byIdx.vertices.length === nW
+            : tierVertsMatch(byIdx)
               ? byIdx
               : undefined;
 
-        if (bimPlan && candidate && candidate.vertices.length === nW) {
+        if (bimPlan && candidate) {
           const mapped = bimPlan.toPlanM(candidate.vertices as any);
-          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+          if (mapped.length >= nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
             tverts = mapped;
             footprintFromMassing = true;
           }
@@ -1302,7 +1304,7 @@ export default function Scaffold3DView({
             verts,
             rawBaseVertsForMassing,
           );
-          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+          if (mapped.length >= nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
             tverts = mapped;
             footprintFromMassing = true;
           }
@@ -1317,13 +1319,16 @@ export default function Scaffold3DView({
         tierPolygons.push({ verts: tverts, footprintFromMassing });
       }
 
-      // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
+      // Tier polygons can be:
+      // - closed: vertices === wall count
+      // - open run: vertices  > wall count (uses first wallCount+1 vertices)
       const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
       const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
-        if (poly.length !== wallCount || wallCount < 3) return false;
+        if (poly.length < wallCount || wallCount < 2) return false;
+        const isOpenPath = poly.length > wallCount;
         for (let i = 0; i < wallCount; i++) {
           const p1 = poly[i];
-          const p2 = poly[(i + 1) % wallCount];
+          const p2 = isOpenPath ? poly[i + 1] : poly[(i + 1) % wallCount];
           if (!p1 || !p2) return false;
           const len = Math.hypot(p2.x - p1.x, p2.z - p1.z);
           if (!Number.isFinite(len) || len < 0.05) return false;
@@ -1338,7 +1343,7 @@ export default function Scaffold3DView({
         const pv = tp.verts?.length ?? 0;
         const finite =
           pv >= 2 &&
-          pv === nW &&
+          pv >= nW &&
           tp.verts!.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
           hasUsableTierEdges(tp.verts!, nW);
         if (finite) continue;
