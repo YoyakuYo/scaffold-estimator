@@ -1314,15 +1314,11 @@ export default function Scaffold3DView({
           if (!tok) {
             tverts = [];
           } else if (verts.length >= 1) {
-            // Center-align the upper tier polygon over the ground tier centroid.
-            // Min-corner alignment caused scaffold to appear inside the building on setback floors.
             const gCx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
             const gCz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
             const tCx = tverts.reduce((s, v) => s + v.x, 0) / tverts.length;
             const tCz = tverts.reduce((s, v) => s + v.z, 0) / tverts.length;
-            const shiftX = gCx - tCx;
-            const shiftZ = gCz - tCz;
-            tverts = tverts.map((v) => ({ x: v.x + shiftX, z: v.z + shiftZ }));
+            tverts = tverts.map((v) => ({ x: v.x + (gCx - tCx), z: v.z + (gCz - tCz) }));
           }
         }
 
@@ -1331,6 +1327,14 @@ export default function Scaffold3DView({
 
       // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
       const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
+      const centroidAlignToGround = (poly: PointXZ[]): PointXZ[] => {
+        if (poly.length < 1 || verts.length < 1) return poly;
+        const gCx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
+        const gCz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
+        const pCx = poly.reduce((s, v) => s + v.x, 0) / poly.length;
+        const pCz = poly.reduce((s, v) => s + v.z, 0) / poly.length;
+        return poly.map((v) => ({ x: v.x + (gCx - pCx), z: v.z + (gCz - pCz) }));
+      };
       const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
         if (poly.length !== wallCount || wallCount < 3) return false;
         for (let i = 0; i < wallCount; i++) {
@@ -1342,16 +1346,6 @@ export default function Scaffold3DView({
         }
         return true;
       };
-      // Helper: centroid-align a polygon to the ground tier centroid.
-      const alignPolyToGroundCentroid = (poly: PointXZ[]): PointXZ[] => {
-        if (poly.length < 1) return poly;
-        const gCx = verts.reduce((s, v) => s + v.x, 0) / Math.max(verts.length, 1);
-        const gCz = verts.reduce((s, v) => s + v.z, 0) / Math.max(verts.length, 1);
-        const pCx = poly.reduce((s, v) => s + v.x, 0) / poly.length;
-        const pCz = poly.reduce((s, v) => s + v.z, 0) / poly.length;
-        return poly.map((v) => ({ x: v.x + (gCx - pCx), z: v.z + (gCz - pCz) }));
-      };
-
       for (let tgi = 0; tgi < tierPolygons.length; tgi++) {
         const tp = tierPolygons[tgi];
         const tg = tierGroups[tgi];
@@ -1379,8 +1373,7 @@ export default function Scaffold3DView({
             fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
         }
         if (ok) {
-          // For upper tiers: centroid-align so the scaffold stays on the exterior.
-          tp.verts = tgi === 0 ? fixed : alignPolyToGroundCentroid(fixed);
+          tp.verts = tgi === 0 ? fixed : centroidAlignToGround(fixed);
           tp.footprintFromMassing = false;
           continue;
         }
@@ -1455,9 +1448,6 @@ export default function Scaffold3DView({
       const COS_L_SHAPED_MAX = 0.35;
       const COS_STRAIGHT_MIN = 0.98;
 
-      // Ground-tier normal sign — all upper tiers reuse this to guarantee consistent
-      // outward direction.  Per-tier recomputation from centroid-aligned polygons was
-      // unreliable and caused scaffold to appear inside the building on setback floors.
       const groundTierSignedArea =
         (tierPolygons[0]?.verts?.length ?? 0) >= 3
           ? signedAreaXZ(tierPolygons[0]!.verts!)
@@ -1469,7 +1459,6 @@ export default function Scaffold3DView({
         const tv = tierPolygons[tgi]?.verts ?? verts;
         const tWalls = tg.walls;
         const tOpen = tWalls.length < tv.length;
-        // Use ground-tier sign for all tiers to keep outward normals consistent.
         const tSign = !tOpen && tv.length >= 3 ? groundNormalSign : 1;
         const tNear = buildOffsetPathXZ(tv, tWalls.length, tSign, standoffM, tOpen);
 
@@ -1526,9 +1515,6 @@ export default function Scaffold3DView({
         const tierV = tpd?.tierVerts ?? verts;
         const footprintFromMassing = tierPolygons[tgi]?.footprintFromMassing ?? false;
 
-        // Upper tiers from wall-length-only polygons are already centroid-aligned to the
-        // ground footprint in the tier-polygon-building step above (min-corner caused interior scaffold).
-        // Massing-tier vertices are already in ground footprint space — no offset needed.
         const tierOffX = 0;
         const tierOffZ = 0;
 
@@ -1568,13 +1554,11 @@ export default function Scaffold3DView({
         // Outward normal from polygon winding.
         let nx = tierNormSign * (-dz / edgeLen);
         let nz = tierNormSign * (dx / edgeLen);
-        if (tierIsOpen) {
-          const midX = (v1.x + v2.x) / 2;
-          const midZ = (v1.z + v2.z) / 2;
-          // Use this tier's own centroid (not ground tier cx/cz) to correctly orient the normal
-          // for open polygons on upper setback floors.
+        {
           const tierCx = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.x, 0) / tierV.length : cx;
           const tierCz = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.z, 0) / tierV.length : cz;
+          const midX = (v1.x + v2.x) / 2;
+          const midZ = (v1.z + v2.z) / 2;
           const toCenterX = tierCx - midX;
           const toCenterZ = tierCz - midZ;
           if (nx * toCenterX + nz * toCenterZ > 0) {
@@ -1587,10 +1571,15 @@ export default function Scaffold3DView({
         const tierNearStart = tierNearRow[localIdx];
         const tierNearEndIdx = tierIsOpen ? localIdx + 1 : ((localIdx + 1) % tierNearRow.length);
         const tierNearEnd = tierNearRow[tierNearEndIdx];
-        const nearStart = tierNearStart
+        const isNearOnOutwardSide = (near: PointXZ, base: PointXZ) => {
+          const offDx = near.x - base.x;
+          const offDz = near.z - base.z;
+          return (offDx * nx + offDz * nz) > -1e-6;
+        };
+        const nearStart = tierNearStart && isNearOnOutwardSide(tierNearStart, p1)
           ? { x: tierNearStart.x + tierOffX, z: tierNearStart.z + tierOffZ }
           : fallbackStart;
-        const nearEnd = tierNearEnd
+        const nearEnd = tierNearEnd && isNearOnOutwardSide(tierNearEnd, p2)
           ? { x: tierNearEnd.x + tierOffX, z: tierNearEnd.z + tierOffZ }
           : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
