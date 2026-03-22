@@ -118,6 +118,26 @@ const MAX_3D_RENDER_LEVELS = 60;
 
 type PointXZ = { x: number; z: number };
 
+function pointInPolygonXZ(pt: PointXZ, poly: PointXZ[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const zi = poly[i].z, zj = poly[j].z;
+    if ((zi > pt.z) !== (zj > pt.z) &&
+        pt.x < (poly[j].x - poly[i].x) * (pt.z - zi) / (zj - zi) + poly[i].x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function pointToSegmentDistXZ(p: PointXZ, a: PointXZ, b: PointXZ): number {
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq < 1e-12) return Math.hypot(p.x - a.x, p.z - a.z);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lenSq));
+  return Math.hypot(p.x - (a.x + t * dx), p.z - (a.z + t * dz));
+}
+
 function lineIntersectionXZ(a1: PointXZ, a2: PointXZ, b1: PointXZ, b2: PointXZ): PointXZ | null {
   const dax = a2.x - a1.x;
   const daz = a2.z - a1.z;
@@ -1311,15 +1331,7 @@ export default function Scaffold3DView({
         if (!footprintFromMassing) {
           tverts = buildFootprintPolygonXZ(tg.walls, undefined);
           const tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          if (!tok) {
-            tverts = [];
-          } else if (verts.length >= 1) {
-            const gCx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
-            const gCz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
-            const tCx = tverts.reduce((s, v) => s + v.x, 0) / tverts.length;
-            const tCz = tverts.reduce((s, v) => s + v.z, 0) / tverts.length;
-            tverts = tverts.map((v) => ({ x: v.x + (gCx - tCx), z: v.z + (gCz - tCz) }));
-          }
+          if (!tok) tverts = [];
         }
 
         tierPolygons.push({ verts: tverts, footprintFromMassing });
@@ -1327,14 +1339,6 @@ export default function Scaffold3DView({
 
       // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
       const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
-      const centroidAlignToGround = (poly: PointXZ[]): PointXZ[] => {
-        if (poly.length < 1 || verts.length < 1) return poly;
-        const gCx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
-        const gCz = verts.reduce((s, v) => s + v.z, 0) / verts.length;
-        const pCx = poly.reduce((s, v) => s + v.x, 0) / poly.length;
-        const pCz = poly.reduce((s, v) => s + v.z, 0) / poly.length;
-        return poly.map((v) => ({ x: v.x + (gCx - pCx), z: v.z + (gCz - pCz) }));
-      };
       const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
         if (poly.length !== wallCount || wallCount < 3) return false;
         for (let i = 0; i < wallCount; i++) {
@@ -1373,7 +1377,7 @@ export default function Scaffold3DView({
             fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
         }
         if (ok) {
-          tp.verts = tgi === 0 ? fixed : centroidAlignToGround(fixed);
+          tp.verts = fixed;
           tp.footprintFromMassing = false;
           continue;
         }
@@ -1448,11 +1452,11 @@ export default function Scaffold3DView({
       const COS_L_SHAPED_MAX = 0.35;
       const COS_STRAIGHT_MIN = 0.98;
 
-      const groundTierSignedArea =
+      const groundSignedArea =
         (tierPolygons[0]?.verts?.length ?? 0) >= 3
           ? signedAreaXZ(tierPolygons[0]!.verts!)
           : -1;
-      const groundNormalSign = groundTierSignedArea > 0 ? -1 : 1;
+      const groundNormalSign = groundSignedArea > 0 ? -1 : 1;
 
       for (let tgi = 0; tgi < tierGroups.length; tgi++) {
         const tg = tierGroups[tgi];
@@ -1497,10 +1501,63 @@ export default function Scaffold3DView({
       const isLShapedAtStart = tierPolyData[0]?.isLShapedAtStart ?? [];
       const isLShapedAtEnd = tierPolyData[0]?.isLShapedAtEnd ?? [];
 
+      // ══════════════════════════════════════════════════════
+      // EXTERIOR-ONLY FILTER — skip upper tier walls whose
+      // scaffold overlaps with a lower tier's scaffold strip.
+      // ══════════════════════════════════════════════════════
+      const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
+      if (hasTiers && tierGroups.length > 1) {
+        const scaffoldStripW = standoffM + 1.5;
+        for (let tgi = 1; tgi < tierGroups.length; tgi++) {
+          const tg = tierGroups[tgi];
+          const tv = tierPolygons[tgi]?.verts ?? [];
+          if (tv.length < 2) continue;
+
+          for (let lowerTgi = 0; lowerTgi < tgi; lowerTgi++) {
+            const lv = tierPolygons[lowerTgi]?.verts ?? [];
+            if (lv.length < 3) continue;
+            const lowerWalls = tierGroups[lowerTgi].walls;
+
+            for (let wi = 0; wi < tg.walls.length; wi++) {
+              const globalIdx = tg.wallIndices[wi];
+              if (wallSkipFlags[globalIdx]) continue;
+              const wall = tg.walls[wi];
+              const p1 = tv[wi];
+              const p2 = tv[(wi + 1) % tv.length];
+              if (!p1 || !p2) continue;
+              const mid: PointXZ = { x: (p1.x + p2.x) / 2, z: (p1.z + p2.z) / 2 };
+
+              if (pointInPolygonXZ(mid, lv)) continue;
+
+              let nearDist = Infinity;
+              let nearEdge = -1;
+              for (let gi = 0; gi < lv.length; gi++) {
+                const d = pointToSegmentDistXZ(mid, lv[gi], lv[(gi + 1) % lv.length]);
+                if (d < nearDist) { nearDist = d; nearEdge = gi; }
+              }
+              if (nearDist < scaffoldStripW && nearEdge >= 0 && nearEdge < lowerWalls.length) {
+                const lw = lowerWalls[nearEdge];
+                const lwTopMm =
+                  ((lw as any).baseHeightMm ?? 0) +
+                  (lw.levelCalc?.fullLevels ?? 1) * LEVEL_H * 1000;
+                const upperBaseMm = (wall as any).baseHeightMm ?? 0;
+                if (lwTopMm >= upperBaseMm) {
+                  wallSkipFlags[globalIdx] = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
       // Render scaffold for each wall, using the correct tier polygon
       let renderedWallCount = 0;
       const skipReasons: Record<string, number> = {};
       for (let i = 0; i < walls.length; i++) {
+        if (wallSkipFlags[i]) {
+          skipReasons['exteriorFilter'] = (skipReasons['exteriorFilter'] ?? 0) + 1;
+          continue;
+        }
         const wall = walls[i];
         const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
 
@@ -1513,7 +1570,6 @@ export default function Scaffold3DView({
         }
         const tpd = tierPolyData[tgi];
         const tierV = tpd?.tierVerts ?? verts;
-        const footprintFromMassing = tierPolygons[tgi]?.footprintFromMassing ?? false;
 
         const tierOffX = 0;
         const tierOffZ = 0;
@@ -1551,17 +1607,17 @@ export default function Scaffold3DView({
         const tierNormSign = tpd?.normalSign ?? outwardNormalSign;
         const tierNearRow = tpd?.nearRow ?? nearRowPath;
 
-        // Outward normal from polygon winding.
+        // Outward normal — initial from polygon winding, then verify
+        // geometrically against the tier's own centroid so it ALWAYS
+        // points away from the building.
         let nx = tierNormSign * (-dz / edgeLen);
         let nz = tierNormSign * (dx / edgeLen);
         {
-          const tierCx = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.x, 0) / tierV.length : cx;
-          const tierCz = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.z, 0) / tierV.length : cz;
+          const tCx = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.x, 0) / tierV.length : cx;
+          const tCz = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.z, 0) / tierV.length : cz;
           const midX = (v1.x + v2.x) / 2;
           const midZ = (v1.z + v2.z) / 2;
-          const toCenterX = tierCx - midX;
-          const toCenterZ = tierCz - midZ;
-          if (nx * toCenterX + nz * toCenterZ > 0) {
+          if (nx * (tCx - midX) + nz * (tCz - midZ) > 0) {
             nx = -nx;
             nz = -nz;
           }
@@ -1571,15 +1627,12 @@ export default function Scaffold3DView({
         const tierNearStart = tierNearRow[localIdx];
         const tierNearEndIdx = tierIsOpen ? localIdx + 1 : ((localIdx + 1) % tierNearRow.length);
         const tierNearEnd = tierNearRow[tierNearEndIdx];
-        const isNearOnOutwardSide = (near: PointXZ, base: PointXZ) => {
-          const offDx = near.x - base.x;
-          const offDz = near.z - base.z;
-          return (offDx * nx + offDz * nz) > -1e-6;
-        };
-        const nearStart = tierNearStart && isNearOnOutwardSide(tierNearStart, p1)
+        const nearOnOutward = (near: PointXZ, base: PointXZ) =>
+          (near.x - base.x) * nx + (near.z - base.z) * nz > -1e-6;
+        const nearStart = tierNearStart && nearOnOutward(tierNearStart, p1)
           ? { x: tierNearStart.x + tierOffX, z: tierNearStart.z + tierOffZ }
           : fallbackStart;
-        const nearEnd = tierNearEnd && isNearOnOutwardSide(tierNearEnd, p2)
+        const nearEnd = tierNearEnd && nearOnOutward(tierNearEnd, p2)
           ? { x: tierNearEnd.x + tierOffX, z: tierNearEnd.z + tierOffZ }
           : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
