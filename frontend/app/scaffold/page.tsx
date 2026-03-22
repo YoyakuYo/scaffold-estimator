@@ -1806,22 +1806,35 @@ function ScaffoldPageContent() {
                       setAiBimConfirming(true);
                       try {
                         const outline = aiBimPreview.buildingOutline;
-                        // Auto-decompose walls for stepped/setback buildings while
-                        // filtering to exterior runs per tier.
+                        // Keep scaffold on the exterior envelope by default.
+                        // Inset/setback tiers represent inner terrace faces; decomposing those
+                        // tiers into independent walls makes scaffold run into the interior.
                         let finalWalls = aiBimPreview.dto.walls;
-                        let finalMassingTiers = aiBimPreview.massingTiers;
-                        if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 0) {
+                        const massingTiers = Array.isArray(aiBimPreview.massingTiers)
+                          ? aiBimPreview.massingTiers
+                          : [];
+                        const hasMassingTiers = massingTiers.length > 0;
+                        const outlineArea = previewPolygonArea(outline ?? []);
+                        const hasInsetTier = hasMassingTiers && outlineArea > 1e-6
+                          ? massingTiers.some((tier) => {
+                              if (!Array.isArray(tier.vertices) || tier.vertices.length < 3) return false;
+                              const tierArea = previewPolygonArea(tier.vertices as any);
+                              return tierArea > 1e-6 && tierArea < outlineArea * 0.985;
+                            })
+                          : false;
+                        const shouldDecomposeTierWalls =
+                          hasMassingTiers &&
+                          !aiBimPreview.isStepped &&
+                          !hasInsetTier;
+                        if (shouldDecomposeTierWalls) {
                           const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
                           const decomposed = decomposeTierWalls(
                             aiBimPreview.dto.walls,
-                            aiBimPreview.massingTiers,
+                            massingTiers,
                             aiBimPreview.buildingHeightMm,
                           );
-                          if (decomposed.massingTiers && decomposed.massingTiers.length > 0) {
-                            finalMassingTiers = decomposed.massingTiers;
-                          }
-                          if (decomposed.walls.length > 0 && decomposed.walls !== aiBimPreview.dto.walls) {
-                            finalWalls = decomposed.walls;
+                          if (decomposed.length > 0 && decomposed !== aiBimPreview.dto.walls) {
+                            finalWalls = decomposed;
                           }
                         }
                         // When walls still have uniform max height but isStepped,
@@ -1846,7 +1859,6 @@ function ScaffoldPageContent() {
                         const dto = {
                           ...aiBimPreview.dto,
                           walls: sanitizedWalls,
-                          ...(finalMassingTiers && finalMassingTiers.length > 0 && { massingTiers: finalMassingTiers }),
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
                           ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };
