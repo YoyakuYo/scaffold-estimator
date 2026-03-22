@@ -217,8 +217,6 @@ For each edge in the polygon, find the dimension line that runs PARALLEL to it o
   * When both metric and imperial are shown for the same dimension, use the metric value.
   * When a wall segment has NO dimension line, derive it from the parallel dimension on the opposite side or from the overall minus sub-dimensions.
   * CROSS-CHECK: the sum of all edge lengths should equal the building's total perimeter.
-  * DIGIT ACCURACY: Read each digit carefully. Construction dimensions are almost always multiples of 50mm (e.g. 8250, 12500, 3600, 1800). If your reading gives a non-round value like 12480 or 8230, re-read the dimension text — you likely misread a digit (common confusions: 0↔8, 5↔3, 0↔6).
-  * RECTANGLE CHECK: For rectangular buildings, opposite walls MUST be exactly equal. If you get 8250 and 8230 for opposite walls, one is misread — use the clearer value for both.
 
 FLOOR PLAN SELF-CHECK:
 - Does the sum of vertical edges equal the total height shown by the overall structural-wall dimension? If not, re-read the dimensions.
