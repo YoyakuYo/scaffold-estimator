@@ -1619,7 +1619,26 @@ function ScaffoldPageContent() {
                           {aiBimPreview.walls.map((w, i) => (
                             <tr key={w.side} className={`border-b border-gray-100 last:border-0 ${aiBimPreview.isStepped && w.wallHeightMm !== aiBimPreview.buildingHeightMm ? 'bg-violet-50/50' : ''}`}>
                               <td className="py-2 px-3 text-gray-800">{t('scaffold', 'aiBimWallLabel').replace('{index}', String(i + 1))}</td>
-                              <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
+                              <td className="py-2 px-3 text-right">
+                                <input
+                                  type="number"
+                                  value={w.wallLengthMm}
+                                  onChange={(e) => {
+                                    const len = Math.max(600, Number(e.target.value) || 600);
+                                    const newWalls = aiBimPreview.walls.map((wall, j) =>
+                                      j === i ? { ...wall, wallLengthMm: len } : wall,
+                                    );
+                                    setAiBimPreview({
+                                      ...aiBimPreview,
+                                      walls: newWalls,
+                                      dto: { ...aiBimPreview.dto, walls: newWalls },
+                                    });
+                                  }}
+                                  min={600}
+                                  step={100}
+                                  className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right font-mono focus:ring-2 focus:ring-violet-500"
+                                />
+                              </td>
                               <td className="py-2 px-3 text-right">
                                 <input
                                   type="number"
