@@ -758,11 +758,12 @@ function BuildingPreviewPanel({
   ifcFileUrl?: string;
   ifcArrayBuffer?: ArrayBuffer;
 }) {
+  const { t } = useI18n();
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-gray-500">建物形状プレビュー</span>
+        <span className="text-xs font-medium text-gray-500">{t('scaffold', 'aiBimPreviewTitle')}</span>
         <div className="flex rounded-md border border-gray-300 overflow-hidden text-xs">
           <button
             onClick={() => setViewMode('2d')}
@@ -772,7 +773,7 @@ function BuildingPreviewPanel({
                 : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
-            2D 平面
+            {t('scaffold', 'aiBimPreview2d')}
           </button>
           <button
             onClick={() => setViewMode('3d')}
@@ -782,7 +783,7 @@ function BuildingPreviewPanel({
                 : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
-            3D ビュー
+            {t('scaffold', 'aiBimPreview3d')}
           </button>
         </div>
       </div>
@@ -1363,9 +1364,9 @@ function ScaffoldPageContent() {
                       { wallLengthsMm, wallHeightsMm },
                     );
                     // Normalize massingTier vertices to mm (same coordinate space as buildingOutline).
-                    // The building graph pipeline converts footprint.vertices → mm, but massingTiers
-                    // stay in the AI's original coordinate system (fractional/pixel). Re-map them
-                    // using the bounding box transformation from original → mm outline.
+                    // Compare massingTier vertices directly against buildingOutline — NOT
+                    // footprint.vertices, which may already be converted to mm by the
+                    // building graph pipeline, masking the mismatch.
                     const normalizedMassingTiers = (() => {
                       if (!footprint.massingTiers || footprint.massingTiers.length === 0) return undefined;
                       if (!buildingOutline || buildingOutline.length < 3) return footprint.massingTiers;
@@ -1373,11 +1374,6 @@ function ScaffoldPageContent() {
                         x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
                         y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
                       });
-                      const origPts = footprint.vertices.map(getC);
-                      const newPts = buildingOutline.map((v: any) => ({
-                        x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
-                        y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
-                      }));
                       const bboxOf = (pts: Array<{ x: number; y: number }>) => {
                         let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
                         for (const p of pts) {
@@ -1386,30 +1382,29 @@ function ScaffoldPageContent() {
                         }
                         return { mnx, mny, mxx, mxy };
                       };
-                      const ob = bboxOf(origPts);
-                      const nb = bboxOf(newPts);
-                      const oW = Math.max(ob.mxx - ob.mnx, 1e-9);
-                      const oH = Math.max(ob.mxy - ob.mny, 1e-9);
-                      const nW = Math.max(nb.mxx - nb.mnx, 1e-9);
-                      const nH = Math.max(nb.mxy - nb.mny, 1e-9);
-                      // Skip normalization only if both coordinate spaces are already
-                      // comparable in scale (ratio-based: within 10x of each other).
-                      const spreadRatio = Math.max(oW, oH) > 1e-9
-                        ? Math.max(nW, nH) / Math.max(oW, oH)
-                        : 1;
-                      if (spreadRatio > 0.1 && spreadRatio < 10 &&
-                          Math.abs(ob.mnx - nb.mnx) < Math.max(oW, nW) * 0.1 &&
-                          Math.abs(ob.mny - nb.mny) < Math.max(oH, nH) * 0.1) {
+                      const outlinePts = buildingOutline.map((v: any) => getC(v));
+                      const ob = bboxOf(outlinePts);
+                      const outW = Math.max(ob.mxx - ob.mnx, 1e-9);
+                      const outH = Math.max(ob.mxy - ob.mny, 1e-9);
+                      const tierPts = footprint.massingTiers.flatMap((t: any) =>
+                        Array.isArray(t.vertices) ? t.vertices.map(getC) : [],
+                      );
+                      if (tierPts.length === 0) return footprint.massingTiers;
+                      const tb = bboxOf(tierPts);
+                      const tierW = Math.max(tb.mxx - tb.mnx, 1e-9);
+                      const tierH = Math.max(tb.mxy - tb.mny, 1e-9);
+                      const spreadRatio = Math.max(outW, outH) / Math.max(tierW, tierH);
+                      if (spreadRatio > 0.1 && spreadRatio < 10) {
                         return footprint.massingTiers;
                       }
                       return footprint.massingTiers.map((tier: any) => ({
                         ...tier,
-                        vertices: tier.vertices.map((v: any) => {
+                        vertices: Array.isArray(tier.vertices) ? tier.vertices.map((v: any) => {
                           const c = getC(v);
-                          const nx = nb.mnx + ((c.x - ob.mnx) / oW) * nW;
-                          const ny = nb.mny + ((c.y - ob.mny) / oH) * nH;
+                          const nx = ob.mnx + ((c.x - tb.mnx) / tierW) * outW;
+                          const ny = ob.mny + ((c.y - tb.mny) / tierH) * outH;
                           return { x: Math.round(nx), y: Math.round(ny) };
-                        }),
+                        }) : tier.vertices,
                       }));
                     })();
                     const defaults = getAiBimDefaults();
@@ -1451,7 +1446,7 @@ function ScaffoldPageContent() {
                     });
                     setAiBimError(null);
                   } catch (err: any) {
-                    setAiBimError(err?.message || 'Analysis failed. Try another image or use Drawing/Quick mode.');
+                    setAiBimError(err?.message || t('scaffold', 'aiBimAnalysisFailed'));
                   } finally {
                     setAiBimUploading(false);
                     e.target.value = '';
@@ -1463,7 +1458,7 @@ function ScaffoldPageContent() {
             {aiBimUploading && (
               <div className="mt-4 flex items-center gap-2 text-violet-600">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span>Analyzing image and generating scaffold model…</span>
+                <span>{t('scaffold', 'aiBimAnalyzing')}</span>
               </div>
             )}
             {aiBimError && (
@@ -1481,7 +1476,7 @@ function ScaffoldPageContent() {
                   <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
                     <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                       <Check className="h-5 w-5" />
-                      抽出完了 — 右側で内容を確認してください
+                      {t('scaffold', 'aiBimExtractedComplete')}
                     </p>
                   </div>
                   <button
@@ -1490,14 +1485,14 @@ function ScaffoldPageContent() {
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
                   >
                     <RotateCcw className="h-4 w-4" />
-                    別のファイルをアップロード
+                    {t('scaffold', 'aiBimUploadAnother')}
                   </button>
                 </div>
                 <div className="border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-800">抽出結果の確認</h3>
+                  <h3 className="text-sm font-semibold text-gray-800">{t('scaffold', 'aiBimReviewTitle')}</h3>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
-                      {aiBimPreview.isStepped ? '最大建物高さ (mm)' : '建物高さ (mm)'}
+                      {aiBimPreview.isStepped ? t('scaffold', 'aiBimMaxBuildingHeight') : t('scaffold', 'aiBimBuildingHeight')}
                     </label>
                     <input
                       type="number"
@@ -1526,47 +1521,47 @@ function ScaffoldPageContent() {
                         <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-800">
                           {aiBimPreview.drawingType === 'plan'
-                            ? '平面図から建物高さを読み取ることはできません。高さはフロア数から推定しています。正確な高さを手動で入力してください。'
-                            : '建物高さは推定値です。正確な高さを入力してください。'}
+                            ? t('scaffold', 'aiBimHeightEstimatedFromPlan')
+                            : t('scaffold', 'aiBimHeightEstimatedGeneral')}
                         </p>
                       </div>
                     )}
                     {aiBimPreview.heightConfidence === 'medium' && (
                       <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />
-                        高さはフロア数から推定 — 確認をお勧めします
+                        {t('scaffold', 'aiBimHeightEstimatedMedium')}
                       </p>
                     )}
                     {aiBimPreview.isStepped && (
                       <p className="text-xs text-violet-600 mt-1 flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-full bg-violet-500" />
-                        段差建物を検出 — 壁面ごとに異なる高さが設定されています。下の表で個別に調整できます。
+                        {t('scaffold', 'aiBimSteppedDetected')}
                       </p>
                     )}
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-500">壁面ごとの長さ</span>
+                      <span className="text-xs font-medium text-gray-500">{t('scaffold', 'aiBimWallLengthsTitle')}</span>
                       {aiBimPreview.wallLengthsFromDimText
-                        ? <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700"><CheckCircle2 size={12} />寸法線から取得</span>
-                        : <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><AlertTriangle size={12} />頂点から推定</span>
+                        ? <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700"><CheckCircle2 size={12} />{t('scaffold', 'aiBimLengthsFromDimensions')}</span>
+                        : <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><AlertTriangle size={12} />{t('scaffold', 'aiBimLengthsFromVertices')}</span>
                       }
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-gray-100 border-b border-gray-200">
-                            <th className="text-left py-2 px-3 font-medium text-gray-700">壁面</th>
-                            <th className="text-right py-2 px-3 font-medium text-gray-700">長さ (mm)</th>
-                            <th className="text-right py-2 px-3 font-medium text-gray-700">高さ (mm)</th>
-                            <th className="text-right py-2 px-3 font-medium text-gray-700">足場幅</th>
-                            <th className="text-right py-2 px-3 font-medium text-gray-700">階段数</th>
+                            <th className="text-left py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimWallHeader')}</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimLengthHeader')}</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimHeightHeader')}</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimScaffoldWidthHeader')}</th>
+                            <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimStairCountHeader')}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aiBimPreview.walls.map((w, i) => (
                             <tr key={w.side} className={`border-b border-gray-100 last:border-0 ${aiBimPreview.isStepped && w.wallHeightMm !== aiBimPreview.buildingHeightMm ? 'bg-violet-50/50' : ''}`}>
-                              <td className="py-2 px-3 text-gray-800">壁面 {i + 1}</td>
+                              <td className="py-2 px-3 text-gray-800">{t('scaffold', 'aiBimWallLabel').replace('{index}', String(i + 1))}</td>
                               <td className="py-2 px-3 text-right font-mono text-gray-700">{w.wallLengthMm.toLocaleString()}</td>
                               <td className="py-2 px-3 text-right">
                                 <input
@@ -1655,7 +1650,7 @@ function ScaffoldPageContent() {
                         </tbody>
                         <tfoot>
                           <tr className="bg-gray-50 border-t border-gray-200">
-                            <td className="py-2 px-3 text-xs font-semibold text-gray-600">合計 (周長)</td>
+                            <td className="py-2 px-3 text-xs font-semibold text-gray-600">{t('scaffold', 'aiBimPerimeterTotal')}</td>
                             <td className="py-2 px-3 text-right font-mono font-semibold text-gray-800">
                               {aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0).toLocaleString()}
                             </td>
@@ -1698,12 +1693,12 @@ function ScaffoldPageContent() {
                     {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
                     <div className="rounded-lg border border-violet-200 bg-white p-3 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-violet-700">足場条件（AI BIM 用）</span>
+                        <span className="text-xs font-semibold text-violet-700">{t('scaffold', 'aiBimConditionsTitle')}</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {/* Type */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">足場タイプ</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">{t('scaffold', 'scaffoldTypeLabel')}</label>
                           <select
                             value={aiBimPreview.scaffoldType}
                             onChange={(e) => {
@@ -1735,7 +1730,7 @@ function ScaffoldPageContent() {
                         </div>
                         {/* Width */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">足場幅</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">{t('scaffold', 'aiBimScaffoldWidthHeader')}</label>
                           <select
                             value={aiBimPreview.dto.scaffoldWidthMm}
                             onChange={(e) => {
@@ -1852,14 +1847,14 @@ function ScaffoldPageContent() {
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
                       } catch (err: any) {
-                        setAiBimError(err?.message ?? 'Failed to create scaffold');
+                        setAiBimError(err?.message ?? t('scaffold', 'aiBimCreateFailed'));
                         setAiBimConfirming(false);
                       }
                     }}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 text-white font-medium hover:bg-violet-700 disabled:opacity-50"
                   >
                     {aiBimConfirming ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-                    {aiBimConfirming ? '作成中…' : '確認して足場モデルを作成'}
+                    {aiBimConfirming ? t('scaffold', 'aiBimCreating') : t('scaffold', 'aiBimCreateScaffold')}
                   </button>
                 </div>
               </div>
