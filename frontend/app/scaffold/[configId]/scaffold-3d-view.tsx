@@ -1452,18 +1452,18 @@ export default function Scaffold3DView({
       const COS_L_SHAPED_MAX = 0.35;
       const COS_STRAIGHT_MIN = 0.98;
 
-      const groundSignedArea =
+      const normalSignFromPolygon = (poly: PointXZ[]): number => (signedAreaXZ(poly) > 0 ? -1 : 1);
+      const groundNormalSign =
         (tierPolygons[0]?.verts?.length ?? 0) >= 3
-          ? signedAreaXZ(tierPolygons[0]!.verts!)
-          : -1;
-      const groundNormalSign = groundSignedArea > 0 ? -1 : 1;
+          ? normalSignFromPolygon(tierPolygons[0]!.verts!)
+          : 1;
 
       for (let tgi = 0; tgi < tierGroups.length; tgi++) {
         const tg = tierGroups[tgi];
         const tv = tierPolygons[tgi]?.verts ?? verts;
         const tWalls = tg.walls;
         const tOpen = tWalls.length < tv.length;
-        const tSign = !tOpen && tv.length >= 3 ? groundNormalSign : 1;
+        const tSign = !tOpen && tv.length >= 3 ? normalSignFromPolygon(tv) : groundNormalSign;
         const tNear = buildOffsetPathXZ(tv, tWalls.length, tSign, standoffM, tOpen);
 
         const hCS: boolean[] = [], hCE: boolean[] = [], iLS: boolean[] = [], iLE: boolean[] = [];
@@ -1613,13 +1613,25 @@ export default function Scaffold3DView({
         let nx = tierNormSign * (-dz / edgeLen);
         let nz = tierNormSign * (dx / edgeLen);
         {
-          const tCx = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.x, 0) / tierV.length : cx;
-          const tCz = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.z, 0) / tierV.length : cz;
           const midX = (v1.x + v2.x) / 2;
           const midZ = (v1.z + v2.z) / 2;
-          if (nx * (tCx - midX) + nz * (tCz - midZ) > 0) {
-            nx = -nx;
-            nz = -nz;
+          if (!tierIsOpen && tierV.length >= 3) {
+            // Robust outward check for concave / stepped polygons:
+            // a probe in the normal direction must be outside the footprint.
+            const probeDist = Math.max(Math.min(standoffM * 0.35, 0.25), 0.05);
+            const probe = { x: midX + nx * probeDist, z: midZ + nz * probeDist };
+            if (pointInPolygonXZ(probe, tierV)) {
+              nx = -nx;
+              nz = -nz;
+            }
+          } else {
+            // Open polylines do not have an inside/outside region; use centroid fallback.
+            const tCx = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.x, 0) / tierV.length : cx;
+            const tCz = tierV.length >= 1 ? tierV.reduce((s, v) => s + v.z, 0) / tierV.length : cz;
+            if (nx * (tCx - midX) + nz * (tCz - midZ) > 0) {
+              nx = -nx;
+              nz = -nz;
+            }
           }
         }
         const fallbackStart = { x: v1.x + nx * standoffM, z: v1.z + nz * standoffM };
@@ -1629,10 +1641,12 @@ export default function Scaffold3DView({
         const tierNearEnd = tierNearRow[tierNearEndIdx];
         const nearOnOutward = (near: PointXZ, base: PointXZ) =>
           (near.x - base.x) * nx + (near.z - base.z) * nz > -1e-6;
-        const nearStart = tierNearStart && nearOnOutward(tierNearStart, p1)
+        const nearIsOutside = (near: PointXZ) =>
+          tierIsOpen || tierV.length < 3 || !pointInPolygonXZ(near, tierV);
+        const nearStart = tierNearStart && nearOnOutward(tierNearStart, p1) && nearIsOutside(tierNearStart)
           ? { x: tierNearStart.x + tierOffX, z: tierNearStart.z + tierOffZ }
           : fallbackStart;
-        const nearEnd = tierNearEnd && nearOnOutward(tierNearEnd, p2)
+        const nearEnd = tierNearEnd && nearOnOutward(tierNearEnd, p2) && nearIsOutside(tierNearEnd)
           ? { x: tierNearEnd.x + tierOffX, z: tierNearEnd.z + tierOffZ }
           : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
@@ -1979,13 +1993,7 @@ export default function Scaffold3DView({
         const hasSteppedWallHeights =
           wallHeightsM.length === centeredVerts.length &&
           new Set(wallHeightsM.map((h) => Math.round(h * 1000))).size > 1;
-        const massingTiers = Array.isArray((result as any)?.massingTiers)
-          ? ((result as any).massingTiers as Array<{
-              vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
-              topHeightMm: number;
-              baseHeightMm?: number;
-            }>)
-          : [];
+        const massingTiers = massingTiersSorted;
         const hasMassingTiers = massingTiers.length > 0;
         const rawBaseVerts = Array.isArray(storedVerts)
           ? storedVerts.map((v) => ({
