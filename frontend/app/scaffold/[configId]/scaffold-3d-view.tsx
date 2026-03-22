@@ -1503,54 +1503,66 @@ export default function Scaffold3DView({
 
       // ══════════════════════════════════════════════════════
       // EXTERIOR-ONLY FILTER — skip upper tier walls whose
-      // scaffold strip is genuinely INTERIOR (hidden behind
-      // a wider lower tier). Walls that sit on the same edge
-      // as the lower tier are vertical continuations and must
-      // NOT be skipped.
+      // scaffold strip faces the terrace of a lower tier.
+      // Uses outward-normal direction: if the scaffold
+      // projection falls inside a lower tier polygon, the
+      // wall faces the terrace and is skipped. Co-edge walls
+      // (sitting on the same edge as the lower tier) are
+      // vertical continuations and must NOT be skipped.
       // ══════════════════════════════════════════════════════
       const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
       if (hasTiers && tierGroups.length > 1) {
-        const scaffoldStripW = standoffM + 1.5;
         const CO_EDGE_THRESHOLD = 0.15;
         for (let tgi = 1; tgi < tierGroups.length; tgi++) {
           const tg = tierGroups[tgi];
           const tv = tierPolygons[tgi]?.verts ?? [];
           if (tv.length < 2) continue;
+          const tSign = tierPolyData[tgi]?.normalSign ?? groundNormalSign;
 
           for (let lowerTgi = 0; lowerTgi < tgi; lowerTgi++) {
             const lv = tierPolygons[lowerTgi]?.verts ?? [];
             if (lv.length < 3) continue;
-            const lowerWalls = tierGroups[lowerTgi].walls;
 
             for (let wi = 0; wi < tg.walls.length; wi++) {
               const globalIdx = tg.wallIndices[wi];
               if (wallSkipFlags[globalIdx]) continue;
-              const wall = tg.walls[wi];
               const p1 = tv[wi];
               const p2 = tv[(wi + 1) % tv.length];
               if (!p1 || !p2) continue;
               const mid: PointXZ = { x: (p1.x + p2.x) / 2, z: (p1.z + p2.z) / 2 };
 
-              if (pointInPolygonXZ(mid, lv)) continue;
-
-              let nearDist = Infinity;
-              let nearEdge = -1;
+              // Co-edge safety: if wall midpoint sits on a lower polygon edge, keep it
+              let isCoEdge = false;
               for (let gi = 0; gi < lv.length; gi++) {
-                const d = pointToSegmentDistXZ(mid, lv[gi], lv[(gi + 1) % lv.length]);
-                if (d < nearDist) { nearDist = d; nearEdge = gi; }
+                if (pointToSegmentDistXZ(mid, lv[gi], lv[(gi + 1) % lv.length]) < CO_EDGE_THRESHOLD) {
+                  isCoEdge = true;
+                  break;
+                }
+              }
+              if (isCoEdge) continue;
+
+              // Compute outward normal for this wall relative to its own tier polygon
+              const edx = p2.x - p1.x;
+              const edz = p2.z - p1.z;
+              const eLen = Math.hypot(edx, edz);
+              if (eLen < 1e-6) continue;
+              let onx = tSign * (-edz / eLen);
+              let onz = tSign * (edx / eLen);
+
+              // Verify normal points outward from the upper tier polygon (probe + flip)
+              if (tv.length >= 3) {
+                const probe: PointXZ = { x: mid.x + onx * 0.15, z: mid.z + onz * 0.15 };
+                if (pointInPolygonXZ(probe, tv)) { onx = -onx; onz = -onz; }
               }
 
-              if (nearDist < CO_EDGE_THRESHOLD) continue;
-
-              if (nearDist < scaffoldStripW && nearEdge >= 0 && nearEdge < lowerWalls.length) {
-                const lw = lowerWalls[nearEdge];
-                const lwTopMm =
-                  ((lw as any).baseHeightMm ?? 0) +
-                  (lw.levelCalc?.fullLevels ?? 1) * LEVEL_H * 1000;
-                const upperBaseMm = (wall as any).baseHeightMm ?? 0;
-                if (lwTopMm > upperBaseMm + 500) {
-                  wallSkipFlags[globalIdx] = true;
-                }
+              // If the scaffold projection (mid + outward) falls inside the
+              // lower tier footprint, the scaffold faces the terrace → skip.
+              const scaffoldProbe: PointXZ = {
+                x: mid.x + onx * (standoffM + 0.5),
+                z: mid.z + onz * (standoffM + 0.5),
+              };
+              if (pointInPolygonXZ(scaffoldProbe, lv)) {
+                wallSkipFlags[globalIdx] = true;
               }
             }
           }
