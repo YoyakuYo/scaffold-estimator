@@ -1394,6 +1394,28 @@ export default function Scaffold3DView({
 
       verts = tierPolygons[0]?.verts ?? verts;
 
+      // Clamp upper-tier polygon vertices to stay within the ground footprint bounding box.
+      // Without this, the smaller upper building's scaffold can overrun the base perimeter.
+      if (tierPolygons.length > 1 && verts.length >= 3) {
+        const gMinX = Math.min(...verts.map((v) => v.x));
+        const gMaxX = Math.max(...verts.map((v) => v.x));
+        const gMinZ = Math.min(...verts.map((v) => v.z));
+        const gMaxZ = Math.max(...verts.map((v) => v.z));
+        for (let tpi = 1; tpi < tierPolygons.length; tpi++) {
+          const tp = tierPolygons[tpi];
+          if (!tp.verts || tp.verts.length < 2) continue;
+          const needsClamp = tp.verts.some(
+            (v) => v.x < gMinX - 0.01 || v.x > gMaxX + 0.01 || v.z < gMinZ - 0.01 || v.z > gMaxZ + 0.01,
+          );
+          if (needsClamp) {
+            tp.verts = tp.verts.map((v) => ({
+              x: Math.max(gMinX, Math.min(gMaxX, v.x)),
+              z: Math.max(gMinZ, Math.min(gMaxZ, v.z)),
+            }));
+          }
+        }
+      }
+
       // (verts already set from tier 0)
       let vertsOk = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
       if (!vertsOk) {
@@ -2168,8 +2190,14 @@ export default function Scaffold3DView({
             .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
           for (const tier of sortedTiers) {
             const isUpperTier = (tier.baseHeightMm ?? 0) > 0;
-            const tierVerts = bimPlan ? bimPlan.toPlanM(tier.vertices) : normaliseTierVerts(tier.vertices, isUpperTier);
+            let tierVerts = bimPlan ? bimPlan.toPlanM(tier.vertices) : normaliseTierVerts(tier.vertices, isUpperTier);
             if (tierVerts.length < 3) continue;
+            if (isUpperTier) {
+              tierVerts = tierVerts.map((v) => ({
+                x: Math.max(builtBaseMinX, Math.min(builtBaseMaxX, v.x)),
+                z: Math.max(builtBaseMinZ, Math.min(builtBaseMaxZ, v.z)),
+              }));
+            }
             const shapeTier = new THREE.Shape();
             shapeTier.moveTo(tierVerts[0].x - cx, -(tierVerts[0].z - cz));
             for (let i = 1; i < tierVerts.length; i++) {
