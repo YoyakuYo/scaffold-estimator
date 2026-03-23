@@ -144,8 +144,8 @@ function tryOrthogonalFallback(
     }
   }
 
-  // Accept if closing error < 10% of last wall or < 0.5m absolute
-  const tolerance = Math.max(lengths[n - 1] * 0.1, 0.5);
+  // Accept if closing error < 15% of last wall or < 1m absolute (relaxed for extraction drift)
+  const tolerance = Math.max(lengths[n - 1] * 0.15, 1);
   if (bestVerts && bestError < tolerance) {
     return bestVerts;
   }
@@ -173,6 +173,14 @@ export function buildFootprintPolygonXZ(
     const len0 = wallLenM(walls, 0);
     const len1 = wallLenM(walls, 1);
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
+  }
+
+  // ── Orthogonal L/U/T (6,8,10...) walls: build from lengths FIRST ──
+  // Perimeter-scaled stored vertices can produce wrong individual edge lengths (e.g. 5m vs 35m).
+  // For orthogonal shapes, geometry built from wall lengths ensures horizontal bands don't overrun.
+  if (n >= 6 && n <= 16 && n % 2 === 0) {
+    const orthoResult = tryOrthogonalFallback(walls, n);
+    if (orthoResult) return orthoResult;
   }
 
   // ── 4 walls: rectangle fallback when no / degenerate stored vertices ──
@@ -269,9 +277,11 @@ export function buildFootprintPolygonXZ(
     }
   }
 
-  // ── Orthogonal fallback: try to build an L/U/T-shape with 90° turns ──
-  const orthoResult = tryOrthogonalFallback(walls, n);
-  if (orthoResult) return orthoResult;
+  // ── Orthogonal fallback (already tried above for 6–16 walls) ──
+  if (n < 6 || n > 16 || n % 2 !== 0) {
+    const orthoResult = tryOrthogonalFallback(walls, n);
+    if (orthoResult) return orthoResult;
+  }
 
   // ── Direction-preserving fallback: use actual edge angles from stored vertices ──
   if (storedVertices && storedVertices.length >= n) {
