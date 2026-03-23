@@ -1937,8 +1937,19 @@ export default function Scaffold3DView({
           t2 = tmp;
         }
 
-        for (let lv = 1; lv <= maxLevelsForCorners; lv++) {
-          const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+        const wallA = walls[wi];
+        const wallB = walls[nextWi];
+        const baseA = ((wallA as any).baseHeightMm ?? 0) / 1000;
+        const baseB = ((wallB as any).baseHeightMm ?? 0) / 1000;
+        // Corner extras must sit on the same vertical tier as the two walls; otherwise they render at y≈0 and look like floating junk.
+        if (Math.abs(baseA - baseB) > 0.05) continue;
+        const baseYM_corner = baseA;
+        const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
+        const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
+        const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
+
+        for (let lv = 1; lv <= maxLvThisCorner; lv++) {
+          const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
 
           if (isLShaped) {
             // L-shaped (~90°) corner: full rule — one-to-one connectors, 600 span pair, walkable deck.
