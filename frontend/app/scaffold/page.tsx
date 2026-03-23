@@ -1439,20 +1439,40 @@ function ScaffoldPageContent() {
                         const tierVerts = tierWallIndices.length === outlineVerts.length
                           ? outlineVerts
                           : (() => {
-                              let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+                              const n = outlineVerts.length;
+                              const tierVertexSet = new Set<number>();
                               for (const wi of tierWallIndices) {
-                                const v1 = outlineVerts[wi];
-                                const v2 = outlineVerts[(wi + 1) % outlineVerts.length];
-                                if (v1) { mnx = Math.min(mnx, v1.x); mny = Math.min(mny, v1.y); mxx = Math.max(mxx, v1.x); mxy = Math.max(mxy, v1.y); }
-                                if (v2) { mnx = Math.min(mnx, v2.x); mny = Math.min(mny, v2.y); mxx = Math.max(mxx, v2.x); mxy = Math.max(mxy, v2.y); }
+                                tierVertexSet.add(wi);
+                                tierVertexSet.add((wi + 1) % n);
                               }
-                              if (!Number.isFinite(mnx)) return outlineVerts;
-                              const bboxW = mxx - mnx;
-                              const bboxH = mxy - mny;
-                              const bboxArea = bboxW * bboxH;
-                              if (bboxArea / fullArea > 0.85) return outlineVerts;
+                              const orderedVerts: Array<{ x: number; y: number }> = [];
+                              for (let vi = 0; vi < n; vi++) {
+                                if (tierVertexSet.has(vi)) orderedVerts.push(outlineVerts[vi]!);
+                              }
+                              if (orderedVerts.length < 3) return outlineVerts;
+
+                              // Remove repeated consecutive points that can appear when high-wall
+                              // ranges collapse to near-zero segments after AI normalization.
+                              const compact: Array<{ x: number; y: number }> = [];
+                              for (const p of orderedVerts) {
+                                const prev = compact[compact.length - 1];
+                                if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 1e-6) {
+                                  compact.push(p);
+                                }
+                              }
+                              if (compact.length < 3) return outlineVerts;
+
+                              let polyArea2 = 0;
+                              for (let i = 0; i < compact.length; i++) {
+                                const j = (i + 1) % compact.length;
+                                polyArea2 += compact[i]!.x * compact[j]!.y - compact[j]!.x * compact[i]!.y;
+                              }
+                              const polyArea = Math.abs(polyArea2) * 0.5;
+                              if (!Number.isFinite(polyArea) || polyArea <= 1e-6) return outlineVerts;
+                              if (polyArea / fullArea > 0.92) return outlineVerts;
+
                               hasRealSetback = true;
-                              return [{ x: mnx, y: mny }, { x: mxx, y: mny }, { x: mxx, y: mxy }, { x: mnx, y: mxy }];
+                              return compact;
                             })();
                         tiers.push({
                           vertices: tierVerts.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) })),

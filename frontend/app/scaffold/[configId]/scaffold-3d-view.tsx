@@ -1416,57 +1416,6 @@ export default function Scaffold3DView({
 
       verts = tierPolygons[0]?.verts ?? verts;
 
-      // Correct polygon edge lengths to match wall lengths.
-      // bimPlan.toPlanM uses a uniform scale which preserves the outline shape but
-      // produces edges whose lengths can differ significantly from wallLengthMm.
-      // The scaffold is then stretched (fitScale) to fill the polygon edge, causing
-      // it to overrun when the edge is longer than the wall. Fix: walk each polygon
-      // and adjust vertices so every edge i→i+1 has length = walls[i].wallLengthMm.
-      for (let tgi = 0; tgi < tierPolygons.length; tgi++) {
-        const tp = tierPolygons[tgi];
-        const tg = tierGroups[tgi];
-        if (!tp.verts || tp.verts.length < 2 || !tg) continue;
-        const nV = tp.verts.length;
-        const nW = tg.walls.length;
-        if (nV !== nW || nW < 2) continue;
-
-        let needsCorrection = false;
-        for (let ei = 0; ei < nW; ei++) {
-          const j = (ei + 1) % nV;
-          const polyEdgeLen = Math.hypot(tp.verts[j].x - tp.verts[ei].x, tp.verts[j].z - tp.verts[ei].z);
-          const wallLenM = Math.max((tg.walls[ei].wallLengthMm ?? 600), 600) / 1000;
-          if (Math.abs(polyEdgeLen - wallLenM) > 0.5) {
-            needsCorrection = true;
-            break;
-          }
-        }
-
-        if (needsCorrection) {
-          const corrected: PointXZ[] = [{ ...tp.verts[0] }];
-          for (let ei = 0; ei < nW - 1; ei++) {
-            const j = (ei + 1) % nV;
-            const rawDx = tp.verts[j].x - tp.verts[ei].x;
-            const rawDz = tp.verts[j].z - tp.verts[ei].z;
-            const rawLen = Math.hypot(rawDx, rawDz);
-            const wallLenM = Math.max((tg.walls[ei].wallLengthMm ?? 600), 600) / 1000;
-            const prev = corrected[corrected.length - 1];
-            if (rawLen < 0.001) {
-              corrected.push({ x: prev.x, z: prev.z });
-            } else {
-              corrected.push({
-                x: prev.x + (rawDx / rawLen) * wallLenM,
-                z: prev.z + (rawDz / rawLen) * wallLenM,
-              });
-            }
-          }
-          if (corrected.length === nW) {
-            const allOk = corrected.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-            if (allOk) tp.verts = corrected;
-          }
-        }
-      }
-      verts = tierPolygons[0]?.verts ?? verts;
-
       // (verts already set from tier 0)
       let vertsOk = verts.length >= 2 && verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
       if (!vertsOk) {
