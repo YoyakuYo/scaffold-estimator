@@ -1727,7 +1727,8 @@ export default function Scaffold3DView({
         const baseLen = Math.max(runLenM, 1e-6);
         const desiredLen = alignedLen;
         const rawScale = desiredLen / baseLen;
-        const fitScale = Number.isFinite(rawScale) ? Math.max(0.5, Math.min(2, rawScale)) : 1;
+        // Use exact wall-fit scale; previous 0.5..2 clamp could leave visible overrun.
+        const fitScale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
