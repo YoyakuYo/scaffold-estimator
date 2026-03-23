@@ -1711,28 +1711,21 @@ export default function Scaffold3DView({
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        // L-shaped only: trim leading 600 and flush deck at corner end; non-L uses pattanko.
+        // Keep 3D wall runs strictly within the traced wall segment.
+        // Corner overrun/turn-span extension is disabled so scaffold never exceeds wall edges.
         const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
           spanCaps[i],
           false,
           false,
-          isStartLShaped,
-          isEndLShaped,
+          false,
+          false,
         );
 
-        // Scale/place wall run. Per 足場コーナー詳細図 (L-shaped only):
-        // wall end extends 300mm past corner, then one 600mm span (total +900mm).
-        // Wall start at L-corner: first span overruns 300mm so 1800 can go beyond wall and fill gap.
-        const tierWallCount = tierGroups[tgi]?.walls.length ?? walls.length;
-        const useCornerExtension = tierWallCount >= 2 && !tierIsOpen && isEndLShaped;
-        const useStartCornerExtension = tierWallCount >= 2 && !tierIsOpen && isStartLShaped;
-        const cornerExtensionM = CORNER_OVERRUN_M + CORNER_TURN_SPAN_M;
+        // Scale/place wall run to exact edge length (no corner extension/overrun).
         const baseLen = Math.max(runLenM, 1e-6);
-        let desiredLen = alignedLen;
-        if (useCornerExtension) desiredLen += cornerExtensionM;
-        if (useStartCornerExtension) desiredLen += CORNER_OVERRUN_M;
+        const desiredLen = alignedLen;
         const rawScale = desiredLen / baseLen;
         const fitScale = Number.isFinite(rawScale) ? Math.max(0.5, Math.min(2, rawScale)) : 1;
         wallRoot.scale.set(fitScale, 1, 1);
