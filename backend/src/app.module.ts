@@ -31,20 +31,20 @@ import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
         const logger = new Logger('BullModule');
         const redisHost = configService.get('REDIS_HOST', 'localhost');
         const redisPort = configService.get('REDIS_PORT', 6379);
-        logger.log(`Connecting to Redis at ${redisHost}:${redisPort} (background jobs will fail if unavailable)`);
+        logger.log(`Redis config: ${redisHost}:${redisPort} (background jobs disabled if unavailable)`);
         return {
           redis: {
             host: redisHost,
             port: redisPort,
             password: configService.get('REDIS_PASSWORD') || undefined,
-            maxRetriesPerRequest: 3,
-            connectTimeout: 5000,
+            maxRetriesPerRequest: 1,
+            connectTimeout: 1500,
             retryStrategy: (times: number) => {
-              if (times > 3) {
-                logger.warn('Redis unavailable - background job processing disabled. App will still work for all other features.');
-                return null; // Stop retrying
+              if (times > 1) {
+                logger.warn('Redis unavailable — background jobs disabled. All other features work normally.');
+                return null;
               }
-              return Math.min(times * 500, 2000);
+              return 500;
             },
             enableOfflineQueue: false,
             lazyConnect: true,
