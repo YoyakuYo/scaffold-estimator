@@ -68,6 +68,117 @@ function combinations(n: number, k: number): number[][] {
   return result;
 }
 
+function polygonAbsArea(verts: FootprintVertexXZ[]): number {
+  let area = 0;
+  const n = verts.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += verts[i].x * verts[j].z - verts[j].x * verts[i].z;
+  }
+  return Math.abs(area / 2);
+}
+
+/**
+ * Build an orthogonal polygon from wall lengths using known reflex corner positions.
+ * Returns the candidate with the largest area (among both CW/CCW), or null.
+ */
+function buildOrthoCandidate(
+  lengths: number[],
+  n: number,
+  reflexSet: Set<number>,
+  tolerance: number,
+): FootprintVertexXZ[] | null {
+  let best: FootprintVertexXZ[] | null = null;
+  let bestArea = -1;
+
+  for (const cwSign of [1, -1] as const) {
+    const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
+    let dir = 0;
+
+    for (let i = 0; i < n - 1; i++) {
+      const prev = verts[verts.length - 1];
+      verts.push({
+        x: prev.x + lengths[i] * Math.cos(dir),
+        z: prev.z + lengths[i] * Math.sin(dir),
+      });
+      const nextVertex = (i + 1) % n;
+      const turn = reflexSet.has(nextVertex) ? -Math.PI / 2 : Math.PI / 2;
+      dir += cwSign * turn;
+    }
+
+    const last = verts[n - 1];
+    const closeDx = verts[0].x - last.x;
+    const closeDz = verts[0].z - last.z;
+    const closeDist = Math.hypot(closeDx, closeDz);
+    const lenError = Math.abs(closeDist - lengths[n - 1]);
+
+    let dirOk = true;
+    if (closeDist > 0.001) {
+      const closeAngle = Math.atan2(closeDz, closeDx);
+      const angleDiff = Math.abs(((closeAngle - dir) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+      if (angleDiff > 0.15) dirOk = false;
+    }
+
+    if (!dirOk || lenError > tolerance) continue;
+
+    const area = polygonAbsArea(verts);
+    if (area > bestArea) {
+      bestArea = area;
+      best = [...verts];
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Use stored polygon vertices to identify which corners are reflex (concave),
+ * then build an orthogonal polygon with the correct wall lengths.
+ * This preserves the shape topology from BIM/AI extraction.
+ */
+function tryOrthogonalFromStoredShape(
+  walls: Array<{ wallLengthMm?: number }>,
+  n: number,
+  stored: FootprintVertexXZ[],
+): FootprintVertexXZ[] | null {
+  if (n < 6 || n > 16 || n % 2 !== 0 || stored.length < n) return null;
+  const numReflex = (n - 4) / 2;
+  if (numReflex <= 0) return null;
+
+  const lengths = Array.from({ length: n }, (_, i) => wallLenM(walls, i));
+  const sv = stored.slice(0, n);
+
+  const crosses: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const prev = sv[(i - 1 + n) % n];
+    const curr = sv[i];
+    const next = sv[(i + 1) % n];
+    crosses.push(
+      (curr.x - prev.x) * (next.z - curr.z) -
+      (curr.z - prev.z) * (next.x - curr.x),
+    );
+  }
+
+  const posCount = crosses.filter(c => c > 0).length;
+  const negCount = crosses.filter(c => c < 0).length;
+
+  let reflexSet: Set<number>;
+  if (posCount === numReflex) {
+    reflexSet = new Set<number>();
+    crosses.forEach((c, i) => { if (c > 0) reflexSet.add(i); });
+  } else if (negCount === numReflex) {
+    reflexSet = new Set<number>();
+    crosses.forEach((c, i) => { if (c < 0) reflexSet.add(i); });
+  } else {
+    return null;
+  }
+
+  const tolerance = Math.max(lengths[n - 1] * 0.15, 1);
+  const result = buildOrthoCandidate(lengths, n, reflexSet, tolerance);
+  if (result && polygonAbsArea(result) > 0.01) return result;
+  return null;
+}
+
 /**
  * Try to construct an orthogonal (all-90°-corners) polygon from wall lengths.
  * Buildings are almost always orthogonal:
@@ -80,8 +191,9 @@ function combinations(n: number, k: number): number[][] {
  *   convex corners = (n+4)/2, concave = (n-4)/2
  *   (sum of exterior angles = 360°, each turn ±90°)
  *
- * Tries all possible reflex vertex placements and picks the one
- * whose closing edge best matches the last wall length.
+ * Tries all possible reflex vertex placements. Among candidates that close
+ * within tolerance, picks the one with the LARGEST polygon area to reject
+ * degenerate / self-intersecting configurations.
  */
 function tryOrthogonalFallback(
   walls: Array<{ wallLengthMm?: number }>,
@@ -92,61 +204,29 @@ function tryOrthogonalFallback(
   const numReflex = (n - 4) / 2;
   if (numReflex < 0) return null;
   if (numReflex === 0) {
-    // Rectangle: already handled by the 4-wall branch above
     return null;
   }
 
   const lengths = Array.from({ length: n }, (_, i) => wallLenM(walls, i));
   const reflexCombos = combinations(n, numReflex);
+  const tolerance = Math.max(lengths[n - 1] * 0.15, 1);
 
   let bestVerts: FootprintVertexXZ[] | null = null;
-  let bestError = Infinity;
+  let bestArea = -1;
 
   for (const reflexPositions of reflexCombos) {
     const reflexSet = new Set(reflexPositions);
+    const candidate = buildOrthoCandidate(lengths, n, reflexSet, tolerance);
+    if (!candidate) continue;
 
-    // Try CW and CCW traversals
-    for (const cwSign of [1, -1] as const) {
-      const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
-      let dir = 0; // start heading right
-
-      for (let i = 0; i < n - 1; i++) {
-        const prev = verts[verts.length - 1];
-        verts.push({
-          x: prev.x + lengths[i] * Math.cos(dir),
-          z: prev.z + lengths[i] * Math.sin(dir),
-        });
-        const nextVertex = (i + 1) % n;
-        const turn = reflexSet.has(nextVertex) ? -Math.PI / 2 : Math.PI / 2;
-        dir += cwSign * turn;
-      }
-
-      // Check if closing edge matches last wall
-      const last = verts[n - 1];
-      const closeDx = verts[0].x - last.x;
-      const closeDz = verts[0].z - last.z;
-      const closeDist = Math.hypot(closeDx, closeDz);
-      const lenError = Math.abs(closeDist - lengths[n - 1]);
-
-      // Verify closing direction aligns with current heading
-      let dirOk = true;
-      if (closeDist > 0.001) {
-        const closeAngle = Math.atan2(closeDz, closeDx);
-        let angleDiff = Math.abs(((closeAngle - dir) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
-        if (angleDiff > 0.15) dirOk = false;
-      }
-
-      const totalError = dirOk ? lenError : lenError + 1e9;
-      if (totalError < bestError) {
-        bestError = totalError;
-        bestVerts = [...verts];
-      }
+    const area = polygonAbsArea(candidate);
+    if (area > bestArea) {
+      bestArea = area;
+      bestVerts = candidate;
     }
   }
 
-  // Accept if closing error < 15% of last wall or < 1m absolute (relaxed for extraction drift)
-  const tolerance = Math.max(lengths[n - 1] * 0.15, 1);
-  if (bestVerts && bestError < tolerance) {
+  if (bestVerts && bestArea > 0.01) {
     return bestVerts;
   }
   return null;
@@ -175,12 +255,26 @@ export function buildFootprintPolygonXZ(
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
-  // ── Orthogonal L/U/T (6,8,10...) walls: build from lengths FIRST ──
-  // Perimeter-scaled stored vertices can produce wrong individual edge lengths (e.g. 5m vs 35m).
-  // For orthogonal shapes, geometry built from wall lengths ensures horizontal bands don't overrun.
+  // ── Orthogonal L/U/T (6,8,10...) walls ──
+  // When stored vertices are available, use their turn directions to identify reflex
+  // corners — this preserves the correct shape from BIM/AI. Fall back to brute-force
+  // when stored vertices are absent or don't produce a valid result.
   if (n >= 6 && n <= 16 && n % 2 === 0) {
+    if (storedVertices && storedVertices.length >= n) {
+      const sv = storedVertices.slice(0, n).map(normaliseVertex);
+      const guidedResult = tryOrthogonalFromStoredShape(walls, n, sv);
+      if (guidedResult) {
+        if (typeof window !== 'undefined') console.info('[Scaffold] footprint: ortho-guided (stored+lengths)', n, 'walls');
+        return guidedResult;
+      }
+    }
+
     const orthoResult = tryOrthogonalFallback(walls, n);
-    if (orthoResult) return orthoResult;
+    if (orthoResult) {
+      if (typeof window !== 'undefined') console.info('[Scaffold] footprint: ortho (wall-lengths)', n, 'walls');
+      return orthoResult;
+    }
+    if (typeof window !== 'undefined') console.info('[Scaffold] footprint: ortho failed, trying stored', n, walls.map((w, i) => `${i}:${(w.wallLengthMm ?? 0) / 1000}m`));
   }
 
   // ── 4 walls: rectangle fallback when no / degenerate stored vertices ──
