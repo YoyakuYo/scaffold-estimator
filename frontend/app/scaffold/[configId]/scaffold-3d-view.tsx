@@ -2038,25 +2038,36 @@ export default function Scaffold3DView({
         const rawSpanZ = Math.max(rawBaseMaxZ - rawBaseMinZ, 1e-6);
         const normaliseTierVerts = (
           tierVerts: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
+          clampToGroundBounds = false,
         ) => {
           const rawTierVerts = tierVerts.map((v) => ({
             x: v.xFrac ?? v.x ?? 0,
             z: v.yFrac ?? v.y ?? 0,
           }));
           if (rawTierVerts.length < 3) return [];
+          let mapped: Array<{ x: number; z: number }>;
           if (rawBaseVerts.length >= 3) {
             const scaleX = builtSpanX / rawSpanX;
             const scaleZ = builtSpanZ / rawSpanZ;
-            return rawTierVerts.map((v) => ({
+            mapped = rawTierVerts.map((v) => ({
               x: builtBaseMinX + (v.x - rawBaseMinX) * scaleX,
               z: builtBaseMinZ + (v.z - rawBaseMinZ) * scaleZ,
             }));
+          } else {
+            const maxCoord = Math.max(...rawTierVerts.map((v) => Math.max(Math.abs(v.x), Math.abs(v.z))));
+            mapped = maxCoord > 1000
+              ? rawTierVerts.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }))
+              : rawTierVerts.map((v) => ({ x: v.x, z: v.z }));
           }
-          const maxCoord = Math.max(...rawTierVerts.map((v) => Math.max(Math.abs(v.x), Math.abs(v.z))));
-          if (maxCoord > 1000) {
-            return rawTierVerts.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }));
+          // Clamp upper-tier vertices to stay within the ground footprint bounding box.
+          // This prevents the smaller upper building from visually overrunning the base.
+          if (clampToGroundBounds) {
+            mapped = mapped.map((v) => ({
+              x: Math.max(builtBaseMinX, Math.min(builtBaseMaxX, v.x)),
+              z: Math.max(builtBaseMinZ, Math.min(builtBaseMaxZ, v.z)),
+            }));
           }
-          return rawTierVerts;
+          return mapped;
         };
 
         /** BIM AI path: flat “shaded with edges” CAD look (solid fills + black outlines, no hatching / no translucent wash). */
@@ -2156,7 +2167,8 @@ export default function Scaffold3DView({
             .filter((tier) => Array.isArray(tier.vertices) && tier.vertices.length >= 3)
             .sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0) || a.topHeightMm - b.topHeightMm);
           for (const tier of sortedTiers) {
-            const tierVerts = bimPlan ? bimPlan.toPlanM(tier.vertices) : normaliseTierVerts(tier.vertices);
+            const isUpperTier = (tier.baseHeightMm ?? 0) > 0;
+            const tierVerts = bimPlan ? bimPlan.toPlanM(tier.vertices) : normaliseTierVerts(tier.vertices, isUpperTier);
             if (tierVerts.length < 3) continue;
             const shapeTier = new THREE.Shape();
             shapeTier.moveTo(tierVerts[0].x - cx, -(tierVerts[0].z - cz));

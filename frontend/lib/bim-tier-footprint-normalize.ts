@@ -11,6 +11,7 @@ export function normaliseMassingTierVerticesToGroundFootprint(
   tierVertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
   groundBuiltVerts: FootprintVertexXZ[],
   rawBaseVerts: Array<{ x: number; z: number }>,
+  clampToGroundBounds = true,
 ): FootprintVertexXZ[] {
   const rawTierVerts = tierVertices.map((v) => ({
     x: v.xFrac ?? v.x ?? 0,
@@ -25,6 +26,8 @@ export function normaliseMassingTierVerticesToGroundFootprint(
   const builtSpanX = Math.max(builtBaseMaxX - builtBaseMinX, 1e-6);
   const builtSpanZ = Math.max(builtBaseMaxZ - builtBaseMinZ, 1e-6);
 
+  let mapped: FootprintVertexXZ[];
+
   if (rawBaseVerts.length >= 3) {
     const rawBaseMinX = Math.min(...rawBaseVerts.map((v) => v.x));
     const rawBaseMaxX = Math.max(...rawBaseVerts.map((v) => v.x));
@@ -35,15 +38,25 @@ export function normaliseMassingTierVerticesToGroundFootprint(
 
     const scaleX = builtSpanX / rawSpanX;
     const scaleZ = builtSpanZ / rawSpanZ;
-    return rawTierVerts.map((v) => ({
+    mapped = rawTierVerts.map((v) => ({
       x: builtBaseMinX + (v.x - rawBaseMinX) * scaleX,
       z: builtBaseMinZ + (v.z - rawBaseMinZ) * scaleZ,
     }));
+  } else {
+    const maxCoord = Math.max(...rawTierVerts.map((v) => Math.max(Math.abs(v.x), Math.abs(v.z))));
+    mapped = maxCoord > 1000
+      ? rawTierVerts.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }))
+      : rawTierVerts.map((v) => ({ x: v.x, z: v.z }));
   }
 
-  const maxCoord = Math.max(...rawTierVerts.map((v) => Math.max(Math.abs(v.x), Math.abs(v.z))));
-  if (maxCoord > 1000) {
-    return rawTierVerts.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }));
+  // Clamp upper-tier vertices to stay within the ground footprint bounding box.
+  // Upper tiers are always smaller and must not extend beyond the base footprint.
+  if (clampToGroundBounds) {
+    mapped = mapped.map((v) => ({
+      x: Math.max(builtBaseMinX, Math.min(builtBaseMaxX, v.x)),
+      z: Math.max(builtBaseMinZ, Math.min(builtBaseMaxZ, v.z)),
+    }));
   }
-  return rawTierVerts;
+
+  return mapped;
 }
