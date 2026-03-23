@@ -7,6 +7,66 @@
 
 import type { FootprintVertexXZ } from '@/lib/scaffold-footprint-polygon';
 
+/** Ray-cast point-in-polygon on XZ plane (z = “plan north”). */
+function pointInPolygonXZ(pt: FootprintVertexXZ, poly: FootprintVertexXZ[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const zi = poly[i]!.z;
+    const zj = poly[j]!.z;
+    if ((zi > pt.z) !== (zj > pt.z) &&
+      pt.x < ((poly[j]!.x - poly[i]!.x) * (pt.z - zi)) / (zj - zi + 1e-15) + poly[i]!.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function closestPointOnSegmentXZ(
+  p: FootprintVertexXZ,
+  a: FootprintVertexXZ,
+  b: FootprintVertexXZ,
+): FootprintVertexXZ {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq < 1e-12) return { x: a.x, z: a.z };
+  let t = ((p.x - a.x) * dx + (p.z - a.z) * dz) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return { x: a.x + t * dx, z: a.z + t * dz };
+}
+
+/**
+ * If a point lies outside the ground footprint, snap it to the nearest point on the polygon boundary.
+ * Unlike an axis-aligned bounding box, this respects L-shaped / concave bases so upper-tier
+ * horizontal bands do not “overrun” into void corners of the bbox.
+ */
+function clampPointToFootprintPolygon(pt: FootprintVertexXZ, ground: FootprintVertexXZ[]): FootprintVertexXZ {
+  if (ground.length < 3) return pt;
+  if (pointInPolygonXZ(pt, ground)) return pt;
+  let best = closestPointOnSegmentXZ(pt, ground[0]!, ground[1]!);
+  let bestD = Math.hypot(pt.x - best.x, pt.z - best.z);
+  for (let i = 0; i < ground.length; i++) {
+    const a = ground[i]!;
+    const b = ground[(i + 1) % ground.length]!;
+    const q = closestPointOnSegmentXZ(pt, a, b);
+    const d = Math.hypot(pt.x - q.x, pt.z - q.z);
+    if (d < bestD) {
+      bestD = d;
+      best = q;
+    }
+  }
+  return best;
+}
+
+/** Clamp every vertex to lie inside (or on) the ground footprint polygon. */
+export function clampFootprintVerticesToGroundPolygon(
+  vertices: FootprintVertexXZ[],
+  groundPoly: FootprintVertexXZ[],
+): FootprintVertexXZ[] {
+  if (groundPoly.length < 3) return vertices;
+  return vertices.map((v) => clampPointToFootprintPolygon(v, groundPoly));
+}
+
 export function normaliseMassingTierVerticesToGroundFootprint(
   tierVertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
   groundBuiltVerts: FootprintVertexXZ[],
@@ -49,13 +109,10 @@ export function normaliseMassingTierVerticesToGroundFootprint(
       : rawTierVerts.map((v) => ({ x: v.x, z: v.z }));
   }
 
-  // Clamp upper-tier vertices to stay within the ground footprint bounding box.
-  // Upper tiers are always smaller and must not extend beyond the base footprint.
+  // Clamp upper-tier vertices to the ground footprint polygon (not its axis-aligned bbox —
+  // bbox corners stick out past L-shaped bases and caused horizontal bands to overrun).
   if (clampToGroundBounds) {
-    mapped = mapped.map((v) => ({
-      x: Math.max(builtBaseMinX, Math.min(builtBaseMaxX, v.x)),
-      z: Math.max(builtBaseMinZ, Math.min(builtBaseMaxZ, v.z)),
-    }));
+    mapped = clampFootprintVerticesToGroundPolygon(mapped, groundBuiltVerts);
   }
 
   return mapped;

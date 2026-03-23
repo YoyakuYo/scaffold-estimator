@@ -18,7 +18,10 @@ import {
   BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
-import { normaliseMassingTierVerticesToGroundFootprint } from '@/lib/bim-tier-footprint-normalize';
+import {
+  normaliseMassingTierVerticesToGroundFootprint,
+  clampFootprintVerticesToGroundPolygon,
+} from '@/lib/bim-tier-footprint-normalize';
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { bimHexToNumber } from '@/lib/bim-facade-colors';
 
@@ -2086,13 +2089,9 @@ export default function Scaffold3DView({
               ? rawTierVerts.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }))
               : rawTierVerts.map((v) => ({ x: v.x, z: v.z }));
           }
-          // Clamp upper-tier vertices to stay within the ground footprint bounding box.
-          // This prevents the smaller upper building from visually overrunning the base.
-          if (clampToGroundBounds) {
-            mapped = mapped.map((v) => ({
-              x: Math.max(builtBaseMinX, Math.min(builtBaseMaxX, v.x)),
-              z: Math.max(builtBaseMinZ, Math.min(builtBaseMaxZ, v.z)),
-            }));
+          // Clamp to ground footprint polygon (not AABB — L-shaped bases have bbox corners in void).
+          if (clampToGroundBounds && verts.length >= 3) {
+            mapped = clampFootprintVerticesToGroundPolygon(mapped, verts);
           }
           return mapped;
         };
@@ -2197,11 +2196,8 @@ export default function Scaffold3DView({
             const isUpperTier = (tier.baseHeightMm ?? 0) > 0;
             let tierVerts = bimPlan ? bimPlan.toPlanM(tier.vertices) : normaliseTierVerts(tier.vertices, isUpperTier);
             if (tierVerts.length < 3) continue;
-            if (isUpperTier) {
-              tierVerts = tierVerts.map((v) => ({
-                x: Math.max(builtBaseMinX, Math.min(builtBaseMaxX, v.x)),
-                z: Math.max(builtBaseMinZ, Math.min(builtBaseMaxZ, v.z)),
-              }));
+            if (isUpperTier && verts.length >= 3) {
+              tierVerts = clampFootprintVerticesToGroundPolygon(tierVerts, verts);
             }
             const shapeTier = new THREE.Shape();
             shapeTier.moveTo(tierVerts[0].x - cx, -(tierVerts[0].z - cz));
