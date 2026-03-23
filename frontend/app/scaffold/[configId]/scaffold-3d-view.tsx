@@ -1259,12 +1259,34 @@ export default function Scaffold3DView({
         let tok = false;
         let footprint0FromPlan = false;
 
-        if (bimPlan && storedVerts && storedVerts.length >= n0) {
+        if (bimPlan && storedVerts && storedVerts.length === n0) {
+          // Outline vertex count matches tier-0 wall count → outline IS the tier-0 polygon
           tverts = bimPlan.toPlanM(storedVerts.slice(0, n0) as any);
           tok =
             tverts.length === n0 &&
             tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
           footprint0FromPlan = tok;
+        }
+
+        // When outline has more vertices than tier-0 walls (tier decomposition split the
+        // building), storedVerts.slice(0, n0) picks the WRONG vertices. Use the massing
+        // tier's own vertices instead — same logic as for upper tiers.
+        if (!tok && bimPlan && massingTiersSorted.length > 0) {
+          const byBase = massingTiersSorted.find(
+            (m) => Math.abs((m.baseHeightMm ?? 0) - (tg0.baseHeightMm ?? 0)) <= 2 && m.vertices.length === n0,
+          );
+          const byIdx = massingTiersSorted[tg0.tierIndex];
+          const candidate =
+            byBase ??
+            (byIdx && byIdx.vertices.length === n0 ? byIdx : undefined);
+          if (candidate && candidate.vertices.length === n0) {
+            const mapped = bimPlan.toPlanM(candidate.vertices as any);
+            if (mapped.length === n0 && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+              tverts = mapped;
+              tok = true;
+              footprint0FromPlan = true;
+            }
+          }
         }
 
         if (!tok) {
