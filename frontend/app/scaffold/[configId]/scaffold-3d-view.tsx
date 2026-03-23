@@ -189,32 +189,43 @@ function buildOffsetPathXZ(
     : Math.min(verts.length, edgeCount);
   if (vertexCount < 2) return [];
   const pts = verts.slice(0, vertexCount);
-  const miterLimit = Math.max(offset * 6, 0.05);
+  const miterLimit = Math.max(offset * 8, 0.08);
   const getNormal = (edgeIdx: number) => edgeNormalXZ(pts, edgeIdx, normalSign, isOpen);
+
+  const computeMiter = (v: PointXZ, prevNormal: PointXZ, nextNormal: PointXZ, prevEdge: number, nextEdge: number, open: boolean): PointXZ => {
+    const [p1, p2] = edgeEndpointsXZ(pts, prevEdge, open);
+    const [n1, n2] = edgeEndpointsXZ(pts, nextEdge, open);
+    const hit = lineIntersectionXZ(
+      shiftedPointXZ(p1, prevNormal, offset),
+      shiftedPointXZ(p2, prevNormal, offset),
+      shiftedPointXZ(n1, nextNormal, offset),
+      shiftedPointXZ(n2, nextNormal, offset),
+    );
+    // Bisector-based fallback: compute proper offset along the angle bisector
+    const bx = prevNormal.x + nextNormal.x;
+    const bz = prevNormal.z + nextNormal.z;
+    const bLen = Math.hypot(bx, bz);
+    let bisector: PointXZ;
+    if (bLen > 1e-6) {
+      const cos = (prevNormal.x * nextNormal.x + prevNormal.z * nextNormal.z);
+      const halfAngle = Math.acos(Math.max(-1, Math.min(1, cos))) / 2;
+      const bisDist = halfAngle > 0.01 ? offset / Math.cos(halfAngle) : offset;
+      const clampedDist = Math.min(bisDist, miterLimit);
+      bisector = { x: (bx / bLen) * clampedDist, z: (bz / bLen) * clampedDist };
+    } else {
+      bisector = { x: nextNormal.x * offset, z: nextNormal.z * offset };
+    }
+    const fallback: PointXZ = { x: v.x + bisector.x, z: v.z + bisector.z };
+    if (!hit || Math.hypot(hit.x - v.x, hit.z - v.z) > miterLimit) return fallback;
+    return hit;
+  };
 
   if (isOpen) {
     const out: PointXZ[] = [];
     const firstNormal = getNormal(0);
     out.push(shiftedPointXZ(pts[0]!, firstNormal, offset));
     for (let i = 1; i < pts.length - 1; i++) {
-      const prevEdge = i - 1;
-      const nextEdge = i;
-      const prevNormal = getNormal(prevEdge);
-      const nextNormal = getNormal(nextEdge);
-      const [p1, p2] = edgeEndpointsXZ(pts, prevEdge, true);
-      const [n1, n2] = edgeEndpointsXZ(pts, nextEdge, true);
-      const hit = lineIntersectionXZ(
-        shiftedPointXZ(p1, prevNormal, offset),
-        shiftedPointXZ(p2, prevNormal, offset),
-        shiftedPointXZ(n1, nextNormal, offset),
-        shiftedPointXZ(n2, nextNormal, offset),
-      );
-      const fallback = shiftedPointXZ(pts[i]!, {
-        x: (prevNormal.x + nextNormal.x) / 2 || nextNormal.x || prevNormal.x,
-        z: (prevNormal.z + nextNormal.z) / 2 || nextNormal.z || prevNormal.z,
-      }, offset);
-      if (!hit || Math.hypot(hit.x - pts[i]!.x, hit.z - pts[i]!.z) > miterLimit) out.push(fallback);
-      else out.push(hit);
+      out.push(computeMiter(pts[i]!, getNormal(i - 1), getNormal(i), i - 1, i, true));
     }
     const lastNormal = getNormal(edgeCount - 1);
     out.push(shiftedPointXZ(pts[pts.length - 1]!, lastNormal, offset));
@@ -224,22 +235,7 @@ function buildOffsetPathXZ(
   return pts.map((v, i) => {
     const prevEdge = (i - 1 + edgeCount) % edgeCount;
     const nextEdge = i % edgeCount;
-    const prevNormal = getNormal(prevEdge);
-    const nextNormal = getNormal(nextEdge);
-    const [p1, p2] = edgeEndpointsXZ(pts, prevEdge, false);
-    const [n1, n2] = edgeEndpointsXZ(pts, nextEdge, false);
-    const hit = lineIntersectionXZ(
-      shiftedPointXZ(p1, prevNormal, offset),
-      shiftedPointXZ(p2, prevNormal, offset),
-      shiftedPointXZ(n1, nextNormal, offset),
-      shiftedPointXZ(n2, nextNormal, offset),
-    );
-    const fallback = shiftedPointXZ(v, {
-      x: (prevNormal.x + nextNormal.x) / 2 || nextNormal.x || prevNormal.x,
-      z: (prevNormal.z + nextNormal.z) / 2 || nextNormal.z || prevNormal.z,
-    }, offset);
-    if (!hit || Math.hypot(hit.x - v.x, hit.z - v.z) > miterLimit) return fallback;
-    return hit;
+    return computeMiter(v, getNormal(prevEdge), getNormal(nextEdge), prevEdge, nextEdge, false);
   });
 }
 
@@ -345,19 +341,36 @@ export default function Scaffold3DView({
       ? (result as any).result.walls
       : [];
 
-  // Patch: when walls have different wallHeightMm but identical fullLevels,
-  // recalculate per-wall levels so the scaffold follows the stepped building profile.
+  // Patch: ensure per-wall scaffold levels match each wall's height so
+  // stepped/multi-tier buildings render at the correct height per wall.
+  // Triggers when: (a) walls have different heights but same levels, or
+  // (b) any wall's level count doesn't match its wallHeightMm.
   const walls: WallCalculationResult[] = (() => {
     if (rawWalls.length < 2) return rawWalls;
-    const heights = rawWalls.map((w) => w.wallHeightMm).filter((h): h is number => typeof h === 'number' && h >= 1000);
-    const uniqueHeights = new Set(heights.map((h) => Math.round(h / 100)));
-    if (uniqueHeights.size <= 1) return rawWalls;
-    const levels = rawWalls.map((w) => w.levelCalc?.fullLevels ?? 0);
-    const uniqueLevels = new Set(levels);
-    if (uniqueLevels.size > 1) return rawWalls;
     const scaffoldType: 'kusabi' | 'wakugumi' =
       (result?.scaffoldType ?? (result as any)?.scaffold_type ?? 'kusabi') as any;
     const levelH = scaffoldType === 'wakugumi' ? (result?.frameSizeMm || 1700) : 1800;
+
+    let needsRecalc = false;
+    const heights = rawWalls.map((w) => w.wallHeightMm).filter((h): h is number => typeof h === 'number' && h >= 1000);
+    const uniqueHeights = new Set(heights.map((h) => Math.round(h / 100)));
+    if (uniqueHeights.size > 1) {
+      const levels = rawWalls.map((w) => w.levelCalc?.fullLevels ?? 0);
+      const uniqueLevels = new Set(levels);
+      if (uniqueLevels.size <= 1) needsRecalc = true;
+    }
+    for (const w of rawWalls) {
+      const wh = w.wallHeightMm;
+      if (typeof wh !== 'number' || !Number.isFinite(wh) || wh < 1000) continue;
+      const expected = Math.max(1, Math.ceil(wh / levelH));
+      const actual = w.levelCalc?.fullLevels ?? 0;
+      if (actual > 0 && Math.abs(expected - actual) >= 2) {
+        needsRecalc = true;
+        break;
+      }
+    }
+    if (!needsRecalc) return rawWalls;
+
     return rawWalls.map((w) => {
       const wh = w.wallHeightMm;
       if (typeof wh !== 'number' || !Number.isFinite(wh) || wh < 1000) return w;
@@ -1660,11 +1673,19 @@ export default function Scaffold3DView({
           const midX = (v1.x + v2.x) / 2;
           const midZ = (v1.z + v2.z) / 2;
           if (!tierIsOpen && tierV.length >= 3) {
-            // Robust outward check for concave / stepped polygons:
-            // a probe in the normal direction must be outside the footprint.
-            const probeDist = Math.max(Math.min(standoffM * 0.35, 0.25), 0.05);
-            const probe = { x: midX + nx * probeDist, z: midZ + nz * probeDist };
-            if (pointInPolygonXZ(probe, tierV)) {
+            // Multi-distance probe for reliable outward detection at concave corners.
+            // A single small probe can land on an edge or in a thin polygon neck;
+            // voting across 3 distances avoids false flips.
+            const probeDistances = [
+              Math.max(standoffM * 0.5, 0.08),
+              Math.max(standoffM * 2.0, 0.4),
+              Math.max(standoffM * 4.0, 0.8),
+            ];
+            let insideVotes = 0;
+            for (const pd of probeDistances) {
+              if (pointInPolygonXZ({ x: midX + nx * pd, z: midZ + nz * pd }, tierV)) insideVotes++;
+            }
+            if (insideVotes > probeDistances.length / 2) {
               nx = -nx;
               nz = -nz;
             }
@@ -1888,12 +1909,9 @@ export default function Scaffold3DView({
       setLevelVisCap(threeDLevelsCapped);
       maxHeightRef.current = maxH;
 
-      // ── Corner connection (reference: 足場コーナー詳細図) ─
-      // Rule:
-      //   1) 300mm overrun from corner on wall A inner row
-      //   2) then 600mm corner span on wall A inner row
-      //   3) reuse those two inner posts and connect each directly into wall B
-      // This creates the direct one-to-one bars the user requested.
+      // ── Tier-aware corner connections (足場コーナー詳細図) ─
+      // Iterate per tier group so upper-tier corners are connected correctly
+      // and walls from different tiers never cross-connect.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.min(
@@ -1908,80 +1926,85 @@ export default function Scaffold3DView({
         return { x: p.x, z: p.z };
       };
 
-      for (let wi = 0; wi < walls.length; wi++) {
-        const nextWi = (wi + 1) % walls.length;
-        if (isOpenPolygon && nextWi <= wi) continue;
-        if (!(hasCornerAtEnd[wi] ?? false)) continue;
+      for (let tgi = 0; tgi < tierGroups.length; tgi++) {
+        const tg = tierGroups[tgi];
+        const tpd = tierPolyData[tgi];
+        if (!tpd || tg.walls.length < 2) continue;
+        const tierCornerEnd = tpd.hasCornerAtEnd;
+        const tierLEnd = tpd.isLShapedAtEnd;
+        const tierOpen = tpd.isOpen;
 
-        const infoA = wallRenderInfos[wi];
-        const infoB = wallRenderInfos[nextWi];
-        if (!infoA || !infoB) continue;
-        if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
+        for (let localWi = 0; localWi < tg.walls.length; localWi++) {
+          const nextLocal = (localWi + 1) % tg.walls.length;
+          if (tierOpen && nextLocal <= localWi) continue;
+          if (!(tierCornerEnd[localWi] ?? false)) continue;
 
-        const isLShaped = isLShapedAtEnd[wi] ?? false;
+          const globalWi = tg.wallIndices[localWi];
+          const globalNext = tg.wallIndices[nextLocal];
+          const infoA = wallRenderInfos[globalWi];
+          const infoB = wallRenderInfos[globalNext];
+          if (!infoA || !infoB) continue;
+          if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
 
-        // Reuse the actual last two inner posts from wall A (matches rendered geometry exactly).
-        const aLast = infoA.postX.length - 1;
-        const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
-        const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
+          const isLShaped = tierLEnd[localWi] ?? false;
 
-        // Connect into wall B's first rendered span endpoint.
-        const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
-        let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
-        let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
-        // Keep left/right pairing stable and avoid crossing connectors.
-        const matchDirect =
-          Math.hypot(r1.x - t1.x, r1.z - t1.z) + Math.hypot(r2.x - t2.x, r2.z - t2.z);
-        const matchCross =
-          Math.hypot(r1.x - t2.x, r1.z - t2.z) + Math.hypot(r2.x - t1.x, r2.z - t1.z);
-        if (matchCross < matchDirect) {
-          const tmp = t1;
-          t1 = t2;
-          t2 = tmp;
-        }
+          const aLast = infoA.postX.length - 1;
+          const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
+          const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
 
-        const wallA = walls[wi];
-        const wallB = walls[nextWi];
-        const baseA = ((wallA as any).baseHeightMm ?? 0) / 1000;
-        const baseB = ((wallB as any).baseHeightMm ?? 0) / 1000;
-        // Corner extras must sit on the same vertical tier as the two walls; otherwise they render at y≈0 and look like floating junk.
-        if (Math.abs(baseA - baseB) > 0.05) continue;
-        const baseYM_corner = baseA;
-        const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
-        const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
-        const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
+          const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
+          let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
+          let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
+          const matchDirect =
+            Math.hypot(r1.x - t1.x, r1.z - t1.z) + Math.hypot(r2.x - t2.x, r2.z - t2.z);
+          const matchCross =
+            Math.hypot(r1.x - t2.x, r1.z - t2.z) + Math.hypot(r2.x - t1.x, r2.z - t1.z);
+          if (matchCross < matchDirect) {
+            const tmp = t1;
+            t1 = t2;
+            t2 = tmp;
+          }
 
-        for (let lv = 1; lv <= maxLvThisCorner; lv++) {
-          const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
+          const wallA = walls[globalWi];
+          const wallB = walls[globalNext];
+          const baseA = ((wallA as any).baseHeightMm ?? 0) / 1000;
+          const baseB = ((wallB as any).baseHeightMm ?? 0) / 1000;
+          if (Math.abs(baseA - baseB) > 0.05) continue;
+          const baseYM_corner = baseA;
+          const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
+          const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
+          const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
 
-          if (isLShaped) {
-            // L-shaped (~90°) corner: full rule — one-to-one connectors, 600 span pair, walkable deck.
-            addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
-            addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
-            addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
-            const firstSpanDeck = new THREE.Shape();
-            firstSpanDeck.moveTo(r1.x, -r1.z);
-            firstSpanDeck.lineTo(t1.x, -t1.z);
-            firstSpanDeck.lineTo(t2.x, -t2.z);
-            firstSpanDeck.lineTo(r2.x, -r2.z);
-            firstSpanDeck.closePath();
-            const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
-            const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
-            deckMesh.rotation.x = -Math.PI / 2;
-            deckMesh.position.y = y + 0.028;
-            deckMesh.castShadow = true;
-            deckMesh.receiveShadow = true;
-            cornerGroup.add(deckMesh);
-            const hY = y + 0.06;
-            addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
-          } else {
-            // Non-L-shaped corner: use pattanko (2 small filler planks per level to close the gap).
-            const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
-            const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;
-            const pattankoW = 0.25;
-            const pattankoD = 0.5;
-            addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
-            addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
+          for (let lv = 1; lv <= maxLvThisCorner; lv++) {
+            const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
+
+            if (isLShaped) {
+              addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+              addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
+              addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
+              const firstSpanDeck = new THREE.Shape();
+              firstSpanDeck.moveTo(r1.x, -r1.z);
+              firstSpanDeck.lineTo(t1.x, -t1.z);
+              firstSpanDeck.lineTo(t2.x, -t2.z);
+              firstSpanDeck.lineTo(r2.x, -r2.z);
+              firstSpanDeck.closePath();
+              const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
+              const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
+              deckMesh.rotation.x = -Math.PI / 2;
+              deckMesh.position.y = y + 0.028;
+              deckMesh.castShadow = true;
+              deckMesh.receiveShadow = true;
+              cornerGroup.add(deckMesh);
+              const hY = y + 0.06;
+              addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
+            } else {
+              const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
+              const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;
+              const pattankoW = 0.25;
+              const pattankoD = 0.5;
+              addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
+              addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
+            }
           }
         }
       }
@@ -2327,8 +2350,62 @@ export default function Scaffold3DView({
 
           if (hasMassingTiers) {
             addMassingTiers(wallMatBrick, 0x0a0a0a, 1);
+
+            // Add roof overhang to the topmost massing tier
+            const topTier = [...massingTiers]
+              .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
+              .sort((a, b) => b.topHeightMm - a.topHeightMm)[0];
+            if (topTier) {
+              const topTierVerts = bimPlan
+                ? bimPlan.toPlanM(topTier.vertices)
+                : normaliseTierVerts(topTier.vertices, false);
+              if (topTierVerts.length >= 3) {
+                const centeredTop = topTierVerts.map((v: any) => ({ x: v.x - cx, z: v.z - cz }));
+                const roofOverhangM = 0.4;
+                const roofNS = signedAreaXZ(centeredTop) > 0 ? 1 : -1;
+                const roofOffVerts = buildOffsetPathXZ(centeredTop, centeredTop.length, roofNS, roofOverhangM, false);
+                const roofS = new THREE.Shape();
+                const rvs = roofOffVerts.length >= 3 ? roofOffVerts : centeredTop;
+                roofS.moveTo(rvs[0].x, -rvs[0].z);
+                for (let ri = 1; ri < rvs.length; ri++) roofS.lineTo(rvs[ri].x, -rvs[ri].z);
+                roofS.closePath();
+                const roofY = GROUND_Y + 0.02 + topTier.topHeightMm / 1000;
+                const roofGeoM = new THREE.ExtrudeGeometry(roofS, { depth: 0.35, bevelEnabled: false });
+                const roofMesh = new THREE.Mesh(roofGeoM, roofMatReal);
+                roofMesh.rotation.x = -Math.PI / 2;
+                roofMesh.position.y = roofY;
+                roofMesh.castShadow = true;
+                roofMesh.receiveShadow = true;
+                roofMesh.userData = { noClip: true };
+                scene.add(roofMesh);
+                addBlackEdges(roofGeoM, roofY);
+              }
+            }
           } else if (hasSteppedWallHeights) {
             addSteppedWallPanels(wallMatBrick, 0x0a0a0a, 1);
+
+            // Add roof slab at the tallest stepped wall height with overhang
+            const maxSteppedH = Math.max(...wallHeightsM.filter((h) => Number.isFinite(h) && h > 0), 0);
+            if (maxSteppedH > 0) {
+              const roofOverhangStepped = 0.4;
+              const roofNSStepped = signedAreaXZ(centeredVerts) > 0 ? 1 : -1;
+              const roofOffVertsStepped = buildOffsetPathXZ(centeredVerts, centeredVerts.length, roofNSStepped, roofOverhangStepped, false);
+              const roofSStepped = new THREE.Shape();
+              const rvsStepped = roofOffVertsStepped.length >= 3 ? roofOffVertsStepped : centeredVerts;
+              roofSStepped.moveTo(rvsStepped[0].x, -rvsStepped[0].z);
+              for (let ri = 1; ri < rvsStepped.length; ri++) roofSStepped.lineTo(rvsStepped[ri].x, -rvsStepped[ri].z);
+              roofSStepped.closePath();
+              const roofYStepped = GROUND_Y + 0.02 + maxSteppedH;
+              const roofGeoStepped = new THREE.ExtrudeGeometry(roofSStepped, { depth: 0.35, bevelEnabled: false });
+              const roofMeshStepped = new THREE.Mesh(roofGeoStepped, roofMatReal);
+              roofMeshStepped.rotation.x = -Math.PI / 2;
+              roofMeshStepped.position.y = roofYStepped;
+              roofMeshStepped.castShadow = true;
+              roofMeshStepped.receiveShadow = true;
+              roofMeshStepped.userData = { noClip: true };
+              scene.add(roofMeshStepped);
+              addBlackEdges(roofGeoStepped, roofYStepped);
+            }
           } else {
             const lowerH = buildingH * 0.48;
             const upperH = buildingH * 0.52;
@@ -2353,7 +2430,27 @@ export default function Scaffold3DView({
             addBlackEdges(upperGeo, baseY + lowerH);
 
             const roofTopY = baseY + lowerH + upperH;
-            const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.22, bevelEnabled: false });
+
+            // Roof with overhang — extend the footprint outward so the roof
+            // extends 0.4m beyond the building walls (visible past the scaffold).
+            const roofOverhang = 0.4;
+            const roofNormSign = signedAreaXZ(centeredVerts) > 0 ? 1 : -1;
+            const roofOffsetVerts = buildOffsetPathXZ(centeredVerts, centeredVerts.length, roofNormSign, roofOverhang, false);
+            const roofShapeObj = new THREE.Shape();
+            if (roofOffsetVerts.length >= 3) {
+              roofShapeObj.moveTo(roofOffsetVerts[0].x, -(roofOffsetVerts[0].z));
+              for (let ri = 1; ri < roofOffsetVerts.length; ri++) {
+                roofShapeObj.lineTo(roofOffsetVerts[ri].x, -(roofOffsetVerts[ri].z));
+              }
+            } else {
+              roofShapeObj.moveTo(centeredVerts[0].x, -(centeredVerts[0].z));
+              for (let ri = 1; ri < centeredVerts.length; ri++) {
+                roofShapeObj.lineTo(centeredVerts[ri].x, -(centeredVerts[ri].z));
+              }
+            }
+            roofShapeObj.closePath();
+            const roofThickness = 0.35;
+            const roofGeo = new THREE.ExtrudeGeometry(roofShapeObj, { depth: roofThickness, bevelEnabled: false });
             const roofMeshObj = new THREE.Mesh(roofGeo, roofMatReal);
             roofMeshObj.rotation.x = -Math.PI / 2;
             roofMeshObj.position.y = roofTopY;
@@ -2362,12 +2459,26 @@ export default function Scaffold3DView({
             scene.add(roofMeshObj);
             addBlackEdges(roofGeo, roofTopY);
 
-            // Floor slab lines
+            // Roof edge trim (fascia board)
+            const fasciaH = 0.15;
+            const fasciaGeo = new THREE.ExtrudeGeometry(roofShapeObj, { depth: fasciaH, bevelEnabled: false });
+            const fasciaMat = new THREE.MeshStandardMaterial({
+              color: 0x4a4a50, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide,
+            });
+            const fasciaMesh = new THREE.Mesh(fasciaGeo, fasciaMat);
+            fasciaMesh.rotation.x = -Math.PI / 2;
+            fasciaMesh.position.y = roofTopY - fasciaH;
+            fasciaMesh.userData = { noClip: true };
+            scene.add(fasciaMesh);
+
+            // Floor slabs (thicker for visibility)
             for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
-              const slabGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.08, bevelEnabled: false });
+              const slabGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.12, bevelEnabled: false });
               const slabObj = new THREE.Mesh(slabGeo, slabMat);
               slabObj.rotation.x = -Math.PI / 2;
               slabObj.position.y = baseY + floorY;
+              slabObj.castShadow = true;
+              slabObj.receiveShadow = true;
               slabObj.userData = { noClip: true };
               scene.add(slabObj);
             }
