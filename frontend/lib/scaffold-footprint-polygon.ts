@@ -255,10 +255,85 @@ export function buildFootprintPolygonXZ(
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
-  // ── Orthogonal L/U/T (6,8,10...) walls ──
-  // When stored vertices are available, use their turn directions to identify reflex
-  // corners — this preserves the correct shape from BIM/AI. Fall back to brute-force
-  // when stored vertices are absent or don't produce a valid result.
+  // ── Stored outline FIRST: when BIM/AI provides polygon vertices, they define
+  // the correct building shape. Use them with perimeter-ratio scaling to get the
+  // right shape in metres. This takes priority over orthogonal builders because
+  // AI-extracted wall lengths often don't form a perfectly closed polygon (e.g.
+  // vertical walls [20,30,10,35] can't sum to zero), causing ortho builders to
+  // produce shapes that "go beyond" the actual building.
+  if (storedVertices && storedVertices.length >= n && n >= 3) {
+    const raw = storedVertices.slice(0, n).map(normaliseVertex);
+    const xs = raw.map((v) => v.x);
+    const zs = raw.map((v) => v.z);
+    const spreadX = Math.max(...xs) - Math.min(...xs);
+    const spreadZ = Math.max(...zs) - Math.min(...zs);
+    const spread = Math.max(spreadX, spreadZ, 1e-6);
+    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
+
+    if (spread >= 1e-6) {
+      let verts: FootprintVertexXZ[];
+      if (maxCoord <= 1.1 && spread <= 1.1) {
+        const refM = Math.max(...walls.map((w) => Math.max(w.wallLengthMm ?? 0, 600))) / 1000;
+        const scale = refM / spread;
+        verts = raw.map((v) => ({ x: v.x * scale, z: v.z * scale }));
+      } else if (spread > 1000 || maxCoord > 1000) {
+        verts = raw.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }));
+      } else {
+        verts = raw.map((v) => ({ x: v.x, z: v.z }));
+      }
+
+      const spreadM = Math.max(
+        Math.max(...verts.map((v) => v.x)) - Math.min(...verts.map((v) => v.x)),
+        Math.max(...verts.map((v) => v.z)) - Math.min(...verts.map((v) => v.z)),
+      );
+      if (spreadM > 0.01) {
+        let rawPerimeter = 0;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          rawPerimeter += Math.hypot(verts[j].x - verts[i].x, verts[j].z - verts[i].z);
+        }
+        const targetPerimeter = walls.reduce(
+          (s, w) => s + Math.max((w.wallLengthMm ?? 600), 600) / 1000, 0,
+        );
+        const perimScale = rawPerimeter > 1e-6 ? targetPerimeter / rawPerimeter : 1;
+        const centX = verts.reduce((s, v) => s + v.x, 0) / n;
+        const centZ = verts.reduce((s, v) => s + v.z, 0) / n;
+        const scaled: FootprintVertexXZ[] = verts.map((v) => ({
+          x: centX + (v.x - centX) * perimScale,
+          z: centZ + (v.z - centZ) * perimScale,
+        }));
+
+        if (scaled.length === n && hasPlausiblePolygonEdges(scaled, walls)) {
+          if (typeof window !== 'undefined') console.info('[Scaffold] footprint: stored-outline (perimeter-scaled)', n, 'walls');
+          return scaled;
+        }
+
+        // Per-edge direction correction: use stored edge directions with wall lengths.
+        // This preserves the shape topology while using correct wall dimensions.
+        const corrected: FootprintVertexXZ[] = [{ ...verts[0] }];
+        for (let i = 0; i < n - 1; i++) {
+          const rawDx = verts[i + 1].x - verts[i].x;
+          const rawDz = verts[i + 1].z - verts[i].z;
+          const rawLen = Math.hypot(rawDx, rawDz);
+          const tgtLen = wallLenM(walls, i);
+          const prev = corrected[corrected.length - 1]!;
+          if (rawLen < 0.001) {
+            corrected.push({ x: prev.x, z: prev.z });
+            continue;
+          }
+          const dx = (rawDx / rawLen) * tgtLen;
+          const dz = (rawDz / rawLen) * tgtLen;
+          corrected.push({ x: prev.x + dx, z: prev.z + dz });
+        }
+        if (corrected.length === n && hasPlausiblePolygonEdges(corrected, walls)) {
+          if (typeof window !== 'undefined') console.info('[Scaffold] footprint: stored-outline (per-edge corrected)', n, 'walls');
+          return corrected;
+        }
+      }
+    }
+  }
+
+  // ── Orthogonal L/U/T (6,8,10...) walls — only when stored vertices are absent ──
   if (n >= 6 && n <= 16 && n % 2 === 0) {
     if (storedVertices && storedVertices.length >= n) {
       const sv = storedVertices.slice(0, n).map(normaliseVertex);
@@ -274,7 +349,7 @@ export function buildFootprintPolygonXZ(
       if (typeof window !== 'undefined') console.info('[Scaffold] footprint: ortho (wall-lengths)', n, 'walls');
       return orthoResult;
     }
-    if (typeof window !== 'undefined') console.info('[Scaffold] footprint: ortho failed, trying stored', n, walls.map((w, i) => `${i}:${(w.wallLengthMm ?? 0) / 1000}m`));
+    if (typeof window !== 'undefined') console.info('[Scaffold] footprint: ortho failed', n, walls.map((w, i) => `${i}:${(w.wallLengthMm ?? 0) / 1000}m`));
   }
 
   // ── 4 walls: rectangle fallback when no / degenerate stored vertices ──
@@ -302,76 +377,7 @@ export function buildFootprintPolygonXZ(
     }
   }
 
-  // ── Stored outline: scale raw vertices to meters, preserving polygon shape ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(normaliseVertex);
-    const xs = raw.map((v) => v.x);
-    const zs = raw.map((v) => v.z);
-    const spreadX = Math.max(...xs) - Math.min(...xs);
-    const spreadZ = Math.max(...zs) - Math.min(...zs);
-    const spread = Math.max(spreadX, spreadZ, 1e-6);
-    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
-
-    if (spread >= 1e-6) {
-      let verts: FootprintVertexXZ[];
-      if (maxCoord <= 1.1 && spread <= 1.1) {
-        const refM = Math.max(...walls.map((w) => Math.max(w.wallLengthMm ?? 0, 600))) / 1000;
-        const scale = refM / spread;
-        verts = raw.map((v) => ({ x: v.x * scale, z: v.z * scale }));
-      } else if (spread > 1000 || maxCoord > 1000) {
-        verts = raw.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }));
-      } else {
-        verts = raw.map((v) => ({ x: v.x, z: v.z }));
-      }
-
-      const spreadM = Math.max(
-        Math.max(...verts.map((v) => v.x)) - Math.min(...verts.map((v) => v.x)),
-        Math.max(...verts.map((v) => v.z)) - Math.min(...verts.map((v) => v.z)),
-      );
-      if (spreadM > 0.01) {
-        // Perimeter-ratio approach: scale the entire polygon uniformly so the
-        // total perimeter matches the sum of wall lengths. This preserves vertex
-        // relationships and prevents cumulative drift from per-edge correction.
-        let rawPerimeter = 0;
-        for (let i = 0; i < n; i++) {
-          const j = (i + 1) % n;
-          rawPerimeter += Math.hypot(verts[j].x - verts[i].x, verts[j].z - verts[i].z);
-        }
-        const targetPerimeter = walls.reduce(
-          (s, w) => s + Math.max((w.wallLengthMm ?? 600), 600) / 1000, 0,
-        );
-        const perimScale = rawPerimeter > 1e-6 ? targetPerimeter / rawPerimeter : 1;
-        const centX = verts.reduce((s, v) => s + v.x, 0) / n;
-        const centZ = verts.reduce((s, v) => s + v.z, 0) / n;
-        const scaled: FootprintVertexXZ[] = verts.map((v) => ({
-          x: centX + (v.x - centX) * perimScale,
-          z: centZ + (v.z - centZ) * perimScale,
-        }));
-
-        if (scaled.length === n && hasPlausiblePolygonEdges(scaled, walls)) return scaled;
-
-        // Fallback: per-edge correction for cases where perimeter scale doesn't fit
-        const corrected: FootprintVertexXZ[] = [{ ...verts[0] }];
-        for (let i = 0; i < n - 1; i++) {
-          const rawDx = verts[i + 1].x - verts[i].x;
-          const rawDz = verts[i + 1].z - verts[i].z;
-          const rawLen = Math.hypot(rawDx, rawDz);
-          const tgtLen = wallLenM(walls, i);
-          const prev = corrected[corrected.length - 1]!;
-          if (rawLen < 0.001) {
-            corrected.push({ x: prev.x, z: prev.z });
-            continue;
-          }
-          const dx = (rawDx / rawLen) * tgtLen;
-          const dz = (rawDz / rawLen) * tgtLen;
-          corrected.push({ x: prev.x + dx, z: prev.z + dz });
-        }
-        if (corrected.length === n && hasPlausiblePolygonEdges(corrected, walls)) return corrected;
-      }
-    }
-  }
-
-  // ── Orthogonal fallback (already tried above for 6–16 walls) ──
+  // ── Orthogonal fallback for odd/out-of-range wall counts ──
   if (n < 6 || n > 16 || n % 2 !== 0) {
     const orthoResult = tryOrthogonalFallback(walls, n);
     if (orthoResult) return orthoResult;

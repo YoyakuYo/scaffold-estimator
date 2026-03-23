@@ -299,6 +299,7 @@ Self-check before outputting (fix silently):
 - no duplicate consecutive vertices
 - no self-intersecting edges
 - if wallLengthsMm provided: sum of lengths > 4m and < 2000m
+- ORTHOGONAL CLOSURE CHECK (critical for L/U/T shapes): For orthogonal buildings (all 90° corners), walls alternate horizontal and vertical. The sum of all rightward wall lengths MUST equal the sum of all leftward wall lengths, and the sum of all downward MUST equal all upward. If they don't balance, one of your dimensions is wrong — re-read the drawing dimensions and fix before outputting. Example: an 8-wall U-shape with walls [60,20,20,30,40,10,40,35] — the vertical walls 20+30=50 vs 10+35=45 are off by 5m, meaning one vertical dimension is wrong.
 - FLOOR PLAN: OPEN terraces/decks (no enclosing structural walls) are EXCLUDED; ENCLOSED wings are INCLUDED
 - FLOOR PLAN: the overall dimension line on each side matches the total length of polygon edges on that side
 - 3D VIEW SILHOUETTE CHECK: if you have 6 walls A,B,A,B,A,B you traced the silhouette — WRONG. Rectangular building = 4 walls A,B,A,B.
@@ -1103,6 +1104,56 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           }
         }
       }
+      // Orthogonal closure check: for 6/8/10+ wall orthogonal buildings,
+      // verify that wall lengths can form a closed polygon. If not, adjust
+      // the wall with the largest closing gap contribution.
+      if (wallLengths && wallLengths.length >= 6 && wallLengths.length % 2 === 0) {
+        const hWalls = wallLengths.filter((_, i) => i % 2 === 0);
+        const vWalls = wallLengths.filter((_, i) => i % 2 !== 0);
+
+        const findBestSplit = (arr: number[]): { balanced: boolean; gap: number; adjustIdx: number } => {
+          const k = arr.length;
+          let bestGap = Infinity;
+          for (let mask = 0; mask < (1 << k); mask++) {
+            let pos = 0, neg = 0;
+            for (let j = 0; j < k; j++) {
+              if (mask & (1 << j)) pos += arr[j]; else neg += arr[j];
+            }
+            const gap = Math.abs(pos - neg);
+            if (gap < bestGap) { bestGap = gap; }
+          }
+          let adjustIdx = 0;
+          let minVal = Infinity;
+          for (let j = 0; j < k; j++) {
+            if (arr[j] < minVal) { minVal = arr[j]; adjustIdx = j; }
+          }
+          return { balanced: bestGap === 0, gap: bestGap, adjustIdx };
+        };
+
+        const hCheck = findBestSplit(hWalls);
+        const vCheck = findBestSplit(vWalls);
+
+        if (!hCheck.balanced || !vCheck.balanced) {
+          const totalGap = hCheck.gap + vCheck.gap;
+          this.logger.warn(
+            `wallLengthsMm: orthogonal closure check failed — H gap=${hCheck.gap}mm, V gap=${vCheck.gap}mm (total ${totalGap}mm). ` +
+            `Wall lengths may not form a valid closed polygon. Stored vertices will be used for shape.`,
+          );
+          if (!hCheck.balanced && hCheck.gap <= Math.max(...hWalls) * 0.2) {
+            const realIdx = hCheck.adjustIdx * 2;
+            const oldVal = wallLengths[realIdx];
+            wallLengths[realIdx] = oldVal + hCheck.gap;
+            this.logger.warn(`wallLengthsMm: adjusted wall[${realIdx}] ${oldVal}→${wallLengths[realIdx]}mm to close H axis`);
+          }
+          if (!vCheck.balanced && vCheck.gap <= Math.max(...vWalls) * 0.2) {
+            const realIdx = vCheck.adjustIdx * 2 + 1;
+            const oldVal = wallLengths[realIdx];
+            wallLengths[realIdx] = oldVal + vCheck.gap;
+            this.logger.warn(`wallLengthsMm: adjusted wall[${realIdx}] ${oldVal}→${wallLengths[realIdx]}mm to close V axis`);
+          }
+        }
+      }
+
       parsed.wallLengthsMm = wallLengths;
       parsed.wallLengthsFromDimText = wallLengths != null
         ? (parsed.wallLengthsFromDimText === true)
