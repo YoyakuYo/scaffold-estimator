@@ -11,6 +11,7 @@ import { PolygonToWallsService } from './polygon-to-walls.service';
 import { runParametricPipeline } from './parametric-scaffold.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+import { correctLegacyMassingTiers } from './massing-tier-normalizer';
 
 @Injectable()
 export class ScaffoldConfigService {
@@ -193,11 +194,19 @@ export class ScaffoldConfigService {
     }
 
     const standoffMm = dto.wallStandoffMm ?? 350;
+    const correctedMassingTiers = correctLegacyMassingTiers(
+      dto.buildingOutline as any,
+      dto.massingTiers as any,
+      result.walls as any,
+    );
     const calculationResult = {
       ...result,
       wallStandoffMm: standoffMm,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
-      ...(dto.massingTiers && dto.massingTiers.length > 0 && { massingTiers: dto.massingTiers }),
+      ...((correctedMassingTiers ?? dto.massingTiers) &&
+        (correctedMassingTiers ?? dto.massingTiers)!.length > 0 && {
+          massingTiers: correctedMassingTiers ?? dto.massingTiers,
+        }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
@@ -398,11 +407,19 @@ export class ScaffoldConfigService {
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     }
+    const correctedMassingTiersUpd = correctLegacyMassingTiers(
+      dto.buildingOutline as any,
+      dto.massingTiers as any,
+      result.walls as any,
+    );
     const calculationResult = {
       ...result,
       wallStandoffMm: wallStandoffMm,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
-      ...(dto.massingTiers && dto.massingTiers.length > 0 && { massingTiers: dto.massingTiers }),
+      ...((correctedMassingTiersUpd ?? dto.massingTiers) &&
+        (correctedMassingTiersUpd ?? dto.massingTiers)!.length > 0 && {
+          massingTiers: correctedMassingTiersUpd ?? dto.massingTiers,
+        }),
       ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
@@ -470,6 +487,7 @@ export class ScaffoldConfigService {
     if (error || !row) throw new NotFoundException('Scaffold configuration not found');
     const config = mapRowToCamel<ScaffoldConfiguration>(row as Record<string, unknown>);
     if (!config) throw new NotFoundException('Scaffold configuration not found');
+    this.applyLegacyMassingCorrection(config);
     return config;
   }
 
@@ -482,7 +500,10 @@ export class ScaffoldConfigService {
       .order('created_at', { ascending: false })
       .limit(1);
     if (!rows || rows.length === 0) return null;
-    return mapRowToCamel<ScaffoldConfiguration>(rows[0] as Record<string, unknown>);
+    const cfg = mapRowToCamel<ScaffoldConfiguration>(rows[0] as Record<string, unknown>);
+    if (!cfg) return null;
+    this.applyLegacyMassingCorrection(cfg);
+    return cfg;
   }
 
   async getQuantities(configId: string): Promise<CalculatedQuantity[]> {
@@ -524,7 +545,23 @@ export class ScaffoldConfigService {
     let q = this.supabase.getClient().from('scaffold_configurations').select('*').order('created_at', { ascending: false });
     if (projectId) q = q.eq('project_id', projectId);
     const { data: rows } = await q;
-    return mapRowsToCamel<ScaffoldConfiguration>(rows || []);
+    const list = mapRowsToCamel<ScaffoldConfiguration>(rows || []);
+    for (const cfg of list) this.applyLegacyMassingCorrection(cfg);
+    return list;
+  }
+
+  private applyLegacyMassingCorrection(config: ScaffoldConfiguration): void {
+    const cr: any = config?.calculationResult;
+    if (!cr || typeof cr !== 'object') return;
+    const corrected = correctLegacyMassingTiers(
+      cr.polygonVertices as any,
+      cr.massingTiers as any,
+      (cr.walls as any[]) ?? (config.walls as any[]),
+    );
+    if (corrected && corrected.length >= 2) {
+      cr.massingTiers = corrected as any;
+      config.calculationResult = cr;
+    }
   }
 
   async deleteConfig(configId: string): Promise<void> {
