@@ -1,8 +1,8 @@
 /**
  * Single source of truth for closed footprint polygons used by 3D and plan views.
- * Each wall i runs along the direction from stored vertex i → i+1, with length walls[i].wallLengthMm.
- * The last wall (i = n-1) closes from built vertex n-1 back to vertex 0 (chord length follows from geometry;
- * we do not overwrite vertex 0, which previously broke edge 0 / made edge n-1 shoot through the building).
+ * Each wall i runs along the direction from polygon vertex i → (i+1)%n.
+ * The ortho builder now force-closes the polygon by adjusting wall lengths per axis,
+ * so the closing edge matches exactly and scaffold never "goes beyond" the building.
  */
 
 import type { WallCalculationResult } from '@/lib/api/scaffold-configs';
@@ -74,91 +74,103 @@ function polygonAbsArea(verts: FootprintVertexXZ[]): number {
 }
 
 /**
- * After building an orthogonal polygon, the closing edge (v[n-1] → v[0]) may not
- * match the last wall length because wall dimensions are inconsistent.
- * Distribute the closing gap proportionally across all vertices so the polygon
- * closes exactly. This keeps all individual edge lengths close to their targets
- * while ensuring the shape is properly closed.
- */
-function closePolygonGap(verts: FootprintVertexXZ[]): FootprintVertexXZ[] {
-  const n = verts.length;
-  if (n < 3) return verts;
-
-  const gapX = verts[0].x - verts[n - 1].x;
-  const gapZ = verts[0].z - verts[n - 1].z;
-  const gapDist = Math.hypot(gapX, gapZ);
-
-  if (gapDist < 0.001) return verts;
-
-  const last = verts[n - 1];
-  const closeDx = verts[0].x - last.x;
-  const closeDz = verts[0].z - last.z;
-  const closeDist = Math.hypot(closeDx, closeDz);
-
-  let totalPathLen = 0;
-  for (let i = 0; i < n - 1; i++) {
-    totalPathLen += Math.hypot(verts[i + 1].x - verts[i].x, verts[i + 1].z - verts[i].z);
-  }
-  totalPathLen += closeDist;
-  if (totalPathLen < 0.01) return verts;
-
-  const result: FootprintVertexXZ[] = [{ ...verts[0] }];
-  let cumLen = 0;
-  for (let i = 1; i < n; i++) {
-    const edgeLen = Math.hypot(verts[i].x - verts[i - 1].x, verts[i].z - verts[i - 1].z);
-    cumLen += edgeLen;
-    const t = cumLen / totalPathLen;
-    result.push({
-      x: verts[i].x + t * (verts[0].x - verts[n - 1].x - (closeDx)),
-      z: verts[i].z + t * (verts[0].z - verts[n - 1].z - (closeDz)),
-    });
-  }
-
-  return result;
-}
-
-/**
- * Build an orthogonal polygon from wall lengths using known reflex corner positions.
- * Returns the candidate with the largest area (among both CW/CCW), or null.
+ * Build an orthogonal polygon with force-closed edges.
+ *
+ * 1. Compute the direction sequence for each edge based on reflex corner placement.
+ * 2. For each axis (X, Z), sum the signed components. If they don't cancel,
+ *    adjust the LONGEST wall on that axis to absorb the gap.
+ * 3. Build the polygon with corrected lengths — guaranteed closure.
  */
 function buildOrthoCandidate(
   lengths: number[],
   n: number,
   reflexSet: Set<number>,
-  tolerance: number,
+  maxGapPerAxis: number,
 ): FootprintVertexXZ[] | null {
   let best: FootprintVertexXZ[] | null = null;
   let bestArea = -1;
 
   for (const cwSign of [1, -1] as const) {
-    const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
-    let dir = 0;
+    // Compute direction for each edge
+    const dirs: number[] = [0]; // dir[0] = East
+    for (let i = 0; i < n - 1; i++) {
+      const nextVertex = (i + 1) % n;
+      const turn = reflexSet.has(nextVertex) ? -Math.PI / 2 : Math.PI / 2;
+      dirs.push(dirs[i] + cwSign * turn);
+    }
 
+    // Classify each edge as horizontal (X) or vertical (Z)
+    const hEdges: number[] = []; // indices of horizontal edges
+    const vEdges: number[] = []; // indices of vertical edges
+    for (let i = 0; i < n; i++) {
+      const cosD = Math.cos(dirs[i]);
+      if (Math.abs(cosD) > 0.5) {
+        hEdges.push(i);
+      } else {
+        vEdges.push(i);
+      }
+    }
+
+    // Compute signed sums per axis
+    let xSum = 0, zSum = 0;
+    for (let i = 0; i < n; i++) {
+      xSum += Math.cos(dirs[i]) * lengths[i];
+      zSum += Math.sin(dirs[i]) * lengths[i];
+    }
+
+    // Reject if gap is too large
+    if (Math.abs(xSum) > maxGapPerAxis || Math.abs(zSum) > maxGapPerAxis) continue;
+
+    // Force closure by adjusting wall lengths
+    const adj = [...lengths];
+
+    if (Math.abs(xSum) > 0.001 && hEdges.length > 0) {
+      // Find the longest horizontal wall to absorb the X gap
+      let bestIdx = hEdges[0];
+      let bestLen = 0;
+      for (const idx of hEdges) {
+        if (adj[idx] > bestLen) { bestLen = adj[idx]; bestIdx = idx; }
+      }
+      const cosD = Math.cos(dirs[bestIdx]);
+      adj[bestIdx] -= xSum / cosD;
+      if (adj[bestIdx] < 0.5) adj[bestIdx] = lengths[bestIdx];
+    }
+
+    if (Math.abs(zSum) > 0.001 && vEdges.length > 0) {
+      let bestIdx = vEdges[0];
+      let bestLen = 0;
+      for (const idx of vEdges) {
+        if (adj[idx] > bestLen) { bestLen = adj[idx]; bestIdx = idx; }
+      }
+      const sinD = Math.sin(dirs[bestIdx]);
+      adj[bestIdx] -= zSum / sinD;
+      if (adj[bestIdx] < 0.5) adj[bestIdx] = lengths[bestIdx];
+    }
+
+    // Build polygon with corrected lengths
+    const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
     for (let i = 0; i < n - 1; i++) {
       const prev = verts[verts.length - 1];
       verts.push({
-        x: prev.x + lengths[i] * Math.cos(dir),
-        z: prev.z + lengths[i] * Math.sin(dir),
+        x: prev.x + adj[i] * Math.cos(dirs[i]),
+        z: prev.z + adj[i] * Math.sin(dirs[i]),
       });
-      const nextVertex = (i + 1) % n;
-      const turn = reflexSet.has(nextVertex) ? -Math.PI / 2 : Math.PI / 2;
-      dir += cwSign * turn;
     }
 
+    // Verify closure (should be nearly perfect after adjustment)
     const last = verts[n - 1];
-    const closeDx = verts[0].x - last.x;
-    const closeDz = verts[0].z - last.z;
-    const closeDist = Math.hypot(closeDx, closeDz);
-    const lenError = Math.abs(closeDist - lengths[n - 1]);
+    const closeDist = Math.hypot(verts[0].x - last.x, verts[0].z - last.z);
+    const lenError = Math.abs(closeDist - adj[n - 1]);
+    if (lenError > 2) continue; // still can't close → reject
 
+    // Verify closing edge direction is aligned with expected direction
     let dirOk = true;
     if (closeDist > 0.001) {
-      const closeAngle = Math.atan2(closeDz, closeDx);
-      const angleDiff = Math.abs(((closeAngle - dir) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+      const closeAngle = Math.atan2(verts[0].z - last.z, verts[0].x - last.x);
+      const angleDiff = Math.abs(((closeAngle - dirs[n - 1]) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
       if (angleDiff > 0.15) dirOk = false;
     }
-
-    if (!dirOk || lenError > tolerance) continue;
+    if (!dirOk) continue;
 
     const area = polygonAbsArea(verts);
     if (area > bestArea) {
@@ -172,7 +184,7 @@ function buildOrthoCandidate(
 
 /**
  * Use stored polygon vertices to identify which corners are reflex (concave),
- * then build an orthogonal polygon with the correct wall lengths.
+ * then build an orthogonal polygon with the correct (force-closed) wall lengths.
  */
 function tryOrthogonalFromStoredShape(
   walls: Array<{ wallLengthMm?: number }>,
@@ -211,17 +223,15 @@ function tryOrthogonalFromStoredShape(
     return null;
   }
 
-  const tolerance = Math.max(lengths[n - 1] * 0.15, 1);
-  const result = buildOrthoCandidate(lengths, n, reflexSet, tolerance);
+  const maxGap = Math.max(...lengths) * 0.20;
+  const result = buildOrthoCandidate(lengths, n, reflexSet, maxGap);
   if (result && polygonAbsArea(result) > 0.01) return result;
   return null;
 }
 
 /**
- * Try to construct an orthogonal polygon from wall lengths.
- * Tries all possible reflex vertex placements. Among candidates that close
- * within tolerance, picks the one with the LARGEST polygon area to reject
- * degenerate / self-intersecting configurations.
+ * Try all reflex corner combinations and pick the one with the largest area
+ * (rejects degenerate / self-intersecting shapes).
  */
 function tryOrthogonalFallback(
   walls: Array<{ wallLengthMm?: number }>,
@@ -231,20 +241,18 @@ function tryOrthogonalFallback(
 
   const numReflex = (n - 4) / 2;
   if (numReflex < 0) return null;
-  if (numReflex === 0) {
-    return null;
-  }
+  if (numReflex === 0) return null;
 
   const lengths = Array.from({ length: n }, (_, i) => wallLenM(walls, i));
   const reflexCombos = combinations(n, numReflex);
-  const tolerance = Math.max(lengths[n - 1] * 0.15, 1);
+  const maxGap = Math.max(...lengths) * 0.20;
 
   let bestVerts: FootprintVertexXZ[] | null = null;
   let bestArea = -1;
 
   for (const reflexPositions of reflexCombos) {
     const reflexSet = new Set(reflexPositions);
-    const candidate = buildOrthoCandidate(lengths, n, reflexSet, tolerance);
+    const candidate = buildOrthoCandidate(lengths, n, reflexSet, maxGap);
     if (!candidate) continue;
 
     const area = polygonAbsArea(candidate);
@@ -254,9 +262,7 @@ function tryOrthogonalFallback(
     }
   }
 
-  if (bestVerts && bestArea > 0.01) {
-    return bestVerts;
-  }
+  if (bestVerts && bestArea > 0.01) return bestVerts;
   return null;
 }
 
@@ -282,9 +288,8 @@ export function buildFootprintPolygonXZ(
   }
 
   // ── Orthogonal L/U/T (6,8,10...) walls ──
-  // Use stored vertex turn directions to place reflex corners correctly,
-  // then build with wall lengths for accurate edge dimensions.
-  // After building, distribute any closing gap so the polygon is fully closed.
+  // Force-closed ortho builder: adjusts wall lengths per axis so polygon
+  // closes exactly. No scaffold overrun.
   if (n >= 6 && n <= 16 && n % 2 === 0) {
     let orthoResult: FootprintVertexXZ[] | null = null;
 
@@ -303,35 +308,7 @@ export function buildFootprintPolygonXZ(
       }
     }
 
-    if (orthoResult) {
-      // Check closing gap and distribute error if needed
-      const last = orthoResult[n - 1];
-      const closeGap = Math.hypot(orthoResult[0].x - last.x, orthoResult[0].z - last.z);
-      const lastWallLen = wallLenM(walls, n - 1);
-      const gapError = Math.abs(closeGap - lastWallLen);
-
-      if (gapError > 0.5) {
-        // Significant gap — redistribute error across vertices
-        // Move vertices proportionally so the closing edge matches the last wall
-        const closeDir = { x: (orthoResult[0].x - last.x) / closeGap, z: (orthoResult[0].z - last.z) / closeGap };
-        const targetClose = { x: last.x + closeDir.x * lastWallLen, z: last.z + closeDir.z * lastWallLen };
-        const errorX = orthoResult[0].x - targetClose.x;
-        const errorZ = orthoResult[0].z - targetClose.z;
-
-        // Distribute: vertex i gets (i/n) of the total error correction
-        const closed = orthoResult.map((v, i) => ({
-          x: v.x - errorX * (i / n),
-          z: v.z - errorZ * (i / n),
-        }));
-
-        if (typeof window !== 'undefined') {
-          console.info(`[Scaffold] footprint: closed gap ${gapError.toFixed(2)}m on ${n}-wall polygon`);
-        }
-        return closed;
-      }
-
-      return orthoResult;
-    }
+    if (orthoResult) return orthoResult;
 
     if (typeof window !== 'undefined') {
       console.info('[Scaffold] footprint: ortho failed, trying stored', n,
