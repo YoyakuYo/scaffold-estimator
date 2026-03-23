@@ -34,6 +34,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
 import ScaffoldPlanView from './scaffold-plan-view';
+import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -180,6 +181,23 @@ function ScaffoldResultPage() {
       });
     return { ...base, walls: minimalWalls };
   }, [result, resultMergedForViz, config]);
+
+  /** Old configs: replace bbox-style massing tiers with per-edge height synthesis (no DB migration). */
+  const resultForViz = useMemo(() => {
+    const base = resultFor3D ?? resultMergedForViz ?? result;
+    if (!base) return base;
+    const pv = (base as any).polygonVertices;
+    const mt = (base as any).massingTiers;
+    if (!Array.isArray(pv) || pv.length < 3 || !Array.isArray(mt) || mt.length < 2) return base;
+    if (!Array.isArray(base.walls) || base.walls.length === 0) return base;
+    const fixed = correctLegacyMassingTiersIfNeeded({
+      storedVerts: pv,
+      massingTiers: mt,
+      walls: base.walls as any[],
+    });
+    if (!fixed || fixed.length < 2) return base;
+    return { ...base, massingTiers: fixed };
+  }, [resultFor3D, resultMergedForViz, result]);
 
   const maxLevels = result ? (result.totalLevels ?? Math.max(...(result.walls?.map((w: WallCalculationResult) => w.levelCalc?.fullLevels ?? 1) ?? [1]))) : 1;
 
@@ -461,11 +479,11 @@ function ScaffoldResultPage() {
         {/* Tab Content */}
         {activeTab === 'table' && <QuotationTable result={result} />}
         {activeTab === 'perside' && <PerSideBreakdown result={result} />}
-        {activeTab === '2d' && <Scaffold2DView result={resultMergedForViz ?? result} />}
-        {activeTab === 'plan' && <ScaffoldPlanView result={resultMergedForViz ?? result} />}
+        {activeTab === '2d' && <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />}
+        {activeTab === 'plan' && <ScaffoldPlanView result={resultForViz ?? resultMergedForViz ?? result} />}
         {activeTab === '3d' && (
           <Scaffold3DView
-            result={resultFor3D ?? resultMergedForViz ?? result}
+            result={resultForViz ?? resultFor3D ?? resultMergedForViz ?? result}
             totalLevels={maxLevels}
             complianceMode={isAiBim ? 'ai_bim' : 'default'}
           />

@@ -40,6 +40,7 @@ import {
   isRasterImageUpload,
 } from '@/lib/bim-facade-colors';
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
+import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
 
 // Dynamic import for PerimeterTracer (uses browser APIs)
 const PerimeterTracer = dynamic(
@@ -1413,76 +1414,10 @@ function ScaffoldPageContent() {
                     const effectiveMassingTiers = (() => {
                       if (normalizedMassingTiers && normalizedMassingTiers.length > 0) return normalizedMassingTiers;
                       if (!Array.isArray(wallHeightsMm) || wallHeightsMm.length === 0) return undefined;
-                      const uniqueH = [...new Set(wallHeightsMm)].sort((a, b) => a - b);
-                      if (uniqueH.length < 2) return undefined;
                       if (!buildingOutline || buildingOutline.length < 3) return undefined;
-                      const outlineVerts = buildingOutline.map((v: any) => ({
-                        x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
-                        y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
-                      }));
-                      let oMnx = Infinity, oMny = Infinity, oMxx = -Infinity, oMxy = -Infinity;
-                      for (const v of outlineVerts) {
-                        oMnx = Math.min(oMnx, v.x); oMny = Math.min(oMny, v.y);
-                        oMxx = Math.max(oMxx, v.x); oMxy = Math.max(oMxy, v.y);
-                      }
-                      const fullW = oMxx - oMnx;
-                      const fullH = oMxy - oMny;
-                      const fullArea = Math.max(fullW * fullH, 1e-6);
-                      const tiers: VisionMassingTier[] = [];
-                      let prevTop = 0;
-                      let hasRealSetback = false;
-                      for (const h of uniqueH) {
-                        const tierWallIndices = wallHeightsMm
-                          .map((wh, i) => wh >= h ? i : -1)
-                          .filter((i) => i >= 0);
-                        if (tierWallIndices.length === 0) continue;
-                        const tierVerts = tierWallIndices.length === outlineVerts.length
-                          ? outlineVerts
-                          : (() => {
-                              const n = outlineVerts.length;
-                              const tierVertexSet = new Set<number>();
-                              for (const wi of tierWallIndices) {
-                                tierVertexSet.add(wi);
-                                tierVertexSet.add((wi + 1) % n);
-                              }
-                              const orderedVerts: Array<{ x: number; y: number }> = [];
-                              for (let vi = 0; vi < n; vi++) {
-                                if (tierVertexSet.has(vi)) orderedVerts.push(outlineVerts[vi]!);
-                              }
-                              if (orderedVerts.length < 3) return outlineVerts;
-
-                              // Remove repeated consecutive points that can appear when high-wall
-                              // ranges collapse to near-zero segments after AI normalization.
-                              const compact: Array<{ x: number; y: number }> = [];
-                              for (const p of orderedVerts) {
-                                const prev = compact[compact.length - 1];
-                                if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 1e-6) {
-                                  compact.push(p);
-                                }
-                              }
-                              if (compact.length < 3) return outlineVerts;
-
-                              let polyArea2 = 0;
-                              for (let i = 0; i < compact.length; i++) {
-                                const j = (i + 1) % compact.length;
-                                polyArea2 += compact[i]!.x * compact[j]!.y - compact[j]!.x * compact[i]!.y;
-                              }
-                              const polyArea = Math.abs(polyArea2) * 0.5;
-                              if (!Number.isFinite(polyArea) || polyArea <= 1e-6) return outlineVerts;
-                              if (polyArea / fullArea > 0.92) return outlineVerts;
-
-                              hasRealSetback = true;
-                              return compact;
-                            })();
-                        tiers.push({
-                          vertices: tierVerts.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) })),
-                          topHeightMm: h,
-                          baseHeightMm: prevTop,
-                        });
-                        prevTop = h;
-                      }
-                      if (!hasRealSetback) return undefined;
-                      return tiers.length >= 2 ? tiers : undefined;
+                      if (wallHeightsMm.length !== buildingOutline.length) return undefined;
+                      const syn = synthesizeMassingTiersFromWallHeights(buildingOutline, wallHeightsMm);
+                      return syn as VisionMassingTier[] | undefined;
                     })();
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
