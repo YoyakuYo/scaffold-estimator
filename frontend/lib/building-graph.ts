@@ -57,6 +57,59 @@ function isLikelyFractionCoords(points: Array<{ x: number; z: number }>): boolea
   return maxCoord <= 1.1 && spread <= 1.1;
 }
 
+type FootprintCoordinateMode = 'fraction' | 'mm' | 'meters' | 'pixel';
+
+/**
+ * Decide whether the incoming outline already encodes a trustworthy footprint shape.
+ * When the source is mm/meters (typical IFC / BIM output), rebuilding from dimension
+ * text can distort the corner layout. For fraction/pixel outlines, reconstruction is
+ * still useful because those coordinates are only a rough shape hint.
+ */
+function detectFootprintCoordinateMode(
+  vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
+  refLengthMm?: number,
+  wallLengthsMm?: number[],
+): FootprintCoordinateMode {
+  const raw = vertices.map((v) => ({
+    x: 'xFrac' in v ? v.xFrac : v.x,
+    z: 'yFrac' in v ? v.yFrac : v.y,
+  }));
+  if (isLikelyFractionCoords(raw)) return 'fraction';
+
+  const xs = raw.map((p) => p.x);
+  const zs = raw.map((p) => p.z);
+  const spreadX = Math.max(...xs) - Math.min(...xs);
+  const spreadZ = Math.max(...zs) - Math.min(...zs);
+  const maxSpread = Math.max(spreadX, spreadZ);
+  const maxCoord = Math.max(Math.max(...xs.map(Math.abs)), Math.max(...zs.map(Math.abs)));
+
+  let vPerimeter = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const j = (i + 1) % raw.length;
+    vPerimeter += Math.hypot(raw[j].x - raw[i].x, raw[j].z - raw[i].z);
+  }
+  const wPerimeter = Array.isArray(wallLengthsMm) && wallLengthsMm.length > 0
+    ? wallLengthsMm.reduce((a, b) => a + b, 0)
+    : 0;
+  const wallLengthsAreMm = wPerimeter >= 3000;
+
+  if (maxSpread >= 3000) return 'mm';
+
+  if (maxSpread > 1.1 && maxSpread < 200) {
+    if (wallLengthsAreMm && vPerimeter > 0) {
+      const ratio = wPerimeter / vPerimeter;
+      if (ratio > 500 && ratio < 2000) return 'meters';
+      if (ratio > 100) return 'meters';
+    }
+    if (!wallLengthsAreMm && refLengthMm && refLengthMm > 3000 && maxSpread < 100) {
+      return 'meters';
+    }
+  }
+
+  if (maxCoord > 1.1) return 'pixel';
+  return 'pixel';
+}
+
 /**
  * Normalize footprint to mm. Uses UNIFORM scale for X and Z (same factor) to preserve
  * aspect ratio and avoid distortion. 90° corners in the source are preserved.
@@ -166,16 +219,16 @@ export function buildGraphFromFootprint(
   const n = vertices.length;
   if (n < 3) return { nodes: [], edges: [] };
 
+  const coordMode = detectFootprintCoordinateMode(vertices, refLengthMm, options?.wallLengthsMm);
   let mm = normalizeFootprintToMm(vertices, refLengthMm, options?.wallLengthsMm);
 
-  // Skip orthogonal correction when coordinates are already in precise mm
-  // (e.g. from DXF parse or AI vision with scale). Snapping precise coordinates
-  // distorts the actual building shape and is the main cause of "shape changes".
-  const alreadyMm = !isLikelyFractionCoords(mm);
-  const contourOpts: ContourExtractionOptions = { skipOrthoCorrection: alreadyMm };
-  const pts2d = mm.map((p) => ({ x: p.x, y: p.z }));
-  const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm, contourOpts);
-  mm = contourPts.map((p) => ({ x: p.x, z: p.y }));
+  const shouldPreserveMetricShape = coordMode === 'mm' || coordMode === 'meters';
+  if (!shouldPreserveMetricShape) {
+    const contourOpts: ContourExtractionOptions = { skipOrthoCorrection: false };
+    const pts2d = mm.map((p) => ({ x: p.x, y: p.z }));
+    const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm, contourOpts);
+    mm = contourPts.map((p) => ({ x: p.x, z: p.y }));
+  }
 
   // Snap / dedupe: merge vertices that are effectively identical (vision output often repeats endpoints).
   const tolMm = 1; // 1mm tolerance for node snapping

@@ -1276,16 +1276,6 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         ? [...parsed.wallHeightsMm]
         : undefined;
 
-    // Conservative: preserve intentional shape vertices.
-    // L/U/T shapes have 6-8 vertices; multi-wing buildings may have 10-16.
-    // Grid-tracing artifacts produce runs of 3+ equal-length edges on a straight wall.
-    // Only simplify when there are clearly too many vertices.
-    // For small polygons (≤8 vertices), preserve all — these are valid L/U/T shapes.
-    // For larger polygons, preserve at least 80% to avoid over-simplification.
-    const minVertices = verts.length <= 8
-      ? verts.length
-      : Math.max(4, Math.ceil(verts.length * 0.80));
-
     const isMm = 'x' in verts[0];
 
     // Normalise to {x, y} in whatever unit the AI used (mm or 0-1 fraction).
@@ -1309,11 +1299,58 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     });
     if (indexed.length < 4) return;
 
-    // ── Pass 2: iteratively remove near-collinear vertices ───────────────────
-    // Threshold: sin(angle at B) < 0.06 ≈ deviation ≤ 3.5°.
-    // Very conservative to avoid removing valid corners of non-orthogonal
-    // buildings with diagonal or angled walls.
-    const SIN_THR = 0.06;
+    // ── Pass 1b: merge collinear height-split vertices ───────────────────────
+    // When the AI returns two consecutive edges that are co-linear (sin < SIN_THR)
+    // but assigns different wallHeightsMm to them, it is representing a stepped
+    // building by splitting a straight facade into two walls at the height change.
+    // That is wrong: a height change on a straight face is a massing/tier issue,
+    // NOT an extra footprint corner. Merge those splits unconditionally regardless
+    // of wallHeightsMm difference. The surviving edge keeps the maximum height;
+    // the height-zone boundary will be encoded as a massingTier instead.
+    // We only do this when the polygon has more vertices than expected for a simple
+    // L/U/T shape (i.e. > 6 for an L-shape, > 8 for a U-shape, etc.). But
+    // crucially, we DO allow merging down to 4 (rectangle) since even 8→4 can be
+    // correct for a pure perspective-split of a box.
+    const SIN_THR = 0.06; // same threshold used in Pass 2
+    {
+      let collinearChanged = true;
+      while (collinearChanged && indexed.length > 4) {
+        collinearChanged = false;
+        for (let i = 0; i < indexed.length; i++) {
+          const a = indexed[(i - 1 + indexed.length) % indexed.length];
+          const b = indexed[i];
+          const c = indexed[(i + 1) % indexed.length];
+          const abx = b.x - a.x, aby = b.y - a.y;
+          const bcx = c.x - b.x, bcy = c.y - b.y;
+          const abLen = Math.hypot(abx, aby);
+          const bcLen = Math.hypot(bcx, bcy);
+          if (abLen < 1e-12 || bcLen < 1e-12) {
+            indexed.splice(i, 1);
+            collinearChanged = true;
+            break;
+          }
+          const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
+          if (sinAngle < SIN_THR) {
+            // Collinear — remove vertex B regardless of height difference.
+            // Height info is preserved by the wallHeightsMm remap at the end.
+            indexed.splice(i, 1);
+            collinearChanged = true;
+            break;
+          }
+        }
+      }
+    }
+    if (indexed.length < 4) return;
+
+    // Conservative: preserve intentional shape vertices for grid-artifact removal.
+    // L/U/T shapes have 6-8 vertices; multi-wing buildings may have 10-16.
+    // Grid-tracing artifacts produce runs of 3+ equal-length edges on a straight wall.
+    // For larger polygons (after the collinear-merge pass above), preserve at least 80%.
+    const minVertices = Math.max(4, Math.ceil(indexed.length * 0.80));
+
+    // ── Pass 2: iteratively remove near-collinear vertices (grid-line artifacts) ──
+    // Height-split splits were already handled in Pass 1b above, so here we only
+    // remove vertices that are collinear AND have the same (or no) height difference.
     let changed = true;
     while (changed && indexed.length > minVertices) {
       changed = false;
@@ -1332,18 +1369,6 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         }
         const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
         if (sinAngle < SIN_THR) {
-          if (originalWallHeights) {
-            const prevEdgeHeight = originalWallHeights[a.origIdx];
-            const nextEdgeHeight = originalWallHeights[b.origIdx];
-            if (
-              typeof prevEdgeHeight === 'number' &&
-              typeof nextEdgeHeight === 'number' &&
-              Math.abs(prevEdgeHeight - nextEdgeHeight) > 1
-            ) {
-              // Intentional collinear split: same facade line, different height zone.
-              continue;
-            }
-          }
           indexed.splice(i, 1);
           changed = true;
           break;
