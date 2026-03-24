@@ -26,7 +26,7 @@ import { extractSegments } from '@/cad/extractSegments';
 import { detectOuterPolygon } from '@/geometry/polygonDetection';
 import {
   Upload, Loader2, AlertCircle, Ruler, RotateCcw,
-  Trash2, CheckCircle2, Maximize2, FileUp,
+  Trash2, CheckCircle2, Maximize2, FileUp, MousePointer2, Hand, PenLine, Magnet, Move,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { drawingsApi, ExtractedDimensions } from '@/lib/api/drawings';
@@ -316,6 +316,10 @@ export function PerimeterTracer({
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
+  const [activeTool, setActiveTool] = useState<'draw' | 'select' | 'pan'>('draw');
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [orthoLock, setOrthoLock] = useState(false);
+  const [underlayOpacity, setUnderlayOpacity] = useState(100);
 
   /* ───── Refs ────────────────────────────────────────────── */
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -511,6 +515,10 @@ export function PerimeterTracer({
     setErrorMsg(null);
     setDxfDisplaySegs([]);
     dxfBBoxRef.current = null;
+    setActiveTool('draw');
+    setSnapEnabled(true);
+    setOrthoLock(false);
+    setUnderlayOpacity(100);
     resetTracer();
     perimeterModel.clear();
   }, [perimeterModel, resetTracer]);
@@ -690,7 +698,7 @@ export function PerimeterTracer({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2) {
       e.preventDefault();
-      if (points.length >= 3 && !closed) setClosed(true);
+      if (activeTool === 'draw' && points.length >= 3 && !closed) setClosed(true);
       return;
     }
     if (e.button !== 0) return;
@@ -708,6 +716,14 @@ export function PerimeterTracer({
       return;
     }
 
+    if (activeTool === 'pan') {
+      isMouseDownRef.current = true;
+      isPanningRef.current = true;
+      mouseMovedRef.current = false;
+      dragStartRef.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
+      return;
+    }
+
     // Point dragging
     const near = findNear(c.x, c.y);
     if (near !== null) {
@@ -722,10 +738,22 @@ export function PerimeterTracer({
     isPanningRef.current = false;
     mouseMovedRef.current = false;
     dragStartRef.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
-  }, [screenToCanvas, findNear, calibPhase, points.length, closed, panX, panY]);
+  }, [screenToCanvas, findNear, calibPhase, points.length, closed, panX, panY, activeTool]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const c = screenToCanvas(e.clientX, e.clientY);
+
+    if (activeTool === 'pan') {
+      if (isMouseDownRef.current) {
+        const dx = e.clientX - dragStartRef.current.x;
+        const dy = e.clientY - dragStartRef.current.y;
+        setPanX(dragStartRef.current.px + dx);
+        setPanY(dragStartRef.current.py + dy);
+      }
+      setCursorPos(c);
+      setSnapResult(null);
+      return;
+    }
 
     // Point drag (only when mouse is down on a point)
     if (draggingPt !== null && isMouseDownRef.current) {
@@ -734,7 +762,13 @@ export function PerimeterTracer({
       const lastPt = points.length > 1
         ? (draggingPt > 0 ? points[draggingPt - 1] : (closed ? points[points.length - 1] : null))
         : null;
-      const snap = computeSnap(c, lastPt, points.filter((_, i) => i !== draggingPt), ALIGN_SNAP_PX / zoom, e.shiftKey);
+      const snap = computeSnap(
+        c,
+        lastPt,
+        points.filter((_, i) => i !== draggingPt),
+        snapEnabled ? (ALIGN_SNAP_PX / zoom) : 0,
+        orthoLock || e.shiftKey,
+      );
       setCursorPos({ x: snap.x, y: snap.y });
       setSnapResult(snap);
       setPoints(prev => prev.map((p, i) =>
@@ -763,7 +797,13 @@ export function PerimeterTracer({
     // Normal move — compute snap for preview
     if (!closed) {
       const lastPt = points.length > 0 ? points[points.length - 1] : null;
-      const snap = computeSnap(c, lastPt, points, ALIGN_SNAP_PX / zoom, e.shiftKey);
+      const snap = computeSnap(
+        c,
+        lastPt,
+        points,
+        snapEnabled ? (ALIGN_SNAP_PX / zoom) : 0,
+        orthoLock || e.shiftKey,
+      );
       setCursorPos({ x: snap.x, y: snap.y });
       setSnapResult(snap);
     } else {
@@ -775,7 +815,7 @@ export function PerimeterTracer({
     if (!isMouseDownRef.current) {
       setHoveredPt(findNear(c.x, c.y));
     }
-  }, [screenToCanvas, draggingPt, findNear, points, closed, zoom]);
+  }, [screenToCanvas, draggingPt, findNear, points, closed, zoom, activeTool, snapEnabled, orthoLock]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     const wasDown = isMouseDownRef.current;
@@ -794,6 +834,7 @@ export function PerimeterTracer({
       isPanningRef.current = false;
       return;
     }
+    if (activeTool !== 'draw') return;
     // If mouse wasn't pressed in this canvas, or it moved, ignore
     if (!wasDown || mouseMovedRef.current) return;
     if (e.button !== 0) return;
@@ -804,7 +845,13 @@ export function PerimeterTracer({
 
     // Apply snap to the click position
     const lastPt = points.length > 0 ? points[points.length - 1] : null;
-    const snap = computeSnap(c, lastPt, points, ALIGN_SNAP_PX / zoom, e.shiftKey);
+    const snap = computeSnap(
+      c,
+      lastPt,
+      points,
+      snapEnabled ? (ALIGN_SNAP_PX / zoom) : 0,
+      orthoLock || e.shiftKey,
+    );
 
     // Close if near first point (check both raw and snapped)
     if (points.length >= 3) {
@@ -817,7 +864,7 @@ export function PerimeterTracer({
 
     // Add point at snapped position
     setPoints(prev => [...prev, { x: snap.x, y: snap.y, label: ptLabel(prev.length) }]);
-  }, [screenToCanvas, closed, points, zoom, calibPhase, draggingPt, editingSegIdx]);
+  }, [screenToCanvas, closed, points, zoom, calibPhase, draggingPt, editingSegIdx, activeTool, snapEnabled, orthoLock]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -904,8 +951,9 @@ export function PerimeterTracer({
   }, [points]);
 
   // Cursor style
-  const cursor =
-    draggingPt !== null ? 'grabbing'
+  const cursor = activeTool === 'pan'
+    ? 'grab'
+    : draggingPt !== null ? 'grabbing'
     : calibPhase === 'point1' || calibPhase === 'point2' ? 'crosshair'
     : hoveredPt !== null ? 'grab'
     : closed ? 'default'
@@ -990,72 +1038,34 @@ export function PerimeterTracer({
       className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col"
       style={{ height: 'calc(100vh - 10rem)', minHeight: 400 }}
     >
-      {/* ── Top toolbar ──────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 flex-shrink-0 flex-wrap">
+      {/* ── Top CAD bar ────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-gray-200 flex-shrink-0 flex-wrap">
+        <div className="inline-flex items-center rounded-md border border-slate-300 bg-white overflow-hidden">
+          <span className="px-3 py-1.5 text-xs font-semibold text-slate-600 border-r border-slate-200">
+            Model Space
+          </span>
+          <span className="px-3 py-1.5 text-xs text-slate-500 truncate max-w-[220px]">{fileName}</span>
+        </div>
         <button
           onClick={handleReset}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
         >
           <FileUp className="h-3.5 w-3.5" /> {t('viewer', 'newFile')}
         </button>
-
-        {fileMode === 'image' && !calib && calibPhase === 'off' && (
-          <button
-            onClick={() => { setCalibPhase('point1'); setCalibPts([]); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 text-amber-800"
-          >
-            <Ruler className="h-3.5 w-3.5" /> {t('viewer', 'calibrateScale')}
-          </button>
-        )}
+        <button
+          onClick={fitCanvas}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+        >
+          <Maximize2 className="h-3.5 w-3.5" /> {t('viewer', 'fit')}
+        </button>
+        <span className="text-xs text-slate-500 px-2 py-1 rounded bg-white border border-slate-200">
+          Zoom: {Math.round(zoom * 100)}%
+        </span>
         {calib && (
           <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
             <CheckCircle2 className="h-3 w-3" /> {t('viewer', 'scale')}: {calib.mmPerPixel.toFixed(2)} mm/px
           </span>
         )}
-
-        <button
-          onClick={handleUndo}
-          disabled={points.length === 0 && !closed}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-30"
-        >
-          <RotateCcw className="h-3.5 w-3.5" /> {t('viewer', 'undo')}
-        </button>
-        <button
-          onClick={handleClear}
-          disabled={points.length === 0}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-red-50 text-red-600 disabled:opacity-30"
-        >
-          <Trash2 className="h-3.5 w-3.5" /> {t('viewer', 'clear')}
-        </button>
-        {!closed && points.length >= 3 && (
-          <button
-            onClick={() => setClosed(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" /> {t('viewer', 'closePolygon')}
-          </button>
-        )}
-
-        {/* Ortho indicator */}
-        {!closed && (
-          <span className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded border transition-all
-            ${shiftHeld
-              ? 'bg-amber-100 border-amber-400 text-amber-700 font-bold'
-              : 'bg-gray-50 border-gray-200 text-gray-400'
-            }`}
-            title={t('viewer', 'orthoTooltip')}
-          >
-            ⊞ {shiftHeld ? t('viewer', 'orthoOn') : t('viewer', 'orthoOff')}
-          </span>
-        )}
-
-        <button
-          onClick={fitCanvas}
-          className="ml-auto flex items-center gap-1 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          <Maximize2 className="h-3.5 w-3.5" /> {t('viewer', 'fit')}
-        </button>
-        <span className="text-xs text-gray-400 truncate max-w-[200px]">{fileName}</span>
       </div>
 
       {/* ── Calibration bars ─────────────────────────────── */}
@@ -1131,6 +1141,103 @@ export function PerimeterTracer({
 
       {/* ── MAIN SPLIT ───────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
+        {/* ─── LEFT TOOL RAIL ─────────────────────────────── */}
+        <div className="w-[74px] flex-shrink-0 border-r border-gray-200 bg-white p-2 space-y-2">
+          <div className="text-[10px] font-semibold text-gray-400 px-1">TOOLS</div>
+          <button
+            type="button"
+            onClick={() => setActiveTool('select')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'select'
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Select / move points"
+          >
+            <MousePointer2 className="h-4 w-4" />
+            <span>Select</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('draw')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'draw'
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Draw polyline"
+          >
+            <PenLine className="h-4 w-4" />
+            <span>Draw</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('pan')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'pan'
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Pan view"
+          >
+            <Hand className="h-4 w-4" />
+            <span>Pan</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSnapEnabled(v => !v)}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              snapEnabled
+                ? 'bg-cyan-50 border-cyan-300 text-cyan-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Toggle snapping"
+          >
+            <Magnet className="h-4 w-4" />
+            <span>Snap</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrthoLock(v => !v)}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              orthoLock
+                ? 'bg-amber-50 border-amber-300 text-amber-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Toggle ortho lock"
+          >
+            <Move className="h-4 w-4" />
+            <span>Ortho</span>
+          </button>
+          <button
+            onClick={handleUndo}
+            disabled={points.length === 0 && !closed}
+            className="w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-gray-200 text-[10px] text-gray-500 bg-white hover:bg-gray-50 disabled:opacity-30"
+            title={t('viewer', 'undo')}
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span>Undo</span>
+          </button>
+          <button
+            onClick={handleClear}
+            disabled={points.length === 0}
+            className="w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-red-200 text-[10px] text-red-600 bg-white hover:bg-red-50 disabled:opacity-30"
+            title={t('viewer', 'clear')}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Clear</span>
+          </button>
+          {!closed && points.length >= 3 && (
+            <button
+              onClick={() => setClosed(true)}
+              className="w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border border-green-200 text-[10px] text-green-700 bg-green-50 hover:bg-green-100"
+              title={t('viewer', 'closePolygon')}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Close</span>
+            </button>
+          )}
+        </div>
 
         {/* ─── LEFT: Drawing Canvas ──────────────────────── */}
         <div
@@ -1160,7 +1267,7 @@ export function PerimeterTracer({
                 src={imageUrl}
                 alt="Drawing"
                 draggable={false}
-                style={{ display: 'block', width: canvasW, height: canvasH }}
+                style={{ display: 'block', width: canvasW, height: canvasH, opacity: underlayOpacity / 100 }}
               />
             )}
 
@@ -1188,7 +1295,7 @@ export function PerimeterTracer({
                   stroke="#94a3b8"
                   strokeWidth={Math.max(0.5, 1 / zoom)}
                   fill="none"
-                  opacity={0.5}
+                  opacity={(underlayOpacity / 100) * 0.7}
                 />
               )}
 
@@ -1559,6 +1666,47 @@ export function PerimeterTracer({
               <Maximize2 className="h-3 w-3" /> {t('viewer', 'fit')}
             </button>
           </div>
+          <div className="px-4 py-3 border-b border-gray-100 bg-white space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Viewport</span>
+              <span className="text-xs text-gray-400">{Math.round(zoom * 100)}%</span>
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Underlay opacity</label>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                value={underlayOpacity}
+                onChange={(e) => setUnderlayOpacity(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSnapEnabled(v => !v)}
+                className={`px-2 py-1.5 text-xs rounded border ${snapEnabled ? 'bg-cyan-50 border-cyan-300 text-cyan-700' : 'bg-white border-gray-300 text-gray-600'}`}
+              >
+                Snap {snapEnabled ? 'ON' : 'OFF'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrthoLock(v => !v)}
+                className={`px-2 py-1.5 text-xs rounded border ${orthoLock ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-gray-300 text-gray-600'}`}
+              >
+                Ortho {orthoLock ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            {fileMode === 'image' && !calib && calibPhase === 'off' && (
+              <button
+                onClick={() => { setCalibPhase('point1'); setCalibPts([]); }}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-50 border border-amber-300 rounded-lg hover:bg-amber-100 text-amber-800"
+              >
+                <Ruler className="h-3.5 w-3.5" /> {t('viewer', 'calibrateScale')}
+              </button>
+            )}
+          </div>
 
           {/* ── Scrollable content ─────────────────────────── */}
           <div className="flex-1 overflow-y-auto">
@@ -1742,6 +1890,17 @@ export function PerimeterTracer({
                   : `${ptLabel(points.length)}${t('viewer', 'guideCloseHint')}`}
           </div>
         </div>
+      </div>
+      <div className="flex items-center gap-3 px-3 py-1.5 bg-slate-50 border-t border-gray-200 text-[11px] text-slate-500">
+        <span>Tool: {activeTool}</span>
+        <span>Snap: {snapEnabled ? 'ON' : 'OFF'}</span>
+        <span>Ortho: {orthoLock || shiftHeld ? 'ON' : 'OFF'}</span>
+        <span>Zoom: {Math.round(zoom * 100)}%</span>
+        {cursorPos && (
+          <span className="ml-auto font-mono">
+            X {Math.round(cursorPos.x).toLocaleString()} / Y {Math.round(cursorPos.y).toLocaleString()}
+          </span>
+        )}
       </div>
     </div>
   );
