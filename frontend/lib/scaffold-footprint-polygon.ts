@@ -2,11 +2,12 @@
  * Single source of truth for closed footprint polygons used by 3D and plan views.
  * Each wall i runs along the direction from polygon vertex i → (i+1)%n.
  *
- * Priority order:
- *   1. Rectangle builder for 4 walls (exact wall lengths)
- *   2. Orthogonal builder for 6+ even walls (exact wall lengths, correct L/U/T shape)
- *   3. Stored-vertex fallbacks (for non-orthogonal or when ortho fails)
- *   4. Regular n-gon last resort
+ * Priority order for 3+ walls:
+ *   1. Rectangle builder for 4 walls (exact wall lengths, always correct)
+ *   2. Stored-vertex direction walk (correct orientation from BIM + exact wall lengths)
+ *   3. Orthogonal builder guided by stored vertices (correct reflex corners + exact lengths)
+ *   4. Blind orthogonal builder (tries all reflex combos, picks largest area)
+ *   5. Regular n-gon last resort
  */
 
 import type { WallCalculationResult } from '@/lib/api/scaffold-configs';
@@ -79,7 +80,6 @@ function polygonAbsArea(verts: FootprintVertexXZ[]): number {
 
 /**
  * Build an orthogonal polygon from wall lengths using known reflex corner positions.
- * Returns the candidate with the largest area (among both CW/CCW), or null.
  */
 function buildOrthoCandidate(
   lengths: number[],
@@ -178,8 +178,7 @@ function tryOrthogonalFromStoredShape(
 }
 
 /**
- * Try all reflex corner combinations and pick the one with the largest area
- * (rejects degenerate / self-intersecting shapes).
+ * Try all reflex corner combinations and pick the one with the largest area.
  */
 function tryOrthogonalFallback(
   walls: Array<{ wallLengthMm?: number }>,
@@ -215,6 +214,73 @@ function tryOrthogonalFallback(
 }
 
 /**
+ * Walk stored vertex directions with exact wall lengths.
+ * For orthogonal buildings, snaps each edge to the nearest 90° for clean results.
+ * Returns null if the stored vertices are degenerate or the result is unusable.
+ */
+function buildFromStoredDirections(
+  walls: Array<{ wallLengthMm?: number }>,
+  n: number,
+  stored: FootprintVertexXZ[],
+): FootprintVertexXZ[] | null {
+  if (stored.length < n || n < 3) return null;
+
+  const sv = stored.slice(0, n);
+  const lengths = Array.from({ length: n }, (_, i) => wallLenM(walls, i));
+
+  const rawAngles: number[] = [];
+  let allOrthogonal = true;
+  for (let i = 0; i < n; i++) {
+    const p1 = sv[i];
+    const p2 = sv[(i + 1) % n];
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    const edgeLen = Math.hypot(dx, dz);
+    if (edgeLen < 1e-9) return null;
+    const angle = Math.atan2(dz, dx);
+    rawAngles.push(angle);
+
+    const snapped = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+    const diff = Math.abs(angle - snapped);
+    if (diff > 0.15) allOrthogonal = false;
+  }
+
+  const angles = allOrthogonal
+    ? rawAngles.map(a => Math.round(a / (Math.PI / 2)) * (Math.PI / 2))
+    : rawAngles;
+
+  const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
+  for (let i = 0; i < n - 1; i++) {
+    const prev = verts[verts.length - 1];
+    verts.push({
+      x: prev.x + lengths[i] * Math.cos(angles[i]),
+      z: prev.z + lengths[i] * Math.sin(angles[i]),
+    });
+  }
+
+  if (verts.length !== n) return null;
+
+  const last = verts[n - 1];
+  const closeDist = Math.hypot(last.x - verts[0].x, last.z - verts[0].z);
+  const closeAngle = Math.atan2(verts[0].z - last.z, verts[0].x - last.x);
+
+  const expectedAngle = angles[n - 1];
+  const angleDiff = Math.abs(
+    ((closeAngle - expectedAngle) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI,
+  );
+  if (angleDiff > 0.4) return null;
+
+  const lenError = Math.abs(closeDist - lengths[n - 1]);
+  const closureTolerance = Math.max(lengths[n - 1] * 0.5, 5);
+  if (lenError > closureTolerance) return null;
+
+  if (polygonAbsArea(verts) < 0.01) return null;
+  if (!hasPlausiblePolygonEdges(verts, walls)) return null;
+
+  return verts;
+}
+
+/**
  * Build footprint polygon in meters (XZ horizontal plane; Y is up in Three.js).
  */
 export function buildFootprintPolygonXZ(
@@ -247,68 +313,59 @@ export function buildFootprintPolygonXZ(
     ];
   }
 
-  // ── Orthogonal L/U/T (6,8,10...) walls — ALWAYS first for even wall counts ──
-  // The ortho builder uses exact wall lengths for each edge, so polygon edges
-  // match wallLengthMm perfectly. This prevents scaffold horizontal overrun.
-  if (n >= 6 && n <= 16 && n % 2 === 0) {
-    let orthoResult: FootprintVertexXZ[] | null = null;
-
-    if (storedVertices && storedVertices.length >= n) {
-      const sv = storedVertices.slice(0, n).map(normaliseVertex);
-      orthoResult = tryOrthogonalFromStoredShape(walls, n, sv);
+  // Normalise stored vertices once for all subsequent builders.
+  // Accept exact match (length == n) or closed ring (length == n+1 with last ≈ first).
+  let sv: FootprintVertexXZ[] | null = null;
+  if (storedVertices) {
+    const allNorm = storedVertices.map(normaliseVertex);
+    if (allNorm.length === n) {
+      sv = allNorm;
+    } else if (allNorm.length === n + 1) {
+      const first = allNorm[0];
+      const last = allNorm[allNorm.length - 1];
+      if (first && last && Math.hypot(first.x - last.x, first.z - last.z) <= 1e-3) {
+        sv = allNorm.slice(0, n);
+      }
+    } else if (allNorm.length > n) {
+      sv = allNorm.slice(0, n);
     }
-
-    if (!orthoResult) {
-      orthoResult = tryOrthogonalFallback(walls, n);
+    if (sv && !sv.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+      sv = null;
     }
-
-    if (orthoResult) return orthoResult;
   }
 
-  // ── Stored outline fallback (non-orthogonal or when ortho failed) ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(normaliseVertex);
-    const xs = raw.map((v) => v.x);
-    const zs = raw.map((v) => v.z);
-    const spreadX = Math.max(...xs) - Math.min(...xs);
-    const spreadZ = Math.max(...zs) - Math.min(...zs);
-    const spread = Math.max(spreadX, spreadZ, 1e-6);
-    const maxCoord = Math.max(Math.max(...xs), Math.max(...zs));
-
-    if (spread >= 1e-6) {
-      let verts: FootprintVertexXZ[];
-      if (maxCoord <= 1.1 && spread <= 1.1) {
-        const refM = Math.max(...walls.map((w) => Math.max(w.wallLengthMm ?? 0, 600))) / 1000;
-        const scale = refM / spread;
-        verts = raw.map((v) => ({ x: v.x * scale, z: v.z * scale }));
-      } else if (spread > 1000 || maxCoord > 1000) {
-        verts = raw.map((v) => ({ x: v.x / 1000, z: v.z / 1000 }));
-      } else {
-        verts = raw.map((v) => ({ x: v.x, z: v.z }));
+  // ── Priority 1: Walk stored vertex directions with exact wall lengths ──
+  // This is the most reliable path because it preserves the shape orientation
+  // from the BIM outline while using exact wall lengths for each edge.
+  if (sv) {
+    const dirResult = buildFromStoredDirections(walls, n, sv);
+    if (dirResult) {
+      if (typeof window !== 'undefined') {
+        console.info('[Scaffold] footprint: direction-walk (stored+lengths)', n, 'walls');
       }
+      return dirResult;
+    }
+  }
 
-      const spreadM = Math.max(
-        Math.max(...verts.map((v) => v.x)) - Math.min(...verts.map((v) => v.x)),
-        Math.max(...verts.map((v) => v.z)) - Math.min(...verts.map((v) => v.z)),
-      );
-      if (spreadM > 0.01) {
-        const corrected: FootprintVertexXZ[] = [{ ...verts[0] }];
-        for (let i = 0; i < n - 1; i++) {
-          const rawDx = verts[i + 1].x - verts[i].x;
-          const rawDz = verts[i + 1].z - verts[i].z;
-          const rawLen = Math.hypot(rawDx, rawDz);
-          const tgtLen = wallLenM(walls, i);
-          const prev = corrected[corrected.length - 1]!;
-          if (rawLen < 0.001) {
-            corrected.push({ x: prev.x, z: prev.z });
-            continue;
-          }
-          const dx = (rawDx / rawLen) * tgtLen;
-          const dz = (rawDz / rawLen) * tgtLen;
-          corrected.push({ x: prev.x + dx, z: prev.z + dz });
-        }
-        if (corrected.length === n && hasPlausiblePolygonEdges(corrected, walls)) return corrected;
+  // ── Priority 2: Orthogonal builder guided by stored reflex corners ──
+  if (sv && n >= 6 && n <= 16 && n % 2 === 0) {
+    const orthoGuided = tryOrthogonalFromStoredShape(walls, n, sv);
+    if (orthoGuided) {
+      if (typeof window !== 'undefined') {
+        console.info('[Scaffold] footprint: ortho-guided (stored+lengths)', n, 'walls');
       }
+      return orthoGuided;
+    }
+  }
+
+  // ── Priority 3: Blind orthogonal builder (tries all reflex combos) ──
+  if (n >= 6 && n <= 16 && n % 2 === 0) {
+    const orthoBlind = tryOrthogonalFallback(walls, n);
+    if (orthoBlind) {
+      if (typeof window !== 'undefined') {
+        console.info('[Scaffold] footprint: ortho-blind (wall-lengths only)', n, 'walls');
+      }
+      return orthoBlind;
     }
   }
 
@@ -316,29 +373,6 @@ export function buildFootprintPolygonXZ(
   if (n < 6 || n > 16 || n % 2 !== 0) {
     const orthoResult = tryOrthogonalFallback(walls, n);
     if (orthoResult) return orthoResult;
-  }
-
-  // ── Direction-preserving fallback ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(normaliseVertex);
-    const dirVerts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
-    let dcx = 0, dcz = 0;
-    for (let i = 0; i < n - 1; i++) {
-      const rawDx = raw[(i + 1) % n].x - raw[i].x;
-      const rawDz = raw[(i + 1) % n].z - raw[i].z;
-      const rawLen = Math.hypot(rawDx, rawDz);
-      const lenM = wallLenM(walls, i);
-      if (rawLen > 1e-6) {
-        dcx += (rawDx / rawLen) * lenM;
-        dcz += (rawDz / rawLen) * lenM;
-      } else {
-        const fallbackAngle = i * (2 * Math.PI) / n;
-        dcx += lenM * Math.cos(fallbackAngle);
-        dcz += lenM * Math.sin(fallbackAngle);
-      }
-      dirVerts.push({ x: dcx, z: dcz });
-    }
-    if (dirVerts.length === n && hasPlausiblePolygonEdges(dirVerts, walls)) return dirVerts;
   }
 
   // ── Last resort: regular n-gon ──
