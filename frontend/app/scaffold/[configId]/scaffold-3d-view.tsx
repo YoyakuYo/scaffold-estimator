@@ -332,7 +332,10 @@ export default function Scaffold3DView({
   const componentMeshesRef = useRef<any[]>([]);
   const controlsRef = useRef<any>(null);
 
-  const isAiBim = complianceMode === 'ai_bim';
+  const isAiBimFromMode = complianceMode === 'ai_bim';
+  const isAiBim = isAiBimFromMode ||
+    (Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3 &&
+     Array.isArray((result as any)?.massingTiers) && (result as any).massingTiers.length > 0);
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
   const rawWalls: WallCalculationResult[] = Array.isArray(result?.walls)
@@ -1254,7 +1257,6 @@ export default function Scaffold3DView({
       const groundWallLensMm =
         tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
       const bimPlan =
-        isAiBim &&
         massingTiersSorted.length > 0 &&
         Array.isArray(storedVerts) &&
         storedVerts.length >= 3
@@ -1419,6 +1421,20 @@ export default function Scaffold3DView({
       // ── Compute span caps to prevent browser freeze ───
       const { caps: spanCaps, simplified: isSimplified } = computeSpanCaps(walls, LEVEL_H);
       setSimplified(isSimplified);
+
+      // Full building outline (L-shape etc.) from bimPlan when available.
+      // The scaffold polygon (verts) may only represent the ground tier
+      // (a subset of the full outline), so use the stored outline for the
+      // building visual rendering.
+      const fullBuildingOutline: PointXZ[] | null = (() => {
+        if (bimPlan && Array.isArray(storedVerts) && storedVerts.length >= 3) {
+          const mapped = bimPlan.toPlanM(storedVerts as any[]);
+          if (mapped.length >= 3 && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+            return mapped;
+          }
+        }
+        return null;
+      })();
 
       // Center the polygon
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
@@ -2029,8 +2045,9 @@ export default function Scaffold3DView({
         color: isAiBim ? 0x0f0f0f : 0x7a8090,
         linewidth: 2,
       });
-      const outlinePts = verts.map(v => new THREE.Vector3(v.x - cx, GROUND_Y + 0.01, v.z - cz));
-      if (!isOpenPolygon) {
+      const outlineSource = fullBuildingOutline ?? verts;
+      const outlinePts = outlineSource.map(v => new THREE.Vector3(v.x - cx, GROUND_Y + 0.01, v.z - cz));
+      if (!isOpenPolygon || fullBuildingOutline) {
         outlinePts.push(outlinePts[0].clone());
       }
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);

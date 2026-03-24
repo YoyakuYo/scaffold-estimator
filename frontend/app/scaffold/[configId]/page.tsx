@@ -77,7 +77,7 @@ function ScaffoldResultPage() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const configId = params.configId as string;
-  const isAiBim = searchParams.get('aiBim') === '1';
+  const isAiBimFromUrl = searchParams.get('aiBim') === '1';
   const [showScanModal, setShowScanModal] = useState(false);
 
   // Support ?tab=3d, ?tab=2d from external links
@@ -105,6 +105,10 @@ function ScaffoldResultPage() {
         walls: resultWalls.length > 0 ? resultWalls : undefined,
       }
     : undefined;
+
+  const isAiBim = isAiBimFromUrl ||
+    (Array.isArray(rawResult?.polygonVertices) && rawResult.polygonVertices.length >= 3 &&
+     Array.isArray((rawResult as any)?.massingTiers) && (rawResult as any).massingTiers.length > 0);
 
   /** Merge row-level scaffoldType / wakugumi fields into calculation JSON (older results omitted scaffoldType). */
   const resultMergedForViz = useMemo(() => {
