@@ -1270,53 +1270,25 @@ export default function Scaffold3DView({
 
       {
         const tg0 = tierGroups[0];
-        const n0 = tg0.walls.length;
         let tverts: PointXZ[] = [];
         let tok = false;
-        let footprint0FromPlan = false;
 
-        if (bimPlan && storedVerts && storedVerts.length === n0) {
-          // Outline vertex count matches tier-0 wall count → outline IS the tier-0 polygon
-          tverts = bimPlan.toPlanM(storedVerts.slice(0, n0) as any);
+        // Ground-tier footprint: ALWAYS reuse the same polygon builder as the 2D plan.
+        // This guarantees that when the plan view is correct, the 3D scaffold follows
+        // the identical footprint (no drift from massing-tier polygons).
+        const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
+        tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
+        tok =
+          tverts.length >= 2 &&
+          tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+        if (!tok && sv0 && sv0.length > 0) {
+          tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
           tok =
-            tverts.length === n0 &&
+            tverts.length >= 2 &&
             tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          footprint0FromPlan = tok;
         }
 
-        // When outline has more vertices than tier-0 walls (tier decomposition split the
-        // building), storedVerts.slice(0, n0) picks the WRONG vertices. Use the massing
-        // tier's own vertices instead — same logic as for upper tiers.
-        if (!tok && bimPlan && massingTiersSorted.length > 0) {
-          const byBase = massingTiersSorted.find(
-            (m) => Math.abs((m.baseHeightMm ?? 0) - (tg0.baseHeightMm ?? 0)) <= 2 && m.vertices.length === n0,
-          );
-          const byIdx = massingTiersSorted[tg0.tierIndex];
-          const candidate =
-            byBase ??
-            (byIdx && byIdx.vertices.length === n0 ? byIdx : undefined);
-          if (candidate && candidate.vertices.length === n0) {
-            const mapped = bimPlan.toPlanM(candidate.vertices as any);
-            if (mapped.length === n0 && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
-              tverts = mapped;
-              tok = true;
-              footprint0FromPlan = true;
-            }
-          }
-        }
-
-        if (!tok) {
-          const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
-          tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
-          tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          if (!tok && sv0 && sv0.length > 0) {
-            tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
-            tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          }
-          footprint0FromPlan = false;
-        }
-
-        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: footprint0FromPlan });
+        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: false });
       }
 
       // Primary polygon = ground tier (or first valid tier)
