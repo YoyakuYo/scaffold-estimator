@@ -1850,14 +1850,20 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
   }
 
   /**
-   * Pick horizontal vs vertical axes: footprint should have the largest 2D convex hull
-   * when projected onto the ground plane (side-elevation projections are thin).
+   * Pick horizontal vs vertical axes for IFC footprint projection.
    *
-   * The depth axis (Y in Z-up, Z in Y-up) is negated so the 3D scaffold
-   * view's isometric camera at (+X, +Y, +Z) shows the building with the
-   * same left-right orientation as a standard south-facing elevation view.
-   * IFC Z-up: X=east, Y=north → footprint (X, -Y) = (east, south)
-   * maps to 3D (x=east, z=south) → camera sees south face correctly.
+   * Previous logic picked the plane with the largest convex-hull area. That can
+   * accidentally choose a side-elevation plane (XZ / YZ) for tall buildings,
+   * which mirrors/warps the extracted footprint in downstream 3D scaffold views.
+   *
+   * New scoring:
+   * 1) Prefer the candidate whose vertical axis is the smallest global span
+   *    when one axis is clearly the thinnest (typical building models).
+   * 2) Use convex-hull area as tie-breaker / fallback.
+   *
+   * We preserve native axis direction here (no forced sign flip) so the backend
+   * output stays consistent with IFC coordinates. View-facing orientation should
+   * be handled in frontend camera/view logic, not by mirroring source geometry.
    */
   private selectIfcFootprintPlane(xyzPoints: Array<{ x: number; y: number; z: number }>): {
     kind: 'xy' | 'xz' | 'yz';
@@ -1865,33 +1871,60 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     vertical: (p: { x: number; y: number; z: number }) => number;
   } {
     const sample = this.subsampleIfcPoints(xyzPoints, 8000);
+    const spanX = Math.max(...sample.map((p) => p.x)) - Math.min(...sample.map((p) => p.x));
+    const spanY = Math.max(...sample.map((p) => p.y)) - Math.min(...sample.map((p) => p.y));
+    const spanZ = Math.max(...sample.map((p) => p.z)) - Math.min(...sample.map((p) => p.z));
+    const minSpan = Math.min(spanX, spanY, spanZ);
+    const maxSpan = Math.max(spanX, spanY, spanZ, 1e-9);
+    const hasClearlySmallAxis = minSpan / maxSpan < 0.92;
+    const smallestAxis: 'x' | 'y' | 'z' =
+      minSpan === spanX ? 'x' : minSpan === spanY ? 'y' : 'z';
+
     const areas: Array<{
       kind: 'xy' | 'xz' | 'yz';
       area: number;
+      verticalAxis: 'x' | 'y' | 'z';
       toFootprintXY: (p: { x: number; y: number; z: number }) => { x: number; y: number };
       vertical: (p: { x: number; y: number; z: number }) => number;
     }> = [
       {
         kind: 'xy',
         area: this.convexHullArea2D(sample.map((p) => ({ x: p.x, y: p.y }))),
-        toFootprintXY: (p) => ({ x: p.x, y: -p.y }),
+        verticalAxis: 'z',
+        toFootprintXY: (p) => ({ x: p.x, y: p.y }),
         vertical: (p) => p.z,
       },
       {
         kind: 'xz',
         area: this.convexHullArea2D(sample.map((p) => ({ x: p.x, y: p.z }))),
-        toFootprintXY: (p) => ({ x: p.x, y: -p.z }),
+        verticalAxis: 'y',
+        toFootprintXY: (p) => ({ x: p.x, y: p.z }),
         vertical: (p) => p.y,
       },
       {
         kind: 'yz',
         area: this.convexHullArea2D(sample.map((p) => ({ x: p.y, y: p.z }))),
-        toFootprintXY: (p) => ({ x: p.y, y: -p.z }),
+        verticalAxis: 'x',
+        toFootprintXY: (p) => ({ x: p.y, y: p.z }),
         vertical: (p) => p.x,
       },
     ];
-    areas.sort((u, v) => v.area - u.area);
-    const best = areas[0];
+    const maxArea = Math.max(...areas.map((c) => c.area), 1e-9);
+    const scored = areas.map((c) => {
+      const areaScore = c.area / maxArea;
+      const axisBonus =
+        hasClearlySmallAxis && c.verticalAxis === smallestAxis ? 0.6 : 0;
+      return {
+        ...c,
+        score: areaScore + axisBonus,
+      };
+    });
+    scored.sort((u, v) => v.score - u.score || v.area - u.area);
+    const best = scored[0];
+    this.logger.log(
+      `IFC plane selection: spans(x=${spanX.toFixed(3)}, y=${spanY.toFixed(3)}, z=${spanZ.toFixed(3)}), ` +
+      `smallest=${smallestAxis}, selected=${best.kind}, score=${best.score.toFixed(3)}`,
+    );
     return { kind: best.kind, toFootprintXY: best.toFootprintXY, vertical: best.vertical };
   }
 
