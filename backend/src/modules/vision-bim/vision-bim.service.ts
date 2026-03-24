@@ -271,6 +271,10 @@ Polygon rules:
 5. ORTHOGONAL: For walls intended to be perpendicular, vertices should form 90 degree angles.
 6. CURVED FACADES: represent with ONE or TWO straight segments. Do NOT use many short segments.
 7. Angled/chamfered corners must each be a separate vertex.
+8. VERTEX COUNT = NUMBER OF 90-DEGREE TURNS IN THE GROUND FOOTPRINT. Count the corners of the ground floor plan — that is your vertex count. A rectangle = 4. An L-shape = 6. A U-shape = 8. A T-shape = 8.
+   CRITICAL: The footprint is the shape you would see if you removed the roof and looked straight down. Height changes, roof steps, and floor setbacks do NOT add vertices to the footprint. If you see a tall tower next to a shorter wing, the footprint is STILL an L with 6 vertices — the height difference is encoded in wallHeightsMm only.
+   WRONG (8 vertices for an L-shape): splitting a wall into two walls because the roofline height changes along that wall.
+   RIGHT (6 vertices for an L-shape): one wall covering the full length, with wallHeightsMm giving each wall its correct height.
 
 =============== ANGLED / NON-ORTHOGONAL BUILDINGS ===============
 Some floor plans have walls at angles other than 90°. For these buildings:
@@ -850,7 +854,7 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v5:${modelForKey}:${hash}`;
+      const cacheKey = `vision-bim:v6:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
@@ -1342,78 +1346,115 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     }
     if (indexed.length < 4) return;
 
-    // ── Pass 1c: collapse orthogonal step patterns at height boundaries ───────
-    // When a 3D BIM render is analysed, the AI often traces the silhouette edge
-    // at the height-change boundary, inserting a "step" pattern of 3 consecutive
-    // edges (dir, perpendicular-step, dir-again). This turns a 6-wall L-shape
-    // into an 8-wall shape. Detect these step triplets and collapse them when
-    // the step occurs at a wallHeightsMm transition.
+    // ── Pass 1c: collapse spurious orthogonal steps at height boundaries ────
+    // When a 3D BIM render is analysed, the AI often traces the silhouette at
+    // the height-change boundary, inserting a "step" pattern of 3 consecutive
+    // edges (dir, perpendicular-step, dir-again).  This turns a 6-wall L-shape
+    // into an 8-wall shape.
     //
-    // A "step triplet" at index i means:
-    //   edge(i-1)  direction d1
-    //   edge(i)    direction d2 (≈ perpendicular to d1) = the "step"
-    //   edge(i+1)  direction d3 ≈ d1 (same axis as the first edge)
+    // Algorithm: find ALL step triplets at height boundaries, then collapse
+    // ONLY the one whose removal adds the MOST area (= it was a notch/dent
+    // caused by the silhouette, not a real protrusion like the L-corner).
+    // Only collapse when there are ≥2 candidates so we never destroy the
+    // last real step of an L/U/T shape.
     //
-    // Collapsing: remove vertex i and vertex (i+1), merging edge(i-1) and edge(i+1)
-    // into one edge going in direction d1.
+    // After collapsing, the adjacent vertex is shifted to maintain
+    // orthogonality (the step was perpendicular, so one coordinate must
+    // be aligned with the pre-step edge).
     if (originalWallHeights && indexed.length > 6) {
-      const edgeDir = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      const edgeDir1c = (a: { x: number; y: number }, b: { x: number; y: number }) => {
         const dx = b.x - a.x, dy = b.y - a.y;
         const len = Math.hypot(dx, dy);
         if (len < 1e-9) return null;
         return { dx: dx / len, dy: dy / len, len };
       };
-
-      const sameAxis = (d1: { dx: number; dy: number }, d3: { dx: number; dy: number }) => {
-        const dot = Math.abs(d1.dx * d3.dx + d1.dy * d3.dy);
-        return dot > 0.85;
+      const sameAxis1c = (d1: { dx: number; dy: number }, d3: { dx: number; dy: number }) => {
+        return Math.abs(d1.dx * d3.dx + d1.dy * d3.dy) > 0.85;
       };
-
-      const perpendicular = (d1: { dx: number; dy: number }, d2: { dx: number; dy: number }) => {
-        const dot = Math.abs(d1.dx * d2.dx + d1.dy * d2.dy);
-        return dot < 0.35;
+      const perp1c = (d1: { dx: number; dy: number }, d2: { dx: number; dy: number }) => {
+        return Math.abs(d1.dx * d2.dx + d1.dy * d2.dy) < 0.35;
+      };
+      const signedArea2 = (arr: { x: number; y: number }[]) => {
+        let a = 0;
+        for (let j = 0; j < arr.length; j++) {
+          const k = (j + 1) % arr.length;
+          a += arr[j].x * arr[k].y - arr[k].x * arr[j].y;
+        }
+        return a;
       };
 
       let stepChanged = true;
-      while (stepChanged && indexed.length > 4) {
+      while (stepChanged && indexed.length > 6) {
         stepChanged = false;
         const n = indexed.length;
-        const extent = polyExtent(indexed);
-        const stepMaxLen = extent * 0.15;
+
+        // Collect all step-triplet candidates at height boundaries
+        type StepCandidate = { i: number; nextIdx: number; nextNextIdx: number; areaGain: number; d2Vertical: boolean; alignCoord: number };
+        const candidates: StepCandidate[] = [];
 
         for (let i = 0; i < n; i++) {
-          const prevIdx = (i - 1 + n) % n;
-          const nextIdx = (i + 1) % n;
-          const nextNextIdx = (i + 2) % n;
+          const prevI = (i - 1 + n) % n;
+          const nextI = (i + 1) % n;
+          const nnI = (i + 2) % n;
 
-          const d1 = edgeDir(indexed[prevIdx], indexed[i]);
-          const d2 = edgeDir(indexed[i], indexed[nextIdx]);
-          const d3 = edgeDir(indexed[nextIdx], indexed[nextNextIdx]);
+          const d1 = edgeDir1c(indexed[prevI], indexed[i]);
+          const d2 = edgeDir1c(indexed[i], indexed[nextI]);
+          const d3 = edgeDir1c(indexed[nextI], indexed[nnI]);
           if (!d1 || !d2 || !d3) continue;
+          if (!sameAxis1c(d1, d3)) continue;
+          if (!perp1c(d1, d2)) continue;
 
-          if (!sameAxis(d1, d3)) continue;
-          if (!perpendicular(d1, d2)) continue;
-          if (d2.len > stepMaxLen) continue;
+          // Height boundary check
+          const h0 = originalWallHeights[indexed[prevI].origIdx] ?? 0;
+          const h1 = originalWallHeights[indexed[i].origIdx] ?? 0;
+          const h2 = originalWallHeights[indexed[nextI].origIdx] ?? 0;
+          if (
+            Math.abs(h0 - h1) <= 500 &&
+            Math.abs(h1 - h2) <= 500 &&
+            Math.abs(h0 - h2) <= 500
+          ) continue;
 
-          const h_before = originalWallHeights[indexed[prevIdx].origIdx] ?? 0;
-          const h_step = originalWallHeights[indexed[i].origIdx] ?? 0;
-          const h_after = originalWallHeights[indexed[nextIdx].origIdx] ?? 0;
-          const hasHeightChange =
-            (Math.abs(h_before - h_step) > 500) ||
-            (Math.abs(h_step - h_after) > 500) ||
-            (Math.abs(h_before - h_after) > 500);
+          // Compute area gain from collapsing this step
+          const d2Vertical = Math.abs(d2.dy) > Math.abs(d2.dx);
+          const alignCoord = d2Vertical ? indexed[i].y : indexed[i].x;
 
-          if (!hasHeightChange) continue;
+          const trial = indexed.map(p => ({ x: p.x, y: p.y }));
+          if (d2Vertical) {
+            trial[nnI].y = alignCoord;
+          } else {
+            trial[nnI].x = alignCoord;
+          }
+          const toRemove = [i, nextI].sort((a2, b) => b - a2);
+          for (const ri of toRemove) trial.splice(ri, 1);
 
-          this.logger.log(
-            `cleanupPolygon: collapsing height-boundary step at vertices ${i},${nextIdx} ` +
-            `(step=${Math.round(d2.len)}, heights ${h_before}/${h_step}/${h_after})`,
-          );
-          const removeIndices = [i, nextIdx].sort((a, b) => b - a);
-          for (const ri of removeIndices) indexed.splice(ri, 1);
-          stepChanged = true;
-          break;
+          const areaBefore = Math.abs(signedArea2(indexed));
+          const areaAfter = Math.abs(signedArea2(trial));
+          const areaGain = areaAfter - areaBefore;
+
+          candidates.push({ i, nextIdx: nextI, nextNextIdx: nnI, areaGain, d2Vertical, alignCoord });
         }
+
+        if (candidates.length < 2) break; // keep the last real step
+
+        // Pick the candidate with the LARGEST area gain (= biggest notch)
+        candidates.sort((a, b) => b.areaGain - a.areaGain);
+        const best = candidates[0];
+        if (best.areaGain <= 0) break; // no notch to collapse
+
+        // Apply the collapse
+        if (best.d2Vertical) {
+          indexed[best.nextNextIdx].y = best.alignCoord;
+        } else {
+          indexed[best.nextNextIdx].x = best.alignCoord;
+        }
+        const removeIndices = [best.i, best.nextIdx].sort((a, b) => b - a);
+        for (const ri of removeIndices) indexed.splice(ri, 1);
+
+        this.logger.log(
+          `cleanupPolygon Pass1c: collapsed notch step at vertices ${best.i},${best.nextIdx} ` +
+          `(areaGain=${Math.round(best.areaGain)}, candidates=${candidates.length})`,
+        );
+        stepChanged = true;
       }
     }
     if (indexed.length < 4) return;
