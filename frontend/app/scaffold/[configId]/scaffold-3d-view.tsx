@@ -2645,10 +2645,12 @@ export default function Scaffold3DView({
       const extent = Math.max(maxExtent, 5);
       const dist = Math.max(extent * 2.5, maxH * 2.2, 12);
       const centerY = Math.max(maxH * 0.4, 2);
+      // Camera from south (+Z) with small east offset so +X maps strongly
+      // to screen-right, matching the 2D plan left-right orientation.
       camera.position.set(
-        dist * 0.6,
-        centerY + dist * 0.5,
-        dist * 0.6,
+        dist * 0.2,
+        centerY + dist * 0.55,
+        dist * 0.85,
       );
       camera.lookAt(0, centerY * 0.5, 0);
       camera.far = dist * 5;

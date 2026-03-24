@@ -651,7 +651,9 @@ function Building3DPreview({
 
       // Camera
       const dist = Math.max(extent * 1.8, heightM * 2, 8);
-      camera.position.set(dist * 0.7, dist * 0.5, dist * 0.7);
+      // Camera from south (+Z) with small east offset so +X maps strongly
+      // to screen-right, matching the 2D plan left-right orientation.
+      camera.position.set(dist * 0.2, dist * 0.6, dist * 0.85);
       camera.lookAt(0, heightM * 0.35, 0);
       camera.far = dist * 10;
       camera.updateProjectionMatrix();
