@@ -121,9 +121,10 @@ Optional fields (read from dimension lines and annotations):
   * Each polygon edge (wall) should get the height of the roof/eaves above THAT specific wall section.
   * Example: A building with a 5-story wing (15000mm) on the left and a 12-story tower (36000mm) on the right — the left-side walls get 15000, the right-side walls get 36000.
   * For walls connecting sections of different height (transition walls), use the TALLER adjacent section's height.
-  * IMPORTANT: if a long straight facade contains multiple height zones along its length, SPLIT that facade into multiple consecutive edges at the height-change points. Those split vertices may be perfectly collinear and are intentional.
+  * IMPORTANT: Do NOT split the footprint polygon at height-change boundaries. The footprint vertices define the GROUND-LEVEL outline shape — a change in roof height does NOT create a new corner in the footprint. Height changes along a straight facade should be expressed via wallHeightsMm (each edge gets its own height) and massingTiers, NOT by adding extra collinear vertices.
+  * Example: An L-shaped building (6 vertices) where the left wing is 42m tall and the right wing is 12m tall is STILL 6 vertices. The left-side walls get wallHeightsMm=42000 and the right-side walls get wallHeightsMm=12000. Do NOT turn it into 8 vertices by splitting at the height boundary.
   * If ALL walls have the same height (simple box), you may omit this field — buildingHeightMm alone is sufficient.
-  * CRITICAL for 3D BIM renders: If you can see that parts of the building are taller than others (stepped roofline, cascading floors, different wing heights), you MUST output wallHeightsMm with the correct per-wall height for each edge.
+  * CRITICAL for 3D BIM renders: If you can see that parts of the building are taller than others (stepped roofline, cascading floors, different wing heights), you MUST output wallHeightsMm with the correct per-wall height for each edge. But keep the footprint vertex count minimal — use ONLY vertices where the wall direction changes.
 - massingTiers: optional array for buildings whose upper floors step inward or have smaller footprints than the base.
   * Use this when the building is a terrace / wedding-cake / podium+tower shape.
   * Each tier: { vertices, topHeightMm, baseHeightMm? }.
@@ -253,7 +254,7 @@ Many buildings have DIFFERENT heights on different sides — stepped rooflines, 
 When you detect this:
 1. Set buildingHeightMm to the MAXIMUM height (tallest point).
 2. Output wallHeightsMm: one height per polygon edge matching the facade height at each wall section.
-3. For the footprint polygon: trace the FULL base outline.
+3. For the footprint polygon: trace the GROUND-LEVEL base outline with MINIMUM vertices. The footprint shape = the shape you see when looking straight down. Height differences do NOT add footprint vertices. An L-shaped building is ALWAYS 6 vertices regardless of how many height zones it has.
 4. CRITICALLY IMPORTANT — output massingTiers for buildings where upper floors are NARROWER than lower floors (podium+tower, wedding-cake, cascading/terraced shapes). Each tier = one rectangular or polygonal volume. Without massingTiers, the scaffold wraps the entire ground footprint at every height, producing an incorrect result.
    Example: A building with a 30m x 20m base (0-15m) topped by a 20m x 15m tower (15-45m):
    massingTiers: [
@@ -1311,7 +1312,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     // L/U/T shape (i.e. > 6 for an L-shape, > 8 for a U-shape, etc.). But
     // crucially, we DO allow merging down to 4 (rectangle) since even 8→4 can be
     // correct for a pure perspective-split of a box.
-    const SIN_THR = 0.06; // same threshold used in Pass 2
+    const SIN_THR_COLLINEAR = 0.25;
+    const SIN_THR_GRID = 0.06;
     {
       let collinearChanged = true;
       while (collinearChanged && indexed.length > 4) {
@@ -1330,13 +1332,87 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
             break;
           }
           const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
-          if (sinAngle < SIN_THR) {
-            // Collinear — remove vertex B regardless of height difference.
-            // Height info is preserved by the wallHeightsMm remap at the end.
+          if (sinAngle < SIN_THR_COLLINEAR) {
             indexed.splice(i, 1);
             collinearChanged = true;
             break;
           }
+        }
+      }
+    }
+    if (indexed.length < 4) return;
+
+    // ── Pass 1c: collapse orthogonal step patterns at height boundaries ───────
+    // When a 3D BIM render is analysed, the AI often traces the silhouette edge
+    // at the height-change boundary, inserting a "step" pattern of 3 consecutive
+    // edges (dir, perpendicular-step, dir-again). This turns a 6-wall L-shape
+    // into an 8-wall shape. Detect these step triplets and collapse them when
+    // the step occurs at a wallHeightsMm transition.
+    //
+    // A "step triplet" at index i means:
+    //   edge(i-1)  direction d1
+    //   edge(i)    direction d2 (≈ perpendicular to d1) = the "step"
+    //   edge(i+1)  direction d3 ≈ d1 (same axis as the first edge)
+    //
+    // Collapsing: remove vertex i and vertex (i+1), merging edge(i-1) and edge(i+1)
+    // into one edge going in direction d1.
+    if (originalWallHeights && indexed.length > 6) {
+      const edgeDir = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-9) return null;
+        return { dx: dx / len, dy: dy / len, len };
+      };
+
+      const sameAxis = (d1: { dx: number; dy: number }, d3: { dx: number; dy: number }) => {
+        const dot = Math.abs(d1.dx * d3.dx + d1.dy * d3.dy);
+        return dot > 0.85;
+      };
+
+      const perpendicular = (d1: { dx: number; dy: number }, d2: { dx: number; dy: number }) => {
+        const dot = Math.abs(d1.dx * d2.dx + d1.dy * d2.dy);
+        return dot < 0.35;
+      };
+
+      let stepChanged = true;
+      while (stepChanged && indexed.length > 4) {
+        stepChanged = false;
+        const n = indexed.length;
+        const extent = polyExtent(indexed);
+        const stepMaxLen = extent * 0.15;
+
+        for (let i = 0; i < n; i++) {
+          const prevIdx = (i - 1 + n) % n;
+          const nextIdx = (i + 1) % n;
+          const nextNextIdx = (i + 2) % n;
+
+          const d1 = edgeDir(indexed[prevIdx], indexed[i]);
+          const d2 = edgeDir(indexed[i], indexed[nextIdx]);
+          const d3 = edgeDir(indexed[nextIdx], indexed[nextNextIdx]);
+          if (!d1 || !d2 || !d3) continue;
+
+          if (!sameAxis(d1, d3)) continue;
+          if (!perpendicular(d1, d2)) continue;
+          if (d2.len > stepMaxLen) continue;
+
+          const h_before = originalWallHeights[indexed[prevIdx].origIdx] ?? 0;
+          const h_step = originalWallHeights[indexed[i].origIdx] ?? 0;
+          const h_after = originalWallHeights[indexed[nextIdx].origIdx] ?? 0;
+          const hasHeightChange =
+            (Math.abs(h_before - h_step) > 500) ||
+            (Math.abs(h_step - h_after) > 500) ||
+            (Math.abs(h_before - h_after) > 500);
+
+          if (!hasHeightChange) continue;
+
+          this.logger.log(
+            `cleanupPolygon: collapsing height-boundary step at vertices ${i},${nextIdx} ` +
+            `(step=${Math.round(d2.len)}, heights ${h_before}/${h_step}/${h_after})`,
+          );
+          const removeIndices = [i, nextIdx].sort((a, b) => b - a);
+          for (const ri of removeIndices) indexed.splice(ri, 1);
+          stepChanged = true;
+          break;
         }
       }
     }
@@ -1349,8 +1425,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const minVertices = Math.max(4, Math.ceil(indexed.length * 0.80));
 
     // ── Pass 2: iteratively remove near-collinear vertices (grid-line artifacts) ──
-    // Height-split splits were already handled in Pass 1b above, so here we only
-    // remove vertices that are collinear AND have the same (or no) height difference.
+    // Height-split splits were already handled in Pass 1b/1c above, so here we only
+    // remove vertices that are strictly collinear (grid-line tracing artifacts).
     let changed = true;
     while (changed && indexed.length > minVertices) {
       changed = false;
@@ -1368,7 +1444,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           break;
         }
         const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
-        if (sinAngle < SIN_THR) {
+        if (sinAngle < SIN_THR_GRID) {
           indexed.splice(i, 1);
           changed = true;
           break;
