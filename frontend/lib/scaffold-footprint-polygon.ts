@@ -30,6 +30,34 @@ function wallLenM(walls: Array<{ wallLengthMm?: number }>, i: number): number {
   return safeMm / 1000;
 }
 
+/**
+ * Only accept stored polygons that match this wall count exactly (or a closed
+ * ring with a duplicated last=first vertex). This prevents using the wrong
+ * vertex subset when the stored outline has extra points from tier decomposition.
+ */
+function pickStoredVerticesForWallCount(
+  storedVertices: Array<{ xFrac?: number; yFrac?: number; x?: number; y?: number }> | undefined,
+  wallCount: number,
+): FootprintVertexXZ[] | null {
+  if (!storedVertices || wallCount < 1) return null;
+  const normalised = storedVertices.map(normaliseVertex);
+  if (!normalised.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) return null;
+
+  if (normalised.length === wallCount) {
+    return normalised;
+  }
+
+  if (normalised.length === wallCount + 1) {
+    const first = normalised[0];
+    const last = normalised[normalised.length - 1];
+    if (first && last && Math.hypot(first.x - last.x, first.z - last.z) <= 1e-3) {
+      return normalised.slice(0, wallCount);
+    }
+  }
+
+  return null;
+}
+
 function hasPlausiblePolygonEdges(
   verts: FootprintVertexXZ[],
   walls: Array<{ wallLengthMm?: number }>,
@@ -218,6 +246,7 @@ export function buildFootprintPolygonXZ(
 ): FootprintVertexXZ[] {
   const n = walls.length;
   if (n < 1) return [];
+  const storedForWalls = pickStoredVerticesForWallCount(storedVertices, n);
 
   if (n === 1) {
     const lenM = wallLenM(walls, 0);
@@ -242,8 +271,8 @@ export function buildFootprintPolygonXZ(
         { x: 0, z: w1 },
       ];
     };
-    if (!storedVertices || storedVertices.length < 4) return rect();
-    const raw4 = storedVertices.slice(0, 4).map(normaliseVertex);
+    if (!storedForWalls) return rect();
+    const raw4 = storedForWalls;
     const xs4 = raw4.map((v) => v.x);
     const zs4 = raw4.map((v) => v.z);
     const spread4 = Math.max(
@@ -256,8 +285,8 @@ export function buildFootprintPolygonXZ(
   }
 
   // ── Stored outline: scale raw vertices to meters ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(normaliseVertex);
+  if (storedForWalls) {
+    const raw = storedForWalls;
     const xs = raw.map((v) => v.x);
     const zs = raw.map((v) => v.z);
     const spreadX = Math.max(...xs) - Math.min(...xs);
@@ -325,9 +354,8 @@ export function buildFootprintPolygonXZ(
   if (n >= 6 && n <= 16 && n % 2 === 0) {
     let orthoResult: FootprintVertexXZ[] | null = null;
 
-    if (storedVertices && storedVertices.length >= n) {
-      const sv = storedVertices.slice(0, n).map(normaliseVertex);
-      orthoResult = tryOrthogonalFromStoredShape(walls, n, sv);
+    if (storedForWalls) {
+      orthoResult = tryOrthogonalFromStoredShape(walls, n, storedForWalls);
       if (orthoResult && typeof window !== 'undefined') {
         console.info('[Scaffold] footprint: ortho-guided (stored+lengths)', n, 'walls');
       }
@@ -358,8 +386,8 @@ export function buildFootprintPolygonXZ(
   }
 
   // ── Direction-preserving fallback ──
-  if (storedVertices && storedVertices.length >= n) {
-    const raw = storedVertices.slice(0, n).map(normaliseVertex);
+  if (storedForWalls) {
+    const raw = storedForWalls;
     const dirVerts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
     let dcx = 0, dcz = 0;
     for (let i = 0; i < n - 1; i++) {
