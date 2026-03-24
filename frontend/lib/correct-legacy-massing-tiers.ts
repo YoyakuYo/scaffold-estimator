@@ -89,7 +89,14 @@ export function correctLegacyMassingTiersIfNeeded(params: {
 
   const countMismatch = vStored.length !== vSyn.length;
 
-  if (!(suspiciousBox || countMismatch || areaRatio > 1.07 || vSyn.length > vStored.length)) return null;
+  // A 4-vertex rectangle is valid for upper tiers of L-shaped buildings;
+  // only treat it as suspicious when area also differs significantly.
+  const needsCorrection =
+    (suspiciousBox && areaRatio > 1.15) ||
+    (!suspiciousBox && countMismatch && areaRatio > 1.07) ||
+    areaRatio > 1.25;
+
+  if (!needsCorrection) return null;
 
   return synthetic.map((t) => ({
     vertices: t.vertices.map((p) => {

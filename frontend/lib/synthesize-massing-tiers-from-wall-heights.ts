@@ -83,17 +83,52 @@ export function synthesizeMassingTiersFromWallHeights(
             }
             if (compact.length < 3) return verts;
 
-            let polyArea2 = 0;
+            // Check if the polygon has orthogonal edges (all ~90° angles).
+            // When extracting a subset of an L-shaped outline, the collected
+            // vertices can form a trapezoid instead of a rectangle (e.g., one
+            // corner from the extension at a different depth). Fall back to
+            // the AABB of qualifying edge vertices for a clean rectangle.
+            let allOrthogonal = true;
             for (let i = 0; i < compact.length; i++) {
-              const j = (i + 1) % compact.length;
-              polyArea2 += compact[i]!.x * compact[j]!.y - compact[j]!.x * compact[i]!.y;
+              const prev = compact[(i - 1 + compact.length) % compact.length]!;
+              const curr = compact[i]!;
+              const next = compact[(i + 1) % compact.length]!;
+              const ax = curr.x - prev.x, ay = curr.y - prev.y;
+              const bx = next.x - curr.x, by = next.y - curr.y;
+              const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+              if (la > 1e-6 && lb > 1e-6) {
+                const dot = Math.abs((ax * bx + ay * by) / (la * lb));
+                if (dot > 0.15) { allOrthogonal = false; break; }
+              }
+            }
+
+            let result = compact;
+            if (!allOrthogonal) {
+              const xs = compact.map((v) => v.x);
+              const ys = compact.map((v) => v.y);
+              const mnx = Math.min(...xs), mxx = Math.max(...xs);
+              const mny = Math.min(...ys), mxy = Math.max(...ys);
+              if (mxx - mnx > 1e-6 && mxy - mny > 1e-6) {
+                result = [
+                  { x: mnx, y: mny },
+                  { x: mxx, y: mny },
+                  { x: mxx, y: mxy },
+                  { x: mnx, y: mxy },
+                ];
+              }
+            }
+
+            let polyArea2 = 0;
+            for (let i = 0; i < result.length; i++) {
+              const j = (i + 1) % result.length;
+              polyArea2 += result[i]!.x * result[j]!.y - result[j]!.x * result[i]!.y;
             }
             const polyArea = Math.abs(polyArea2) * 0.5;
             if (!Number.isFinite(polyArea) || polyArea <= 1e-6) return verts;
             if (polyArea / fullArea > 0.92) return verts;
 
             hasRealSetback = true;
-            return compact;
+            return result;
           })();
 
     tiers.push({
