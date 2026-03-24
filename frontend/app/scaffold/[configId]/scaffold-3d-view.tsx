@@ -1658,6 +1658,8 @@ export default function Scaffold3DView({
           skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] = (skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] ?? 0) + 1;
           continue;
         }
+        const edgeUx = dx / edgeLen;
+        const edgeUz = dz / edgeLen;
 
         // Use tier-specific polygon data for normals and corners
         const tierIsOpen = tpd?.isOpen ?? isOpenPolygon;
@@ -1708,12 +1710,50 @@ export default function Scaffold3DView({
           (near.x - base.x) * nx + (near.z - base.z) * nz > -1e-6;
         const nearIsOutside = (near: PointXZ) =>
           tierIsOpen || tierV.length < 3 || !pointInPolygonXZ(near, tierV);
-        const nearStart = tierNearStart && nearOnOutward(tierNearStart, p1) && nearIsOutside(tierNearStart)
+        const nearStartCandidate = tierNearStart && nearOnOutward(tierNearStart, p1) && nearIsOutside(tierNearStart)
           ? { x: tierNearStart.x + tierOffX, z: tierNearStart.z + tierOffZ }
-          : fallbackStart;
-        const nearEnd = tierNearEnd && nearOnOutward(tierNearEnd, p2) && nearIsOutside(tierNearEnd)
+          : null;
+        const nearEndCandidate = tierNearEnd && nearOnOutward(tierNearEnd, p2) && nearIsOutside(tierNearEnd)
           ? { x: tierNearEnd.x + tierOffX, z: tierNearEnd.z + tierOffZ }
-          : fallbackEnd;
+          : null;
+
+        // Keep scaffold runs within each wall's horizontal extent.
+        // Offset-miter intersections can overshoot at corners (notably on small tiers),
+        // so we only accept near-row points that project inside this wall segment.
+        const projectToWallT = (pt: PointXZ) => (pt.x - v1.x) * edgeUx + (pt.z - v1.z) * edgeUz;
+        const toWallOffsetPoint = (t: number): PointXZ => ({
+          x: v1.x + edgeUx * t + nx * standoffM,
+          z: v1.z + edgeUz * t + nz * standoffM,
+        });
+        const clampT = (t: number) => Math.max(0, Math.min(edgeLen, t));
+        const edgeProjectionTolerance = Math.max(standoffM * 0.35, 0.04);
+
+        let startT = 0;
+        let endT = edgeLen;
+
+        if (nearStartCandidate) {
+          const rawStartT = projectToWallT(nearStartCandidate);
+          const clampedStartT = clampT(rawStartT);
+          if (Number.isFinite(rawStartT) && Math.abs(rawStartT - clampedStartT) <= edgeProjectionTolerance) {
+            startT = clampedStartT;
+          }
+        }
+
+        if (nearEndCandidate) {
+          const rawEndT = projectToWallT(nearEndCandidate);
+          const clampedEndT = clampT(rawEndT);
+          if (Number.isFinite(rawEndT) && Math.abs(rawEndT - clampedEndT) <= edgeProjectionTolerance) {
+            endT = clampedEndT;
+          }
+        }
+
+        if (endT - startT < 0.05) {
+          startT = 0;
+          endT = edgeLen;
+        }
+
+        const nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
+        const nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
         const nearDx = nearEnd.x - nearStart.x;
         const nearDz = nearEnd.z - nearStart.z;
         const alignedLen = Math.hypot(nearDx, nearDz);

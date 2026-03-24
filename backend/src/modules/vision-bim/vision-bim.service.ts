@@ -1105,13 +1105,13 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         }
       }
       // Orthogonal closure check: for 6/8/10+ wall orthogonal buildings,
-      // verify that wall lengths can form a closed polygon. If not, adjust
-      // the wall with the largest closing gap contribution.
+      // verify that wall lengths can form a closed polygon. If not, keep the
+      // original extracted lengths and rely on stored vertices for footprint shape.
       if (wallLengths && wallLengths.length >= 6 && wallLengths.length % 2 === 0) {
         const hWalls = wallLengths.filter((_, i) => i % 2 === 0);
         const vWalls = wallLengths.filter((_, i) => i % 2 !== 0);
 
-        const findBestSplit = (arr: number[]): { balanced: boolean; gap: number; adjustIdx: number } => {
+        const findBestSplit = (arr: number[]): { balanced: boolean; gap: number } => {
           const k = arr.length;
           let bestGap = Infinity;
           for (let mask = 0; mask < (1 << k); mask++) {
@@ -1122,12 +1122,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
             const gap = Math.abs(pos - neg);
             if (gap < bestGap) { bestGap = gap; }
           }
-          let adjustIdx = 0;
-          let minVal = Infinity;
-          for (let j = 0; j < k; j++) {
-            if (arr[j] < minVal) { minVal = arr[j]; adjustIdx = j; }
-          }
-          return { balanced: bestGap === 0, gap: bestGap, adjustIdx };
+          return { balanced: bestGap === 0, gap: bestGap };
         };
 
         const hCheck = findBestSplit(hWalls);
@@ -1139,18 +1134,6 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
             `wallLengthsMm: orthogonal closure check failed — H gap=${hCheck.gap}mm, V gap=${vCheck.gap}mm (total ${totalGap}mm). ` +
             `Wall lengths may not form a valid closed polygon. Stored vertices will be used for shape.`,
           );
-          if (!hCheck.balanced && hCheck.gap <= Math.max(...hWalls) * 0.2) {
-            const realIdx = hCheck.adjustIdx * 2;
-            const oldVal = wallLengths[realIdx];
-            wallLengths[realIdx] = oldVal + hCheck.gap;
-            this.logger.warn(`wallLengthsMm: adjusted wall[${realIdx}] ${oldVal}→${wallLengths[realIdx]}mm to close H axis`);
-          }
-          if (!vCheck.balanced && vCheck.gap <= Math.max(...vWalls) * 0.2) {
-            const realIdx = vCheck.adjustIdx * 2 + 1;
-            const oldVal = wallLengths[realIdx];
-            wallLengths[realIdx] = oldVal + vCheck.gap;
-            this.logger.warn(`wallLengthsMm: adjusted wall[${realIdx}] ${oldVal}→${wallLengths[realIdx]}mm to close V axis`);
-          }
         }
       }
 
