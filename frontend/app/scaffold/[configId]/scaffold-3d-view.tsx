@@ -1274,23 +1274,45 @@ export default function Scaffold3DView({
         const tg0 = tierGroups[0];
         let tverts: PointXZ[] = [];
         let tok = false;
+        let groundFromMassing = false;
 
-        // Ground-tier footprint: ALWAYS reuse the same polygon builder as the 2D plan.
-        // This guarantees that when the plan view is correct, the 3D scaffold follows
-        // the identical footprint (no drift from massing-tier polygons).
-        const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
-        tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
-        tok =
-          tverts.length >= 2 &&
-          tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-        if (!tok && sv0 && sv0.length > 0) {
-          tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
+        // Prefer bimPlan-mapped massing tier vertices for the ground polygon.
+        // decomposeTierWalls creates walls from massing tier edges (1:1 order),
+        // so massing tier 0 vertices give the correct footprint position and
+        // orientation. buildFootprintPolygonXZ can pick a mirrored L-shape
+        // when wall order doesn't match the stored outline vertex order.
+        if (bimPlan && massingTiersSorted.length > 0) {
+          const groundMassing = massingTiersSorted.find(
+            (m) => (m.baseHeightMm ?? 0) <= 2 && m.vertices.length === tg0.walls.length,
+          ) ?? (massingTiersSorted[0]?.vertices.length === tg0.walls.length ? massingTiersSorted[0] : undefined);
+
+          if (groundMassing) {
+            const mapped = bimPlan.toPlanM(groundMassing.vertices as any);
+            if (mapped.length === tg0.walls.length &&
+                mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+              tverts = mapped;
+              tok = true;
+              groundFromMassing = true;
+            }
+          }
+        }
+
+        // Fallback: build from wall lengths + stored vertex hints
+        if (!tok) {
+          const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
+          tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
           tok =
             tverts.length >= 2 &&
             tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          if (!tok && sv0 && sv0.length > 0) {
+            tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
+            tok =
+              tverts.length >= 2 &&
+              tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          }
         }
 
-        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: false });
+        tierPolygons.push({ verts: tok ? tverts : [], footprintFromMassing: groundFromMassing });
       }
 
       // Primary polygon = ground tier (or first valid tier)

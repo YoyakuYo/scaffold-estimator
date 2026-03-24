@@ -26,7 +26,7 @@ import { extractSegments } from '@/cad/extractSegments';
 import { detectOuterPolygon } from '@/geometry/polygonDetection';
 import {
   Upload, Loader2, AlertCircle, Ruler, RotateCcw,
-  Trash2, CheckCircle2, Maximize2, FileUp, MousePointer2, Hand, PenLine, Magnet, Move,
+  Trash2, CheckCircle2, Maximize2, FileUp, MousePointer2, Hand, PenLine, Magnet, Move, Plus, Minus, Compass, Scissors, StretchHorizontal, RotateCw,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { drawingsApi, ExtractedDimensions } from '@/lib/api/drawings';
@@ -61,6 +61,22 @@ function ptLabel(i: number): string {
 
 function ptDist(a: { x: number; y: number }, b: { x: number; y: number }): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function pointSegmentDist(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): { dist: number; t: number; projX: number; projY: number } {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const ab2 = abx * abx + aby * aby;
+  if (ab2 < 1e-9) return { dist: ptDist(p, a), t: 0, projX: a.x, projY: a.y };
+  const tRaw = ((p.x - a.x) * abx + (p.y - a.y) * aby) / ab2;
+  const t = Math.max(0, Math.min(1, tRaw));
+  const projX = a.x + abx * t;
+  const projY = a.y + aby * t;
+  return { dist: Math.hypot(p.x - projX, p.y - projY), t, projX, projY };
 }
 
 // ─── Snap Engine ────────────────────────────────────────────
@@ -316,10 +332,15 @@ export function PerimeterTracer({
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
-  const [activeTool, setActiveTool] = useState<'draw' | 'select' | 'pan'>('draw');
+  const [activeTool, setActiveTool] = useState<'draw' | 'select' | 'pan' | 'add_vertex' | 'delete_vertex' | 'measure' | 'trim' | 'extend' | 'offset' | 'rotate'>('draw');
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [orthoLock, setOrthoLock] = useState(false);
   const [underlayOpacity, setUnderlayOpacity] = useState(100);
+  const [measurePts, setMeasurePts] = useState<Array<{ x: number; y: number }>>([]);
+  const [selectedSegIdx, setSelectedSegIdx] = useState<number | null>(null);
+  const [trimExtendMm, setTrimExtendMm] = useState(1000);
+  const [offsetMm, setOffsetMm] = useState(300);
+  const [rotateDeg, setRotateDeg] = useState(15);
 
   /* ───── Refs ────────────────────────────────────────────── */
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -409,6 +430,14 @@ export function PerimeterTracer({
     () => closed && segments.length >= 3 && segments.every(s => s.confirmed && s.mm > 0),
     [closed, segments],
   );
+
+  const measureDistanceMm = useMemo(() => {
+    if (measurePts.length !== 2) return null;
+    const px = ptDist(measurePts[0], measurePts[1]);
+    if (fileMode === 'dxf') return px;
+    if (calib) return px * calib.mmPerPixel;
+    return null;
+  }, [measurePts, fileMode, calib]);
 
   /* ═══════════════════════════════════════════════════════════
      SYNC TO PERIMETER MODEL
@@ -519,6 +548,11 @@ export function PerimeterTracer({
     setSnapEnabled(true);
     setOrthoLock(false);
     setUnderlayOpacity(100);
+    setMeasurePts([]);
+    setSelectedSegIdx(null);
+    setTrimExtendMm(1000);
+    setOffsetMm(300);
+    setRotateDeg(15);
     resetTracer();
     perimeterModel.clear();
   }, [perimeterModel, resetTracer]);
@@ -695,6 +729,68 @@ export function PerimeterTracer({
     return null;
   }, [points, zoom]);
 
+  const findNearSegment = useCallback((cx: number, cy: number): { index: number; x: number; y: number } | null => {
+    if (segments.length === 0) return null;
+    const thr = 16 / zoom;
+    let best: { index: number; x: number; y: number; d: number } | null = null;
+    for (let i = 0; i < segments.length; i++) {
+      const s = segments[i];
+      const pr = pointSegmentDist({ x: cx, y: cy }, s.from, s.to);
+      if (pr.dist > thr) continue;
+      if (!best || pr.dist < best.d) {
+        best = { index: i, x: pr.projX, y: pr.projY, d: pr.dist };
+      }
+    }
+    return best ? { index: best.index, x: best.x, y: best.y } : null;
+  }, [segments, zoom]);
+
+  const mmToCanvas = useCallback((mm: number) => {
+    if (fileMode === 'dxf') return mm;
+    if (calib && calib.mmPerPixel > 0) return mm / calib.mmPerPixel;
+    return mm;
+  }, [fileMode, calib]);
+
+  const applyTrimExtend = useCallback((sign: 1 | -1) => {
+    if (!closed || points.length < 3 || selectedSegIdx === null) return;
+    const n = points.length;
+    const i = ((selectedSegIdx % n) + n) % n;
+    const next = (i + 1) % n;
+    const a = points[i];
+    const b = points[next];
+    const vx = b.x - a.x;
+    const vy = b.y - a.y;
+    const len = Math.hypot(vx, vy);
+    if (len < 1e-9) return;
+    const ux = vx / len;
+    const uy = vy / len;
+    const delta = mmToCanvas(Math.max(1, trimExtendMm)) * sign;
+    setPoints(prev => prev.map((p, idx) => idx === next ? { ...p, x: p.x + ux * delta, y: p.y + uy * delta } : p));
+  }, [closed, points, selectedSegIdx, trimExtendMm, mmToCanvas]);
+
+  const applyOffset = useCallback((sign: 1 | -1) => {
+    if (!closed || points.length < 3) return;
+    const delta = mmToCanvas(Math.max(1, offsetMm)) * sign;
+    const cx = points.reduce((s, p) => s + p.x, 0) / points.length;
+    const cy = points.reduce((s, p) => s + p.y, 0) / points.length;
+    const avgR = Math.max(1, points.reduce((s, p) => s + Math.hypot(p.x - cx, p.y - cy), 0) / points.length);
+    const factor = Math.max(0.05, (avgR + delta) / avgR);
+    setPoints(prev => prev.map(p => ({ ...p, x: cx + (p.x - cx) * factor, y: cy + (p.y - cy) * factor })));
+  }, [closed, points, offsetMm, mmToCanvas]);
+
+  const applyRotate = useCallback((sign: 1 | -1) => {
+    if (points.length < 2) return;
+    const rad = (Math.max(0.1, rotateDeg) * Math.PI / 180) * sign;
+    const cx = points.reduce((s, p) => s + p.x, 0) / points.length;
+    const cy = points.reduce((s, p) => s + p.y, 0) / points.length;
+    const cr = Math.cos(rad);
+    const sr = Math.sin(rad);
+    setPoints(prev => prev.map((p) => {
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      return { ...p, x: cx + dx * cr - dy * sr, y: cy + dx * sr + dy * cr };
+    }));
+  }, [points, rotateDeg]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2) {
       e.preventDefault();
@@ -724,13 +820,15 @@ export function PerimeterTracer({
       return;
     }
 
-    // Point dragging
-    const near = findNear(c.x, c.y);
-    if (near !== null) {
-      setDraggingPt(near);
-      isMouseDownRef.current = true;
-      mouseMovedRef.current = false;
-      return;
+    // Point dragging (draw/select tools only)
+    if (activeTool === 'draw' || activeTool === 'select') {
+      const near = findNear(c.x, c.y);
+      if (near !== null) {
+        setDraggingPt(near);
+        isMouseDownRef.current = true;
+        mouseMovedRef.current = false;
+        return;
+      }
     }
 
     // Start pan tracking — only set the anchor, don't pan yet
@@ -834,14 +932,77 @@ export function PerimeterTracer({
       isPanningRef.current = false;
       return;
     }
-    if (activeTool !== 'draw') return;
+    const c = screenToCanvas(e.clientX, e.clientY);
+
+    if (activeTool === 'measure') {
+      if (!wasDown || mouseMovedRef.current || e.button !== 0 || calibPhase !== 'off') return;
+      setMeasurePts(prev => {
+        if (prev.length >= 2) return [{ x: c.x, y: c.y }];
+        return [...prev, { x: c.x, y: c.y }];
+      });
+      return;
+    }
+
+    if (activeTool === 'trim' || activeTool === 'extend') {
+      if (!wasDown || mouseMovedRef.current || e.button !== 0 || calibPhase !== 'off') return;
+      const hit = findNearSegment(c.x, c.y);
+      if (!hit) return;
+      setSelectedSegIdx(hit.index);
+      applyTrimExtend(activeTool === 'extend' ? 1 : -1);
+      return;
+    }
+
+    if (activeTool === 'delete_vertex') {
+      if (!wasDown || mouseMovedRef.current || e.button !== 0 || calibPhase !== 'off') return;
+      const near = findNear(c.x, c.y);
+      if (near === null || points.length <= 3) return;
+      setPoints(prev => {
+        const next = prev.filter((_, idx) => idx !== near).map((p, idx) => ({ ...p, label: ptLabel(idx) }));
+        return next;
+      });
+      setManualDims(prev => {
+        const next: Record<number, number> = {};
+        for (let i = 0; i < points.length; i++) {
+          if (i === near) continue;
+          const target = i > near ? i - 1 : i;
+          if (prev[i] !== undefined) next[target] = prev[i];
+        }
+        return next;
+      });
+      if (points.length - 1 < 3) setClosed(false);
+      return;
+    }
+
+    if (activeTool === 'add_vertex') {
+      if (!wasDown || mouseMovedRef.current || e.button !== 0 || calibPhase !== 'off') return;
+      const hit = findNearSegment(c.x, c.y);
+      if (!hit) return;
+      setPoints(prev => {
+        const next = [...prev];
+        next.splice(hit.index + 1, 0, { x: hit.x, y: hit.y, label: '' });
+        return next.map((p, idx) => ({ ...p, label: ptLabel(idx) }));
+      });
+      setManualDims(prev => {
+        const next: Record<number, number> = {};
+        for (let i = 0; i <= points.length; i++) {
+          if (i <= hit.index) {
+            if (prev[i] !== undefined) next[i] = prev[i];
+          } else {
+            if (prev[i - 1] !== undefined) next[i] = prev[i - 1];
+          }
+        }
+        delete next[hit.index];
+        return next;
+      });
+      return;
+    }
+
+    if (activeTool !== 'draw' && activeTool !== 'select') return;
     // If mouse wasn't pressed in this canvas, or it moved, ignore
     if (!wasDown || mouseMovedRef.current) return;
     if (e.button !== 0) return;
     if (calibPhase !== 'off') return;
     if (closed) return;
-
-    const c = screenToCanvas(e.clientX, e.clientY);
 
     // Apply snap to the click position
     const lastPt = points.length > 0 ? points[points.length - 1] : null;
@@ -864,7 +1025,10 @@ export function PerimeterTracer({
 
     // Add point at snapped position
     setPoints(prev => [...prev, { x: snap.x, y: snap.y, label: ptLabel(prev.length) }]);
-  }, [screenToCanvas, closed, points, zoom, calibPhase, draggingPt, editingSegIdx, activeTool, snapEnabled, orthoLock]);
+  }, [
+    screenToCanvas, closed, points, zoom, calibPhase, draggingPt, editingSegIdx, activeTool,
+    snapEnabled, orthoLock, findNear, findNearSegment, setMeasurePts, applyTrimExtend,
+  ]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -953,6 +1117,8 @@ export function PerimeterTracer({
   // Cursor style
   const cursor = activeTool === 'pan'
     ? 'grab'
+    : activeTool === 'measure' || activeTool === 'add_vertex' || activeTool === 'delete_vertex' || activeTool === 'trim' || activeTool === 'extend'
+    ? 'crosshair'
     : draggingPt !== null ? 'grabbing'
     : calibPhase === 'point1' || calibPhase === 'point2' ? 'crosshair'
     : hoveredPt !== null ? 'grab'
@@ -1185,6 +1351,97 @@ export function PerimeterTracer({
           </button>
           <button
             type="button"
+            onClick={() => setActiveTool('add_vertex')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'add_vertex'
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Insert vertex on segment"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add V</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('delete_vertex')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'delete_vertex'
+                ? 'bg-red-50 border-red-300 text-red-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Delete vertex"
+          >
+            <Minus className="h-4 w-4" />
+            <span>Del V</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('measure')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'measure'
+                ? 'bg-violet-50 border-violet-300 text-violet-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Measure distance between two points"
+          >
+            <Compass className="h-4 w-4" />
+            <span>Measure</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('trim')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'trim'
+                ? 'bg-red-50 border-red-300 text-red-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Trim selected segment"
+          >
+            <Scissors className="h-4 w-4" />
+            <span>Trim</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('extend')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'extend'
+                ? 'bg-green-50 border-green-300 text-green-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Extend selected segment"
+          >
+            <StretchHorizontal className="h-4 w-4" />
+            <span>Extend</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('offset')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'offset'
+                ? 'bg-teal-50 border-teal-300 text-teal-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Offset whole polygon"
+          >
+            <Move className="h-4 w-4" />
+            <span>Offset</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool('rotate')}
+            className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
+              activeTool === 'rotate'
+                ? 'bg-sky-50 border-sky-300 text-sky-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+            }`}
+            title="Rotate whole polygon"
+          >
+            <RotateCw className="h-4 w-4" />
+            <span>Rotate</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setSnapEnabled(v => !v)}
             className={`w-full flex flex-col items-center gap-1 px-2 py-2 rounded-lg border text-[10px] ${
               snapEnabled
@@ -1320,8 +1577,8 @@ export function PerimeterTracer({
                       y1={seg.from.y}
                       x2={seg.to.x}
                       y2={seg.to.y}
-                      stroke="#2563eb"
-                      strokeWidth={2.5 / zoom}
+                      stroke={selectedSegIdx === i ? '#9333ea' : '#2563eb'}
+                      strokeWidth={(selectedSegIdx === i ? 3.8 : 2.5) / zoom}
                       strokeLinecap="round"
                     />
                     {/* Dimension text along segment */}
@@ -1511,6 +1768,28 @@ export function PerimeterTracer({
                   strokeDasharray={`${5 / zoom} ${3 / zoom}`}
                 />
               )}
+              {measurePts.map((mp, i) => (
+                <circle
+                  key={`measure-${i}`}
+                  cx={mp.x}
+                  cy={mp.y}
+                  r={7 / zoom}
+                  fill="none"
+                  stroke="#7c3aed"
+                  strokeWidth={2 / zoom}
+                />
+              ))}
+              {measurePts.length === 2 && (
+                <line
+                  x1={measurePts[0].x}
+                  y1={measurePts[0].y}
+                  x2={measurePts[1].x}
+                  y2={measurePts[1].y}
+                  stroke="#7c3aed"
+                  strokeWidth={2 / zoom}
+                  strokeDasharray={`${5 / zoom} ${3 / zoom}`}
+                />
+              )}
             </svg>
           </div>
 
@@ -1603,6 +1882,7 @@ export function PerimeterTracer({
                   <button
                     onClick={e => {
                       e.stopPropagation();
+                      setSelectedSegIdx(i);
                       setEditingSegIdx(i);
                       setEditingSegVal(seg.mm > 0 ? String(seg.mm) : '');
                     }}
@@ -1707,6 +1987,130 @@ export function PerimeterTracer({
               </button>
             )}
           </div>
+          <div className="px-4 py-3 border-b border-gray-100 bg-white space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Measure</span>
+              <button
+                type="button"
+                onClick={() => setMeasurePts([])}
+                className="text-[10px] px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50"
+              >
+                Clear
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Tool mode: click two points in canvas to measure distance.
+            </p>
+            <div className="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs">
+              {measureDistanceMm != null
+                ? (
+                  <span className="font-semibold text-violet-700">
+                    {Math.round(measureDistanceMm).toLocaleString()} mm ({(measureDistanceMm / 1000).toFixed(3)} m)
+                  </span>
+                )
+                : (
+                  <span className="text-violet-600">No measured distance yet.</span>
+                )}
+            </div>
+          </div>
+          <div className="px-4 py-3 border-b border-gray-100 bg-white space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">CAD Ops</span>
+              <span className="text-[10px] text-gray-400">
+                Seg: {selectedSegIdx !== null ? `${selectedSegIdx + 1}` : 'none'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => applyTrimExtend(-1)}
+                disabled={!closed || selectedSegIdx === null}
+                className="px-2 py-1.5 text-xs rounded border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-40"
+              >
+                Trim
+              </button>
+              <button
+                type="button"
+                onClick={() => applyTrimExtend(1)}
+                disabled={!closed || selectedSegIdx === null}
+                className="px-2 py-1.5 text-xs rounded border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-40"
+              >
+                Extend
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                step={100}
+                value={trimExtendMm}
+                onChange={(e) => setTrimExtendMm(Number(e.target.value) || 1)}
+                className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+              />
+              <span className="text-xs text-gray-500">mm delta</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => applyOffset(1)}
+                disabled={!closed}
+                className="px-2 py-1.5 text-xs rounded border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100 disabled:opacity-40"
+              >
+                Offset +
+              </button>
+              <button
+                type="button"
+                onClick={() => applyOffset(-1)}
+                disabled={!closed}
+                className="px-2 py-1.5 text-xs rounded border border-teal-300 text-teal-700 bg-teal-50 hover:bg-teal-100 disabled:opacity-40"
+              >
+                Offset -
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                step={50}
+                value={offsetMm}
+                onChange={(e) => setOffsetMm(Number(e.target.value) || 1)}
+                className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+              />
+              <span className="text-xs text-gray-500">mm offset</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => applyRotate(-1)}
+                disabled={points.length < 2}
+                className="px-2 py-1.5 text-xs rounded border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-40"
+              >
+                Rotate -
+              </button>
+              <button
+                type="button"
+                onClick={() => applyRotate(1)}
+                disabled={points.length < 2}
+                className="px-2 py-1.5 text-xs rounded border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-40"
+              >
+                Rotate +
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0.1}
+                step={1}
+                value={rotateDeg}
+                onChange={(e) => setRotateDeg(Number(e.target.value) || 0.1)}
+                className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+              />
+              <span className="text-xs text-gray-500">deg</span>
+            </div>
+            <p className="text-[10px] text-gray-400">
+              Tip: click a segment label (AB, BC...) to select segment before Trim/Extend.
+            </p>
+          </div>
 
           {/* ── Scrollable content ─────────────────────────── */}
           <div className="flex-1 overflow-y-auto">
@@ -1767,7 +2171,15 @@ export function PerimeterTracer({
                 </h3>
                 <div className="space-y-1">
                   {segments.map((seg, i) => (
-                    <div key={i} className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-2 py-1.5 border border-gray-200">
+                    <div
+                      key={i}
+                      onClick={() => setSelectedSegIdx(i)}
+                      className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 border cursor-pointer ${
+                        selectedSegIdx === i
+                          ? 'bg-violet-50 border-violet-300'
+                          : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
                       {/* Label */}
                       <span className="text-[11px] font-mono font-bold text-blue-600 w-10 flex-shrink-0">
                         {seg.fromLabel}→{seg.toLabel}
