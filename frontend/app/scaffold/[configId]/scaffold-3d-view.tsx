@@ -1787,12 +1787,14 @@ export default function Scaffold3DView({
           false,
         );
 
-        // Scale/place wall run to exact edge length (no corner extension/overrun).
+        // Scale scaffold run to fit polygon edge. With the ortho builder, edge ≈ wallLength
+        // so fitScale ≈ 1. Clamp to [0.5, 1.1] as safety net against polygon edge mismatch.
         const baseLen = Math.max(runLenM, 1e-6);
         const desiredLen = alignedLen;
         const rawScale = desiredLen / baseLen;
-        // Use exact wall-fit scale; previous 0.5..2 clamp could leave visible overrun.
-        const fitScale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+        const fitScale = Number.isFinite(rawScale) && rawScale > 0
+          ? Math.max(0.5, Math.min(1.1, rawScale))
+          : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
