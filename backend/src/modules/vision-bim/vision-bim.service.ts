@@ -2106,8 +2106,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       minEdgeMm: Math.max(120, Math.round(cellMm * 0.8)),
     });
     const jogCollapsed = this.collapseShortParallelStepArtifacts(pre, {
-      maxStepMm: Math.max(600, Math.round(cellMm * 2.0)),
-      maxStepToNeighborRatio: 0.35,
+      maxStepMm: Math.max(1200, Math.round(cellMm * 4.0)),
+      maxStepToNeighborRatio: 0.50,
     });
     const simplified = this.removeCollinearVertices(jogCollapsed, {
       sinTolerance: 0.10,
@@ -2450,8 +2450,10 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const widthChange = Math.abs(currW - prevW) / Math.max(prevW, 1);
         const heightChange = Math.abs(currH - prevH) / Math.max(prevH, 1);
         // Balanced split detection: catch real setbacks (30–50% area drop)
-        // without false-triggering on minor point cloud noise (≤15%).
-        shouldSplit = areaRatio < 0.85 || widthChange > 0.15 || heightChange > 0.15;
+        // without false-triggering on minor point cloud noise (≤20%).
+        // L-shaped buildings have non-uniform point distributions across height slices,
+        // so require larger changes before splitting into tiers.
+        shouldSplit = areaRatio < 0.75 || widthChange > 0.25 || heightChange > 0.25;
       }
 
       if (shouldSplit) {
@@ -2488,8 +2490,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       const areaDrop = Math.max(0, baseTierArea - tierArea);
       const dropRatio = areaDrop / Math.max(baseTierArea, 1);
       // Treat as real setback when both ratio and absolute area are meaningful.
-      // This avoids size-dependent misses where small wings disappear on large models.
-      return dropRatio >= 0.03 && areaDrop >= 4_000_000; // >=3% and >=4m^2
+      // Use 10% threshold to avoid false tier splits from IFC noise on L-shaped buildings.
+      return dropRatio >= 0.10 && areaDrop >= 9_000_000; // >=10% and >=9m^2
     });
     if (!hasRealSetback) {
       this.logger.log('IFC massing tiers all have similar footprints — skipping tier generation');
@@ -2833,7 +2835,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       candidates.sort((a, b) => a.ratio - b.ratio);
       const best = candidates[0];
 
-      if (best.ratio >= 0.7) break;
+      if (best.ratio >= 0.90) break;
 
       if (best.d2Vertical) out[best.nnI].y = out[best.i].y;
       else out[best.nnI].x = out[best.i].x;
@@ -2877,12 +2879,12 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     },
   ): Array<{ x: number; y: number }> {
     const { maxStepMm, maxStepToNeighborRatio } = options;
-    if (pts.length <= 6) return pts;
+    if (pts.length <= 4) return pts;
 
     const out = pts.map((p) => ({ x: p.x, y: p.y }));
     let changed = true;
 
-    while (changed && out.length > 6) {
+    while (changed && out.length > 4) {
       changed = false;
       const n = out.length;
 
@@ -2912,7 +2914,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const perp12 = Math.abs((d1x * d2x + d1y * d2y) / (l1 * l2));
         if (parallel13 < 0.985 || perp12 > 0.2) continue;
 
-        const neighborRef = Math.max(Math.max(l1, l3), 1);
+        const neighborRef = Math.max(Math.min(l1, l3), 1);
         const isTinyStep =
           l2 <= maxStepMm && l2 <= maxStepToNeighborRatio * neighborRef;
         if (!isTinyStep) continue;

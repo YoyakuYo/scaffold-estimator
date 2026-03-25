@@ -334,8 +334,8 @@ export default function Scaffold3DView({
 
   const isAiBimFromMode = complianceMode === 'ai_bim';
   const isAiBim = isAiBimFromMode ||
-    (Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3 &&
-     Array.isArray((result as any)?.massingTiers) && (result as any).massingTiers.length > 0);
+    (Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3) ||
+    !!(result as any)?.ifcFileUrl;
   const ifcFileUrl: string | undefined =
     typeof (result as any)?.ifcFileUrl === 'string' ? (result as any).ifcFileUrl : undefined;
   const hasIfcSource = !!ifcFileUrl;

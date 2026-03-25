@@ -107,8 +107,8 @@ function ScaffoldResultPage() {
     : undefined;
 
   const isAiBim = isAiBimFromUrl ||
-    (Array.isArray(rawResult?.polygonVertices) && rawResult.polygonVertices.length >= 3 &&
-     Array.isArray((rawResult as any)?.massingTiers) && (rawResult as any).massingTiers.length > 0);
+    (Array.isArray(rawResult?.polygonVertices) && rawResult.polygonVertices.length >= 3) ||
+    !!(rawResult as any)?.ifcFileUrl;
 
   /** Merge row-level scaffoldType / wakugumi fields into calculation JSON (older results omitted scaffoldType). */
   const resultMergedForViz = useMemo(() => {

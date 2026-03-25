@@ -256,7 +256,7 @@ function collapseTinyOrthogonalJogs(
       }
     }
 
-    if (bestIdx < 0 || bestRatio >= 0.7) break;
+    if (bestIdx < 0 || bestRatio >= 0.90) break;
 
     if (bestVertical) out[bestNnI]!.z = out[bestIdx]!.z;
     else out[bestNnI]!.x = out[bestIdx]!.x;
