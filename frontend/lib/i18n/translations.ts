@@ -181,6 +181,11 @@ export const translations = {
     aiBimAnalyzing: { ja: '画像を解析して足場モデルを生成中…', en: 'Analyzing image and generating scaffold model...', fr: 'Analyse de l\'image et generation du modele d\'echafaudage...' },
     aiBimAnalysisFailed: { ja: '解析に失敗しました。別の画像を試すか、図面/クイックモードを使用してください。', en: 'Analysis failed. Try another image or use Drawing/Quick mode.', fr: 'Echec de l\'analyse. Essayez une autre image ou utilisez le mode Plan/Rapide.' },
     aiBimExtractedComplete: { ja: '抽出完了 — 右側で内容を確認してください', en: 'Extraction complete - review the details on the right', fr: 'Extraction terminee - verifiez les details a droite' },
+    aiBimFootprintWorkflowNote: {
+      ja: '平面の外形はAIが読み取った結果がそのまま入ります。問題なければ編集せず確定してかまいません。形を直したいときだけ、下の「外形の編集」で調整してください。',
+      en: 'The plan footprint is exactly what the AI extracted. If it looks correct, continue without editing. Use “Edit footprint” below only when you want to trim or adjust the shape.',
+      fr: 'L\'emprise au sol correspond exactement a l\'extraction IA. Si c\'est bon, continuez sans modifier. Utilisez « Modifier l\'emprise » ci-dessous seulement pour ajuster la forme.',
+    },
     aiBimUploadAnother: { ja: '別のファイルをアップロード', en: 'Upload another file', fr: 'Televerser un autre fichier' },
     aiBimReviewTitle: { ja: '抽出結果の確認', en: 'Review Extracted Result', fr: 'Verifier le resultat extrait' },
     aiBimBuildingHeight: { ja: '建物高さ (mm)', en: 'Building Height (mm)', fr: 'Hauteur du batiment (mm)' },

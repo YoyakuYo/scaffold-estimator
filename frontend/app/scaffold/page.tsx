@@ -1535,6 +1535,9 @@ function ScaffoldPageContent() {
                       <Check className="h-5 w-5" />
                       {t('scaffold', 'aiBimExtractedComplete')}
                     </p>
+                    <p className="text-xs text-green-900/85 mt-2 leading-relaxed">
+                      {t('scaffold', 'aiBimFootprintWorkflowNote')}
+                    </p>
                   </div>
                   <button
                     type="button"
