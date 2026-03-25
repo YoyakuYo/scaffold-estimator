@@ -115,7 +115,51 @@ function applyOrthoSnap(
   return { x: nx, y: ny };
 }
 
-type EditTool = 'move' | 'split' | 'removeVertex';
+function edgesAllMinLength(pts: AiBimOutlinePoint[], minMm: number): boolean {
+  const n = pts.length;
+  if (n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const len = Math.hypot(pts[j].xFrac - pts[i].xFrac, pts[j].yFrac - pts[i].yFrac);
+    if (len + 1e-9 < minMm) return false;
+  }
+  return true;
+}
+
+/**
+ * Pick corner A then B: remove vertices along the shorter perimeter detour and connect A–B with one straight segment (CAD-style chord).
+ */
+function chordReplaceDetour(outline: AiBimOutlinePoint[], idxA: number, idxB: number): AiBimOutlinePoint[] | null {
+  const n = outline.length;
+  if (n < 4 || idxA < 0 || idxB < 0 || idxA >= n || idxB >= n || idxA === idxB) return null;
+
+  const jb = (idxB - idxA + n) % n;
+  if (jb === 0 || jb === 1 || jb === n - 1) return null;
+  const fwdInterior = jb - 1;
+  const bwdInterior = n - jb - 1;
+  if (fwdInterior < 1 && bwdInterior < 1) return null;
+
+  const rot = idxA === 0 ? cloneOutline(outline) : [...outline.slice(idxA), ...outline.slice(0, idxA)];
+
+  let useForward: boolean;
+  if (fwdInterior >= 1 && bwdInterior >= 1) {
+    useForward = jb <= n - jb;
+  } else {
+    useForward = fwdInterior >= 1;
+  }
+
+  let candidate: AiBimOutlinePoint[];
+  if (useForward) {
+    candidate = [rot[0], ...rot.slice(jb)];
+  } else {
+    candidate = rot.slice(0, jb + 1);
+  }
+
+  if (candidate.length < 3 || !edgesAllMinLength(candidate, MIN_EDGE_MM)) return null;
+  return candidate;
+}
+
+type EditTool = 'move' | 'split' | 'removeVertex' | 'chordAB';
 
 type Props = {
   outline: AiBimOutlinePoint[];
@@ -139,6 +183,9 @@ export function AiBimFootprintEditor({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [editTool, setEditTool] = useState<EditTool>('move');
   const [snapOrtho, setSnapOrtho] = useState(false);
+  /** true = length edit moves the end (B) of the edge; false = moves the start (A). */
+  const [trimMovesEnd, setTrimMovesEnd] = useState(true);
+  const [chordFirstIdx, setChordFirstIdx] = useState<number | null>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<number | null>(null);
   const [edgeLengthInput, setEdgeLengthInput] = useState<string>('');
@@ -240,18 +287,39 @@ export function AiBimFootprintEditor({
     const cur = Math.hypot(dx, dy);
     if (cur < 1e-6) return;
 
-    const scale = raw / cur;
+    const ux = dx / cur;
+    const uy = dy / cur;
     const next = cloneOutline(outline);
-    next[j] = {
-      xFrac: A.xFrac + dx * scale,
-      yFrac: A.yFrac + dy * scale,
-    };
+    if (trimMovesEnd) {
+      next[j] = {
+        xFrac: A.xFrac + ux * raw,
+        yFrac: A.yFrac + uy * raw,
+      };
+    } else {
+      next[i] = {
+        xFrac: B.xFrac - ux * raw,
+        yFrac: B.yFrac - uy * raw,
+      };
+    }
     onChange(next);
-  }, [selectedEdge, edgeLengthInput, outline, n, onChange]);
+  }, [selectedEdge, edgeLengthInput, outline, n, onChange, trimMovesEnd]);
 
   const onPointerDownVertex = useCallback(
     (e: React.PointerEvent, idx: number) => {
       e.stopPropagation();
+      if (editTool === 'chordAB') {
+        if (chordFirstIdx == null) {
+          setChordFirstIdx(idx);
+        } else if (chordFirstIdx === idx) {
+          setChordFirstIdx(null);
+        } else {
+          const next = chordReplaceDetour(outline, chordFirstIdx, idx);
+          setChordFirstIdx(null);
+          if (next) onChange(next);
+          else flash(t('scaffold', 'aiBimFootprintChordErr'));
+        }
+        return;
+      }
       if (editTool === 'removeVertex') {
         const next = removeVertexAt(outline, idx);
         if (next) onChange(next);
@@ -263,7 +331,7 @@ export function AiBimFootprintEditor({
       setDragIdx(idx);
       setSelectedEdge(null);
     },
-    [editTool, outline, n, onChange, flash, t],
+    [editTool, outline, n, onChange, flash, t, chordFirstIdx],
   );
 
   const onPointerMove = useCallback(
@@ -316,6 +384,8 @@ export function AiBimFootprintEditor({
     [dragIdx, toWorld, editTool, pickEdgeAt, outline, onChange, edgeLenMm, flash, t],
   );
 
+  const clearChordPick = useCallback(() => setChordFirstIdx(null), []);
+
   const baselinePoly =
     showBaseline && baselineOutline && baselineOutline.length >= 3
       ? baselineOutline.map((p) => `${p.xFrac},${p.yFrac}`).join(' ')
@@ -332,7 +402,11 @@ export function AiBimFootprintEditor({
       ? t('scaffold', 'aiBimFootprintHintMove')
       : editTool === 'split'
         ? t('scaffold', 'aiBimFootprintHintSplit')
-        : t('scaffold', 'aiBimFootprintHintRemove');
+        : editTool === 'chordAB'
+          ? chordFirstIdx == null
+            ? t('scaffold', 'aiBimFootprintHintChordPickA')
+            : t('scaffold', 'aiBimFootprintHintChordPickB')
+          : t('scaffold', 'aiBimFootprintHintRemove');
 
   return (
     <div className="rounded-lg border border-violet-200 bg-white overflow-hidden">
@@ -352,7 +426,7 @@ export function AiBimFootprintEditor({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50/90">
-        {(['move', 'split', 'removeVertex'] as const).map((tool) => (
+        {(['move', 'split', 'chordAB', 'removeVertex'] as const).map((tool) => (
           <button
             key={tool}
             type="button"
@@ -360,6 +434,7 @@ export function AiBimFootprintEditor({
               setEditTool(tool);
               setSelectedEdge(null);
               setDragIdx(null);
+              setChordFirstIdx(null);
             }}
             className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
               editTool === tool
@@ -371,9 +446,20 @@ export function AiBimFootprintEditor({
               ? t('scaffold', 'aiBimFootprintToolMove')
               : tool === 'split'
                 ? t('scaffold', 'aiBimFootprintToolSplit')
-                : t('scaffold', 'aiBimFootprintToolRemove')}
+                : tool === 'chordAB'
+                  ? t('scaffold', 'aiBimFootprintToolChord')
+                  : t('scaffold', 'aiBimFootprintToolRemove')}
           </button>
         ))}
+        {editTool === 'chordAB' && chordFirstIdx != null && (
+          <button
+            type="button"
+            onClick={clearChordPick}
+            className="text-[10px] font-medium px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            {t('scaffold', 'aiBimFootprintChordCancel')}
+          </button>
+        )}
         <label className="flex items-center gap-1 ml-1 text-[10px] text-gray-600 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -452,59 +538,105 @@ export function AiBimFootprintEditor({
             selectedEdge != null &&
             (idx === selectedEdge || idx === (selectedEdge + 1) % n);
           const isRemoveHot = editTool === 'removeVertex' && n > 3;
+          const isChordPick = editTool === 'chordAB' && chordFirstIdx === idx;
           return (
-            <circle
-              key={idx}
-              cx={p.xFrac}
-              cy={p.yFrac}
-              r={isRemoveHot ? r * 1.15 : r}
-              fill={
-                isEdgeVert ? '#f59e0b' : isRemoveHot ? '#fecaca' : '#6366f1'
-              }
-              stroke={isRemoveHot ? '#dc2626' : '#fff'}
-              strokeWidth={Math.max(vbW, vbH) * 0.002}
-              style={{
-                cursor:
-                  editTool === 'removeVertex'
-                    ? n > 3
-                      ? 'pointer'
-                      : 'not-allowed'
-                    : editTool === 'move'
-                      ? 'grab'
-                      : 'default',
-              }}
-              onPointerDown={(e) => onPointerDownVertex(e, idx)}
-            />
+            <g key={idx}>
+              {isChordPick ? (
+                <circle
+                  cx={p.xFrac}
+                  cy={p.yFrac}
+                  r={r * 1.75}
+                  fill="none"
+                  stroke="#c026d3"
+                  strokeWidth={Math.max(vbW, vbH) * 0.003}
+                  style={{ pointerEvents: 'none' }}
+                />
+              ) : null}
+              <circle
+                cx={p.xFrac}
+                cy={p.yFrac}
+                r={isRemoveHot ? r * 1.15 : r}
+                fill={
+                  isChordPick
+                    ? '#e879f9'
+                    : isEdgeVert
+                      ? '#f59e0b'
+                      : isRemoveHot
+                        ? '#fecaca'
+                        : '#6366f1'
+                }
+                stroke={isRemoveHot ? '#dc2626' : '#fff'}
+                strokeWidth={Math.max(vbW, vbH) * 0.002}
+                style={{
+                  cursor:
+                    editTool === 'chordAB'
+                      ? 'crosshair'
+                      : editTool === 'removeVertex'
+                        ? n > 3
+                          ? 'pointer'
+                          : 'not-allowed'
+                        : editTool === 'move'
+                          ? 'grab'
+                          : 'default',
+                }}
+                onPointerDown={(e) => onPointerDownVertex(e, idx)}
+              />
+            </g>
           );
         })}
       </svg>
 
       {editTool === 'move' && selectedEdge != null && n >= 3 ? (
-        <div className="flex flex-wrap items-end gap-2 px-2 py-2 border-t border-gray-100 bg-gray-50/80">
-          <div>
-            <label className="block text-[10px] font-medium text-gray-600 mb-0.5">
-              {t('scaffold', 'aiBimFootprintEdgeLength').replace('{n}', String(selectedEdge + 1))}
-            </label>
-            <div className="flex items-center gap-1">
+        <div className="flex flex-col gap-2 px-2 py-2 border-t border-gray-100 bg-gray-50/80">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-700">
+            <span className="font-medium text-gray-600">{t('scaffold', 'aiBimFootprintTrimWhich')}</span>
+            <label className="flex items-center gap-1 cursor-pointer">
               <input
-                type="number"
-                min={MIN_EDGE_MM}
-                step={100}
-                value={edgeLengthInput}
-                onChange={(e) => setEdgeLengthInput(e.target.value)}
-                className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+                type="radio"
+                name="aiBimFootprintTrimVertex"
+                checked={trimMovesEnd}
+                onChange={() => setTrimMovesEnd(true)}
+                className="rounded-full border-gray-300"
               />
-              <span className="text-xs text-gray-500">mm</span>
-            </div>
+              {t('scaffold', 'aiBimFootprintAtB')}
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="aiBimFootprintTrimVertex"
+                checked={!trimMovesEnd}
+                onChange={() => setTrimMovesEnd(false)}
+                className="rounded-full border-gray-300"
+              />
+              {t('scaffold', 'aiBimFootprintAtA')}
+            </label>
           </div>
-          <button
-            type="button"
-            onClick={applyEdgeLength}
-            className="text-xs font-medium px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700"
-          >
-            {t('scaffold', 'aiBimFootprintApplyEdge')}
-          </button>
-          <span className="text-[10px] text-gray-500">{t('scaffold', 'aiBimFootprintEdgeNote')}</span>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-[10px] font-medium text-gray-600 mb-0.5">
+                {t('scaffold', 'aiBimFootprintEdgeLength').replace('{n}', String(selectedEdge + 1))}
+              </label>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={MIN_EDGE_MM}
+                  step={100}
+                  value={edgeLengthInput}
+                  onChange={(e) => setEdgeLengthInput(e.target.value)}
+                  className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+                />
+                <span className="text-xs text-gray-500">mm</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={applyEdgeLength}
+              className="text-xs font-medium px-3 py-1.5 rounded bg-violet-600 text-white hover:bg-violet-700"
+            >
+              {t('scaffold', 'aiBimFootprintApplyEdge')}
+            </button>
+            <span className="text-[10px] text-gray-500">{t('scaffold', 'aiBimFootprintEdgeNoteTrim')}</span>
+          </div>
         </div>
       ) : null}
     </div>
