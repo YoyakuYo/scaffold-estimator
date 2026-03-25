@@ -2073,6 +2073,17 @@ export default function Scaffold3DView({
       }
       scene.add(cornerGroup);
 
+      // When IFC is available for AI BIM, native meshes replace this shell (below).
+      const ifcUrlForBimMeshEarly = (result as any)?.ifcFileUrl;
+      const useNativeIfcAsBuilding =
+        isAiBim && typeof ifcUrlForBimMeshEarly === 'string' && ifcUrlForBimMeshEarly.length > 0;
+      const proceduralBimShell = useNativeIfcAsBuilding ? new THREE.Group() : null;
+      const buildingShellParent: THREE.Object3D = proceduralBimShell ?? scene;
+      if (proceduralBimShell) {
+        proceduralBimShell.userData = { isProceduralBimShell: true };
+        scene.add(proceduralBimShell);
+      }
+
       // ── Building outline at ground level ─────────────────
       const outlineMat = new THREE.LineBasicMaterial({
         color: isAiBim ? 0x0f0f0f : 0x7a8090,
@@ -2085,7 +2096,7 @@ export default function Scaffold3DView({
       }
       const outlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
       const outlineLine = new THREE.Line(outlineGeo, outlineMat);
-      scene.add(outlineLine);
+      buildingShellParent.add(outlineLine);
 
       // Building fill — procedural building with floor slabs, window grids, and edges
       if (!isOpenPolygon && verts.length >= 3) {
@@ -2191,7 +2202,7 @@ export default function Scaffold3DView({
           lines.rotation.x = -Math.PI / 2;
           lines.position.y = posY;
           lines.userData = { noClip: true };
-          scene.add(lines);
+          buildingShellParent.add(lines);
         };
         const addSteppedWallPanels = (
           wallMat: any,
@@ -2222,7 +2233,7 @@ export default function Scaffold3DView({
             wallGeo.computeVertexNormals();
             const wallMesh = new THREE.Mesh(wallGeo, wallMat);
             wallMesh.userData = { noClip: true };
-            scene.add(wallMesh);
+            buildingShellParent.add(wallMesh);
 
             const wallEdgePts = [
               new THREE.Vector3(vStart.x, GROUND_Y + 0.02, vStart.z),
@@ -2236,7 +2247,7 @@ export default function Scaffold3DView({
               panelLineMat,
             );
             wallEdge.userData = { noClip: true };
-            scene.add(wallEdge);
+            buildingShellParent.add(wallEdge);
 
             const roofEdge = new THREE.Line(
               new THREE.BufferGeometry().setFromPoints([
@@ -2246,7 +2257,7 @@ export default function Scaffold3DView({
               panelLineMat,
             );
             roofEdge.userData = { noClip: true };
-            scene.add(roofEdge);
+            buildingShellParent.add(roofEdge);
 
             for (let floorY = floorH; floorY < edgeHeight; floorY += floorH) {
               const floorGeo = new THREE.BufferGeometry().setFromPoints([
@@ -2262,7 +2273,7 @@ export default function Scaffold3DView({
                 }),
               );
               floorLine.userData = { noClip: true };
-              scene.add(floorLine);
+              buildingShellParent.add(floorLine);
             }
           }
         };
@@ -2300,13 +2311,13 @@ export default function Scaffold3DView({
             mesh.rotation.x = -Math.PI / 2;
             mesh.position.y = baseY;
             mesh.userData = { noClip: true };
-            scene.add(mesh);
+            buildingShellParent.add(mesh);
 
             const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), tierLineMat);
             edges.rotation.x = -Math.PI / 2;
             edges.position.y = baseY;
             edges.userData = { noClip: true };
-            scene.add(edges);
+            buildingShellParent.add(edges);
 
             for (let floorY = Math.ceil(baseY / floorH) * floorH; floorY < topY; floorY += floorH) {
               const floorPts = tierVerts.map((v) => new THREE.Vector3(v.x - cx, floorY, v.z - cz));
@@ -2320,7 +2331,7 @@ export default function Scaffold3DView({
                 }),
               );
               floorLine.userData = { noClip: true };
-              scene.add(floorLine);
+              buildingShellParent.add(floorLine);
             }
           }
         };
@@ -2441,7 +2452,7 @@ export default function Scaffold3DView({
                 roofMesh.castShadow = true;
                 roofMesh.receiveShadow = true;
                 roofMesh.userData = { noClip: true };
-                scene.add(roofMesh);
+                buildingShellParent.add(roofMesh);
                 addBlackEdges(roofGeoM, roofY);
               }
             }
@@ -2467,7 +2478,7 @@ export default function Scaffold3DView({
               roofMeshStepped.castShadow = true;
               roofMeshStepped.receiveShadow = true;
               roofMeshStepped.userData = { noClip: true };
-              scene.add(roofMeshStepped);
+              buildingShellParent.add(roofMeshStepped);
               addBlackEdges(roofGeoStepped, roofYStepped);
             }
           } else {
@@ -2481,7 +2492,7 @@ export default function Scaffold3DView({
             lowerMesh.position.y = baseY;
             lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
             lowerMesh.userData = { noClip: true };
-            scene.add(lowerMesh);
+            buildingShellParent.add(lowerMesh);
             addBlackEdges(lowerGeo, baseY);
 
             const upperGeo = new THREE.ExtrudeGeometry(shape, { depth: upperH, bevelEnabled: false });
@@ -2490,7 +2501,7 @@ export default function Scaffold3DView({
             upperMesh.position.y = baseY + lowerH;
             upperMesh.castShadow = true; upperMesh.receiveShadow = true;
             upperMesh.userData = { noClip: true };
-            scene.add(upperMesh);
+            buildingShellParent.add(upperMesh);
             addBlackEdges(upperGeo, baseY + lowerH);
 
             const roofTopY = baseY + lowerH + upperH;
@@ -2520,7 +2531,7 @@ export default function Scaffold3DView({
             roofMeshObj.position.y = roofTopY;
             roofMeshObj.castShadow = true; roofMeshObj.receiveShadow = true;
             roofMeshObj.userData = { noClip: true };
-            scene.add(roofMeshObj);
+            buildingShellParent.add(roofMeshObj);
             addBlackEdges(roofGeo, roofTopY);
 
             // Roof edge trim (fascia board)
@@ -2533,7 +2544,7 @@ export default function Scaffold3DView({
             fasciaMesh.rotation.x = -Math.PI / 2;
             fasciaMesh.position.y = roofTopY - fasciaH;
             fasciaMesh.userData = { noClip: true };
-            scene.add(fasciaMesh);
+            buildingShellParent.add(fasciaMesh);
 
             // Floor slabs (thicker for visibility)
             for (let floorY = floorH; floorY < buildingH; floorY += floorH) {
@@ -2544,7 +2555,7 @@ export default function Scaffold3DView({
               slabObj.castShadow = true;
               slabObj.receiveShadow = true;
               slabObj.userData = { noClip: true };
-              scene.add(slabObj);
+              buildingShellParent.add(slabObj);
             }
           }
         }
@@ -2602,7 +2613,7 @@ export default function Scaffold3DView({
                 windowMeshObj.position.set(wx, wMid, wz);
                 windowMeshObj.rotation.y = angle;
                 windowMeshObj.userData = { noClip: true };
-                scene.add(windowMeshObj);
+                buildingShellParent.add(windowMeshObj);
 
                 // Window frame (4 bars around glass)
                 const frameThick = 0.04;
@@ -2618,7 +2629,7 @@ export default function Scaffold3DView({
                 topBar.position.set(wx + frameOffset, wBot + windowH, wz + frameOffsetZ);
                 topBar.rotation.y = angle;
                 topBar.userData = { noClip: true };
-                scene.add(topBar);
+                buildingShellParent.add(topBar);
 
                 // Bottom sill (thicker)
                 const sillBar = new THREE.Mesh(
@@ -2628,7 +2639,7 @@ export default function Scaffold3DView({
                 sillBar.position.set(wx + frameOffset, wBot - frameThick * 0.5, wz + frameOffsetZ);
                 sillBar.rotation.y = angle;
                 sillBar.userData = { noClip: true };
-                scene.add(sillBar);
+                buildingShellParent.add(sillBar);
               }
             }
           }
@@ -2899,6 +2910,8 @@ export default function Scaffold3DView({
             }
 
             scene.add(ifcGroup);
+            // Hide simplified massing/windows so the native IFC mesh is the visible “building”.
+            if (proceduralBimShell) proceduralBimShell.visible = false;
           } catch (e) {
             console.warn('IFC model load failed (non-critical):', e);
           }

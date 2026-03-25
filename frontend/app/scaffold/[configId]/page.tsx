@@ -142,9 +142,18 @@ function ScaffoldResultPage() {
           tierIndex: (wall as any).tierIndex ?? (cfgMatch as any)?.tierIndex,
         };
       });
-      return { ...base, walls: mergedWalls };
+      return {
+        ...base,
+        walls: mergedWalls,
+        ifcFileUrl: (base as any).ifcFileUrl ?? (config as any)?.ifcFileUrl,
+      };
     }
-    if (!config?.walls?.length) return base;
+    if (!config?.walls?.length) {
+      const mergedUrl = (base as any).ifcFileUrl ?? (config as any)?.ifcFileUrl;
+      return mergedUrl && mergedUrl !== (base as any).ifcFileUrl
+        ? { ...base, ifcFileUrl: mergedUrl }
+        : base;
+    }
     const levelH = base.scaffoldType === 'wakugumi' ? (base.frameSizeMm ?? 1800) : 1800;
     const topGuardMm = base.topGuardHeightMm ?? 900;
     const scaffoldWidthMm = config.scaffoldWidthMm ?? base.scaffoldWidthMm ?? 900;
@@ -183,7 +192,11 @@ function ScaffoldResultPage() {
           },
         };
       });
-    return { ...base, walls: minimalWalls };
+    return {
+      ...base,
+      walls: minimalWalls,
+      ifcFileUrl: (base as any).ifcFileUrl ?? (config as any)?.ifcFileUrl,
+    };
   }, [result, resultMergedForViz, config]);
 
   /** Old configs: replace bbox-style massing tiers with per-edge height synthesis (no DB migration). */
