@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
+import { AiBimFootprintEditor } from '@/components/ai-bim-footprint-editor';
 import { visionBimApi, type VisionFootprintResult, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
@@ -743,76 +744,6 @@ function Building3DPreview({
   return <div ref={containerRef} className={className} style={style} />;
 }
 
-/** Building preview panel with 2D (plan) / 3D toggle. */
-function BuildingPreviewPanel({
-  outline,
-  wallLengthsMm,
-  wallHeightsMm,
-  massingTiers,
-  buildingHeightMm,
-  ifcFileUrl,
-  ifcArrayBuffer,
-}: {
-  outline: Array<{ xFrac: number; yFrac: number }>;
-  wallLengthsMm?: number[];
-  wallHeightsMm?: number[];
-  massingTiers?: VisionMassingTier[];
-  buildingHeightMm: number;
-  ifcFileUrl?: string;
-  ifcArrayBuffer?: ArrayBuffer;
-}) {
-  const { t } = useI18n();
-  const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-gray-500">{t('scaffold', 'aiBimPreviewTitle')}</span>
-        <div className="flex rounded-md border border-gray-300 overflow-hidden text-xs">
-          <button
-            onClick={() => setViewMode('2d')}
-            className={`px-3 py-1 font-medium transition-colors ${
-              viewMode === '2d'
-                ? 'bg-violet-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {t('scaffold', 'aiBimPreview2d')}
-          </button>
-          <button
-            onClick={() => setViewMode('3d')}
-            className={`px-3 py-1 font-medium transition-colors ${
-              viewMode === '3d'
-                ? 'bg-violet-600 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {t('scaffold', 'aiBimPreview3d')}
-          </button>
-        </div>
-      </div>
-      {viewMode === '2d' ? (
-        <BuildingShapeSvg
-          outline={outline}
-          wallLengthsMm={wallLengthsMm}
-          className="w-full max-w-sm aspect-square rounded-lg border border-gray-200 bg-white"
-        />
-      ) : (
-        <Building3DPreview
-          outline={outline}
-          buildingHeightMm={buildingHeightMm}
-          wallLengthsMm={wallLengthsMm}
-          wallHeightsMm={wallHeightsMm}
-          massingTiers={massingTiers}
-          ifcFileUrl={ifcFileUrl}
-          ifcArrayBuffer={ifcArrayBuffer}
-          className="w-full rounded-lg border border-gray-200 bg-slate-50"
-          style={{ height: 320 }}
-        />
-      )}
-    </div>
-  );
-}
-
 // ─── Manual building geometry: single closed footprint, walls derived from it ───
 
 type FootprintPoint = { xFrac: number; yFrac: number };
@@ -822,6 +753,52 @@ function distMm(a: FootprintPoint, b: FootprintPoint): number {
   const dx = b.xFrac - a.xFrac;
   const dy = b.yFrac - a.yFrac;
   return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getTierVertexMm(v: { x?: number; y?: number; xFrac?: number; yFrac?: number }): { x: number; y: number } {
+  const x = typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0);
+  const y = typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0);
+  return { x, y };
+}
+
+/** True when tier footprint matches the building outline (same vertex count and positions). */
+function tierMatchesFootprintOutline(
+  tier: VisionMassingTier,
+  footprintMm: FootprintPoint[],
+  tolMm: number,
+): boolean {
+  const n = footprintMm.length;
+  if (!tier.vertices || tier.vertices.length !== n) return false;
+  for (let i = 0; i < n; i++) {
+    const p = getTierVertexMm(tier.vertices[i]);
+    if (Math.hypot(p.x - footprintMm[i].xFrac, p.y - footprintMm[i].yFrac) > tolMm) return false;
+  }
+  return true;
+}
+
+/**
+ * After editing the footprint polygon, shift massing tier vertices that matched the old outline.
+ * Tiers with different footprints (setbacks) are left unchanged on XY.
+ */
+function remapMassingTiersAfterFootprintEdit(
+  tiers: VisionMassingTier[] | undefined,
+  oldOutline: FootprintPoint[],
+  newOutline: FootprintPoint[],
+): VisionMassingTier[] | undefined {
+  if (!tiers?.length) return tiers;
+  const n = newOutline.length;
+  if (oldOutline.length !== n) return undefined;
+  const tolMm = 5;
+  return tiers.map((tier) => {
+    if (tier.vertices.length !== n) return tier;
+    if (tierMatchesFootprintOutline(tier, oldOutline, tolMm)) {
+      return {
+        ...tier,
+        vertices: newOutline.map((p) => ({ x: Math.round(p.xFrac), y: Math.round(p.yFrac) })),
+      };
+    }
+    return tier;
+  });
 }
 
 /**
@@ -968,8 +945,61 @@ function ScaffoldPageContent() {
     dto: CreateScaffoldConfigDto;
   } | null>(null);
   const [aiBimConfirming, setAiBimConfirming] = useState(false);
+  /** Snapshot of AI-extracted footprint for compare / reset (mm polygon, same as buildingOutline). */
+  const [aiBimExtractOutline, setAiBimExtractOutline] = useState<FootprintPoint[] | null>(null);
+  const [aiBimCompareExtract, setAiBimCompareExtract] = useState(false);
   const scaffoldManagerRef = useRef<ScaffoldManager | null>(null);
   if (!scaffoldManagerRef.current) scaffoldManagerRef.current = new ScaffoldManager();
+
+  const handleAiBimOutlineEdit = useCallback((nextOutline: FootprintPoint[]) => {
+    setAiBimPreview((prev) => {
+      if (!prev) return prev;
+      const n = nextOutline.length;
+      if (n < 3) return prev;
+
+      const closedOutline = nextOutline.map((p) => ({ xFrac: p.xFrac, yFrac: p.yFrac }));
+      const oldOutline = prev.buildingOutline;
+
+      let newWalls: WallInput[];
+      if (prev.walls.length === n) {
+        newWalls = prev.walls.map((w, i) => {
+          const j = (i + 1) % n;
+          const len = Math.round(distMm(closedOutline[i], closedOutline[j]));
+          return { ...w, wallLengthMm: Math.max(600, len) };
+        });
+      } else {
+        newWalls = Array.from({ length: n }, (_, i) => {
+          const j = (i + 1) % n;
+          const len = Math.max(600, Math.round(distMm(closedOutline[i], closedOutline[j])));
+          const w0 = prev.walls[i] ?? prev.walls[0];
+          return {
+            side: w0?.side ?? `edge-${i}`,
+            wallLengthMm: len,
+            wallHeightMm: w0?.wallHeightMm ?? prev.buildingHeightMm,
+            stairAccessCount: w0?.stairAccessCount ?? 0,
+            scaffoldWidthMm: w0?.scaffoldWidthMm ?? prev.dto.scaffoldWidthMm,
+            kaidanCount: 0,
+            kaidanOffsets: [],
+          };
+        });
+      }
+
+      const newMassing = remapMassingTiersAfterFootprintEdit(prev.massingTiers, oldOutline, closedOutline);
+
+      return {
+        ...prev,
+        buildingOutline: closedOutline,
+        walls: newWalls,
+        massingTiers: newMassing && newMassing.length > 0 ? newMassing : undefined,
+        dto: {
+          ...prev.dto,
+          buildingOutline: closedOutline,
+          walls: newWalls,
+          massingTiers: newMassing && newMassing.length > 0 ? newMassing : undefined,
+        },
+      };
+    });
+  }, []);
 
   // ─── Perimeter Model ────────────────────────────────────
   const [perimeterModel] = useState(() => new PerimeterModel());
@@ -1467,6 +1497,10 @@ function ScaffoldPageContent() {
                       obstacles,
                       dto,
                     });
+                    setAiBimExtractOutline(
+                      buildingOutline.map((p) => ({ xFrac: p.xFrac, yFrac: p.yFrac })),
+                    );
+                    setAiBimCompareExtract(false);
                     setAiBimError(null);
                   } catch (err: any) {
                     setAiBimError(err?.message || t('scaffold', 'aiBimAnalysisFailed'));
@@ -1504,7 +1538,12 @@ function ScaffoldPageContent() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setAiBimPreview(null); setAiBimError(null); }}
+                    onClick={() => {
+                      setAiBimPreview(null);
+                      setAiBimExtractOutline(null);
+                      setAiBimCompareExtract(false);
+                      setAiBimError(null);
+                    }}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
                   >
                     <RotateCcw className="h-4 w-4" />
@@ -1722,21 +1761,64 @@ function ScaffoldPageContent() {
                       <p className="text-xs text-slate-500 mt-1">{t('result', 'obstacleNote')}</p>
                     </div>
                   )}
-                  <BuildingPreviewPanel
-                    outline={aiBimPreview.buildingOutline}
-                    wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                    wallHeightsMm={
-                      aiBimPreview.massingTiers?.length
-                        ? undefined
-                        : aiBimPreview.isStepped
-                          ? aiBimPreview.walls.map((w) => w.wallHeightMm)
-                          : undefined
-                    }
-                    massingTiers={aiBimPreview.massingTiers}
-                    buildingHeightMm={aiBimPreview.buildingHeightMm}
-                    ifcFileUrl={aiBimPreview.ifcFileUrl}
-                    ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}
-                  />
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-gray-500">
+                        {t('scaffold', 'aiBimPreviewTitle')}
+                      </span>
+                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer w-fit">
+                        <input
+                          type="checkbox"
+                          checked={aiBimCompareExtract}
+                          onChange={(e) => setAiBimCompareExtract(e.target.checked)}
+                          disabled={!aiBimExtractOutline}
+                          className="rounded border-gray-300"
+                        />
+                        {t('scaffold', 'aiBimCompareExtract')}
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                      <AiBimFootprintEditor
+                        outline={aiBimPreview.buildingOutline}
+                        baselineOutline={aiBimExtractOutline ?? undefined}
+                        showBaseline={aiBimCompareExtract && !!aiBimExtractOutline}
+                        onChange={handleAiBimOutlineEdit}
+                        onResetToBaseline={
+                          aiBimExtractOutline
+                            ? () =>
+                                handleAiBimOutlineEdit(
+                                  aiBimExtractOutline.map((p) => ({
+                                    xFrac: p.xFrac,
+                                    yFrac: p.yFrac,
+                                  })),
+                                )
+                            : undefined
+                        }
+                      />
+                      <div className="space-y-2 min-h-0">
+                        <span className="text-xs font-medium text-gray-500 block">
+                          {t('scaffold', 'aiBimPreview3d')}
+                        </span>
+                        <Building3DPreview
+                          outline={aiBimPreview.buildingOutline}
+                          buildingHeightMm={aiBimPreview.buildingHeightMm}
+                          wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                          wallHeightsMm={
+                            aiBimPreview.massingTiers?.length
+                              ? undefined
+                              : aiBimPreview.isStepped
+                                ? aiBimPreview.walls.map((w) => w.wallHeightMm)
+                                : undefined
+                          }
+                          massingTiers={aiBimPreview.massingTiers}
+                          ifcFileUrl={aiBimPreview.ifcFileUrl}
+                          ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}
+                          className="w-full rounded-lg border border-gray-200 bg-slate-50"
+                          style={{ height: 320 }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 gap-4">
                     {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
                     <div className="rounded-lg border border-violet-200 bg-white p-3 space-y-3">
