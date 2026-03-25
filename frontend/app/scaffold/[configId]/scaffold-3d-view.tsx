@@ -1285,12 +1285,25 @@ export default function Scaffold3DView({
         let tok = false;
         let groundFromMassing = false;
 
+          // Prefer bimPlan-mapped full outline when it matches ground-tier wall count exactly.
+        // storedVerts (polygonVertices) are ordered edge-by-edge matching wall indices,
+        // so toPlanM(storedVerts) gives the correct shape, orientation, and scale.
+        if (!tok && bimPlan && storedVerts && storedVerts.length === tg0.walls.length) {
+          const mapped = bimPlan.toPlanM(storedVerts as any[]);
+          if (mapped.length === tg0.walls.length &&
+              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+            tverts = mapped;
+            tok = true;
+            groundFromMassing = true;
+          }
+        }
+
         // Prefer bimPlan-mapped massing tier vertices for the ground polygon.
         // decomposeTierWalls creates walls from massing tier edges (1:1 order),
         // so massing tier 0 vertices give the correct footprint position and
         // orientation. buildFootprintPolygonXZ can pick a mirrored L-shape
         // when wall order doesn't match the stored outline vertex order.
-        if (bimPlan && massingTiersSorted.length > 0) {
+        if (!tok && bimPlan && massingTiersSorted.length > 0) {
           const groundMassing = massingTiersSorted.find(
             (m) => (m.baseHeightMm ?? 0) <= 2 && m.vertices.length === tg0.walls.length,
           ) ?? (massingTiersSorted[0]?.vertices.length === tg0.walls.length ? massingTiersSorted[0] : undefined);
@@ -1538,6 +1551,25 @@ export default function Scaffold3DView({
         }
         return null;
       })();
+
+      // When fullBuildingOutline matches the ground tier wall count exactly,
+      // promote it as the scaffold polygon so that scaffold edge positions,
+      // IFC building placement, and outline all share one coordinate system.
+      // This prevents the scaffold from wrapping wrong faces when the
+      // buildFootprintPolygonXZ reconstruction has a different orientation.
+      {
+        const groundTierWallCount = tierGroups[0]?.walls.length ?? 0;
+        if (
+          fullBuildingOutline &&
+          fullBuildingOutline.length === groundTierWallCount &&
+          groundTierWallCount >= 3 &&
+          tierPolygons[0] !== undefined
+        ) {
+          tierPolygons[0].verts = fullBuildingOutline;
+          tierPolygons[0].footprintFromMassing = true;
+          verts = fullBuildingOutline;
+        }
+      }
 
       // Center the polygon
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
@@ -2963,9 +2995,17 @@ export default function Scaffold3DView({
             const ifcCenterX = (ifcMinX + ifcMaxX) / 2;
             const ifcCenterZ = (ifcMinZ + ifcMaxZ) / 2;
 
+            // Use scaffold polygon (verts) bbox in world space to align IFC.
+            // The polygon uses (cx, cz) as its centroid, so in scene coords
+            // vertices are at (v.x - cx, v.z - cz). We match IFC bbox center
+            // to polygon bbox center so IFC and scaffold share the same space.
             let bxMin = Infinity, bxMax = -Infinity, bzMin = Infinity, bzMax = -Infinity;
-            for (const v of verts) {
-              const ax = v.x - cx, az = v.z - cz;
+            const sourceVerts = fullBuildingOutline && fullBuildingOutline.length >= 3
+              ? fullBuildingOutline : verts;
+            const sourceCx = sourceVerts.reduce((s, v) => s + v.x, 0) / sourceVerts.length;
+            const sourceCz = sourceVerts.reduce((s, v) => s + v.z, 0) / sourceVerts.length;
+            for (const v of sourceVerts) {
+              const ax = v.x - sourceCx, az = v.z - sourceCz;
               if (ax < bxMin) bxMin = ax; if (ax > bxMax) bxMax = ax;
               if (az < bzMin) bzMin = az; if (az > bzMax) bzMax = az;
             }
@@ -2975,6 +3015,12 @@ export default function Scaffold3DView({
             const scZ = ifcSizeZ > 0.01 ? buildingExtentZ / ifcSizeZ : 1;
             const uniformScale = Math.min(scX, scZ);
             const scaleY = ifcSizeY > 0.01 ? maxH / ifcSizeY : uniformScale;
+            // IFC scene offset: shift IFC center to match polygon centroid in scene space.
+            // polygon centroid in scene = (0, 0) since we subtract cx/cz from all verts.
+            // IFC center needs to land at (0, 0) in scene XZ → translate by -(ifcCenter)*scale.
+            // Additionally offset by polygon bbox center (which may not be centroid).
+            const polyBboxCx = (bxMin + bxMax) / 2;
+            const polyBboxCz = (bzMin + bzMax) / 2;
 
             for (const meshData of meshesForView) {
               if (meshData.elementType === 'opening') continue;
@@ -2983,9 +3029,9 @@ export default function Scaffold3DView({
               const positions = new Float32Array(vertCount * 3);
               const normals = new Float32Array(vertCount * 3);
               for (let vi = 0; vi < vertCount; vi++) {
-                positions[vi * 3]     = (meshData.vertices[vi * stride] - ifcCenterX) * uniformScale;
+                positions[vi * 3]     = (meshData.vertices[vi * stride] - ifcCenterX) * uniformScale + polyBboxCx;
                 positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - ifcMinY) * scaleY + GROUND_Y;
-                positions[vi * 3 + 2] = (meshData.vertices[vi * stride + 2] - ifcCenterZ) * uniformScale;
+                positions[vi * 3 + 2] = (meshData.vertices[vi * stride + 2] - ifcCenterZ) * uniformScale + polyBboxCz;
                 normals[vi * 3]     = meshData.vertices[vi * stride + 3];
                 normals[vi * 3 + 1] = meshData.vertices[vi * stride + 4];
                 normals[vi * 3 + 2] = meshData.vertices[vi * stride + 5];
