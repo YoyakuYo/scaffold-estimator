@@ -5,6 +5,8 @@ import { useI18n } from '@/lib/i18n';
 
 export type AiBimOutlinePoint = { xFrac: number; yFrac: number };
 
+const MIN_EDGE_MM = 600;
+
 function distToSegment(
   px: number,
   py: number,
@@ -30,6 +32,91 @@ function cloneOutline(pts: AiBimOutlinePoint[]): AiBimOutlinePoint[] {
   return pts.map((p) => ({ xFrac: p.xFrac, yFrac: p.yFrac }));
 }
 
+/** Insert a vertex on edge `edgeIndex` (vertex edgeIndex → edgeIndex+1), clamped so both new edges ≥ MIN_EDGE_MM. */
+function insertVertexOnEdge(
+  outline: AiBimOutlinePoint[],
+  edgeIndex: number,
+  wx: number,
+  wy: number,
+): AiBimOutlinePoint[] | null {
+  const n = outline.length;
+  if (n < 3 || edgeIndex < 0 || edgeIndex >= n) return null;
+  const i = edgeIndex;
+  const j = (i + 1) % n;
+  const ax = outline[i].xFrac;
+  const ay = outline[i].yFrac;
+  const bx = outline[j].xFrac;
+  const by = outline[j].yFrac;
+  const abx = bx - ax;
+  const aby = by - ay;
+  const len = Math.hypot(abx, aby);
+  if (len < MIN_EDGE_MM * 2 + 1) return null;
+  let t = ((wx - ax) * abx + (wy - ay) * aby) / (len * len);
+  const tMin = MIN_EDGE_MM / len;
+  const tMax = 1 - MIN_EDGE_MM / len;
+  if (tMax < tMin) return null;
+  t = Math.max(tMin, Math.min(tMax, t));
+  const nx = ax + t * abx;
+  const ny = ay + t * aby;
+  const next = cloneOutline(outline);
+  const insertAt = j === 0 ? n : j;
+  next.splice(insertAt, 0, { xFrac: nx, yFrac: ny });
+  return next;
+}
+
+/** Remove vertex `vertexIndex`; merges two walls into one. Requires n > 3 and new diagonal edge ≥ MIN_EDGE_MM. */
+function removeVertexAt(outline: AiBimOutlinePoint[], vertexIndex: number): AiBimOutlinePoint[] | null {
+  const n = outline.length;
+  if (n <= 3 || vertexIndex < 0 || vertexIndex >= n) return null;
+  const prevIdx = (vertexIndex - 1 + n) % n;
+  const nextIdx = (vertexIndex + 1) % n;
+  const A = outline[prevIdx];
+  const B = outline[nextIdx];
+  const merged = Math.hypot(B.xFrac - A.xFrac, B.yFrac - A.yFrac);
+  if (merged < MIN_EDGE_MM) return null;
+  const copy = cloneOutline(outline);
+  copy.splice(vertexIndex, 1);
+  return copy;
+}
+
+function pickVertexAt(
+  x: number,
+  y: number,
+  outline: AiBimOutlinePoint[],
+  thresh: number,
+): number | null {
+  let best: { i: number; d: number } | null = null;
+  for (let i = 0; i < outline.length; i++) {
+    const d = Math.hypot(x - outline[i].xFrac, y - outline[i].yFrac);
+    if (!best || d < best.d) best = { i, d };
+  }
+  if (best && best.d <= thresh) return best.i;
+  return null;
+}
+
+function applyOrthoSnap(
+  x: number,
+  y: number,
+  dragIdx: number,
+  outline: AiBimOutlinePoint[],
+  eps: number,
+): { x: number; y: number } {
+  const n = outline.length;
+  const neighbors = [
+    outline[(dragIdx - 1 + n) % n],
+    outline[(dragIdx + 1) % n],
+  ];
+  let nx = x;
+  let ny = y;
+  for (const nb of neighbors) {
+    if (Math.abs(x - nb.xFrac) < eps) nx = nb.xFrac;
+    if (Math.abs(y - nb.yFrac) < eps) ny = nb.yFrac;
+  }
+  return { x: nx, y: ny };
+}
+
+type EditTool = 'move' | 'split' | 'removeVertex';
+
 type Props = {
   outline: AiBimOutlinePoint[];
   baselineOutline?: AiBimOutlinePoint[] | null;
@@ -39,8 +126,7 @@ type Props = {
 };
 
 /**
- * Interactive 2D footprint editor for AI BIM preview: drag vertices, select edge and set length (trim/extend).
- * Coordinates use the same mm space as buildingOutline (xFrac/yFrac field names are legacy).
+ * CAD-style footprint editor: move corners, edge length, split wall (add corner), remove corner (merge walls), optional orthogonal snap.
  */
 export function AiBimFootprintEditor({
   outline,
@@ -51,9 +137,17 @@ export function AiBimFootprintEditor({
 }: Props) {
   const { t } = useI18n();
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const [editTool, setEditTool] = useState<EditTool>('move');
+  const [snapOrtho, setSnapOrtho] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<number | null>(null);
   const [edgeLengthInput, setEdgeLengthInput] = useState<string>('');
+  const [flashMsg, setFlashMsg] = useState<string | null>(null);
+
+  const flash = useCallback((msg: string) => {
+    setFlashMsg(msg);
+    window.setTimeout(() => setFlashMsg(null), 3200);
+  }, []);
 
   const { minX, minY, vbW, vbH, pad } = useMemo(() => {
     const xs: number[] = [];
@@ -77,6 +171,9 @@ export function AiBimFootprintEditor({
     const p = Math.max(w, h) * 0.08;
     return { minX: mnX, minY: mnY, vbW: w + 2 * p, vbH: h + 2 * p, pad: p };
   }, [outline, baselineOutline, showBaseline]);
+
+  const vertexHitR = Math.max(vbW, vbH) * 0.022;
+  const edgePickThresh = Math.max(vbW, vbH) * 0.02;
 
   const toWorld = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -107,9 +204,9 @@ export function AiBimFootprintEditor({
   );
 
   const pickEdgeAt = useCallback(
-    (x: number, y: number): number | null => {
+    (x: number, y: number, skipNearVertices: boolean): number | null => {
       if (n < 3) return null;
-      const thresh = Math.max(vbW, vbH) * 0.02;
+      if (skipNearVertices && pickVertexAt(x, y, outline, vertexHitR * 1.1) != null) return null;
       let best: { i: number; d: number } | null = null;
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
@@ -123,16 +220,16 @@ export function AiBimFootprintEditor({
         );
         if (!best || d < best.d) best = { i, d };
       }
-      if (best && best.d <= thresh) return best.i;
+      if (best && best.d <= edgePickThresh) return best.i;
       return null;
     },
-    [outline, n, vbW, vbH],
+    [outline, n, edgePickThresh, vertexHitR],
   );
 
   const applyEdgeLength = useCallback(() => {
     if (selectedEdge == null || n < 3) return;
     const raw = Number(edgeLengthInput);
-    if (!Number.isFinite(raw) || raw < 600) return;
+    if (!Number.isFinite(raw) || raw < MIN_EDGE_MM) return;
 
     const i = selectedEdge;
     const j = (i + 1) % n;
@@ -143,8 +240,7 @@ export function AiBimFootprintEditor({
     const cur = Math.hypot(dx, dy);
     if (cur < 1e-6) return;
 
-    const newLen = raw;
-    const scale = newLen / cur;
+    const scale = raw / cur;
     const next = cloneOutline(outline);
     next[j] = {
       xFrac: A.xFrac + dx * scale,
@@ -156,23 +252,38 @@ export function AiBimFootprintEditor({
   const onPointerDownVertex = useCallback(
     (e: React.PointerEvent, idx: number) => {
       e.stopPropagation();
+      if (editTool === 'removeVertex') {
+        const next = removeVertexAt(outline, idx);
+        if (next) onChange(next);
+        else if (n <= 3) flash(t('scaffold', 'aiBimFootprintErrRemoveMinEdges'));
+        else flash(t('scaffold', 'aiBimFootprintErrRemoveLong'));
+        return;
+      }
       (e.target as Element).setPointerCapture?.(e.pointerId);
       setDragIdx(idx);
       setSelectedEdge(null);
     },
-    [],
+    [editTool, outline, n, onChange, flash, t],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (dragIdx == null) return;
+      if (dragIdx == null || editTool !== 'move') return;
       const w = toWorld(e.clientX, e.clientY);
       if (!w) return;
+      let x = w.x;
+      let y = w.y;
+      if (snapOrtho) {
+        const eps = Math.max(vbW, vbH) * 0.015;
+        const sn = applyOrthoSnap(x, y, dragIdx, outline, eps);
+        x = typeof sn.x === 'number' ? sn.x : x;
+        y = typeof sn.y === 'number' ? sn.y : y;
+      }
       const next = cloneOutline(outline);
-      next[dragIdx] = { xFrac: w.x, yFrac: w.y };
+      next[dragIdx] = { xFrac: x, yFrac: y };
       onChange(next);
     },
-    [dragIdx, outline, onChange, toWorld],
+    [dragIdx, editTool, outline, onChange, snapOrtho, toWorld, vbW, vbH],
   );
 
   const onPointerUp = useCallback(() => {
@@ -184,13 +295,25 @@ export function AiBimFootprintEditor({
       if (dragIdx != null) return;
       const w = toWorld(e.clientX, e.clientY);
       if (!w) return;
-      const edge = pickEdgeAt(w.x, w.y);
-      if (edge != null) {
-        setSelectedEdge(edge);
-        setEdgeLengthInput(String(Math.round(edgeLenMm(edge))));
+
+      if (editTool === 'split') {
+        const edge = pickEdgeAt(w.x, w.y, true);
+        if (edge == null) return;
+        const next = insertVertexOnEdge(outline, edge, w.x, w.y);
+        if (next) onChange(next);
+        else flash(t('scaffold', 'aiBimFootprintErrSplitShort'));
+        return;
+      }
+
+      if (editTool === 'move') {
+        const edge = pickEdgeAt(w.x, w.y, false);
+        if (edge != null) {
+          setSelectedEdge(edge);
+          setEdgeLengthInput(String(Math.round(edgeLenMm(edge))));
+        }
       }
     },
-    [dragIdx, toWorld, pickEdgeAt, edgeLenMm],
+    [dragIdx, toWorld, editTool, pickEdgeAt, outline, onChange, edgeLenMm, flash, t],
   );
 
   const baselinePoly =
@@ -201,6 +324,15 @@ export function AiBimFootprintEditor({
   const editedPoly = outline.map((p) => `${p.xFrac},${p.yFrac}`).join(' ');
 
   const viewBox = `${minX - pad} ${minY - pad} ${vbW} ${vbH}`;
+  const strokeW = Math.max(vbW, vbH) * 0.004;
+  const vh = Math.max(vbW, vbH) * 0.012;
+
+  const toolHint =
+    editTool === 'move'
+      ? t('scaffold', 'aiBimFootprintHintMove')
+      : editTool === 'split'
+        ? t('scaffold', 'aiBimFootprintHintSplit')
+        : t('scaffold', 'aiBimFootprintHintRemove');
 
   return (
     <div className="rounded-lg border border-violet-200 bg-white overflow-hidden">
@@ -218,15 +350,53 @@ export function AiBimFootprintEditor({
           </button>
         )}
       </div>
-      <p className="text-[11px] text-gray-600 px-2 py-1 border-b border-gray-100">
-        {t('scaffold', 'aiBimFootprintEditHint')}
-      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50/90">
+        {(['move', 'split', 'removeVertex'] as const).map((tool) => (
+          <button
+            key={tool}
+            type="button"
+            onClick={() => {
+              setEditTool(tool);
+              setSelectedEdge(null);
+              setDragIdx(null);
+            }}
+            className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
+              editTool === tool
+                ? 'bg-violet-600 text-white border-violet-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {tool === 'move'
+              ? t('scaffold', 'aiBimFootprintToolMove')
+              : tool === 'split'
+                ? t('scaffold', 'aiBimFootprintToolSplit')
+                : t('scaffold', 'aiBimFootprintToolRemove')}
+          </button>
+        ))}
+        <label className="flex items-center gap-1 ml-1 text-[10px] text-gray-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={snapOrtho}
+            onChange={(e) => setSnapOrtho(e.target.checked)}
+            disabled={editTool !== 'move'}
+            className="rounded border-gray-300"
+          />
+          {t('scaffold', 'aiBimFootprintSnapOrtho')}
+        </label>
+      </div>
+
+      <p className="text-[11px] text-gray-600 px-2 py-1 border-b border-gray-100">{toolHint}</p>
+      {flashMsg && (
+        <p className="text-[11px] text-amber-800 bg-amber-50 px-2 py-1 border-b border-amber-100">{flashMsg}</p>
+      )}
+
       <svg
         ref={svgRef}
         role="img"
         viewBox={viewBox}
         className="w-full block touch-none select-none bg-white"
-        style={{ minHeight: 200, maxHeight: 360 }}
+        style={{ minHeight: 220, maxHeight: 400 }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
@@ -237,7 +407,7 @@ export function AiBimFootprintEditor({
             points={baselinePoly}
             fill="none"
             stroke="#94a3b8"
-            strokeWidth={Math.max(vbW, vbH) * 0.004}
+            strokeWidth={strokeW}
             strokeDasharray={`${Math.max(vbW, vbH) * 0.015} ${Math.max(vbW, vbH) * 0.01}`}
             opacity={0.85}
           />
@@ -248,41 +418,77 @@ export function AiBimFootprintEditor({
             fill="#e0e7ff"
             fillOpacity={0.75}
             stroke="#4f46e5"
-            strokeWidth={Math.max(vbW, vbH) * 0.004}
+            strokeWidth={strokeW}
           />
         ) : null}
+        {n >= 3 &&
+          editTool === 'split' &&
+          Array.from({ length: n }, (_, ei) => {
+            const a = outline[ei];
+            const b = outline[(ei + 1) % n];
+            const mx = (a.xFrac + b.xFrac) / 2;
+            const my = (a.yFrac + b.yFrac) / 2;
+            const br = Math.max(vbW, vbH) * 0.006;
+            return (
+              <rect
+                key={`mid-${ei}`}
+                x={mx - br}
+                y={my - br}
+                width={br * 2}
+                height={br * 2}
+                fill="#22c55e"
+                fillOpacity={0.35}
+                stroke="#16a34a"
+                strokeWidth={strokeW * 0.5}
+                transform={`rotate(45 ${mx} ${my})`}
+                style={{ pointerEvents: 'none' }}
+              />
+            );
+          })}
         {outline.map((p, idx) => {
-          const r = Math.max(vbW, vbH) * 0.012;
-          const isSel =
+          const r = vh;
+          const isEdgeVert =
+            editTool === 'move' &&
             selectedEdge != null &&
             (idx === selectedEdge || idx === (selectedEdge + 1) % n);
+          const isRemoveHot = editTool === 'removeVertex' && n > 3;
           return (
             <circle
               key={idx}
               cx={p.xFrac}
               cy={p.yFrac}
-              r={r}
-              fill={isSel ? '#f59e0b' : '#6366f1'}
-              stroke="#fff"
+              r={isRemoveHot ? r * 1.15 : r}
+              fill={
+                isEdgeVert ? '#f59e0b' : isRemoveHot ? '#fecaca' : '#6366f1'
+              }
+              stroke={isRemoveHot ? '#dc2626' : '#fff'}
               strokeWidth={Math.max(vbW, vbH) * 0.002}
+              style={{
+                cursor:
+                  editTool === 'removeVertex'
+                    ? n > 3
+                      ? 'pointer'
+                      : 'not-allowed'
+                    : editTool === 'move'
+                      ? 'grab'
+                      : 'default',
+              }}
               onPointerDown={(e) => onPointerDownVertex(e, idx)}
             />
           );
         })}
       </svg>
-      {selectedEdge != null && n >= 3 ? (
+
+      {editTool === 'move' && selectedEdge != null && n >= 3 ? (
         <div className="flex flex-wrap items-end gap-2 px-2 py-2 border-t border-gray-100 bg-gray-50/80">
           <div>
             <label className="block text-[10px] font-medium text-gray-600 mb-0.5">
-              {t('scaffold', 'aiBimFootprintEdgeLength').replace(
-                '{n}',
-                String(selectedEdge + 1),
-              )}
+              {t('scaffold', 'aiBimFootprintEdgeLength').replace('{n}', String(selectedEdge + 1))}
             </label>
             <div className="flex items-center gap-1">
               <input
                 type="number"
-                min={600}
+                min={MIN_EDGE_MM}
                 step={100}
                 value={edgeLengthInput}
                 onChange={(e) => setEdgeLengthInput(e.target.value)}
@@ -298,9 +504,7 @@ export function AiBimFootprintEditor({
           >
             {t('scaffold', 'aiBimFootprintApplyEdge')}
           </button>
-          <span className="text-[10px] text-gray-500">
-            {t('scaffold', 'aiBimFootprintEdgeNote')}
-          </span>
+          <span className="text-[10px] text-gray-500">{t('scaffold', 'aiBimFootprintEdgeNote')}</span>
         </div>
       ) : null}
     </div>

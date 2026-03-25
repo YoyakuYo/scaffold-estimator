@@ -968,12 +968,14 @@ function ScaffoldPageContent() {
           return { ...w, wallLengthMm: Math.max(600, len) };
         });
       } else {
+        const pw = prev.walls;
+        const lastI = Math.max(0, pw.length - 1);
         newWalls = Array.from({ length: n }, (_, i) => {
           const j = (i + 1) % n;
           const len = Math.max(600, Math.round(distMm(closedOutline[i], closedOutline[j])));
-          const w0 = prev.walls[i] ?? prev.walls[0];
+          const w0 = pw[Math.min(i, lastI)] ?? pw[0];
           return {
-            side: w0?.side ?? `edge-${i}`,
+            side: `edge-${i}`,
             wallLengthMm: len,
             wallHeightMm: w0?.wallHeightMm ?? prev.buildingHeightMm,
             stairAccessCount: w0?.stairAccessCount ?? 0,
