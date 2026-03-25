@@ -31,9 +31,14 @@ export default function LandingPage() {
   const { locale, setLocale, t } = useI18n();
   const { canInstall, triggerInstall } = usePwaInstall();
   const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const localeMenuRef = useRef<HTMLDivElement>(null);
 
-  const hasToken = !!authApi.getToken();
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const hasToken = mounted && !!authApi.getToken();
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -54,7 +59,7 @@ export default function LandingPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  if (profile) return null;
+  if (mounted && profile) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
