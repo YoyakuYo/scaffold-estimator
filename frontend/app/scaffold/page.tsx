@@ -42,17 +42,17 @@ import {
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
 
-// Dynamic import for PerimeterTracer (uses browser APIs)
-const PerimeterTracer = dynamic(
+// Dynamic import for DrawingUpload (uses browser APIs)
+const DrawingUpload = dynamic(
   () =>
-    import('@/components/perimeter-tracer/PerimeterTracer').then(m => ({
-      default: m.PerimeterTracer,
+    import('@/components/drawing-upload/DrawingUpload').then(m => ({
+      default: m.DrawingUpload,
     })),
   {
     ssr: false,
     loading: () => (
       <div className="h-96 flex items-center justify-center text-gray-400 bg-white rounded-xl border border-gray-200">
-        Loading Perimeter Tracer…
+        図面アップロードを読み込み中…
       </div>
     ),
   },
@@ -1946,10 +1946,10 @@ function ScaffoldPageContent() {
         </div>
       )}
 
-      {/* Drawing Upload — Perimeter Tracer */}
+      {/* Drawing Upload */}
       {(manualSubTab === 'drawing' || editConfigId) && (<>
       <div className="max-w-[1600px] mx-auto px-4 mb-6">
-        <PerimeterTracer
+        <DrawingUpload
           perimeterModel={perimeterModel}
           onWallsDetected={handleWallsDetected}
           onSegmentEdit={handleSegmentEdit}
@@ -1957,7 +1957,7 @@ function ScaffoldPageContent() {
           buildingHeightMm={buildingHeightMm}
           onBuildingHeightChange={setBuildingHeightMm}
         />
-          </div>
+      </div>
 
       {/* ═══════════════════════════════════════════════════════
           SCAFFOLD SETTINGS + WALL CONFIG (shown when walls exist)

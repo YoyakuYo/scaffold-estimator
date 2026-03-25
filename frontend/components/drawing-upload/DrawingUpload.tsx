@@ -1,0 +1,773 @@
+'use client';
+
+import React, {
+  useState, useRef, useCallback, useEffect, useMemo,
+} from 'react';
+import { useDropzone } from 'react-dropzone';
+import { PerimeterModel } from '@/lib/perimeter-model';
+import { parseDxfFile } from '@/cad/parseDxf';
+import { extractSegments } from '@/cad/extractSegments';
+import { detectOuterPolygon } from '@/geometry/polygonDetection';
+import { drawingsApi, type CadWallSegment } from '@/lib/api/drawings';
+import {
+  Upload, Loader2, AlertCircle, FileUp, RotateCcw, Check,
+  Pencil, Trash2, Building2, Ruler, MousePointer2,
+} from 'lucide-react';
+
+// ═══════════════════════════════════════════════════════════════
+// Types
+// ═══════════════════════════════════════════════════════════════
+
+interface DrawingUploadProps {
+  perimeterModel: PerimeterModel;
+  onWallsDetected: (
+    walls: Array<{ side: string; lengthMm: number }>,
+    vertices?: Array<{ x: number; y: number }>,
+  ) => void;
+  onSegmentEdit: (index: number, lengthMm: number) => void;
+  externalWallLengths: number[];
+  buildingHeightMm: number | null;
+  onBuildingHeightChange: (mm: number) => void;
+}
+
+interface Vertex { x: number; y: number }
+interface Seg { start: Vertex; end: Vertex }
+
+type Phase = 'idle' | 'processing' | 'editor' | 'error';
+type FileKind = 'dxf' | 'cad' | 'pdf' | 'image';
+
+interface ShapeState {
+  verts: Vertex[];
+  wallMm: number[];
+  coordsAreMm: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════
+
+function fileKind(name: string): FileKind {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'dxf') return 'dxf';
+  if (ext === 'dwg' || ext === 'jww') return 'cad';
+  if (ext === 'pdf') return 'pdf';
+  return 'image';
+}
+
+function d(a: Vertex, b: Vertex): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function fmtMm(mm: number): string {
+  if (mm >= 10000) return `${(mm / 1000).toFixed(1)}m`;
+  if (mm >= 1000) return `${(mm / 1000).toFixed(2)}m`;
+  return `${Math.round(mm)}mm`;
+}
+
+function midPt(a: Vertex, b: Vertex): Vertex {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function edgeNorm(a: Vertex, b: Vertex, off: number): Vertex {
+  const len = d(a, b);
+  if (len < 1e-6) return { x: 0, y: -off };
+  return { x: -(b.y - a.y) / len * off, y: (b.x - a.x) / len * off };
+}
+
+function bbox(pts: Vertex[], extra?: Seg[]): { x: number; y: number; w: number; h: number } {
+  const all: Vertex[] = [...pts];
+  if (extra) for (const s of extra) { all.push(s.start, s.end); }
+  if (all.length === 0) return { x: 0, y: 0, w: 100, h: 100 };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of all) {
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+  }
+  const w = x1 - x0 || 100;
+  const h = y1 - y0 || 100;
+  const pad = Math.max(w, h) * 0.12;
+  return { x: x0 - pad, y: y0 - pad, w: w + 2 * pad, h: h + 2 * pad };
+}
+
+function svgPt(e: React.MouseEvent, svg: SVGSVGElement): Vertex | null {
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
+  const s = pt.matrixTransform(ctm.inverse());
+  return { x: s.x, y: s.y };
+}
+
+function recalcLengths(verts: Vertex[]): number[] {
+  return verts.map((v, i) => Math.round(d(v, verts[(i + 1) % verts.length])));
+}
+
+const ACCEPT = {
+  'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tif', '.tiff'],
+  'application/pdf': ['.pdf'],
+  'application/dxf': ['.dxf'],
+  'image/vnd.dxf': ['.dxf'],
+  'application/octet-stream': ['.dwg', '.jww', '.dxf'],
+};
+
+const FILE_LABELS = ['PDF', 'DXF', 'DWG', 'JWW', 'JPG', 'PNG', 'BMP', 'WebP', 'SVG', 'TIFF'];
+
+// ═══════════════════════════════════════════════════════════════
+// Component
+// ═══════════════════════════════════════════════════════════════
+
+export function DrawingUpload({
+  perimeterModel,
+  onWallsDetected,
+  onSegmentEdit,
+  externalWallLengths,
+  buildingHeightMm,
+  onBuildingHeightChange,
+}: DrawingUploadProps) {
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [file, setFile] = useState<File | null>(null);
+  const [kind, setKind] = useState<FileKind>('image');
+  const [status, setStatus] = useState('');
+  const [errMsg, setErrMsg] = useState('');
+
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [bgSegs, setBgSegs] = useState<Seg[]>([]);
+
+  const [shape, setShape] = useState<ShapeState>({ verts: [], wallMm: [], coordsAreMm: false });
+
+  const [tracing, setTracing] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState('');
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const skipExtSync = useRef(false);
+
+  // ── Cleanup ──
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
+
+  // ── Sync shape → parent ──
+  useEffect(() => {
+    const { verts, wallMm } = shape;
+    if (verts.length < 3 || wallMm.length < 3) return;
+
+    skipExtSync.current = true;
+    const walls = wallMm.map((mm, i) => ({ side: `edge-${i}`, lengthMm: mm }));
+    onWallsDetected(walls, verts);
+
+    perimeterModel.loadFromPoints(verts);
+    for (let i = 0; i < wallMm.length && i < perimeterModel.segmentCount; i++) {
+      if (wallMm[i] > 0) {
+        try { perimeterModel.updateSegmentLength(i, wallMm[i]); } catch { /* ignore */ }
+      }
+    }
+  }, [shape]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sync externalWallLengths → shape (when edited externally) ──
+  useEffect(() => {
+    if (skipExtSync.current) { skipExtSync.current = false; return; }
+    if (externalWallLengths.length !== shape.wallMm.length) return;
+    const differs = externalWallLengths.some((v, i) => v !== shape.wallMm[i]);
+    if (!differs) return;
+    setShape(prev => ({ ...prev, wallMm: [...externalWallLengths] }));
+  }, [externalWallLengths]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Shape mutators ──
+
+  const moveVertex = useCallback((idx: number, pos: Vertex) => {
+    setShape(prev => {
+      const verts = [...prev.verts];
+      verts[idx] = pos;
+      const wallMm = prev.coordsAreMm ? recalcLengths(verts) : [...prev.wallMm];
+      return { ...prev, verts, wallMm };
+    });
+  }, []);
+
+  const addVertexOnEdge = useCallback((edgeIdx: number) => {
+    setShape(prev => {
+      const n = prev.verts.length;
+      const a = prev.verts[edgeIdx];
+      const b = prev.verts[(edgeIdx + 1) % n];
+      const mid = midPt(a, b);
+      const verts = [...prev.verts];
+      verts.splice(edgeIdx + 1, 0, mid);
+      const halfLen = Math.round((prev.wallMm[edgeIdx] || 0) / 2);
+      const wallMm = [...prev.wallMm];
+      wallMm.splice(edgeIdx, 1, halfLen, halfLen);
+      return { ...prev, verts, wallMm };
+    });
+  }, []);
+
+  const deleteVertex = useCallback((idx: number) => {
+    setShape(prev => {
+      if (prev.verts.length <= 3) return prev;
+      const n = prev.verts.length;
+      const prevI = (idx - 1 + n) % n;
+      const nextI = (idx + 1) % n;
+      const verts = prev.verts.filter((_, j) => j !== idx);
+      const mergedLen = prev.coordsAreMm
+        ? Math.round(d(prev.verts[prevI], prev.verts[nextI]))
+        : prev.wallMm[prevI] + prev.wallMm[idx];
+      const wallMm = [...prev.wallMm];
+      wallMm[prevI < idx ? prevI : prevI - 1] = mergedLen;
+      const filtered = wallMm.filter((_, j) => j !== idx);
+      return { ...prev, verts, wallMm: filtered };
+    });
+  }, []);
+
+  const editWallLength = useCallback((idx: number, mm: number) => {
+    setShape(prev => {
+      const wallMm = [...prev.wallMm];
+      wallMm[idx] = mm;
+      return { ...prev, wallMm };
+    });
+    onSegmentEdit(idx, mm);
+  }, [onSegmentEdit]);
+
+  const addTraceVertex = useCallback((pos: Vertex) => {
+    setShape(prev => {
+      const verts = [...prev.verts, pos];
+      const wallMm = [...prev.wallMm];
+      if (prev.verts.length > 0 && prev.coordsAreMm) {
+        wallMm.push(Math.round(d(prev.verts[prev.verts.length - 1], pos)));
+      } else {
+        wallMm.push(0);
+      }
+      return { ...prev, verts, wallMm };
+    });
+  }, []);
+
+  // ── Process DXF client-side ──
+  const processDxf = useCallback(async (f: File) => {
+    try {
+      setStatus('DXFファイルを解析中...');
+      const dxf = await parseDxfFile(f);
+      const extraction = extractSegments(dxf);
+
+      const segs: Seg[] = extraction.segments.map(s => ({
+        start: { x: s.start.x, y: -s.start.y },
+        end: { x: s.end.x, y: -s.end.y },
+      }));
+      setBgSegs(segs);
+
+      const poly = detectOuterPolygon(extraction.segments);
+      if (poly && poly.points.length >= 3) {
+        const pts = poly.points.map(p => ({ x: p.x, y: -p.y }));
+        setShape({ verts: pts, wallMm: recalcLengths(pts), coordsAreMm: true });
+        setStatus(`${pts.length}辺の建物形状を検出しました`);
+      } else {
+        setShape({ verts: [], wallMm: [], coordsAreMm: true });
+        setStatus('建物形状を自動検出できません。クリックして頂点を指定してください。');
+        setTracing(true);
+      }
+
+      try { await drawingsApi.upload(f, 'default-project'); } catch { /* non-critical */ }
+      setPhase('editor');
+    } catch (err: any) {
+      setErrMsg(`DXF解析エラー: ${err.message}`);
+      setPhase('error');
+    }
+  }, []);
+
+  // ── Process via backend (image/PDF/CAD) ──
+  const processBackend = useCallback(async (f: File, fk: FileKind) => {
+    try {
+      setStatus('ファイルをアップロード・処理中...');
+      const res = await drawingsApi.upload(f, 'default-project');
+
+      if (res.status === 'failed') {
+        setErrMsg(res.message || '処理に失敗しました');
+        setPhase('error');
+        return;
+      }
+
+      // CAD pipeline result (DWG/JWW)
+      if (res.cadData?.wallSegments && res.cadData.wallSegments.length >= 3) {
+        const ws = res.cadData.wallSegments;
+        const pts = ws.map((s: CadWallSegment) => ({ x: s.start.x, y: -s.start.y }));
+        setShape({ verts: pts, wallMm: ws.map((s: CadWallSegment) => Math.round(s.length)), coordsAreMm: true });
+        if (res.cadData.buildingHeight) onBuildingHeightChange(res.cadData.buildingHeight);
+        setStatus(`${ws.length}辺の建物形状を検出 (CAD)`);
+        setPhase('editor');
+        return;
+      }
+
+      // Image/PDF OCR extraction
+      if (res.extractedDimensions) {
+        const ed = res.extractedDimensions;
+        const n = ed.walls.north?.lengthMm || 0;
+        const e = ed.walls.east?.lengthMm || 0;
+        const s = ed.walls.south?.lengthMm || n;
+        const w = ed.walls.west?.lengthMm || e;
+
+        if (n > 0 && e > 0) {
+          const pts: Vertex[] = [
+            { x: 0, y: 0 }, { x: n, y: 0 },
+            { x: n, y: e }, { x: 0, y: e },
+          ];
+          setShape({ verts: pts, wallMm: [n, e, s, w], coordsAreMm: true });
+          setStatus('壁面寸法を検出しました。クリックして編集できます。');
+        } else {
+          setShape({ verts: [], wallMm: [], coordsAreMm: false });
+          setStatus('寸法を自動検出できません。クリックして頂点を指定し、寸法を入力してください。');
+          setTracing(true);
+        }
+
+        const height = ed.buildingHeightMm || ed.estimatedBuildingHeightMm;
+        if (height && height > 0) onBuildingHeightChange(height);
+      } else {
+        setShape({ verts: [], wallMm: [], coordsAreMm: false });
+        setStatus('自動検出できません。クリックして頂点を指定してください。');
+        setTracing(true);
+      }
+
+      setPhase('editor');
+    } catch (err: any) {
+      setErrMsg(`処理エラー: ${err.message}`);
+      setPhase('error');
+    }
+  }, [onBuildingHeightChange]);
+
+  // ── Dropzone ──
+  const onDrop = useCallback(async (accepted: File[]) => {
+    if (!accepted.length) return;
+    const f = accepted[0];
+    const fk = fileKind(f.name);
+
+    setFile(f);
+    setKind(fk);
+    setPhase('processing');
+    setErrMsg('');
+    setShape({ verts: [], wallMm: [], coordsAreMm: false });
+    setBgSegs([]);
+    setTracing(false);
+
+    if (fk === 'image') setPreviewUrl(URL.createObjectURL(f));
+    else setPreviewUrl(null);
+
+    if (fk === 'dxf') await processDxf(f);
+    else await processBackend(f, fk);
+  }, [processDxf, processBackend]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop, accept: ACCEPT, maxFiles: 1, maxSize: 100 * 1024 * 1024,
+  });
+
+  // ── Reset ──
+  const reset = useCallback(() => {
+    setPhase('idle');
+    setFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setImgSize(null);
+    setBgSegs([]);
+    setShape({ verts: [], wallMm: [], coordsAreMm: false });
+    setErrMsg('');
+    setTracing(false);
+    setDragIdx(null);
+    setEditIdx(null);
+    perimeterModel.clear();
+  }, [previewUrl, perimeterModel]);
+
+  // ── Image load ──
+  const onImgLoad = useCallback(() => {
+    if (imgRef.current) {
+      setImgSize({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight });
+    }
+  }, []);
+
+  // ── ViewBox ──
+  const vb = useMemo(() => {
+    if (previewUrl && imgSize) return { x: 0, y: 0, w: imgSize.w, h: imgSize.h };
+    return bbox(shape.verts, bgSegs.length > 0 ? bgSegs : undefined);
+  }, [shape.verts, bgSegs, previewUrl, imgSize]);
+
+  const scale = vb.w / 500;
+  const vtxR = Math.max(4, scale * 4);
+  const fs = Math.max(10, scale * 10);
+  const sw = Math.max(1, scale * 1.5);
+  const dimOff = Math.max(12, scale * 12);
+
+  const perimeter = useMemo(() => shape.wallMm.reduce((s, v) => s + v, 0), [shape.wallMm]);
+
+  // ── SVG interaction: vertex drag ──
+  const onVtxDown = useCallback((e: React.MouseEvent, i: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragIdx(i);
+  }, []);
+
+  const onSvgMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (dragIdx === null || !svgRef.current) return;
+    const c = svgPt(e, svgRef.current);
+    if (c) moveVertex(dragIdx, c);
+  }, [dragIdx, moveVertex]);
+
+  const onSvgUp = useCallback(() => { setDragIdx(null); }, []);
+
+  // ── SVG interaction: trace click ──
+  const onSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!tracing || dragIdx !== null || !svgRef.current) return;
+    const c = svgPt(e, svgRef.current);
+    if (c) addTraceVertex(c);
+  }, [tracing, dragIdx, addTraceVertex]);
+
+  // ── Close polygon in trace mode ──
+  const closeTrace = useCallback(() => {
+    if (shape.verts.length < 3) return;
+    setTracing(false);
+    if (shape.coordsAreMm) {
+      setShape(prev => ({ ...prev, wallMm: recalcLengths(prev.verts) }));
+    }
+    setStatus(`${shape.verts.length}辺の建物形状を確定しました`);
+  }, [shape.verts.length, shape.coordsAreMm]);
+
+  // ── Wall edit ──
+  const startEdit = useCallback((i: number) => {
+    setEditIdx(i);
+    setEditVal(String(shape.wallMm[i] || ''));
+  }, [shape.wallMm]);
+
+  const commitEdit = useCallback(() => {
+    if (editIdx === null) return;
+    const val = parseInt(editVal, 10);
+    if (!isNaN(val) && val > 0) editWallLength(editIdx, val);
+    setEditIdx(null);
+  }, [editIdx, editVal, editWallLength]);
+
+  // ════════════════════════════════════════════════════════════
+  // RENDER
+  // ════════════════════════════════════════════════════════════
+
+  // Phase: Idle
+  if (phase === 'idle') {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <Upload className="h-5 w-5 text-blue-600" />
+            図面アップロード
+          </h2>
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+              isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/50'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <FileUp className={`h-12 w-12 mx-auto mb-4 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`} />
+            <p className="text-base font-medium text-gray-700 mb-2">
+              {isDragActive ? 'ドロップしてアップロード' : 'ファイルをドラッグ＆ドロップ'}
+            </p>
+            <p className="text-sm text-gray-500 mb-4">またはクリックしてファイルを選択</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {FILE_LABELS.map(ext => (
+                <span key={ext} className="px-2.5 py-1 bg-white rounded-md border border-gray-200 text-xs font-medium text-gray-600">
+                  {ext}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-3">最大100MB — 図面・写真・CADファイル対応</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Phase: Processing
+  if (phase === 'processing') {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+          <p className="text-base font-medium text-gray-700">{status || '処理中...'}</p>
+          <p className="text-sm text-gray-500">{file?.name}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Phase: Error
+  if (phase === 'error') {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="flex flex-col items-center gap-4">
+          <AlertCircle className="h-10 w-10 text-red-500" />
+          <p className="text-base font-medium text-red-700">{errMsg}</p>
+          <button onClick={reset} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2">
+            <RotateCcw className="h-4 w-4" /> やり直す
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Phase: Editor
+  const { verts, wallMm } = shape;
+  const hasSvg = bgSegs.length > 0 || verts.length >= 2 || tracing;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <Check className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium text-gray-700 truncate max-w-xs">{file?.name}</span>
+          <span className="px-2 py-0.5 bg-gray-200 rounded text-xs font-medium text-gray-600 uppercase">{kind}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {status && <span className="text-xs text-green-600 hidden sm:inline">{status}</span>}
+          <button onClick={reset} className="p-1.5 hover:bg-gray-200 rounded-lg" title="リセット">
+            <RotateCcw className="h-4 w-4 text-gray-500" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row" style={{ minHeight: 520 }}>
+        {/* Left: Drawing + Polygon SVG */}
+        <div className="flex-1 relative bg-gray-100 overflow-hidden" style={{ minHeight: 400 }}>
+          {previewUrl && (
+            <img ref={imgRef} src={previewUrl} alt="" className="hidden" onLoad={onImgLoad} />
+          )}
+
+          {(hasSvg || (previewUrl && imgSize)) && (
+            <svg
+              ref={svgRef}
+              className="absolute inset-0 w-full h-full"
+              viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+              preserveAspectRatio="xMidYMid meet"
+              onMouseMove={onSvgMove}
+              onMouseUp={onSvgUp}
+              onMouseLeave={onSvgUp}
+              onClick={onSvgClick}
+              style={{ cursor: tracing ? 'crosshair' : dragIdx !== null ? 'grabbing' : 'default' }}
+            >
+              {previewUrl && imgSize && (
+                <image href={previewUrl} x={0} y={0} width={imgSize.w} height={imgSize.h} />
+              )}
+
+              {bgSegs.map((seg, i) => (
+                <line key={i} x1={seg.start.x} y1={seg.start.y} x2={seg.end.x} y2={seg.end.y}
+                  stroke="#94a3b8" strokeWidth={sw * 0.4} strokeLinecap="round" />
+              ))}
+
+              {verts.length >= 3 && (
+                <polygon
+                  points={verts.map(v => `${v.x},${v.y}`).join(' ')}
+                  fill="rgba(59,130,246,0.06)" stroke="#2563eb" strokeWidth={sw} strokeLinejoin="round"
+                />
+              )}
+
+              {verts.length === 2 && (
+                <line x1={verts[0].x} y1={verts[0].y} x2={verts[1].x} y2={verts[1].y}
+                  stroke="#2563eb" strokeWidth={sw} />
+              )}
+
+              {verts.length >= 3 && verts.map((v, i) => {
+                const next = verts[(i + 1) % verts.length];
+                const mid = midPt(v, next);
+                const norm = edgeNorm(v, next, dimOff);
+                const len = wallMm[i] || 0;
+
+                return (
+                  <g key={`e-${i}`}>
+                    <rect
+                      x={mid.x + norm.x - fs * 2.5} y={mid.y + norm.y - fs * 0.6}
+                      width={fs * 5} height={fs * 1.2} rx={fs * 0.2}
+                      fill="white" fillOpacity={0.85} stroke="#dbeafe" strokeWidth={0.5}
+                    />
+                    <text
+                      x={mid.x + norm.x} y={mid.y + norm.y}
+                      textAnchor="middle" dominantBaseline="middle"
+                      fontSize={fs} fontWeight="600" fill="#1e40af"
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      onClick={(e) => { e.stopPropagation(); startEdit(i); }}
+                    >
+                      {len > 0 ? fmtMm(len) : '?mm'}
+                    </text>
+
+                    {!tracing && (
+                      <g style={{ cursor: 'pointer' }} className="opacity-30 hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); addVertexOnEdge(i); }}>
+                        <circle cx={mid.x} cy={mid.y} r={vtxR * 0.7} fill="white" stroke="#94a3b8" strokeWidth={1} />
+                        <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
+                          fontSize={fs * 0.55} fill="#64748b" style={{ pointerEvents: 'none' }}>+</text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+
+              {verts.map((v, i) => (
+                <g key={`v-${i}`}>
+                  <circle
+                    cx={v.x} cy={v.y} r={vtxR}
+                    fill={dragIdx === i ? '#f59e0b' : i === 0 ? '#22c55e' : '#2563eb'}
+                    stroke="white" strokeWidth={vtxR * 0.4}
+                    style={{ cursor: 'grab' }}
+                    onMouseDown={(e) => onVtxDown(e, i)}
+                  />
+                  <text
+                    x={v.x} y={v.y - vtxR * 2}
+                    textAnchor="middle" fontSize={fs * 0.8} fontWeight="bold"
+                    fill="#1e293b" stroke="white" strokeWidth={fs * 0.15} paintOrder="stroke"
+                  >
+                    {String.fromCharCode(65 + (i % 26))}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          )}
+
+          {tracing && (
+            <div className="absolute bottom-4 left-4 right-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2 text-sm text-amber-700">
+                <MousePointer2 className="h-4 w-4" />
+                <span>クリックして建物の頂点を指定（最低3点）— 現在 {verts.length} 点</span>
+              </div>
+              {verts.length >= 3 && (
+                <button onClick={closeTrace}
+                  className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> 確定
+                </button>
+              )}
+            </div>
+          )}
+
+          {!previewUrl && bgSegs.length === 0 && verts.length === 0 && !tracing && (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+              <div className="text-center">
+                <Building2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">図面プレビュー</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Settings Panel */}
+        <div className="w-full lg:w-96 flex flex-col border-t lg:border-t-0 lg:border-l border-gray-200">
+          {/* Building Height */}
+          <div className="p-4 border-b border-gray-200">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 text-blue-600" />
+              建物の高さ
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={buildingHeightMm || ''}
+                onChange={(e) => onBuildingHeightChange(parseInt(e.target.value, 10) || 0)}
+                placeholder="例: 10000"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              <span className="text-sm text-gray-500 w-8">mm</span>
+            </div>
+            {buildingHeightMm != null && buildingHeightMm > 0 && (
+              <p className="text-xs text-gray-400 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
+            )}
+          </div>
+
+          {/* Wall Dimensions */}
+          <div className="flex-1 overflow-auto p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Ruler className="h-4 w-4 text-blue-600" />
+                壁面寸法
+              </h3>
+              {perimeter > 0 && (
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                  周長: {fmtMm(perimeter)}
+                </span>
+              )}
+            </div>
+
+            {verts.length < 3 ? (
+              <p className="text-sm text-gray-400 text-center py-8">
+                建物形状が検出されると壁面寸法が表示されます
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {verts.map((_, i) => {
+                  const len = wallMm[i] || 0;
+                  const isEd = editIdx === i;
+                  const lA = String.fromCharCode(65 + (i % 26));
+                  const lB = String.fromCharCode(65 + ((i + 1) % verts.length % 26));
+
+                  return (
+                    <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                      isEd ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}>
+                      <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                        {lA}
+                      </div>
+                      <span className="text-xs text-gray-500 w-10 flex-shrink-0">{lA}→{lB}</span>
+
+                      {isEd ? (
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                          <input
+                            type="number"
+                            value={editVal}
+                            onChange={(e) => setEditVal(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitEdit();
+                              if (e.key === 'Escape') setEditIdx(null);
+                            }}
+                            autoFocus
+                            className="w-20 px-2 py-1 border border-blue-300 rounded text-sm text-right focus:ring-1 focus:ring-blue-500 outline-none"
+                          />
+                          <span className="text-xs text-gray-500">mm</span>
+                          <button onClick={commitEdit} className="p-0.5 text-green-600 hover:bg-green-50 rounded">
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span
+                          className="text-sm font-medium text-gray-800 cursor-pointer hover:text-blue-600 flex-1 min-w-0 truncate"
+                          onClick={() => startEdit(i)}
+                          title="クリックして編集"
+                        >
+                          {len > 0 ? `${fmtMm(len)} (${Math.round(len)}mm)` : '— 未設定 —'}
+                        </span>
+                      )}
+
+                      {verts.length > 3 && !isEd && (
+                        <button onClick={() => deleteVertex(i)}
+                          className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0" title="頂点を削除">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center gap-2">
+            {tracing ? (
+              <button onClick={closeTrace} disabled={verts.length < 3}
+                className="flex-1 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <Check className="h-4 w-4" /> 形状を確定 ({verts.length}点)
+              </button>
+            ) : verts.length >= 3 ? (
+              <button onClick={() => { setTracing(true); setShape(prev => ({ ...prev, verts: [], wallMm: [] })); }}
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
+                <Pencil className="h-4 w-4" /> 頂点を再指定
+              </button>
+            ) : null}
+            <button onClick={reset}
+              className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
+              <RotateCcw className="h-4 w-4" /> リセット
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
