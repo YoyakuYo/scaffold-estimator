@@ -201,24 +201,31 @@ function normalizeFootprintToMm(
 }
 
 /**
- * Remove tiny orthogonal jog artifacts (grid/pixel noise) while preserving
- * real setbacks. This is scale-invariant: thresholds are perimeter-relative.
+ * Collapse parallel-step artifacts that turn a 6-wall L-shape into 8+ walls.
+ *
+ * Criterion: stepLen / min(neighborLen1, neighborLen2).
+ * A grid artifact step is SHORT relative to its parallel neighbors (ratio < 0.7);
+ * a real building corner has step ≈ neighbor length (ratio ≈ 1.0).
+ * Collapses the smallest-ratio step first; stops at 4 vertices or when
+ * all remaining candidates have ratio ≥ 0.7.
  */
 function collapseTinyOrthogonalJogs(
   pts: Array<{ x: number; z: number }>,
 ): Array<{ x: number; z: number }> {
-  if (pts.length <= 6) return pts;
+  if (pts.length <= 4) return pts;
   const out = pts.map((p) => ({ x: p.x, z: p.z }));
-  const perimeter = out.reduce((s, p, i) => {
-    const q = out[(i + 1) % out.length]!;
-    return s + Math.hypot(q.x - p.x, q.z - p.z);
-  }, 0);
-  const maxJogMm = Math.max(600, perimeter * 0.015);
 
   let changed = true;
-  while (changed && out.length > 6) {
+  while (changed && out.length > 4) {
     changed = false;
     const n = out.length;
+
+    let bestIdx = -1;
+    let bestNextI = -1;
+    let bestNnI = -1;
+    let bestRatio = Infinity;
+    let bestVertical = false;
+
     for (let i = 0; i < n; i++) {
       const prevI = (i - 1 + n) % n;
       const nextI = (i + 1) % n;
@@ -227,32 +234,38 @@ function collapseTinyOrthogonalJogs(
       const b = out[i]!;
       const c = out[nextI]!;
       const d = out[nnI]!;
-      const d1x = b.x - a.x;
-      const d1z = b.z - a.z;
-      const d2x = c.x - b.x;
-      const d2z = c.z - b.z;
-      const d3x = d.x - c.x;
-      const d3z = d.z - c.z;
+      const d1x = b.x - a.x, d1z = b.z - a.z;
+      const d2x = c.x - b.x, d2z = c.z - b.z;
+      const d3x = d.x - c.x, d3z = d.z - c.z;
       const l1 = Math.hypot(d1x, d1z);
       const l2 = Math.hypot(d2x, d2z);
       const l3 = Math.hypot(d3x, d3z);
       if (l1 < 1e-9 || l2 < 1e-9 || l3 < 1e-9) continue;
+
       const parallel13 = Math.abs((d1x * d3x + d1z * d3z) / (l1 * l3));
       const perp12 = Math.abs((d1x * d2x + d1z * d2z) / (l1 * l2));
-      if (parallel13 < 0.985 || perp12 > 0.2) continue;
-      if (l2 > maxJogMm || l2 > 0.33 * Math.max(l1, l3)) continue;
+      if (parallel13 < 0.95 || perp12 > 0.25) continue;
 
-      const stepMostlyZ = Math.abs(d2z) > Math.abs(d2x);
-      if (stepMostlyZ) out[nnI]!.z = out[i]!.z;
-      else out[nnI]!.x = out[i]!.x;
-
-      const rmA = Math.max(i, nextI);
-      const rmB = Math.min(i, nextI);
-      out.splice(rmA, 1);
-      out.splice(rmB, 1);
-      changed = true;
-      break;
+      const ratio = l2 / Math.max(Math.min(l1, l3), 1);
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        bestIdx = i;
+        bestNextI = nextI;
+        bestNnI = nnI;
+        bestVertical = Math.abs(d2z) > Math.abs(d2x);
+      }
     }
+
+    if (bestIdx < 0 || bestRatio >= 0.7) break;
+
+    if (bestVertical) out[bestNnI]!.z = out[bestIdx]!.z;
+    else out[bestNnI]!.x = out[bestIdx]!.x;
+
+    const rmA = Math.max(bestIdx, bestNextI);
+    const rmB = Math.min(bestIdx, bestNextI);
+    out.splice(rmA, 1);
+    out.splice(rmB, 1);
+    changed = true;
   }
   return out.length >= 3 ? out : pts;
 }
