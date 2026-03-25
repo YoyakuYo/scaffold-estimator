@@ -2054,7 +2054,9 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
 
     // Morphological close (dilate→erode) fills small internal gaps without
     // expanding the overall footprint boundary beyond the real building walls.
-    const closeRadius = Math.max(1, Math.ceil(400 / cellMm));
+    // Slightly stronger close bridges thin gaps between façade meshes on the same face
+    // (common on IFC exports), which otherwise trace as separate “wings” or deep U-notches.
+    const closeRadius = Math.max(2, Math.ceil(700 / cellMm));
     this.dilateGrid(grid, gw, gh, closeRadius);
     this.erodeGrid(grid, gw, gh, closeRadius);
     this.floodFillExterior(grid, gw, gh);
@@ -2458,18 +2460,56 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       return undefined;
     }
 
+    const groundFootprint =
+      Array.isArray(baseFootprint) && baseFootprint.length >= 3 ? baseFootprint : null;
+
     const result: VisionMassingTier[] = tiers.map((tier, idx) => {
-      // Keep tier 0 aligned to the extracted footprint (not its bbox rectangle),
-      // so scaffold decomposition preserves the real ground outline (e.g. 6-wall L-shape).
-      const tierVerts =
-        idx === 0 && Array.isArray(baseFootprint) && baseFootprint.length >= 3
-          ? baseFootprint.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) }))
-          : [
-              { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
-              { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
-              { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
-              { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
-            ];
+      // Tier 0: exact cleaned IFC footprint (L/U/T), not a bbox.
+      if (idx === 0 && groundFootprint) {
+        return {
+          vertices: groundFootprint.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) })),
+          topHeightMm: Math.min(tier.topHeightMm, buildingHeightMm),
+          baseHeightMm: tier.baseHeightMm,
+        };
+      }
+
+      // Upper tiers: clip the ground footprint to this slice's bbox so setbacks stay
+      // collinear with tier 0. Raw bbox rectangles misalign wings (e.g. small block shifted in X).
+      let tierVerts: Array<{ x: number; y: number }>;
+      if (
+        idx > 0 &&
+        groundFootprint &&
+        groundFootprint.length >= 4
+      ) {
+        const clipped = this.clipPolygonToAxisRect(
+          groundFootprint,
+          tier.bbox.minX,
+          tier.bbox.minY,
+          tier.bbox.maxX,
+          tier.bbox.maxY,
+        );
+        if (clipped && clipped.length >= 3) {
+          tierVerts = clipped.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) }));
+          tierVerts = this.removeCollinearVertices(tierVerts, {
+            sinTolerance: 0.12,
+            minEdgeMm: 150,
+          });
+        } else {
+          tierVerts = [
+            { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
+            { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
+            { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
+            { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
+          ];
+        }
+      } else {
+        tierVerts = [
+          { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
+          { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
+          { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
+          { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
+        ];
+      }
       return {
         vertices: tierVerts,
         topHeightMm: Math.min(tier.topHeightMm, buildingHeightMm),
@@ -2528,10 +2568,169 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       minEdgeMm,
     });
 
+    // Phase 3: merge split façades (IFC often offsets adjacent shells by ~0.5–3 m on the
+    // same outer plane, which looks like a U-courtyard in 3D; target is one collinear axis).
+    result = this.mergeOrthogonalSplitFacadesMm(result, minEdgeMm);
+
     this.logger.log(
       `cleanupIfcFootprintPolygon: ${pts.length} → ${result.length} vertices`,
     );
     return result.length >= 3 ? result : pts;
+  }
+
+  /**
+   * Snap nearly-coincident outer vertical/horizontal façade chains to a single line.
+   * CCW orthogonal polygons: upward vertical edges are east-facing; downward are west-facing.
+   */
+  private mergeOrthogonalSplitFacadesMm(
+    pts: Array<{ x: number; y: number }>,
+    minEdgeMm: number,
+  ): Array<{ x: number; y: number }> {
+    if (pts.length < 4) return pts;
+    const eps = Math.max(40, Math.min(120, minEdgeMm * 0.3));
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const span = Math.max(maxX - minX, maxY - minY, 1);
+    const thresh = Math.min(6000, Math.max(700, span * 0.07));
+
+    const n = pts.length;
+    const eastIdx = new Set<number>();
+    const westIdx = new Set<number>();
+    /** CCW: upward vertical edges face east (+x outward). CW: reversed. */
+    const ccw = this.signedArea2(pts) > 0;
+
+    for (let i = 0; i < n; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      if (Math.abs(dx) <= eps && Math.abs(dy) > eps) {
+        const upward = dy > 0;
+        const isEastFacing = ccw ? upward : !upward;
+        if (isEastFacing) {
+          eastIdx.add(i);
+          eastIdx.add((i + 1) % n);
+        } else {
+          westIdx.add(i);
+          westIdx.add((i + 1) % n);
+        }
+      }
+    }
+
+    const out = pts.map((p) => ({ x: p.x, y: p.y }));
+    for (let i = 0; i < n; i++) {
+      if (eastIdx.has(i) && maxX - out[i].x <= thresh && maxX - out[i].x > eps) {
+        out[i].x = maxX;
+      }
+      if (westIdx.has(i) && out[i].x - minX <= thresh && out[i].x - minX > eps) {
+        out[i].x = minX;
+      }
+    }
+
+    const dedup: Array<{ x: number; y: number }> = [];
+    for (const p of out) {
+      const last = dedup[dedup.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) > minEdgeMm * 0.4) {
+        dedup.push(p);
+      }
+    }
+    if (dedup.length >= 3) {
+      const a0 = dedup[0];
+      const aL = dedup[dedup.length - 1];
+      if (Math.hypot(a0.x - aL.x, a0.y - aL.y) < minEdgeMm * 0.4) dedup.pop();
+    }
+
+    let cleaned = this.removeCollinearVertices(dedup, {
+      sinTolerance: 0.12,
+      minEdgeMm,
+    });
+    cleaned = cleaned.length >= 3 ? cleaned : dedup;
+    this.logger.log(
+      `mergeOrthogonalSplitFacades: ${pts.length} → ${cleaned.length} vertices (thresh≈${Math.round(thresh)}mm)`,
+    );
+    return cleaned.length >= 3 ? cleaned : pts;
+  }
+
+  /**
+   * Clip an orthogonal (or any simple) 2D polygon to an axis-aligned rectangle (mm).
+   * Upper IFC tiers use slice bboxes; clipping ground L to the bbox keeps stacked volumes
+   * aligned instead of replacing them with offset rectangles.
+   */
+  private clipPolygonToAxisRect(
+    subject: Array<{ x: number; y: number }>,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+  ): Array<{ x: number; y: number }> | null {
+    if (!subject.length || maxX <= minX || maxY <= minY) return null;
+
+    const insideLeft = (p: { x: number; y: number }) => p.x >= minX;
+    const insideRight = (p: { x: number; y: number }) => p.x <= maxX;
+    const insideBottom = (p: { x: number; y: number }) => p.y >= minY;
+    const insideTop = (p: { x: number; y: number }) => p.y <= maxY;
+
+    const intersect = (
+      a: { x: number; y: number },
+      b: { x: number; y: number },
+      edge: 'left' | 'right' | 'bottom' | 'top',
+    ): { x: number; y: number } => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      if (edge === 'left') {
+        const t = (minX - a.x) / (dx || 1e-12);
+        return { x: minX, y: a.y + t * dy };
+      }
+      if (edge === 'right') {
+        const t = (maxX - a.x) / (dx || 1e-12);
+        return { x: maxX, y: a.y + t * dy };
+      }
+      if (edge === 'bottom') {
+        const t = (minY - a.y) / (dy || 1e-12);
+        return { x: a.x + t * dx, y: minY };
+      }
+      const t = (maxY - a.y) / (dy || 1e-12);
+      return { x: a.x + t * dx, y: maxY };
+    };
+
+    let out = subject.map((p) => ({ x: p.x, y: p.y }));
+    const clipper = (
+      inside: (p: { x: number; y: number }) => boolean,
+      edge: 'left' | 'right' | 'bottom' | 'top',
+    ) => {
+      if (out.length === 0) return;
+      const inp = out;
+      out = [];
+      for (let i = 0; i < inp.length; i++) {
+        const cur = inp[i];
+        const prev = inp[(i - 1 + inp.length) % inp.length];
+        const curIn = inside(cur);
+        const prevIn = inside(prev);
+        if (curIn) {
+          if (!prevIn) out.push(intersect(prev, cur, edge));
+          out.push(cur);
+        } else if (prevIn) {
+          out.push(intersect(prev, cur, edge));
+        }
+      }
+    };
+
+    clipper(insideLeft, 'left');
+    clipper(insideRight, 'right');
+    clipper(insideBottom, 'bottom');
+    clipper(insideTop, 'top');
+
+    if (out.length < 3) return null;
+    const dedup: Array<{ x: number; y: number }> = [];
+    for (const p of out) {
+      const last = dedup[dedup.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) > 1) dedup.push(p);
+    }
+    return dedup.length >= 3 ? dedup : null;
   }
 
   /**
