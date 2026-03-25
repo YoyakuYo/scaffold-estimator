@@ -1429,6 +1429,29 @@ export default function Scaffold3DView({
           tp.footprintFromMassing = false;
           continue;
         }
+        // AI BIM: massing→plan mapping can leave empty polygons or collapsed edges
+        // (vertex count mismatch, bad coordinates). Skipping buildFootprintPolygonXZ
+        // made 3D show "all walls skipped". Reconstruct from wall lengths when possible.
+        if (isAiBim && nW >= 2) {
+          const sv = tgi === 0 ? storedVerts : undefined;
+          let fixed = buildFootprintPolygonXZ(tg.walls, sv);
+          let ok =
+            fixed.length === nW &&
+            fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
+            hasUsableTierEdges(fixed, nW);
+          if (!ok && sv && sv.length > 0) {
+            fixed = buildFootprintPolygonXZ(tg.walls, undefined);
+            ok =
+              fixed.length === nW &&
+              fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
+              hasUsableTierEdges(fixed, nW);
+          }
+          if (ok) {
+            tp.verts = fixed;
+            tp.footprintFromMassing = false;
+            continue;
+          }
+        }
         // Degenerate: drop footprint; wall loop will skip bad edges rather than crash
         tp.verts = [];
         tp.footprintFromMassing = false;
