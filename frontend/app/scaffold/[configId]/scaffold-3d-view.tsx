@@ -336,6 +336,9 @@ export default function Scaffold3DView({
   const isAiBim = isAiBimFromMode ||
     (Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3 &&
      Array.isArray((result as any)?.massingTiers) && (result as any).massingTiers.length > 0);
+  const ifcFileUrl: string | undefined =
+    typeof (result as any)?.ifcFileUrl === 'string' ? (result as any).ifcFileUrl : undefined;
+  const hasIfcSource = !!ifcFileUrl;
 
   // Support both flat (result.walls) and nested (result.result.walls) API shapes
   const rawWalls: WallCalculationResult[] = Array.isArray(result?.walls)
@@ -2143,8 +2146,9 @@ export default function Scaffold3DView({
       }
       scene.add(cornerGroup);
 
-      // When AI BIM, always put building geometry in a group we can hide if IFC loads.
-      const proceduralBimShell = isAiBim ? new THREE.Group() : null;
+      // When IFC exists, keep procedural shell in a dedicated group so we can hide
+      // it once native IFC geometry is loaded.
+      const proceduralBimShell = hasIfcSource ? new THREE.Group() : null;
       const buildingShellParent: THREE.Object3D = proceduralBimShell ?? scene;
       if (proceduralBimShell) {
         proceduralBimShell.userData = { isProceduralBimShell: true };
@@ -2156,7 +2160,7 @@ export default function Scaffold3DView({
 
       // ── Building outline at ground level ─────────────────
       const outlineMat = new THREE.LineBasicMaterial({
-        color: isAiBim ? 0x0f0f0f : 0x7a8090,
+        color: hasIfcSource ? 0x0f0f0f : 0x7a8090,
         linewidth: 2,
       });
       const outlineSource = fullBuildingOutline ?? verts;
@@ -2880,10 +2884,9 @@ export default function Scaffold3DView({
       setReady(true);
 
       // ── IFC Model Loading ──
-      // For AI BIM: load native IFC mesh from buffer cache or URL.
+      // Load native IFC mesh whenever a source URL is available.
       // Procedural shell is visible from the first frame; hide it when IFC succeeds.
-      if (isAiBim) {
-        const ifcFileUrl = (result as any)?.ifcFileUrl;
+      if (hasIfcSource) {
         let configId: string | undefined;
         try {
           configId = typeof window !== 'undefined'
@@ -2899,7 +2902,7 @@ export default function Scaffold3DView({
             if (arrayBuffer) console.log('[Scaffold3DView] IFC loaded from IndexedDB cache');
           } catch { /* cache module unavailable */ }
 
-          if (!arrayBuffer && ifcFileUrl && typeof ifcFileUrl === 'string') {
+          if (!arrayBuffer) {
             try {
               console.log('[Scaffold3DView] Fetching IFC from URL:', ifcFileUrl);
               const response = await fetch(ifcFileUrl);
