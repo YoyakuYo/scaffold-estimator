@@ -327,18 +327,6 @@ export function buildFootprintPolygonXZ(
     return [{ x: 0, z: 0 }, { x: len0, z: 0 }, { x: len0, z: len1 }];
   }
 
-  // ── 4 walls: always use rectangle from wall lengths ──
-  if (n === 4) {
-    const w0 = wallLenM(walls, 0);
-    const w1 = wallLenM(walls, 1);
-    return [
-      { x: 0, z: 0 },
-      { x: w0, z: 0 },
-      { x: w0, z: w1 },
-      { x: 0, z: w1 },
-    ];
-  }
-
   // Normalise stored vertices once for all subsequent builders.
   // Accept exact match (length == n) or closed ring (length == n+1 with last ≈ first).
   let sv: FootprintVertexXZ[] | null = null;
@@ -358,6 +346,21 @@ export function buildFootprintPolygonXZ(
     if (sv && !sv.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
       sv = null;
     }
+  }
+
+  // ── 4 walls: rectangle from wall lengths (only when no stored vertices) ──
+  // Previously this was an unconditional early return that ignored stored vertices,
+  // breaking L-shaped tier groups with exactly 4 walls. Now we first try direction-walk
+  // from stored vertices so non-rectangular 4-wall shapes are preserved.
+  if (n === 4 && !sv) {
+    const w0 = wallLenM(walls, 0);
+    const w1 = wallLenM(walls, 1);
+    return [
+      { x: 0, z: 0 },
+      { x: w0, z: 0 },
+      { x: w0, z: w1 },
+      { x: 0, z: w1 },
+    ];
   }
 
   // ── Priority 1: Walk stored vertex directions with exact wall lengths ──
@@ -407,6 +410,18 @@ export function buildFootprintPolygonXZ(
   if (n < 6 || n > 16 || n % 2 !== 0) {
     const orthoResult = tryOrthogonalFallback(walls, n);
     if (orthoResult) return orthoResult;
+  }
+
+  // ── 4-wall rectangle fallback (stored vertices existed but all builders failed) ──
+  if (n === 4) {
+    const w0 = wallLenM(walls, 0);
+    const w1 = wallLenM(walls, 1);
+    return [
+      { x: 0, z: 0 },
+      { x: w0, z: 0 },
+      { x: w0, z: w1 },
+      { x: 0, z: w1 },
+    ];
   }
 
   // ── Last resort: regular n-gon ──

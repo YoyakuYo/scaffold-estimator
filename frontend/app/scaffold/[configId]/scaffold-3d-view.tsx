@@ -1222,8 +1222,14 @@ export default function Scaffold3DView({
         );
         // If outline is in mm but tier vertices are in a much smaller scale
         // (fractional 0-1, pixel 50-400, etc.), re-map to the outline's coordinate space.
-        // Ratio-based: tiers < 10% of outline spread = mismatch.
-        if (outlineSpread > 500 && tierSpread > 1e-9 && tierSpread < outlineSpread * 0.1) {
+        // Use perimeter-ratio check: compute perimeter of tier verts and compare with
+        // sum of wall lengths. If they differ by >5x, the tier verts are in a different space.
+        const perimeterMismatch = (() => {
+          if (outlineSpread <= 500 || tierSpread <= 1e-9) return false;
+          if (tierSpread < outlineSpread * 0.5) return true;
+          return false;
+        })();
+        if (outlineSpread > 500 && tierSpread > 1e-9 && perimeterMismatch) {
           const ob = {
             mnx: Math.min(...allTierVerts.map((p) => p.x)),
             mny: Math.min(...allTierVerts.map((p) => p.y)),
@@ -1299,13 +1305,24 @@ export default function Scaffold3DView({
 
         // Fallback: build from wall lengths + stored vertex hints
         if (!tok) {
+          // Try multiple vertex hint sources: full outline first, then massing tier vertices
+          type VertexHint = Array<{ xFrac?: number; yFrac?: number; x?: number; y?: number }>;
           const sv0 = tg0.tierIndex === 0 ? storedVerts : undefined;
-          tverts = buildFootprintPolygonXZ(tg0.walls, sv0);
-          tok =
-            tverts.length >= 2 &&
-            tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          if (!tok && sv0 && sv0.length > 0) {
-            tverts = buildFootprintPolygonXZ(tg0.walls, undefined);
+          const hintSources: Array<VertexHint | undefined> = [sv0];
+          if (massingTiersSorted.length > 0) {
+            const gm = massingTiersSorted.find((m) => (m.baseHeightMm ?? 0) <= 2) ?? massingTiersSorted[0];
+            if (gm?.vertices?.length >= 3) {
+              const gmAsStored: VertexHint = gm.vertices.map((v: any) => ({
+                x: (v.xFrac ?? v.x ?? 0) as number,
+                y: (v.yFrac ?? v.y ?? 0) as number,
+              }));
+              hintSources.push(gmAsStored);
+            }
+          }
+          hintSources.push(undefined);
+          for (const hints of hintSources) {
+            if (tok) break;
+            tverts = buildFootprintPolygonXZ(tg0.walls, hints);
             tok =
               tverts.length >= 2 &&
               tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
@@ -1363,14 +1380,34 @@ export default function Scaffold3DView({
         }
 
         if (!footprintFromMassing) {
-          // AI BIM: never invent tier footprints from wall-length reconstruction.
-          // It can introduce synthetic extension walls not present in BIM massing.
+          // Try using any available massing tier vertices as shape hints,
+          // even when vertex count doesn't match exactly. This preserves the
+          // L-shape/concavity information that wall-length-only reconstruction loses.
+          const tierMassing = byBase ?? byIdx;
+          const tierHints = tierMassing?.vertices?.length >= 3
+            ? tierMassing.vertices.map((v: any) => ({
+                x: v.xFrac ?? v.x ?? 0,
+                y: v.yFrac ?? v.y ?? 0,
+              }))
+            : undefined;
+
           if (!isAiBim) {
-            tverts = buildFootprintPolygonXZ(tg.walls, undefined);
-            const tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+            tverts = buildFootprintPolygonXZ(tg.walls, tierHints);
+            let tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+            if (!tok && tierHints) {
+              tverts = buildFootprintPolygonXZ(tg.walls, undefined);
+              tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+            }
             if (!tok) tverts = [];
           } else {
-            tverts = [];
+            // AI BIM: try massing hints first to preserve shape, only skip if truly unusable
+            if (tierHints) {
+              tverts = buildFootprintPolygonXZ(tg.walls, tierHints);
+              const tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+              if (!tok) tverts = [];
+            } else {
+              tverts = [];
+            }
           }
         }
 
@@ -1403,25 +1440,38 @@ export default function Scaffold3DView({
           hasUsableTierEdges(tp.verts!, nW);
         if (finite) continue;
 
+        // Gather vertex hints: stored outline + any matching massing tier vertices
+        type RepairVertexHint = Array<{ xFrac?: number; yFrac?: number; x?: number; y?: number }>;
+        const repairHintSources: Array<RepairVertexHint | undefined> = [];
+        if (tgi === 0 && storedVerts) repairHintSources.push(storedVerts);
+        const repairMassing = massingTiersSorted.find(
+          (m) => Math.abs((m.baseHeightMm ?? 0) - (tg.baseHeightMm ?? 0)) <= 2,
+        ) ?? massingTiersSorted[tg.tierIndex];
+        if (repairMassing?.vertices?.length >= 3) {
+          const rmHints: RepairVertexHint = repairMassing.vertices.map((v: any) => ({
+            x: (v.xFrac ?? v.x ?? 0) as number,
+            y: (v.yFrac ?? v.y ?? 0) as number,
+          }));
+          repairHintSources.push(rmHints);
+        }
+        repairHintSources.push(undefined);
+
         if (!isAiBim) {
-          const sv = tgi === 0 ? storedVerts : undefined;
-          let fixed = buildFootprintPolygonXZ(tg.walls, sv);
-          let ok =
-            fixed.length >= 2 &&
-            fixed.length === nW &&
-            fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          if (!ok && sv && sv.length > 0) {
-            fixed = buildFootprintPolygonXZ(tg.walls, undefined);
-            ok =
+          let repaired = false;
+          for (const hints of repairHintSources) {
+            const fixed = buildFootprintPolygonXZ(tg.walls, hints);
+            const ok =
               fixed.length >= 2 &&
               fixed.length === nW &&
               fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+            if (ok) {
+              tp.verts = fixed;
+              tp.footprintFromMassing = false;
+              repaired = true;
+              break;
+            }
           }
-          if (ok) {
-            tp.verts = fixed;
-            tp.footprintFromMassing = false;
-            continue;
-          }
+          if (repaired) continue;
         }
         const gv = groundFootprint();
         if (gv.length >= 2 && gv.length === nW) {
@@ -1430,27 +1480,24 @@ export default function Scaffold3DView({
           continue;
         }
         // AI BIM: massing→plan mapping can leave empty polygons or collapsed edges
-        // (vertex count mismatch, bad coordinates). Skipping buildFootprintPolygonXZ
-        // made 3D show "all walls skipped". Reconstruct from wall lengths when possible.
+        // (vertex count mismatch, bad coordinates). Reconstruct from wall lengths
+        // with massing hints when possible.
         if (isAiBim && nW >= 2) {
-          const sv = tgi === 0 ? storedVerts : undefined;
-          let fixed = buildFootprintPolygonXZ(tg.walls, sv);
-          let ok =
-            fixed.length === nW &&
-            fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
-            hasUsableTierEdges(fixed, nW);
-          if (!ok && sv && sv.length > 0) {
-            fixed = buildFootprintPolygonXZ(tg.walls, undefined);
-            ok =
+          let repaired = false;
+          for (const hints of repairHintSources) {
+            const fixed = buildFootprintPolygonXZ(tg.walls, hints);
+            const ok =
               fixed.length === nW &&
               fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
               hasUsableTierEdges(fixed, nW);
+            if (ok) {
+              tp.verts = fixed;
+              tp.footprintFromMassing = false;
+              repaired = true;
+              break;
+            }
           }
-          if (ok) {
-            tp.verts = fixed;
-            tp.footprintFromMassing = false;
-            continue;
-          }
+          if (repaired) continue;
         }
         // Degenerate: drop footprint; wall loop will skip bad edges rather than crash
         tp.verts = [];

@@ -239,8 +239,22 @@ export default function ScaffoldPlanView({ result }: Props) {
     ? allWalls.filter((w) => ((w as any).tierIndex ?? 0) === 0)
     : allWalls;
 
-  const storedVertices: Array<Record<string, any>> | undefined =
-    Array.isArray(result?.polygonVertices) ? result.polygonVertices : undefined;
+  // Use stored polygon vertices as shape hints. Also try ground massing tier vertices
+  // when the full outline vertex count doesn't match the ground-tier wall count
+  // (tier decomposition can reduce wall count per tier).
+  const storedVertices: Array<Record<string, any>> | undefined = useMemo(() => {
+    const pv = Array.isArray(result?.polygonVertices) ? result.polygonVertices : undefined;
+    if (pv && pv.length === walls.length) return pv;
+    // If stored outline doesn't match wall count, try ground massing tier vertices
+    const mt = Array.isArray((result as any)?.massingTiers) ? (result as any).massingTiers : [];
+    if (mt.length > 0) {
+      const groundMassing = mt.find(
+        (m: any) => ((m.baseHeightMm ?? 0) <= 2) && Array.isArray(m.vertices) && m.vertices.length === walls.length,
+      );
+      if (groundMassing) return groundMassing.vertices;
+    }
+    return pv;
+  }, [result, walls.length]);
 
   const maxLen = Math.max(...walls.map(w => w.wallLengthMm ?? 1800));
   const baseSf = maxLen > 0 ? 350 / maxLen : 1;
