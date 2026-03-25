@@ -2178,17 +2178,14 @@ export default function Scaffold3DView({
       }
       scene.add(cornerGroup);
 
-      // When IFC exists, keep procedural shell in a dedicated group so we can hide
-      // it once native IFC geometry is loaded.
-      const proceduralBimShell = hasIfcSource ? new THREE.Group() : null;
-      const buildingShellParent: THREE.Object3D = proceduralBimShell ?? scene;
-      if (proceduralBimShell) {
-        proceduralBimShell.userData = { isProceduralBimShell: true };
-        // Show procedural building immediately so the 3D tab is never "scaffold-only"
-        // while IFC loads. Native IFC hides this group when meshes are ready.
-        proceduralBimShell.visible = true;
-        scene.add(proceduralBimShell);
-      }
+      // Scaffold-only mode: keep building geometry mounted under a hidden parent
+      // so the 3D view renders scaffold without any building shell or IFC model.
+      const showBuilding = false;
+      const proceduralBimShell = new THREE.Group();
+      proceduralBimShell.userData = { isProceduralBimShell: true };
+      proceduralBimShell.visible = showBuilding;
+      scene.add(proceduralBimShell);
+      const buildingShellParent: THREE.Object3D = proceduralBimShell;
 
       // ── Building outline at ground level ─────────────────
       const outlineMat = new THREE.LineBasicMaterial({
@@ -2918,7 +2915,7 @@ export default function Scaffold3DView({
       // ── IFC Model Loading ──
       // Load native IFC mesh whenever a source URL is available.
       // Procedural shell is visible from the first frame; hide it when IFC succeeds.
-      if (hasIfcSource) {
+      if (showBuilding && hasIfcSource) {
         let configId: string | undefined;
         try {
           configId = typeof window !== 'undefined'
