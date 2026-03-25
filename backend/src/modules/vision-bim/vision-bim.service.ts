@@ -2778,7 +2778,10 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
    * A grid artifact step is short compared to its parallel neighbors;
    * a real building corner has step ≈ neighbor length (ratio ≈ 1.0).
    * We collapse the step with the SMALLEST ratio first, and stop when
-   * no candidate has ratio < 0.7 (remaining steps are likely real geometry).
+   * no candidate passes both ratio AND area checks.
+   *
+   * Area guard: collapsing a grid artifact barely changes polygon area (<2%),
+   * while collapsing a real L-shape inner wall removes significant area (>5%).
    */
   private collapseSmallestStepIteratively(
     pts: Array<{ x: number; y: number }>,
@@ -2786,10 +2789,20 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     if (pts.length <= 4) return pts;
     const out = pts.map((p) => ({ x: p.x, y: p.y }));
 
+    const polyArea = (verts: Array<{ x: number; y: number }>): number => {
+      let a = 0;
+      for (let i = 0; i < verts.length; i++) {
+        const j = (i + 1) % verts.length;
+        a += verts[i].x * verts[j].y - verts[j].x * verts[i].y;
+      }
+      return Math.abs(a / 2);
+    };
+
     let changed = true;
     while (changed && out.length > 4) {
       changed = false;
       const n = out.length;
+      const currentArea = polyArea(out);
 
       type StepCandidate = {
         i: number;
@@ -2833,23 +2846,39 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       if (candidates.length === 0) break;
 
       candidates.sort((a, b) => a.ratio - b.ratio);
-      const best = candidates[0];
 
-      if (best.ratio >= 0.90) break;
+      let collapsed = false;
+      for (const best of candidates) {
+        if (best.ratio >= 0.90) break;
 
-      if (best.d2Vertical) out[best.nnI].y = out[best.i].y;
-      else out[best.nnI].x = out[best.i].x;
+        const sim = out.map((p) => ({ x: p.x, y: p.y }));
+        if (best.d2Vertical) sim[best.nnI].y = sim[best.i].y;
+        else sim[best.nnI].x = sim[best.i].x;
+        const srmA = Math.max(best.i, best.nextI);
+        const srmB = Math.min(best.i, best.nextI);
+        sim.splice(srmA, 1);
+        sim.splice(srmB, 1);
+        const newArea = polyArea(sim);
+        const areaChange = Math.abs(newArea - currentArea) / Math.max(currentArea, 1);
 
-      const rmA = Math.max(best.i, best.nextI);
-      const rmB = Math.min(best.i, best.nextI);
-      out.splice(rmA, 1);
-      out.splice(rmB, 1);
+        if (areaChange > 0.03) continue;
 
-      this.logger.log(
-        `collapseSmallestStep: removed step (len=${Math.round(best.stepLen)}mm, ` +
-        `ratio=${best.ratio.toFixed(3)}), ${n}→${out.length} vertices`,
-      );
-      changed = true;
+        if (best.d2Vertical) out[best.nnI].y = out[best.i].y;
+        else out[best.nnI].x = out[best.i].x;
+
+        const rmA = Math.max(best.i, best.nextI);
+        const rmB = Math.min(best.i, best.nextI);
+        out.splice(rmA, 1);
+        out.splice(rmB, 1);
+
+        this.logger.log(
+          `collapseSmallestStep: removed step (len=${Math.round(best.stepLen)}mm, ` +
+          `ratio=${best.ratio.toFixed(3)}, areaΔ=${(areaChange * 100).toFixed(1)}%), ${n}→${out.length} vertices`,
+        );
+        collapsed = true;
+        break;
+      }
+      changed = collapsed;
     }
 
     return out.length >= 3 ? out : pts;
@@ -2879,7 +2908,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     },
   ): Array<{ x: number; y: number }> {
     const { maxStepMm, maxStepToNeighborRatio } = options;
-    if (pts.length <= 4) return pts;
+    if (pts.length <= 6) return pts;
 
     const out = pts.map((p) => ({ x: p.x, y: p.y }));
     let changed = true;
@@ -2914,7 +2943,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const perp12 = Math.abs((d1x * d2x + d1y * d2y) / (l1 * l2));
         if (parallel13 < 0.985 || perp12 > 0.2) continue;
 
-        const neighborRef = Math.max(Math.min(l1, l3), 1);
+        const neighborRef = Math.max(Math.max(l1, l3), 1);
         const isTinyStep =
           l2 <= maxStepMm && l2 <= maxStepToNeighborRatio * neighborRef;
         if (!isTinyStep) continue;

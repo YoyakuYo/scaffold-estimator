@@ -203,11 +203,9 @@ function normalizeFootprintToMm(
 /**
  * Collapse parallel-step artifacts that turn a 6-wall L-shape into 8+ walls.
  *
- * Criterion: stepLen / min(neighborLen1, neighborLen2).
- * A grid artifact step is SHORT relative to its parallel neighbors (ratio < 0.7);
- * a real building corner has step ≈ neighbor length (ratio ≈ 1.0).
- * Collapses the smallest-ratio step first; stops at 4 vertices or when
- * all remaining candidates have ratio ≥ 0.7.
+ * Uses ratio + area guard: grid artifacts have small ratios AND tiny area impact,
+ * while real L-shape inner walls have significant area impact (>3% of polygon).
+ * This prevents collapsing genuine geometry (6→4) while still removing artifacts (8→6).
  */
 function collapseTinyOrthogonalJogs(
   pts: Array<{ x: number; z: number }>,
@@ -215,16 +213,23 @@ function collapseTinyOrthogonalJogs(
   if (pts.length <= 4) return pts;
   const out = pts.map((p) => ({ x: p.x, z: p.z }));
 
+  const polyArea = (verts: Array<{ x: number; z: number }>): number => {
+    let a = 0;
+    for (let i = 0; i < verts.length; i++) {
+      const j = (i + 1) % verts.length;
+      a += verts[i].x * verts[j].z - verts[j].x * verts[i].z;
+    }
+    return Math.abs(a / 2);
+  };
+
   let changed = true;
   while (changed && out.length > 4) {
     changed = false;
     const n = out.length;
+    const currentArea = polyArea(out);
 
-    let bestIdx = -1;
-    let bestNextI = -1;
-    let bestNnI = -1;
-    let bestRatio = Infinity;
-    let bestVertical = false;
+    type Candidate = { i: number; nextI: number; nnI: number; ratio: number; vertical: boolean };
+    const candidates: Candidate[] = [];
 
     for (let i = 0; i < n; i++) {
       const prevI = (i - 1 + n) % n;
@@ -247,25 +252,33 @@ function collapseTinyOrthogonalJogs(
       if (parallel13 < 0.95 || perp12 > 0.25) continue;
 
       const ratio = l2 / Math.max(Math.min(l1, l3), 1);
-      if (ratio < bestRatio) {
-        bestRatio = ratio;
-        bestIdx = i;
-        bestNextI = nextI;
-        bestNnI = nnI;
-        bestVertical = Math.abs(d2z) > Math.abs(d2x);
-      }
+      candidates.push({ i, nextI, nnI, ratio, vertical: Math.abs(d2z) > Math.abs(d2x) });
     }
 
-    if (bestIdx < 0 || bestRatio >= 0.90) break;
+    if (candidates.length === 0) break;
+    candidates.sort((a, b) => a.ratio - b.ratio);
 
-    if (bestVertical) out[bestNnI]!.z = out[bestIdx]!.z;
-    else out[bestNnI]!.x = out[bestIdx]!.x;
+    let collapsed = false;
+    for (const best of candidates) {
+      if (best.ratio >= 0.90) break;
 
-    const rmA = Math.max(bestIdx, bestNextI);
-    const rmB = Math.min(bestIdx, bestNextI);
-    out.splice(rmA, 1);
-    out.splice(rmB, 1);
-    changed = true;
+      const sim = out.map((p) => ({ x: p.x, z: p.z }));
+      if (best.vertical) sim[best.nnI]!.z = sim[best.i]!.z;
+      else sim[best.nnI]!.x = sim[best.i]!.x;
+      sim.splice(Math.max(best.i, best.nextI), 1);
+      sim.splice(Math.min(best.i, best.nextI), 1);
+      const areaChange = Math.abs(polyArea(sim) - currentArea) / Math.max(currentArea, 1);
+
+      if (areaChange > 0.03) continue;
+
+      if (best.vertical) out[best.nnI]!.z = out[best.i]!.z;
+      else out[best.nnI]!.x = out[best.i]!.x;
+      out.splice(Math.max(best.i, best.nextI), 1);
+      out.splice(Math.min(best.i, best.nextI), 1);
+      collapsed = true;
+      break;
+    }
+    changed = collapsed;
   }
   return out.length >= 3 ? out : pts;
 }
