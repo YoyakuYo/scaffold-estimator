@@ -1738,7 +1738,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           const next = footprint[(i + 1) % n];
           return Math.round(Math.hypot(next.x - v.x, next.y - v.y));
         });
-        const wallHeightsMm = this.estimateWallHeightsFromIfcPoints(
+        const wallHeightsEstimated = this.estimateWallHeightsFromIfcPoints(
           footprint,
           pointsMm,
           minZMm,
@@ -1749,10 +1749,16 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           pointsMm, fp2d, toMm, minFx, minFy, maxFx, maxFy,
           minZMm, maxZMm, buildingHeightMm, footprint,
         );
+        // Massing tiers already encode vertical stepping. Per-edge wallHeightsMm from
+        // façade point sampling is noisy and fights tiers: scaffold + "stepped panels"
+        // get different heights per edge (jagged runs). Use uniform ground height + tiers only.
+        const wallHeightsMm =
+          massingTiers && massingTiers.length > 0 ? undefined : wallHeightsEstimated;
         this.logger.log(
           `IFC footprint: ${n} vertices (grid-based), height=${buildingHeightMm}mm, ` +
           `walls=${wallLengthsMm.join('/')}mm` +
-          `${wallHeightsMm ? `, wallHeights=${wallHeightsMm.join('/')}mm` : ''}` +
+          `${wallHeightsEstimated ? `, wallHeights(est)=${wallHeightsEstimated.join('/')}mm` : ''}` +
+          `${wallHeightsMm ? `, wallHeights(out)=${wallHeightsMm.join('/')}mm` : ', wallHeights(out)=suppressed (tiers)'} ` +
           `${massingTiers ? `, massingTiers=${massingTiers.length}` : ''}`,
         );
         return {
@@ -2323,7 +2329,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const minH = Math.min(...heights);
     const maxH = Math.max(...heights);
     // Ignore near-uniform results; then global buildingHeightMm is sufficient.
-    if (maxH - minH < 600) return undefined;
+    // Require a clear step (≥2 m) so minor sampling noise does not trigger per-edge mode.
+    if (maxH - minH < 2000) return undefined;
     return heights;
   }
 

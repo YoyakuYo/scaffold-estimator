@@ -1360,11 +1360,15 @@ function ScaffoldPageContent() {
                       && wallHeightsMmRaw.every((h) => h < 1800)
                       ? undefined
                       : wallHeightsMmRaw;
+                    const hasIfcMassingTiers =
+                      Array.isArray(footprint.massingTiers) && footprint.massingTiers.length > 0;
+                    // Tiers carry stepping; per-edge heights here only create jagged scaffold runs.
+                    const wallHeightsForGraph = hasIfcMassingTiers ? undefined : wallHeightsMm;
                     const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
                       footprint.vertices,
                       footprint.buildingHeightMm,
                       refMm,
-                      { wallLengthsMm, wallHeightsMm },
+                      { wallLengthsMm, wallHeightsMm: wallHeightsForGraph },
                     );
                     // Normalize massingTier vertices to mm (same coordinate space as buildingOutline).
                     // Compare massingTier vertices directly against buildingOutline — NOT
@@ -1716,7 +1720,13 @@ function ScaffoldPageContent() {
                   <BuildingPreviewPanel
                     outline={aiBimPreview.buildingOutline}
                     wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                    wallHeightsMm={aiBimPreview.isStepped ? aiBimPreview.walls.map((w) => w.wallHeightMm) : undefined}
+                    wallHeightsMm={
+                      aiBimPreview.massingTiers?.length
+                        ? undefined
+                        : aiBimPreview.isStepped
+                          ? aiBimPreview.walls.map((w) => w.wallHeightMm)
+                          : undefined
+                    }
                     massingTiers={aiBimPreview.massingTiers}
                     buildingHeightMm={aiBimPreview.buildingHeightMm}
                     ifcFileUrl={aiBimPreview.ifcFileUrl}
