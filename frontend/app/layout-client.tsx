@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { usersApi } from '@/lib/api/users';
@@ -12,11 +13,16 @@ import { AppTitlebar } from '@/components/app-titlebar';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const noNavPages = ['/', '/login', '/register'];
   const isPublicPage = noNavPages.includes(pathname);
   const isSuperAdminLogin = pathname === '/superadmin';
 
-  const hasToken = !!authApi.getToken();
+  const hasToken = mounted && !!authApi.getToken();
   const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: usersApi.getProfile,
@@ -26,7 +32,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   });
 
   const isSuperAdmin = profile?.role === 'superadmin';
-  const showNav = !isPublicPage && !isSuperAdminLogin;
+  const showNav = mounted && !isPublicPage && !isSuperAdminLogin;
 
   return (
     <>
