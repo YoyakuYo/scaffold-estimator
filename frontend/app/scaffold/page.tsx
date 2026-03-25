@@ -1448,8 +1448,8 @@ function ScaffoldPageContent() {
                     const isStepped = Array.isArray(wallHeightsMm) && wallHeightsMm.length > 0
                       && new Set(walls.map((w) => w.wallHeightMm)).size > 1;
                     if (ifcArrayBuffer) {
-                      if (footprint.ifcFileUrl) cacheIfcBuffer(footprint.ifcFileUrl, ifcArrayBuffer);
-                      cacheIfcBuffer('__latest_ifc__', ifcArrayBuffer);
+                      if (footprint.ifcFileUrl) await cacheIfcBuffer(footprint.ifcFileUrl, ifcArrayBuffer);
+                      await cacheIfcBuffer('__latest_ifc__', ifcArrayBuffer);
                     }
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
@@ -1895,8 +1895,8 @@ function ScaffoldPageContent() {
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         if (aiBimPreview.ifcArrayBuffer) {
                           const { cacheIfcBuffer: cacheIfc } = await import('@/lib/ifc-buffer-cache');
-                          cacheIfc(data.config.id, aiBimPreview.ifcArrayBuffer);
-                          if (aiBimPreview.ifcFileUrl) cacheIfc(aiBimPreview.ifcFileUrl, aiBimPreview.ifcArrayBuffer);
+                          await cacheIfc(data.config.id, aiBimPreview.ifcArrayBuffer);
+                          if (aiBimPreview.ifcFileUrl) await cacheIfc(aiBimPreview.ifcFileUrl, aiBimPreview.ifcArrayBuffer);
                         }
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
                       } catch (err: any) {

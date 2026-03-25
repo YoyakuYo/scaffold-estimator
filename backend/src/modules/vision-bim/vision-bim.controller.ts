@@ -78,14 +78,17 @@ export class VisionBimController {
         const { error: uploadError } = await client.storage
           .from('drawings')
           .upload(storagePath, buffer, { contentType: 'application/octet-stream', upsert: true });
-        if (!uploadError) {
+        if (uploadError) {
+          console.warn('[VisionBIM] Supabase IFC upload failed:', uploadError.message);
+        } else {
           const { data: urlData } = client.storage.from('drawings').getPublicUrl(storagePath);
           if (urlData?.publicUrl) {
             result.ifcFileUrl = urlData.publicUrl;
+            console.log('[VisionBIM] IFC stored at:', urlData.publicUrl);
           }
         }
-      } catch {
-        // Storage upload is best-effort; don't fail the whole request
+      } catch (e: any) {
+        console.warn('[VisionBIM] Supabase IFC storage error:', e?.message);
       }
 
       return result;

@@ -2823,8 +2823,8 @@ export default function Scaffold3DView({
           let arrayBuffer: ArrayBuffer | undefined;
           try {
             const { getCachedIfcBufferAny } = await import('@/lib/ifc-buffer-cache');
-            arrayBuffer = getCachedIfcBufferAny(ifcFileUrl, configId, '__latest_ifc__');
-            if (arrayBuffer) console.log('[Scaffold3DView] IFC loaded from buffer cache');
+            arrayBuffer = await getCachedIfcBufferAny(ifcFileUrl, configId, '__latest_ifc__');
+            if (arrayBuffer) console.log('[Scaffold3DView] IFC loaded from IndexedDB cache');
           } catch { /* cache module unavailable */ }
 
           if (!arrayBuffer && ifcFileUrl && typeof ifcFileUrl === 'string') {
