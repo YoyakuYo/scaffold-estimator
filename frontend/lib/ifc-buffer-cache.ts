@@ -8,7 +8,7 @@
 
 const DB_NAME = 'zoomen_ifc_cache';
 const STORE_NAME = 'buffers';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const memFallback = new Map<string, ArrayBuffer>();
 
@@ -17,13 +17,31 @@ function openDB(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
+      // On version bump, delete the old store and recreate to clear stale data
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
       }
+      db.createObjectStore(STORE_NAME);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+
+export async function clearIfcCache(): Promise<void> {
+  memFallback.clear();
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+    await new Promise<void>((res, rej) => {
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+    db.close();
+  } catch {
+    // IndexedDB unavailable
+  }
 }
 
 export async function cacheIfcBuffer(key: string, buf: ArrayBuffer): Promise<void> {
