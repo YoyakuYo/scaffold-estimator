@@ -1686,9 +1686,36 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         minFy = Math.min(minFy, q.y);
         maxFy = Math.max(maxFy, q.y);
       }
-      const minVert = Math.min(...vertVals);
-      const maxVert = Math.max(...vertVals);
-      const spanVert = maxVert - minVert;
+      let rawMinVert = Infinity;
+      let rawMaxVert = -Infinity;
+      for (const v of vertVals) {
+        if (v < rawMinVert) rawMinVert = v;
+        if (v > rawMaxVert) rawMaxVert = v;
+      }
+      const rawSpanVert = Math.max(0, rawMaxVert - rawMinVert);
+
+      // Robust vertical bounds (percentiles) avoid stray IFC outliers (terrain,
+      // helper geometry, long axis lines) inflating building height dramatically.
+      const vertSample = this.subsampleIfcPoints(vertVals, 120000);
+      const sortedVert = [...vertSample].sort((a, b) => a - b);
+      const atQuantile = (q: number): number => {
+        if (sortedVert.length === 0) return 0;
+        const idx = Math.max(0, Math.min(sortedVert.length - 1, Math.floor((sortedVert.length - 1) * q)));
+        return sortedVert[idx];
+      };
+      const q01 = atQuantile(0.01);
+      const q99 = atQuantile(0.99);
+      const robustSpanVert = Math.max(0, q99 - q01);
+
+      let minVert = rawMinVert;
+      let maxVert = rawMaxVert;
+      // Only clip when raw span is significantly larger than the robust span.
+      if (robustSpanVert > 1e-6 && rawSpanVert > robustSpanVert * 1.35) {
+        minVert = q01;
+        maxVert = q99;
+      }
+
+      const spanVert = Math.max(1e-6, maxVert - minVert);
       const buildingHeightMm = Math.max(1000, Math.round(spanVert * toMm));
 
       const pointsMm = xyzPoints.map((p, i) => ({
@@ -1700,17 +1727,19 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       const maxZMm = maxVert * toMm;
 
       this.logger.log(
-        `IFC footprint plane=${plane.kind} (convex-hull area proxy), heightAxis span=${spanVert.toFixed(3)}`,
+        `IFC footprint plane=${plane.kind}, vertical span raw=${rawSpanVert.toFixed(3)}, ` +
+        `used=${spanVert.toFixed(3)} (toMm=${toMm})`,
       );
 
       // Use ground-level geometry for the footprint so upper-floor overhangs
       // and setbacks don't inflate the outline beyond the actual building walls.
       // Filter to the bottom ~30% of the building height (ground + first few floors).
+      const groundBandMin = minVert - spanVert * 0.08;
       const groundCutoff = minVert + spanVert * 0.3;
       const groundFp2d: Array<{ x: number; y: number }> = [];
       let gMinFx = Infinity, gMinFy = Infinity, gMaxFx = -Infinity, gMaxFy = -Infinity;
       for (let i = 0; i < xyzPoints.length; i++) {
-        if (vertVals[i] <= groundCutoff) {
+        if (vertVals[i] >= groundBandMin && vertVals[i] <= groundCutoff) {
           const q = fp2d[i];
           groundFp2d.push(q);
           gMinFx = Math.min(gMinFx, q.x);
