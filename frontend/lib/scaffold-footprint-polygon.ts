@@ -36,6 +36,32 @@ function wallLenM(walls: Array<{ wallLengthMm?: number }>, i: number): number {
   return safeMm / 1000;
 }
 
+/**
+ * Reverse winding while keeping sv[0] as the first corner (same closed ring, opposite direction).
+ */
+function reverseClosedRingXZ(sv: FootprintVertexXZ[]): FootprintVertexXZ[] {
+  const n = sv.length;
+  if (n < 3) return [...sv];
+  const out: FootprintVertexXZ[] = [sv[0]!];
+  for (let i = n - 1; i >= 1; i--) out.push(sv[i]!);
+  return out;
+}
+
+/**
+ * Yield n cyclic rotations of the ring, plus the same for reversed winding.
+ * Lets buildFromStoredDirections align walls[i] with the correct geometric edge when
+ * polygonVertices from BIM start at a different corner than wall index 0 (plan 辺番号ずれ).
+ */
+function* storedPolygonRotations(sv: FootprintVertexXZ[]): Generator<FootprintVertexXZ[]> {
+  const n = sv.length;
+  const bases = [sv, reverseClosedRingXZ(sv)];
+  for (const base of bases) {
+    for (let k = 0; k < n; k++) {
+      yield Array.from({ length: n }, (_, i) => base[(i + k) % n]!);
+    }
+  }
+}
+
 function hasPlausiblePolygonEdges(
   verts: FootprintVertexXZ[],
   walls: Array<{ wallLengthMm?: number }>,
@@ -335,26 +361,34 @@ export function buildFootprintPolygonXZ(
   }
 
   // ── Priority 1: Walk stored vertex directions with exact wall lengths ──
-  // This is the most reliable path because it preserves the shape orientation
-  // from the BIM outline while using exact wall lengths for each edge.
+  // Try every cyclic start (and reversed winding): BIM outline may list vertices from
+  // a different corner than wall[0], which used to force ortho-blind and wrong 辺 order.
   if (sv) {
-    const dirResult = buildFromStoredDirections(walls, n, sv);
-    if (dirResult) {
-      if (typeof window !== 'undefined') {
-        console.info('[Scaffold] footprint: direction-walk (stored+lengths)', n, 'walls');
+    let rotIdx = 0;
+    for (const svTry of storedPolygonRotations(sv)) {
+      const dirResult = buildFromStoredDirections(walls, n, svTry);
+      if (dirResult) {
+        if (typeof window !== 'undefined') {
+          console.info('[Scaffold] footprint: direction-walk (stored+lengths)', n, 'walls, rot=', rotIdx);
+        }
+        return dirResult;
       }
-      return dirResult;
+      rotIdx++;
     }
   }
 
   // ── Priority 2: Orthogonal builder guided by stored reflex corners ──
   if (sv && n >= 6 && n <= 16 && n % 2 === 0) {
-    const orthoGuided = tryOrthogonalFromStoredShape(walls, n, sv);
-    if (orthoGuided) {
-      if (typeof window !== 'undefined') {
-        console.info('[Scaffold] footprint: ortho-guided (stored+lengths)', n, 'walls');
+    let rotIdx = 0;
+    for (const svTry of storedPolygonRotations(sv)) {
+      const orthoGuided = tryOrthogonalFromStoredShape(walls, n, svTry);
+      if (orthoGuided) {
+        if (typeof window !== 'undefined') {
+          console.info('[Scaffold] footprint: ortho-guided (stored+lengths)', n, 'walls, rot=', rotIdx);
+        }
+        return orthoGuided;
       }
-      return orthoGuided;
+      rotIdx++;
     }
   }
 
