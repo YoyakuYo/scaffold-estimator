@@ -1363,9 +1363,15 @@ export default function Scaffold3DView({
         }
 
         if (!footprintFromMassing) {
-          tverts = buildFootprintPolygonXZ(tg.walls, undefined);
-          const tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-          if (!tok) tverts = [];
+          // AI BIM: never invent tier footprints from wall-length reconstruction.
+          // It can introduce synthetic extension walls not present in BIM massing.
+          if (!isAiBim) {
+            tverts = buildFootprintPolygonXZ(tg.walls, undefined);
+            const tok = tverts.length >= 2 && tverts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+            if (!tok) tverts = [];
+          } else {
+            tverts = [];
+          }
         }
 
         tierPolygons.push({ verts: tverts, footprintFromMassing });
@@ -1397,23 +1403,25 @@ export default function Scaffold3DView({
           hasUsableTierEdges(tp.verts!, nW);
         if (finite) continue;
 
-        const sv = tgi === 0 ? storedVerts : undefined;
-        let fixed = buildFootprintPolygonXZ(tg.walls, sv);
-        let ok =
-          fixed.length >= 2 &&
-          fixed.length === nW &&
-          fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-        if (!ok && sv && sv.length > 0) {
-          fixed = buildFootprintPolygonXZ(tg.walls, undefined);
-          ok =
+        if (!isAiBim) {
+          const sv = tgi === 0 ? storedVerts : undefined;
+          let fixed = buildFootprintPolygonXZ(tg.walls, sv);
+          let ok =
             fixed.length >= 2 &&
             fixed.length === nW &&
             fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
-        }
-        if (ok) {
-          tp.verts = fixed;
-          tp.footprintFromMassing = false;
-          continue;
+          if (!ok && sv && sv.length > 0) {
+            fixed = buildFootprintPolygonXZ(tg.walls, undefined);
+            ok =
+              fixed.length >= 2 &&
+              fixed.length === nW &&
+              fixed.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
+          }
+          if (ok) {
+            tp.verts = fixed;
+            tp.footprintFromMassing = false;
+            continue;
+          }
         }
         const gv = groundFootprint();
         if (gv.length >= 2 && gv.length === nW) {
