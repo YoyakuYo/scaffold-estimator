@@ -1332,6 +1332,7 @@ function ScaffoldPageContent() {
                     if (isIfc) {
                       ifcArrayBuffer = await file.arrayBuffer();
                     }
+                    const { cacheIfcBuffer } = await import('@/lib/ifc-buffer-cache');
                     const raw = isIfc
                       ? await visionBimApi.fromIfc(file)
                       : await visionBimApi.analyze(file);
@@ -1446,6 +1447,10 @@ function ScaffoldPageContent() {
                     };
                     const isStepped = Array.isArray(wallHeightsMm) && wallHeightsMm.length > 0
                       && new Set(walls.map((w) => w.wallHeightMm)).size > 1;
+                    if (ifcArrayBuffer) {
+                      if (footprint.ifcFileUrl) cacheIfcBuffer(footprint.ifcFileUrl, ifcArrayBuffer);
+                      cacheIfcBuffer('__latest_ifc__', ifcArrayBuffer);
+                    }
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
                       walls,
@@ -1888,6 +1893,11 @@ function ScaffoldPageContent() {
                           ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
+                        if (aiBimPreview.ifcArrayBuffer) {
+                          const { cacheIfcBuffer: cacheIfc } = await import('@/lib/ifc-buffer-cache');
+                          cacheIfc(data.config.id, aiBimPreview.ifcArrayBuffer);
+                          if (aiBimPreview.ifcFileUrl) cacheIfc(aiBimPreview.ifcFileUrl, aiBimPreview.ifcArrayBuffer);
+                        }
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
                       } catch (err: any) {
                         setAiBimError(err?.message ?? t('scaffold', 'aiBimCreateFailed'));

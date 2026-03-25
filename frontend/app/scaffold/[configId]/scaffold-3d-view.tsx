@@ -2073,14 +2073,12 @@ export default function Scaffold3DView({
       }
       scene.add(cornerGroup);
 
-      // When IFC is available for AI BIM, native meshes replace this shell (below).
-      const ifcUrlForBimMeshEarly = (result as any)?.ifcFileUrl;
-      const useNativeIfcAsBuilding =
-        isAiBim && typeof ifcUrlForBimMeshEarly === 'string' && ifcUrlForBimMeshEarly.length > 0;
-      const proceduralBimShell = useNativeIfcAsBuilding ? new THREE.Group() : null;
+      // When AI BIM, always put building geometry in a group we can hide if IFC loads.
+      const proceduralBimShell = isAiBim ? new THREE.Group() : null;
       const buildingShellParent: THREE.Object3D = proceduralBimShell ?? scene;
       if (proceduralBimShell) {
         proceduralBimShell.userData = { isProceduralBimShell: true };
+        proceduralBimShell.visible = false; // hidden until IFC fails or timeout
         scene.add(proceduralBimShell);
       }
 
@@ -2809,31 +2807,60 @@ export default function Scaffold3DView({
       animate();
       setReady(true);
 
-      // ── IFC Model Loading (when ifcFileUrl is available) ──
-      // Renders the actual BIM model with element-type-aware materials
-      // (brick walls, dark slate roofs, blue glass windows, concrete slabs)
-      const ifcFileUrl = result?.ifcFileUrl;
-      if (ifcFileUrl && typeof ifcFileUrl === 'string') {
+      // ── IFC Model Loading ──
+      // For AI BIM: load native IFC mesh from buffer cache or URL.
+      // Procedural shell starts hidden; shown only when IFC unavailable.
+      if (isAiBim) {
+        const ifcFileUrl = (result as any)?.ifcFileUrl;
+        let configId: string | undefined;
+        try {
+          configId = typeof window !== 'undefined'
+            ? window.location.pathname.split('/').filter(Boolean).pop()
+            : undefined;
+        } catch { /* ignore */ }
+
         (async () => {
+          let arrayBuffer: ArrayBuffer | undefined;
+          try {
+            const { getCachedIfcBufferAny } = await import('@/lib/ifc-buffer-cache');
+            arrayBuffer = getCachedIfcBufferAny(ifcFileUrl, configId, '__latest_ifc__');
+            if (arrayBuffer) console.log('[Scaffold3DView] IFC loaded from buffer cache');
+          } catch { /* cache module unavailable */ }
+
+          if (!arrayBuffer && ifcFileUrl && typeof ifcFileUrl === 'string') {
+            try {
+              console.log('[Scaffold3DView] Fetching IFC from URL:', ifcFileUrl);
+              const response = await fetch(ifcFileUrl);
+              if (response.ok) {
+                arrayBuffer = await response.arrayBuffer();
+                console.log('[Scaffold3DView] IFC fetched, size:', arrayBuffer.byteLength);
+              } else {
+                console.warn('[Scaffold3DView] IFC fetch failed:', response.status);
+              }
+            } catch (e) {
+              console.warn('[Scaffold3DView] IFC fetch error:', e);
+            }
+          }
+
+          if (!arrayBuffer || arrayBuffer.byteLength === 0 || disposed) {
+            console.warn('[Scaffold3DView] No IFC data — showing procedural shell');
+            if (proceduralBimShell) proceduralBimShell.visible = true;
+            return;
+          }
+
           try {
             const { parseIfcToMeshes } = await import('@/lib/ifc-loader');
-            const { createBimMaterialSet, getMaterialForElement, disposeBimMaterials } = await import('@/lib/ifc-bim-materials');
-            const response = await fetch(ifcFileUrl);
-            if (!response.ok) return;
-            const arrayBuffer = await response.arrayBuffer();
+            const { createBimMaterialSet, getMaterialForElement } = await import('@/lib/ifc-bim-materials');
             const meshes = await parseIfcToMeshes(arrayBuffer);
-            if (disposed || meshes.length === 0) return;
+            if (disposed) return;
+            if (meshes.length === 0) {
+              if (proceduralBimShell) proceduralBimShell.visible = true;
+              return;
+            }
 
             const MAX_IFC_MESHES_IN_VIEW = 4000;
-            const meshesForView =
-              meshes.length > MAX_IFC_MESHES_IN_VIEW
-                ? meshes.slice(0, MAX_IFC_MESHES_IN_VIEW)
-                : meshes;
-            if (meshes.length > MAX_IFC_MESHES_IN_VIEW) {
-              console.warn(
-                `[Scaffold3DView] IFC has ${meshes.length} meshes; showing first ${MAX_IFC_MESHES_IN_VIEW} for performance`,
-              );
-            }
+            const meshesForView = meshes.length > MAX_IFC_MESHES_IN_VIEW
+              ? meshes.slice(0, MAX_IFC_MESHES_IN_VIEW) : meshes;
 
             const bimMaterials = createBimMaterialSet(THREE);
             const ifcGroup = new THREE.Group();
@@ -2842,7 +2869,6 @@ export default function Scaffold3DView({
             let ifcMinX = Infinity, ifcMaxX = -Infinity;
             let ifcMinY = Infinity, ifcMaxY = -Infinity;
             let ifcMinZ = Infinity, ifcMaxZ = -Infinity;
-
             for (const mesh of meshesForView) {
               const stride = 6;
               const count = mesh.vertices.length / stride;
@@ -2864,28 +2890,23 @@ export default function Scaffold3DView({
 
             let bxMin = Infinity, bxMax = -Infinity, bzMin = Infinity, bzMax = -Infinity;
             for (const v of verts) {
-              const ax = v.x - cx;
-              const az = v.z - cz;
-              if (ax < bxMin) bxMin = ax;
-              if (ax > bxMax) bxMax = ax;
-              if (az < bzMin) bzMin = az;
-              if (az > bzMax) bzMax = az;
+              const ax = v.x - cx, az = v.z - cz;
+              if (ax < bxMin) bxMin = ax; if (ax > bxMax) bxMax = ax;
+              if (az < bzMin) bzMin = az; if (az > bzMax) bzMax = az;
             }
             const buildingExtentX = Number.isFinite(bxMin) ? Math.max(bxMax - bxMin, 0.1) : 10;
             const buildingExtentZ = Number.isFinite(bzMin) ? Math.max(bzMax - bzMin, 0.1) : 10;
-            const scaleX = ifcSizeX > 0.01 ? buildingExtentX / ifcSizeX : 1;
-            const scaleZ = ifcSizeZ > 0.01 ? buildingExtentZ / ifcSizeZ : 1;
-            const uniformScale = Math.min(scaleX, scaleZ);
+            const scX = ifcSizeX > 0.01 ? buildingExtentX / ifcSizeX : 1;
+            const scZ = ifcSizeZ > 0.01 ? buildingExtentZ / ifcSizeZ : 1;
+            const uniformScale = Math.min(scX, scZ);
             const scaleY = ifcSizeY > 0.01 ? maxH / ifcSizeY : uniformScale;
 
             for (const meshData of meshesForView) {
               if (meshData.elementType === 'opening') continue;
-
               const stride = 6;
               const vertCount = meshData.vertices.length / stride;
               const positions = new Float32Array(vertCount * 3);
               const normals = new Float32Array(vertCount * 3);
-
               for (let vi = 0; vi < vertCount; vi++) {
                 positions[vi * 3]     = (meshData.vertices[vi * stride] - ifcCenterX) * uniformScale;
                 positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - ifcMinY) * scaleY + GROUND_Y;
@@ -2894,14 +2915,11 @@ export default function Scaffold3DView({
                 normals[vi * 3 + 1] = meshData.vertices[vi * stride + 4];
                 normals[vi * 3 + 2] = meshData.vertices[vi * stride + 5];
               }
-
               const geo = new THREE.BufferGeometry();
               geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
               geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
               geo.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
-
               const mat = getMaterialForElement(bimMaterials, meshData.elementType, meshData.expressID);
-
               const m = new THREE.Mesh(geo, mat as any);
               m.castShadow = meshData.elementType !== 'window' && meshData.elementType !== 'curtainWall';
               m.receiveShadow = true;
@@ -2910,14 +2928,23 @@ export default function Scaffold3DView({
             }
 
             scene.add(ifcGroup);
-            // Hide simplified massing/windows so the native IFC mesh is the visible “building”.
-            if (proceduralBimShell) proceduralBimShell.visible = false;
+            console.log(`[Scaffold3DView] IFC rendered: ${meshesForView.length} meshes`);
           } catch (e) {
-            console.warn('IFC model load failed (non-critical):', e);
+            console.warn('[Scaffold3DView] IFC parse failed, showing procedural shell:', e);
+            if (proceduralBimShell) proceduralBimShell.visible = true;
           }
         })();
-      }
 
+        setTimeout(() => {
+          if (proceduralBimShell && !proceduralBimShell.visible) {
+            const hasIfcMesh = scene.children.some((c: any) => c.userData?.isIfcModel);
+            if (!hasIfcMesh) {
+              console.warn('[Scaffold3DView] IFC timeout — showing procedural shell');
+              proceduralBimShell.visible = true;
+            }
+          }
+        }, 8000);
+      }
       // ── Cleanup ──────────────────────────────────────
       return () => {
         disposed = true;
