@@ -2147,9 +2147,12 @@ export default function Scaffold3DView({
             const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
 
             if (isLShaped) {
+              // Yokoji pipes connecting wall A end to wall B start
               addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
               addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
               addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
+              addPipe(cornerGroup, t1.x, y, t1.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.8);
+              // Corner deck bridging the 4 posts
               const firstSpanDeck = new THREE.Shape();
               firstSpanDeck.moveTo(r1.x, -r1.z);
               firstSpanDeck.lineTo(t1.x, -t1.z);
@@ -2163,8 +2166,12 @@ export default function Scaffold3DView({
               deckMesh.castShadow = true;
               deckMesh.receiveShadow = true;
               cornerGroup.add(deckMesh);
+              // Habaki (toe boards) on ALL exposed corner edges to fully close the gap
               const hY = y + 0.06;
               addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
+              addPipe(cornerGroup, t1.x, hY, t1.z, t2.x, hY, t2.z, habakiMatEff, PIPE_R * 0.5);
+              addPipe(cornerGroup, r1.x, hY, r1.z, t1.x, hY, t1.z, habakiMatEff, PIPE_R * 0.5);
+              addPipe(cornerGroup, r2.x, hY, r2.z, t2.x, hY, t2.z, habakiMatEff, PIPE_R * 0.5);
             } else {
               const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
               const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;

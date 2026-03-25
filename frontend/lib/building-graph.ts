@@ -270,8 +270,10 @@ function collapseTinyOrthogonalJogs(
       const areaChange = Math.abs(polyArea(sim) - currentArea) / Math.max(currentArea, 1);
 
       // Match backend two-stage guard so preview and persisted result stay aligned.
+      // Strict limit for 6-vertex L-shapes to prevent collapsing real corners.
+      const strictLimit = out.length <= 6 ? 0.03 : 0.08;
       const canUseRelaxedFirstPass = out.length > 6 && best.ratio < 0.75 && areaChange <= 0.20;
-      if (areaChange > 0.08 && !canUseRelaxedFirstPass) continue;
+      if (areaChange > strictLimit && !canUseRelaxedFirstPass) continue;
 
       if (best.vertical) out[best.nnI]!.z = out[best.i]!.z;
       else out[best.nnI]!.x = out[best.i]!.x;

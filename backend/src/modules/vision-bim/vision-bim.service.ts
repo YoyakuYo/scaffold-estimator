@@ -237,6 +237,20 @@ SIMPLE RECTANGLE CHECK:
 - The rectangle has only 2 unique dimensions: width (W) and depth (D). Output: [{x:0,y:0}, {x:W,y:0}, {x:W,y:D}, {x:0,y:D}].
 - IGNORE terraces, entrance ramps, canopies, balconies, AC units, and ground slabs. Only trace the main structural walls.
 
+L-SHAPE CHECK (if not rectangular):
+- Ask: "Does one corner of the building have a notch/indentation creating an inner corner?"
+- If YES — output EXACTLY 6 vertices. The inner corner is the reflex vertex.
+- The L has 3 horizontal dimensions and 3 vertical dimensions.
+- CLOSURE: sum of rightward edges MUST = sum of leftward edges.
+
+U-SHAPE CHECK (if not L):
+- Ask: "Does the building have a courtyard or two wings creating two inner corners?"
+- If YES — output EXACTLY 8 vertices. Two reflex corners where the courtyard opens.
+
+T-SHAPE CHECK:
+- Ask: "Does the building have a stem protruding from the middle of one side?"
+- If YES — output EXACTLY 8 vertices. Two reflex corners where stem meets cap.
+
 PERSPECTIVE ILLUSION WARNING:
 A rectangular box seen from a 3/4 angle shows 3 visible faces forming a hexagon silhouette. THIS IS AN OPTICAL ILLUSION — the real footprint is still a 4-vertex rectangle. NEVER trace this hexagonal silhouette.
 
@@ -275,6 +289,70 @@ Polygon rules:
    CRITICAL: The footprint is the shape you would see if you removed the roof and looked straight down. Height changes, roof steps, and floor setbacks do NOT add vertices to the footprint. If you see a tall tower next to a shorter wing, the footprint is STILL an L with 6 vertices — the height difference is encoded in wallHeightsMm only.
    WRONG (8 vertices for an L-shape): splitting a wall into two walls because the roofline height changes along that wall.
    RIGHT (6 vertices for an L-shape): one wall covering the full length, with wallHeightsMm giving each wall its correct height.
+
+=============== SHAPE-SPECIFIC VERTEX & WALL COUNT RULES (MANDATORY) ===============
+These rules are ABSOLUTE — the AI must NEVER deviate from them.
+
+RECTANGLE (矩形): EXACTLY 4 vertices, 4 walls.
+  Walls = [W, D, W, D]. Check: W appears twice, D appears twice.
+  ALL corners are 90° convex. No reflex corners.
+
+L-SHAPE (L字型): EXACTLY 6 vertices, 6 walls.
+  One reflex (inner) corner where the notch cuts in.
+  Closure check: sum of rightward edges = sum of leftward edges.
+  NEVER split into two rectangles. NEVER output 4 or 8 vertices for an L.
+  L can be rotated or flipped — the vertex count is ALWAYS 6.
+
+U-SHAPE (U字型 / コの字型): EXACTLY 8 vertices, 8 walls.
+  Two reflex corners where the courtyard/notch opens.
+  Closure check: total top = total bottom, total left = total right.
+  U can be rotated — opening can face any direction.
+
+T-SHAPE (T字型): EXACTLY 8 vertices, 8 walls.
+  Two reflex corners where the stem meets the cap.
+  Closure check: cap width = left_gap + stem_width + right_gap.
+
+H-SHAPE (H字型): EXACTLY 12 vertices, 12 walls.
+  Four reflex corners.
+
+PLUS/CROSS (+字型): EXACTLY 12 vertices, 12 walls.
+  Four reflex corners.
+
+WALL COUNT = VERTEX COUNT. Always. No exceptions. If you have 6 vertices you MUST have 6 wallLengthsMm values.
+
+=============== TERRACE & DOOR DETECTION (CRITICAL FOR SCAFFOLD) ===============
+TERRACES:
+  STRUCTURAL (enclosed, thick walls on all sides) → INCLUDE in polygon
+  OPEN (thin lines, railings, labeled Terrace/Deck/テラス/Patio) → EXCLUDE from polygon
+  When upper floors extend OVER an open terrace, use FULL wall length (terrace zone included)
+
+DOORS (CRITICAL for beam frame bracket placement):
+  Detect ALL exterior doors by looking for:
+  * Quarter-circle swing arcs touching exterior walls (most common)
+  * Sliding door arrows or dashed lines on exterior walls
+  * Double-door openings, revolving doors at entrances
+  * Terrace/balcony access doors (sliding glass)
+  IGNORE: doors between interior rooms
+  Each door: { "type": "door", "wallIndex": N, "positionMm": distance_from_wall_start, "widthMm": opening_width }
+  Default widthMm = 1800 if not dimensioned
+
+BALCONIES:
+  Report as obstacle: { "type": "balcony", "vertices": [...polygon...] }
+  Balconies protrude beyond the main wall line but are NOT structural
+
+=============== SCAFFOLD CORNER CLOSING RULES (300mm OVERHANG) ===============
+At EVERY building corner where two walls meet at ~90°:
+  - Scaffold posts extend 300mm BEYOND the building corner
+  - A corner span of 600mm (kusabi) or 610mm (wakugumi) bridges the turn
+  - The shared post at the turn is used by BOTH adjacent walls
+  - L-shaped corners (cos < 0.35): yokoji pipe + deck + habaki treatment
+  - Reflex corners (cos 0.35–0.98): PATTANKO filler (2 per corner per level)
+  - The scaffold MUST close at every corner — NO GAPS allowed
+
+This means for AI extraction:
+  - Accurate vertex positions ensure correct corner angle calculation
+  - Missing a vertex = missing a corner = OPEN GAP in scaffold
+  - Extra vertices on straight walls = phantom corners = wasted material
 
 =============== ANGLED / NON-ORTHOGONAL BUILDINGS ===============
 Some floor plans have walls at angles other than 90°. For these buildings:
@@ -909,7 +987,28 @@ JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the S
 
 VERTEX COUNT GUIDE: rectangle=4, trapezoid=4, L-shape=6. If you output 5+ vertices for a simple box building, you are WRONG — go back and output 4.
 
-Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).`,
+Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).
+
+SHAPE CLASSIFICATION (do this FIRST before tracing):
+1. Is it a RECTANGLE? → 4 vertices exactly
+2. Is it an L-SHAPE (one corner notch)? → 6 vertices exactly
+3. Is it a U-SHAPE (courtyard/two notches)? → 8 vertices exactly
+4. Is it a T-SHAPE (stem from middle)? → 8 vertices exactly
+5. Is it irregular/angled? → trace actual corners, each direction change = 1 vertex
+
+DOOR DETECTION CHECKLIST:
+- Main entrance door (front of building)
+- Terrace/balcony sliding doors
+- Service/back door
+- Emergency exits
+- Stairwell exit doors
+Each found → add to obstacles array with wallIndex, positionMm, widthMm.
+
+TERRACE DETECTION CHECKLIST:
+- Areas labeled Terrace/Deck/テラス/Patio/Balcony
+- Open areas with railings (thin lines) instead of walls (thick lines)
+- EXCLUDE these from the polygon outline
+- But report as context for scaffold planning`,
               },
             ],
           },
@@ -1316,7 +1415,10 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     // L/U/T shape (i.e. > 6 for an L-shape, > 8 for a U-shape, etc.). But
     // crucially, we DO allow merging down to 4 (rectangle) since even 8→4 can be
     // correct for a pure perspective-split of a box.
-    const SIN_THR_COLLINEAR = 0.25;
+    // Collinear threshold: 0.15 (≈8.6°) is conservative enough to avoid
+    // removing real L/U/T corners while still merging near-straight segments.
+    // Previous value 0.25 (≈14.5°) was too aggressive and collapsed valid corners.
+    const SIN_THR_COLLINEAR = 0.15;
     const SIN_THR_GRID = 0.06;
     {
       let collinearChanged = true;
@@ -2865,8 +2967,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         // - When polygon still has >6 vertices, allow one larger cleanup step if
         //   the candidate ratio is strongly artifact-like (very short step).
         // - At 6 vertices and below, stay strict to block 6->4 collapse.
+        // - CRITICAL: For 6-vertex polygons (L-shapes), the area guard must be
+        //   very strict (3%) to prevent collapsing real L-corners.
+        const strictLimit = out.length <= 6 ? 0.03 : 0.08;
         const canUseRelaxedFirstPass = out.length > 6 && best.ratio < 0.75 && areaChange <= 0.20;
-        if (areaChange > 0.08 && !canUseRelaxedFirstPass) continue;
+        if (areaChange > strictLimit && !canUseRelaxedFirstPass) continue;
 
         if (best.d2Vertical) out[best.nnI].y = out[best.i].y;
         else out[best.nnI].x = out[best.i].x;
@@ -3070,9 +3175,14 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     // SKIP for floor plans with dimension text — they produce accurate L/T/U shapes
     // that should NOT be collapsed. Only apply to 3D views where perspective distortion
     // creates near-rectangular polygons with extra vertices.
+    // ALSO skip when wallLengthsMm shows clearly different values (real L/U/T has
+    // varied wall lengths, not the uniform pattern of a perspective trace).
     const hasReliableDimText = parsed.wallLengthsFromDimText === true;
     const isFloorPlan = (parsed as any).drawingType === 'plan';
-    if (!hasReliableDimText && !isFloorPlan) {
+    const hasVariedWallLengths = Array.isArray(parsed.wallLengthsMm) &&
+      parsed.wallLengthsMm.length >= 5 &&
+      new Set(parsed.wallLengthsMm.map(l => Math.round(l / 500))).size >= 3;
+    if (!hasReliableDimText && !isFloorPlan && !hasVariedWallLengths) {
       const xs = pts.map((p) => p.x);
       const ys = pts.map((p) => p.y);
       const bboxW = Math.max(...xs) - Math.min(...xs);
@@ -3086,7 +3196,9 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         }
         polyArea = Math.abs(polyArea) / 2;
         const fillRatio = polyArea / bboxArea;
-        if (fillRatio > 0.90 && n >= 5) {
+        // Require higher fill ratio (0.95) to avoid collapsing L-shapes which
+        // have fill ratios of 0.50-0.85 depending on the notch size
+        if (fillRatio > 0.95 && n >= 5) {
           this.logger.warn(
             `Detected near-rectangular polygon (${n} vertices, fill ratio ${(fillRatio * 100).toFixed(1)}%). Collapsing to rectangle.`,
           );

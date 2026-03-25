@@ -159,7 +159,55 @@ function chordReplaceDetour(outline: AiBimOutlinePoint[], idxA: number, idxB: nu
   return candidate;
 }
 
-type EditTool = 'move' | 'split' | 'removeVertex' | 'chordAB';
+function rectFromOppositeCorners(a: AiBimOutlinePoint, b: AiBimOutlinePoint): AiBimOutlinePoint[] | null {
+  const x1 = Math.min(a.xFrac, b.xFrac);
+  const x2 = Math.max(a.xFrac, b.xFrac);
+  const y1 = Math.min(a.yFrac, b.yFrac);
+  const y2 = Math.max(a.yFrac, b.yFrac);
+  const w = x2 - x1;
+  const h = y2 - y1;
+  if (w < MIN_EDGE_MM || h < MIN_EDGE_MM) return null;
+  return [
+    { xFrac: x1, yFrac: y1 },
+    { xFrac: x2, yFrac: y1 },
+    { xFrac: x2, yFrac: y2 },
+    { xFrac: x1, yFrac: y2 },
+  ];
+}
+
+/** Regular N-gon approximating a circle; edge count scales so chords stay ≥ minChord. */
+function circleOutline(cx: number, cy: number, r: number): AiBimOutlinePoint[] | null {
+  if (r < MIN_EDGE_MM / (2 * Math.sin(Math.PI / 12))) return null;
+  const circumference = 2 * Math.PI * r;
+  let n = Math.round(circumference / (MIN_EDGE_MM * 0.92));
+  n = Math.max(12, Math.min(96, n));
+  const pts: AiBimOutlinePoint[] = [];
+  for (let i = 0; i < n; i++) {
+    const ang = (2 * Math.PI * i) / n - Math.PI / 2;
+    pts.push({ xFrac: cx + r * Math.cos(ang), yFrac: cy + r * Math.sin(ang) });
+  }
+  if (!edgesAllMinLength(pts, MIN_EDGE_MM)) return null;
+  return pts;
+}
+
+function snapDrawOrtho(px: number, py: number, last: AiBimOutlinePoint | null, epsScale: number): AiBimOutlinePoint {
+  if (!last) return { xFrac: px, yFrac: py };
+  const dx = px - last.xFrac;
+  const dy = py - last.yFrac;
+  const eps = epsScale * 0.02;
+  if (Math.abs(dx) < eps && Math.abs(dy) < eps) return { xFrac: last.xFrac, yFrac: last.yFrac };
+  if (Math.abs(dx) >= Math.abs(dy)) return { xFrac: px, yFrac: last.yFrac };
+  return { xFrac: last.xFrac, yFrac: py };
+}
+
+type EditTool =
+  | 'move'
+  | 'split'
+  | 'removeVertex'
+  | 'chordAB'
+  | 'drawPolyline'
+  | 'drawRect'
+  | 'drawCircle';
 
 type Props = {
   outline: AiBimOutlinePoint[];
@@ -170,7 +218,7 @@ type Props = {
 };
 
 /**
- * CAD-style footprint editor: move corners, edge length, split wall (add corner), remove corner (merge walls), optional orthogonal snap.
+ * CAD-style footprint: draw polyline / rect / circle to replace outline, plus vertex edits (move, split, chord, remove).
  */
 export function AiBimFootprintEditor({
   outline,
@@ -183,6 +231,8 @@ export function AiBimFootprintEditor({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [editTool, setEditTool] = useState<EditTool>('move');
   const [snapOrtho, setSnapOrtho] = useState(false);
+  /** Orthogonal segment snap while drawing polyline / second corner of rectangle. */
+  const [drawOrtho, setDrawOrtho] = useState(true);
   /** true = length edit moves the end (B) of the edge; false = moves the start (A). */
   const [trimMovesEnd, setTrimMovesEnd] = useState(true);
   const [chordFirstIdx, setChordFirstIdx] = useState<number | null>(null);
@@ -191,23 +241,43 @@ export function AiBimFootprintEditor({
   const [edgeLengthInput, setEdgeLengthInput] = useState<string>('');
   const [flashMsg, setFlashMsg] = useState<string | null>(null);
 
+  const [draftPolyline, setDraftPolyline] = useState<AiBimOutlinePoint[]>([]);
+  const [draftHover, setDraftHover] = useState<{ x: number; y: number } | null>(null);
+  const [rectCornerA, setRectCornerA] = useState<AiBimOutlinePoint | null>(null);
+  const [circleCenter, setCircleCenter] = useState<AiBimOutlinePoint | null>(null);
+
   const flash = useCallback((msg: string) => {
     setFlashMsg(msg);
     window.setTimeout(() => setFlashMsg(null), 3200);
   }, []);
 
+  const clearDrawingDraft = useCallback(() => {
+    setDraftPolyline([]);
+    setDraftHover(null);
+    setRectCornerA(null);
+    setCircleCenter(null);
+  }, []);
+
   const { minX, minY, vbW, vbH, pad } = useMemo(() => {
     const xs: number[] = [];
     const ys: number[] = [];
-    for (const p of outline) {
+    const pushPt = (p: { xFrac: number; yFrac: number }) => {
       xs.push(p.xFrac);
       ys.push(p.yFrac);
-    }
+    };
+    for (const p of outline) pushPt(p);
     if (showBaseline && baselineOutline?.length) {
-      for (const p of baselineOutline) {
-        xs.push(p.xFrac);
-        ys.push(p.yFrac);
-      }
+      for (const p of baselineOutline) pushPt(p);
+    }
+    for (const p of draftPolyline) pushPt(p);
+    if (draftHover) {
+      xs.push(draftHover.x);
+      ys.push(draftHover.y);
+    }
+    if (rectCornerA) pushPt(rectCornerA);
+    if (circleCenter) pushPt(circleCenter);
+    if (xs.length === 0) {
+      return { minX: 0, minY: 0, vbW: 1e4, vbH: 1e4, pad: 800 };
     }
     const mnX = Math.min(...xs);
     const mnY = Math.min(...ys);
@@ -217,7 +287,7 @@ export function AiBimFootprintEditor({
     const h = Math.max(mxY - mnY, 1e-6);
     const p = Math.max(w, h) * 0.08;
     return { minX: mnX, minY: mnY, vbW: w + 2 * p, vbH: h + 2 * p, pad: p };
-  }, [outline, baselineOutline, showBaseline]);
+  }, [outline, baselineOutline, showBaseline, draftPolyline, draftHover, rectCornerA, circleCenter]);
 
   const vertexHitR = Math.max(vbW, vbH) * 0.022;
   const edgePickThresh = Math.max(vbW, vbH) * 0.02;
@@ -238,6 +308,20 @@ export function AiBimFootprintEditor({
   );
 
   const n = outline.length;
+  const isDrawTool =
+    editTool === 'drawPolyline' || editTool === 'drawRect' || editTool === 'drawCircle';
+
+  const tryApplyPolyline = useCallback(() => {
+    if (draftPolyline.length < 3) return;
+    const closed = cloneOutline(draftPolyline);
+    if (!edgesAllMinLength(closed, MIN_EDGE_MM)) {
+      flash(t('scaffold', 'aiBimFootprintDrawInvalid'));
+      return;
+    }
+    onChange(closed);
+    clearDrawingDraft();
+    setEditTool('move');
+  }, [draftPolyline, onChange, flash, t, clearDrawingDraft]);
 
   const edgeLenMm = useCallback(
     (i: number) => {
@@ -307,6 +391,7 @@ export function AiBimFootprintEditor({
   const onPointerDownVertex = useCallback(
     (e: React.PointerEvent, idx: number) => {
       e.stopPropagation();
+      if (isDrawTool) return;
       if (editTool === 'chordAB') {
         if (chordFirstIdx == null) {
           setChordFirstIdx(idx);
@@ -331,11 +416,25 @@ export function AiBimFootprintEditor({
       setDragIdx(idx);
       setSelectedEdge(null);
     },
-    [editTool, outline, n, onChange, flash, t, chordFirstIdx],
+    [editTool, outline, n, onChange, flash, t, chordFirstIdx, isDrawTool],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (isDrawTool && dragIdx == null) {
+        const w = toWorld(e.clientX, e.clientY);
+        if (w) {
+          let x = w.x;
+          let y = w.y;
+          if (editTool === 'drawRect' && rectCornerA && drawOrtho) {
+            const sn = snapDrawOrtho(x, y, rectCornerA, Math.max(vbW, vbH));
+            x = sn.xFrac;
+            y = sn.yFrac;
+          }
+          setDraftHover({ x, y });
+        }
+        return;
+      }
       if (dragIdx == null || editTool !== 'move') return;
       const w = toWorld(e.clientX, e.clientY);
       if (!w) return;
@@ -351,7 +450,19 @@ export function AiBimFootprintEditor({
       next[dragIdx] = { xFrac: x, yFrac: y };
       onChange(next);
     },
-    [dragIdx, editTool, outline, onChange, snapOrtho, toWorld, vbW, vbH],
+    [
+      isDrawTool,
+      dragIdx,
+      editTool,
+      rectCornerA,
+      drawOrtho,
+      outline,
+      onChange,
+      snapOrtho,
+      toWorld,
+      vbW,
+      vbH,
+    ],
   );
 
   const onPointerUp = useCallback(() => {
@@ -363,6 +474,66 @@ export function AiBimFootprintEditor({
       if (dragIdx != null) return;
       const w = toWorld(e.clientX, e.clientY);
       if (!w) return;
+
+      const closePolyTol = Math.max(vbW, vbH) * 0.028;
+
+      if (editTool === 'drawPolyline') {
+        let nx = w.x;
+        let ny = w.y;
+        if (drawOrtho && draftPolyline.length > 0) {
+          const last = draftPolyline[draftPolyline.length - 1];
+          const sn = snapDrawOrtho(nx, ny, last, Math.max(vbW, vbH));
+          nx = sn.xFrac;
+          ny = sn.yFrac;
+        }
+        if (draftPolyline.length >= 3) {
+          const a = draftPolyline[0];
+          if (Math.hypot(nx - a.xFrac, ny - a.yFrac) <= closePolyTol) {
+            tryApplyPolyline();
+            return;
+          }
+        }
+        setDraftPolyline((prev) => [...prev, { xFrac: nx, yFrac: ny }]);
+        return;
+      }
+
+      if (editTool === 'drawRect') {
+        if (!rectCornerA) {
+          setRectCornerA({ xFrac: w.x, yFrac: w.y });
+        } else {
+          let bx = w.x;
+          let by = w.y;
+          if (drawOrtho) {
+            const sn = snapDrawOrtho(bx, by, rectCornerA, Math.max(vbW, vbH));
+            bx = sn.xFrac;
+            by = sn.yFrac;
+          }
+          const r = rectFromOppositeCorners(rectCornerA, { xFrac: bx, yFrac: by });
+          setRectCornerA(null);
+          setDraftHover(null);
+          if (r) {
+            onChange(r);
+            setEditTool('move');
+          } else flash(t('scaffold', 'aiBimFootprintDrawRectTooSmall'));
+        }
+        return;
+      }
+
+      if (editTool === 'drawCircle') {
+        if (!circleCenter) {
+          setCircleCenter({ xFrac: w.x, yFrac: w.y });
+        } else {
+          const r = Math.hypot(w.x - circleCenter.xFrac, w.y - circleCenter.yFrac);
+          const poly = circleOutline(circleCenter.xFrac, circleCenter.yFrac, r);
+          setCircleCenter(null);
+          setDraftHover(null);
+          if (poly) {
+            onChange(poly);
+            setEditTool('move');
+          } else flash(t('scaffold', 'aiBimFootprintDrawCircleTooSmall'));
+        }
+        return;
+      }
 
       if (editTool === 'split') {
         const edge = pickEdgeAt(w.x, w.y, true);
@@ -381,7 +552,24 @@ export function AiBimFootprintEditor({
         }
       }
     },
-    [dragIdx, toWorld, editTool, pickEdgeAt, outline, onChange, edgeLenMm, flash, t],
+    [
+      dragIdx,
+      toWorld,
+      editTool,
+      pickEdgeAt,
+      outline,
+      onChange,
+      edgeLenMm,
+      flash,
+      t,
+      vbW,
+      vbH,
+      draftPolyline,
+      drawOrtho,
+      rectCornerA,
+      circleCenter,
+      tryApplyPolyline,
+    ],
   );
 
   const clearChordPick = useCallback(() => setChordFirstIdx(null), []);
@@ -406,7 +594,17 @@ export function AiBimFootprintEditor({
           ? chordFirstIdx == null
             ? t('scaffold', 'aiBimFootprintHintChordPickA')
             : t('scaffold', 'aiBimFootprintHintChordPickB')
-          : t('scaffold', 'aiBimFootprintHintRemove');
+          : editTool === 'drawPolyline'
+            ? t('scaffold', 'aiBimFootprintHintDrawPoly')
+            : editTool === 'drawRect'
+              ? rectCornerA == null
+                ? t('scaffold', 'aiBimFootprintHintDrawRect1')
+                : t('scaffold', 'aiBimFootprintHintDrawRect2')
+              : editTool === 'drawCircle'
+                ? circleCenter == null
+                  ? t('scaffold', 'aiBimFootprintHintDrawCircle1')
+                  : t('scaffold', 'aiBimFootprintHintDrawCircle2')
+                : t('scaffold', 'aiBimFootprintHintRemove');
 
   return (
     <div className="rounded-lg border border-violet-200 bg-white overflow-hidden">
@@ -435,6 +633,7 @@ export function AiBimFootprintEditor({
               setSelectedEdge(null);
               setDragIdx(null);
               setChordFirstIdx(null);
+              clearDrawingDraft();
             }}
             className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
               editTool === tool
@@ -472,6 +671,44 @@ export function AiBimFootprintEditor({
         </label>
       </div>
 
+      <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 border-b border-amber-100/80 bg-amber-50/40">
+        <span className="text-[10px] font-semibold text-amber-900/90 mr-1">{t('scaffold', 'aiBimFootprintDrawGroup')}</span>
+        {(['drawPolyline', 'drawRect', 'drawCircle'] as const).map((tool) => (
+          <button
+            key={tool}
+            type="button"
+            onClick={() => {
+              setEditTool(tool);
+              setSelectedEdge(null);
+              setDragIdx(null);
+              setChordFirstIdx(null);
+              clearDrawingDraft();
+            }}
+            className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
+              editTool === tool
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-white text-gray-700 border-amber-200 hover:bg-amber-50/80'
+            }`}
+          >
+            {tool === 'drawPolyline'
+              ? t('scaffold', 'aiBimFootprintToolDrawPoly')
+              : tool === 'drawRect'
+                ? t('scaffold', 'aiBimFootprintToolDrawRect')
+                : t('scaffold', 'aiBimFootprintToolDrawCircle')}
+          </button>
+        ))}
+        <label className="flex items-center gap-1 ml-1 text-[10px] text-gray-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={drawOrtho}
+            onChange={(e) => setDrawOrtho(e.target.checked)}
+            disabled={!isDrawTool}
+            className="rounded border-gray-300"
+          />
+          {t('scaffold', 'aiBimFootprintDrawOrtho')}
+        </label>
+      </div>
+
       <p className="text-[11px] text-gray-600 px-2 py-1 border-b border-gray-100">{toolHint}</p>
       {flashMsg && (
         <p className="text-[11px] text-amber-800 bg-amber-50 px-2 py-1 border-b border-amber-100">{flashMsg}</p>
@@ -502,9 +739,10 @@ export function AiBimFootprintEditor({
           <polygon
             points={editedPoly}
             fill="#e0e7ff"
-            fillOpacity={0.75}
+            fillOpacity={isDrawTool ? 0.22 : 0.75}
             stroke="#4f46e5"
             strokeWidth={strokeW}
+            strokeOpacity={isDrawTool ? 0.45 : 1}
           />
         ) : null}
         {n >= 3 &&
@@ -531,6 +769,100 @@ export function AiBimFootprintEditor({
               />
             );
           })}
+        {editTool === 'drawPolyline' && draftPolyline.length > 0 && (
+          <g style={{ pointerEvents: 'none' }}>
+            <polyline
+              points={draftPolyline.map((p) => `${p.xFrac},${p.yFrac}`).join(' ')}
+              fill="none"
+              stroke="#ea580c"
+              strokeWidth={strokeW * 1.2}
+              strokeDasharray={`${Math.max(vbW, vbH) * 0.012} ${Math.max(vbW, vbH) * 0.008}`}
+            />
+            {draftHover && draftPolyline.length > 0 ? (
+              <line
+                x1={draftPolyline[draftPolyline.length - 1].xFrac}
+                y1={draftPolyline[draftPolyline.length - 1].yFrac}
+                x2={draftHover.x}
+                y2={draftHover.y}
+                stroke="#fdba74"
+                strokeWidth={strokeW}
+                strokeDasharray={`${Math.max(vbW, vbH) * 0.01} ${Math.max(vbW, vbH) * 0.008}`}
+              />
+            ) : null}
+            {draftPolyline.map((p, i) => (
+              <circle key={`d-${i}`} cx={p.xFrac} cy={p.yFrac} r={vh * 0.65} fill="#ea580c" stroke="#fff" strokeWidth={strokeW * 0.4} />
+            ))}
+            {draftPolyline.length >= 3 ? (
+              <circle
+                cx={draftPolyline[0].xFrac}
+                cy={draftPolyline[0].yFrac}
+                r={Math.max(vbW, vbH) * 0.028}
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth={strokeW}
+              />
+            ) : null}
+            {draftHover && draftPolyline.length >= 3 ? (
+              <line
+                x1={draftPolyline[draftPolyline.length - 1].xFrac}
+                y1={draftPolyline[draftPolyline.length - 1].yFrac}
+                x2={draftPolyline[0].xFrac}
+                y2={draftPolyline[0].yFrac}
+                stroke="#86efac"
+                strokeWidth={strokeW * 0.85}
+                strokeDasharray={`${Math.max(vbW, vbH) * 0.01} ${Math.max(vbW, vbH) * 0.008}`}
+                opacity={0.9}
+              />
+            ) : null}
+          </g>
+        )}
+        {editTool === 'drawRect' &&
+          rectCornerA &&
+          draftHover &&
+          (() => {
+            const r = rectFromOppositeCorners(rectCornerA, { xFrac: draftHover.x, yFrac: draftHover.y });
+            if (!r) return null;
+            return (
+              <polygon
+                points={r.map((p) => `${p.xFrac},${p.yFrac}`).join(' ')}
+                fill="#fed7aa"
+                fillOpacity={0.35}
+                stroke="#ea580c"
+                strokeWidth={strokeW}
+                strokeDasharray={`${Math.max(vbW, vbH) * 0.014} ${Math.max(vbW, vbH) * 0.01}`}
+                style={{ pointerEvents: 'none' }}
+              />
+            );
+          })()}
+        {editTool === 'drawRect' && rectCornerA && !draftHover ? (
+          <circle cx={rectCornerA.xFrac} cy={rectCornerA.yFrac} r={vh * 0.8} fill="#ea580c" stroke="#fff" strokeWidth={strokeW * 0.4} style={{ pointerEvents: 'none' }} />
+        ) : null}
+        {editTool === 'drawCircle' && circleCenter && draftHover ? (
+          <g style={{ pointerEvents: 'none' }}>
+            <circle
+              cx={circleCenter.xFrac}
+              cy={circleCenter.yFrac}
+              r={Math.hypot(draftHover.x - circleCenter.xFrac, draftHover.y - circleCenter.yFrac)}
+              fill="#fed7aa"
+              fillOpacity={0.2}
+              stroke="#ea580c"
+              strokeWidth={strokeW}
+              strokeDasharray={`${Math.max(vbW, vbH) * 0.014} ${Math.max(vbW, vbH) * 0.01}`}
+            />
+            <line
+              x1={circleCenter.xFrac}
+              y1={circleCenter.yFrac}
+              x2={draftHover.x}
+              y2={draftHover.y}
+              stroke="#c2410c"
+              strokeWidth={strokeW * 0.8}
+            />
+            <circle cx={circleCenter.xFrac} cy={circleCenter.yFrac} r={vh * 0.65} fill="#ea580c" stroke="#fff" strokeWidth={strokeW * 0.4} />
+          </g>
+        ) : null}
+        {editTool === 'drawCircle' && circleCenter && !draftHover ? (
+          <circle cx={circleCenter.xFrac} cy={circleCenter.yFrac} r={vh * 0.8} fill="#ea580c" stroke="#fff" strokeWidth={strokeW * 0.4} style={{ pointerEvents: 'none' }} />
+        ) : null}
         {outline.map((p, idx) => {
           const r = vh;
           const isEdgeVert =
@@ -540,7 +872,7 @@ export function AiBimFootprintEditor({
           const isRemoveHot = editTool === 'removeVertex' && n > 3;
           const isChordPick = editTool === 'chordAB' && chordFirstIdx === idx;
           return (
-            <g key={idx}>
+            <g key={idx} style={{ pointerEvents: isDrawTool ? 'none' : 'auto' }}>
               {isChordPick ? (
                 <circle
                   cx={p.xFrac}
@@ -637,6 +969,36 @@ export function AiBimFootprintEditor({
             </button>
             <span className="text-[10px] text-gray-500">{t('scaffold', 'aiBimFootprintEdgeNoteTrim')}</span>
           </div>
+        </div>
+      ) : null}
+
+      {editTool === 'drawPolyline' ? (
+        <div className="flex flex-wrap items-center gap-2 px-2 py-2 border-t border-amber-100 bg-amber-50/50">
+          <button
+            type="button"
+            disabled={draftPolyline.length === 0}
+            onClick={() => setDraftPolyline((p) => p.slice(0, -1))}
+            className="text-xs font-medium px-2 py-1 rounded border border-amber-300 bg-white text-amber-900 disabled:opacity-40"
+          >
+            {t('scaffold', 'aiBimFootprintDrawUndo')}
+          </button>
+          <button
+            type="button"
+            disabled={draftPolyline.length < 3}
+            onClick={() => tryApplyPolyline()}
+            className="text-xs font-medium px-2 py-1 rounded bg-amber-600 text-white disabled:opacity-40"
+          >
+            {t('scaffold', 'aiBimFootprintDrawApply')}
+          </button>
+          <button
+            type="button"
+            disabled={draftPolyline.length === 0}
+            onClick={() => setDraftPolyline([])}
+            className="text-xs font-medium px-2 py-1 rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-40"
+          >
+            {t('scaffold', 'aiBimFootprintDrawClear')}
+          </button>
+          <span className="text-[10px] text-gray-600">{t('scaffold', 'aiBimFootprintDrawCloseHint')}</span>
         </div>
       ) : null}
     </div>
