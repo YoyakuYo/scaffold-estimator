@@ -269,7 +269,9 @@ function collapseTinyOrthogonalJogs(
       sim.splice(Math.min(best.i, best.nextI), 1);
       const areaChange = Math.abs(polyArea(sim) - currentArea) / Math.max(currentArea, 1);
 
-      if (areaChange > 0.03) continue;
+      // Match backend two-stage guard so preview and persisted result stay aligned.
+      const canUseRelaxedFirstPass = out.length > 6 && best.ratio < 0.75 && areaChange <= 0.20;
+      if (areaChange > 0.08 && !canUseRelaxedFirstPass) continue;
 
       if (best.vertical) out[best.nnI]!.z = out[best.i]!.z;
       else out[best.nnI]!.x = out[best.i]!.x;

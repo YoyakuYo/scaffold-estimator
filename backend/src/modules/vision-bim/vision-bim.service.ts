@@ -2107,7 +2107,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     });
     const jogCollapsed = this.collapseShortParallelStepArtifacts(pre, {
       maxStepMm: Math.max(1200, Math.round(cellMm * 4.0)),
-      maxStepToNeighborRatio: 0.50,
+      maxStepToNeighborRatio: 0.65,
     });
     const simplified = this.removeCollinearVertices(jogCollapsed, {
       sinTolerance: 0.10,
@@ -2861,7 +2861,12 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const newArea = polyArea(sim);
         const areaChange = Math.abs(newArea - currentArea) / Math.max(currentArea, 1);
 
-        if (areaChange > 0.03) continue;
+        // Two-stage area guard:
+        // - When polygon still has >6 vertices, allow one larger cleanup step if
+        //   the candidate ratio is strongly artifact-like (very short step).
+        // - At 6 vertices and below, stay strict to block 6->4 collapse.
+        const canUseRelaxedFirstPass = out.length > 6 && best.ratio < 0.75 && areaChange <= 0.20;
+        if (areaChange > 0.08 && !canUseRelaxedFirstPass) continue;
 
         if (best.d2Vertical) out[best.nnI].y = out[best.i].y;
         else out[best.nnI].x = out[best.i].x;
