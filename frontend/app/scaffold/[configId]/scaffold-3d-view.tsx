@@ -2078,7 +2078,9 @@ export default function Scaffold3DView({
       const buildingShellParent: THREE.Object3D = proceduralBimShell ?? scene;
       if (proceduralBimShell) {
         proceduralBimShell.userData = { isProceduralBimShell: true };
-        proceduralBimShell.visible = false; // hidden until IFC fails or timeout
+        // Show procedural building immediately so the 3D tab is never "scaffold-only"
+        // while IFC loads. Native IFC hides this group when meshes are ready.
+        proceduralBimShell.visible = true;
         scene.add(proceduralBimShell);
       }
 
@@ -2809,7 +2811,7 @@ export default function Scaffold3DView({
 
       // ── IFC Model Loading ──
       // For AI BIM: load native IFC mesh from buffer cache or URL.
-      // Procedural shell starts hidden; shown only when IFC unavailable.
+      // Procedural shell is visible from the first frame; hide it when IFC succeeds.
       if (isAiBim) {
         const ifcFileUrl = (result as any)?.ifcFileUrl;
         let configId: string | undefined;
@@ -2928,6 +2930,7 @@ export default function Scaffold3DView({
             }
 
             scene.add(ifcGroup);
+            if (proceduralBimShell) proceduralBimShell.visible = false;
             console.log(`[Scaffold3DView] IFC rendered: ${meshesForView.length} meshes`);
           } catch (e) {
             console.warn('[Scaffold3DView] IFC parse failed, showing procedural shell:', e);
