@@ -2411,9 +2411,9 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const areaRatio = Math.min(prevArea, currArea) / Math.max(prevArea, currArea);
         const widthChange = Math.abs(currW - prevW) / Math.max(prevW, 1);
         const heightChange = Math.abs(currH - prevH) / Math.max(prevH, 1);
-        // More sensitive split detection for stepped buildings:
-        // previous thresholds (0.70 / 20%) missed smaller but real setbacks.
-        shouldSplit = areaRatio < 0.90 || widthChange > 0.10 || heightChange > 0.10;
+        // Balanced split detection: catch real setbacks (30–50% area drop)
+        // without false-triggering on minor point cloud noise (≤15%).
+        shouldSplit = areaRatio < 0.85 || widthChange > 0.15 || heightChange > 0.15;
       }
 
       if (shouldSplit) {
@@ -2488,10 +2488,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
   /**
    * Final IFC footprint cleanup pass.
    *
-   * Goal:
-   * - Preserve true outline shape (e.g. 6-wall L-shape)
-   * - Remove grid quantization artifacts that produce 8+ walls
-   * - Keep behavior scale-invariant (not dependent on building absolute size)
+   * IFC grid extraction often produces 8+ wall polygons for buildings that are
+   * really 6-wall L-shapes. The grid cell boundaries create spurious parallel-step
+   * artifacts (two short perpendicular edges between parallel long edges). These
+   * steps can be 15–25% of perimeter — much larger than typical grid noise — so
+   * the collapse must use generous, perimeter-relative thresholds.
    */
   private cleanupIfcFootprintPolygon(
     pts: Array<{ x: number; y: number }>,
@@ -2517,16 +2518,113 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       sinTolerance: 0.10,
       minEdgeMm,
     });
-    const collapsed = this.collapseShortParallelStepArtifacts(collinear1, {
-      maxStepMm: Math.max(600, perimeter * 0.015),
-      maxStepToNeighborRatio: 0.33,
-    });
-    const collinear2 = this.removeCollinearVertices(collapsed, {
+
+    // Phase 1: collapse steps iteratively (smallest-area-contribution first)
+    let result = this.collapseSmallestStepIteratively(collinear1);
+
+    // Phase 2: secondary collinear cleanup after step collapse
+    result = this.removeCollinearVertices(result, {
       sinTolerance: 0.12,
       minEdgeMm,
     });
 
-    return collinear2.length >= 3 ? collinear2 : pts;
+    this.logger.log(
+      `cleanupIfcFootprintPolygon: ${pts.length} → ${result.length} vertices`,
+    );
+    return result.length >= 3 ? result : pts;
+  }
+
+  /**
+   * Iteratively collapse parallel-step triplets (A→B ∥ C→D, B→C ⊥ them).
+   *
+   * Ranking criterion: stepLen / min(neighborLen1, neighborLen2).
+   * A grid artifact step is short compared to its parallel neighbors;
+   * a real building corner has step ≈ neighbor length (ratio ≈ 1.0).
+   * We collapse the step with the SMALLEST ratio first, and stop when
+   * no candidate has ratio < 0.7 (remaining steps are likely real geometry).
+   */
+  private collapseSmallestStepIteratively(
+    pts: Array<{ x: number; y: number }>,
+  ): Array<{ x: number; y: number }> {
+    if (pts.length <= 4) return pts;
+    const out = pts.map((p) => ({ x: p.x, y: p.y }));
+
+    let changed = true;
+    while (changed && out.length > 4) {
+      changed = false;
+      const n = out.length;
+
+      type StepCandidate = {
+        i: number;
+        nextI: number;
+        nnI: number;
+        stepLen: number;
+        ratio: number;
+        d2Vertical: boolean;
+      };
+      const candidates: StepCandidate[] = [];
+
+      for (let i = 0; i < n; i++) {
+        const prevI = (i - 1 + n) % n;
+        const nextI = (i + 1) % n;
+        const nnI = (i + 2) % n;
+
+        const a = out[prevI];
+        const b = out[i];
+        const c = out[nextI];
+        const d = out[nnI];
+
+        const d1x = b.x - a.x, d1y = b.y - a.y;
+        const d2x = c.x - b.x, d2y = c.y - b.y;
+        const d3x = d.x - c.x, d3y = d.y - c.y;
+        const l1 = Math.hypot(d1x, d1y);
+        const l2 = Math.hypot(d2x, d2y);
+        const l3 = Math.hypot(d3x, d3y);
+        if (l1 < 1e-9 || l2 < 1e-9 || l3 < 1e-9) continue;
+
+        const parallel13 = Math.abs((d1x * d3x + d1y * d3y) / (l1 * l3));
+        const perp12 = Math.abs((d1x * d2x + d1y * d2y) / (l1 * l2));
+        if (parallel13 < 0.95 || perp12 > 0.25) continue;
+
+        const d2Vertical = Math.abs(d2y) > Math.abs(d2x);
+        const shorterNeighbor = Math.min(l1, l3);
+        const ratio = l2 / Math.max(shorterNeighbor, 1);
+
+        candidates.push({ i, nextI, nnI, stepLen: l2, ratio, d2Vertical });
+      }
+
+      if (candidates.length === 0) break;
+
+      candidates.sort((a, b) => a.ratio - b.ratio);
+      const best = candidates[0];
+
+      if (best.ratio >= 0.7) break;
+
+      if (best.d2Vertical) out[best.nnI].y = out[best.i].y;
+      else out[best.nnI].x = out[best.i].x;
+
+      const rmA = Math.max(best.i, best.nextI);
+      const rmB = Math.min(best.i, best.nextI);
+      out.splice(rmA, 1);
+      out.splice(rmB, 1);
+
+      this.logger.log(
+        `collapseSmallestStep: removed step (len=${Math.round(best.stepLen)}mm, ` +
+        `ratio=${best.ratio.toFixed(3)}), ${n}→${out.length} vertices`,
+      );
+      changed = true;
+    }
+
+    return out.length >= 3 ? out : pts;
+  }
+
+  private signedArea2(pts: Array<{ x: number; y: number }>): number {
+    let a = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const j = (i + 1) % pts.length;
+      a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    }
+    return a;
   }
 
   /**
