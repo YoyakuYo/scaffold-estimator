@@ -1559,7 +1559,10 @@ export default function Scaffold3DView({
       // vertical continuations and must NOT be skipped.
       // ══════════════════════════════════════════════════════
       const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
-      if (hasTiers && tierGroups.length > 1) {
+      // AI BIM stepped buildings should keep scaffold on setback facades too
+      // (including walls rising from the smaller building roof).
+      const enableExteriorOnlyFilter = !isAiBim;
+      if (enableExteriorOnlyFilter && hasTiers && tierGroups.length > 1) {
         const CO_EDGE_THRESHOLD = 0.15;
         for (let tgi = 1; tgi < tierGroups.length; tgi++) {
           const tg = tierGroups[tgi];

@@ -1728,8 +1728,11 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       const fpMaxFy = useGround ? gMaxFy : maxFy;
 
       // Try grid-based footprint extraction (captures L/U/T and complex shapes)
-      const footprint = this.extractFootprintFromXY(fpPoints, fpMinFx, fpMinFy, fpMaxFx, fpMaxFy, toMm);
-      if (footprint && footprint.length >= 3) {
+      const footprintRaw = this.extractFootprintFromXY(fpPoints, fpMinFx, fpMinFy, fpMaxFx, fpMaxFy, toMm);
+      if (footprintRaw && footprintRaw.length >= 3) {
+        // IFC grid extraction can introduce tiny orthogonal jog artifacts that turn
+        // a true 6-wall L-shape into 8 walls. Clean those in a scale-invariant way.
+        const footprint = this.cleanupIfcFootprintPolygon(footprintRaw);
         const n = footprint.length;
         const wallLengthsMm = footprint.map((v, i) => {
           const next = footprint[(i + 1) % n];
@@ -1744,7 +1747,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         );
         const massingTiers = this.generateMassingTiersFromIfcPoints(
           pointsMm, fp2d, toMm, minFx, minFy, maxFx, maxFy,
-          minZMm, maxZMm, buildingHeightMm,
+          minZMm, maxZMm, buildingHeightMm, footprint,
         );
         this.logger.log(
           `IFC footprint: ${n} vertices (grid-based), height=${buildingHeightMm}mm, ` +
@@ -2059,7 +2062,20 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const boundary = this.extractBoundaryFromGrid(grid, gw, gh, originXMm, originYMm, cellMm);
     if (boundary.length < 3) return null;
 
-    const simplified = this.removeCollinearVertices(boundary, cellMm * cellMm * 0.5);
+    // Simplify with angle-based (scale-invariant) collinear removal first, then
+    // collapse tiny orthogonal jogs introduced by grid discretization.
+    const pre = this.removeCollinearVertices(boundary, {
+      sinTolerance: 0.08,
+      minEdgeMm: Math.max(120, Math.round(cellMm * 0.8)),
+    });
+    const jogCollapsed = this.collapseShortParallelStepArtifacts(pre, {
+      maxStepMm: Math.max(600, Math.round(cellMm * 2.0)),
+      maxStepToNeighborRatio: 0.35,
+    });
+    const simplified = this.removeCollinearVertices(jogCollapsed, {
+      sinTolerance: 0.10,
+      minEdgeMm: Math.max(120, Math.round(cellMm * 0.8)),
+    });
     return simplified.length >= 3 ? simplified : null;
   }
 
@@ -2321,6 +2337,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     minFx: number, minFy: number, maxFx: number, maxFy: number,
     minZMm: number, maxZMm: number,
     buildingHeightMm: number,
+    baseFootprint?: Array<{ x: number; y: number }>,
   ): VisionMassingTier[] | undefined {
     if (pointsMm.length < 500 || buildingHeightMm < 3000) return undefined;
 
@@ -2394,7 +2411,9 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         const areaRatio = Math.min(prevArea, currArea) / Math.max(prevArea, currArea);
         const widthChange = Math.abs(currW - prevW) / Math.max(prevW, 1);
         const heightChange = Math.abs(currH - prevH) / Math.max(prevH, 1);
-        shouldSplit = areaRatio < 0.70 || widthChange > 0.20 || heightChange > 0.20;
+        // More sensitive split detection for stepped buildings:
+        // previous thresholds (0.70 / 20%) missed smaller but real setbacks.
+        shouldSplit = areaRatio < 0.90 || widthChange > 0.10 || heightChange > 0.10;
       }
 
       if (shouldSplit) {
@@ -2428,23 +2447,35 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const hasRealSetback = tiers.some((tier, idx) => {
       if (idx === 0) return false;
       const tierArea = (tier.bbox.maxX - tier.bbox.minX) * (tier.bbox.maxY - tier.bbox.minY);
-      return tierArea / Math.max(baseTierArea, 1) < 0.85;
+      const areaDrop = Math.max(0, baseTierArea - tierArea);
+      const dropRatio = areaDrop / Math.max(baseTierArea, 1);
+      // Treat as real setback when both ratio and absolute area are meaningful.
+      // This avoids size-dependent misses where small wings disappear on large models.
+      return dropRatio >= 0.03 && areaDrop >= 4_000_000; // >=3% and >=4m^2
     });
     if (!hasRealSetback) {
       this.logger.log('IFC massing tiers all have similar footprints — skipping tier generation');
       return undefined;
     }
 
-    const result: VisionMassingTier[] = tiers.map((tier) => ({
-      vertices: [
-        { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
-        { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
-        { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
-        { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
-      ],
-      topHeightMm: Math.min(tier.topHeightMm, buildingHeightMm),
-      baseHeightMm: tier.baseHeightMm,
-    }));
+    const result: VisionMassingTier[] = tiers.map((tier, idx) => {
+      // Keep tier 0 aligned to the extracted footprint (not its bbox rectangle),
+      // so scaffold decomposition preserves the real ground outline (e.g. 6-wall L-shape).
+      const tierVerts =
+        idx === 0 && Array.isArray(baseFootprint) && baseFootprint.length >= 3
+          ? baseFootprint.map((v) => ({ x: Math.round(v.x), y: Math.round(v.y) }))
+          : [
+              { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.minY) },
+              { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.minY) },
+              { x: Math.round(tier.bbox.maxX), y: Math.round(tier.bbox.maxY) },
+              { x: Math.round(tier.bbox.minX), y: Math.round(tier.bbox.maxY) },
+            ];
+      return {
+        vertices: tierVerts,
+        topHeightMm: Math.min(tier.topHeightMm, buildingHeightMm),
+        baseHeightMm: tier.baseHeightMm,
+      };
+    });
 
     this.logger.log(
       `Generated ${result.length} massing tiers from IFC points: ` +
@@ -2454,19 +2485,154 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     return result;
   }
 
+  /**
+   * Final IFC footprint cleanup pass.
+   *
+   * Goal:
+   * - Preserve true outline shape (e.g. 6-wall L-shape)
+   * - Remove grid quantization artifacts that produce 8+ walls
+   * - Keep behavior scale-invariant (not dependent on building absolute size)
+   */
+  private cleanupIfcFootprintPolygon(
+    pts: Array<{ x: number; y: number }>,
+  ): Array<{ x: number; y: number }> {
+    if (!Array.isArray(pts) || pts.length < 3) return pts;
+
+    const dedup: Array<{ x: number; y: number }> = [];
+    for (const p of pts) {
+      const last = dedup[dedup.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) > 1e-6) {
+        dedup.push({ x: p.x, y: p.y });
+      }
+    }
+    if (dedup.length < 3) return pts;
+
+    const perimeter = dedup.reduce((s, p, i) => {
+      const q = dedup[(i + 1) % dedup.length];
+      return s + Math.hypot(q.x - p.x, q.y - p.y);
+    }, 0);
+    const minEdgeMm = Math.max(150, perimeter * 0.002);
+
+    const collinear1 = this.removeCollinearVertices(dedup, {
+      sinTolerance: 0.10,
+      minEdgeMm,
+    });
+    const collapsed = this.collapseShortParallelStepArtifacts(collinear1, {
+      maxStepMm: Math.max(600, perimeter * 0.015),
+      maxStepToNeighborRatio: 0.33,
+    });
+    const collinear2 = this.removeCollinearVertices(collapsed, {
+      sinTolerance: 0.12,
+      minEdgeMm,
+    });
+
+    return collinear2.length >= 3 ? collinear2 : pts;
+  }
+
+  /**
+   * Collapse tiny orthogonal "parallel-step" artifacts:
+   * prev→A, A→B(short), B→C where prev→A ∥ B→C and A→B ⟂ them.
+   *
+   * These appear from voxel/grid contour extraction and often turn
+   * a true 6-wall L-shape into an 8-wall footprint.
+   */
+  private collapseShortParallelStepArtifacts(
+    pts: Array<{ x: number; y: number }>,
+    options: {
+      maxStepMm: number;
+      maxStepToNeighborRatio: number;
+    },
+  ): Array<{ x: number; y: number }> {
+    const { maxStepMm, maxStepToNeighborRatio } = options;
+    if (pts.length <= 6) return pts;
+
+    const out = pts.map((p) => ({ x: p.x, y: p.y }));
+    let changed = true;
+
+    while (changed && out.length > 6) {
+      changed = false;
+      const n = out.length;
+
+      for (let i = 0; i < n; i++) {
+        const prevI = (i - 1 + n) % n;
+        const nextI = (i + 1) % n;
+        const nnI = (i + 2) % n;
+
+        const a = out[prevI];
+        const b = out[i];
+        const c = out[nextI];
+        const d = out[nnI];
+
+        const d1x = b.x - a.x;
+        const d1y = b.y - a.y;
+        const d2x = c.x - b.x;
+        const d2y = c.y - b.y;
+        const d3x = d.x - c.x;
+        const d3y = d.y - c.y;
+
+        const l1 = Math.hypot(d1x, d1y);
+        const l2 = Math.hypot(d2x, d2y);
+        const l3 = Math.hypot(d3x, d3y);
+        if (l1 < 1e-9 || l2 < 1e-9 || l3 < 1e-9) continue;
+
+        const parallel13 = Math.abs((d1x * d3x + d1y * d3y) / (l1 * l3));
+        const perp12 = Math.abs((d1x * d2x + d1y * d2y) / (l1 * l2));
+        if (parallel13 < 0.985 || perp12 > 0.2) continue;
+
+        const neighborRef = Math.max(Math.max(l1, l3), 1);
+        const isTinyStep =
+          l2 <= maxStepMm && l2 <= maxStepToNeighborRatio * neighborRef;
+        if (!isTinyStep) continue;
+
+        // Maintain orthogonality: align D with B on the step axis, then remove B,C.
+        const stepMostlyVertical = Math.abs(d2y) > Math.abs(d2x);
+        if (stepMostlyVertical) {
+          out[nnI].y = out[i].y;
+        } else {
+          out[nnI].x = out[i].x;
+        }
+
+        const rmA = Math.max(i, nextI);
+        const rmB = Math.min(i, nextI);
+        out.splice(rmA, 1);
+        out.splice(rmB, 1);
+        changed = true;
+        break;
+      }
+    }
+
+    return out.length >= 3 ? out : pts;
+  }
+
   private removeCollinearVertices(
     pts: Array<{ x: number; y: number }>,
-    tolerance: number,
+    options?: {
+      sinTolerance?: number;
+      minEdgeMm?: number;
+    },
   ): Array<{ x: number; y: number }> {
     if (pts.length <= 3) return pts;
+    const sinTolerance = options?.sinTolerance ?? 0.08;
+    const minEdgeMm = options?.minEdgeMm ?? 120;
+
     const result: typeof pts = [];
     for (let i = 0; i < pts.length; i++) {
       const prev = pts[(i - 1 + pts.length) % pts.length];
       const curr = pts[i];
       const next = pts[(i + 1) % pts.length];
-      const cross = (curr.x - prev.x) * (next.y - curr.y)
-                  - (curr.y - prev.y) * (next.x - curr.x);
-      if (Math.abs(cross) > tolerance) result.push(curr);
+      const abx = curr.x - prev.x;
+      const aby = curr.y - prev.y;
+      const bcx = next.x - curr.x;
+      const bcy = next.y - curr.y;
+      const abLen = Math.hypot(abx, aby);
+      const bcLen = Math.hypot(bcx, bcy);
+
+      // Degenerate/tiny edges are usually raster-grid noise.
+      if (abLen < minEdgeMm || bcLen < minEdgeMm) continue;
+
+      const sinAngle = Math.abs(abx * bcy - aby * bcx) / (abLen * bcLen);
+      if (sinAngle <= sinTolerance) continue;
+      result.push(curr);
     }
     return result.length >= 3 ? result : pts;
   }

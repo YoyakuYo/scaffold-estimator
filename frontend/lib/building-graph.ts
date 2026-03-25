@@ -200,6 +200,63 @@ function normalizeFootprintToMm(
   return raw.map((p) => ({ x: Number(p.x) || 0, z: Number(p.z) || 0 }));
 }
 
+/**
+ * Remove tiny orthogonal jog artifacts (grid/pixel noise) while preserving
+ * real setbacks. This is scale-invariant: thresholds are perimeter-relative.
+ */
+function collapseTinyOrthogonalJogs(
+  pts: Array<{ x: number; z: number }>,
+): Array<{ x: number; z: number }> {
+  if (pts.length <= 6) return pts;
+  const out = pts.map((p) => ({ x: p.x, z: p.z }));
+  const perimeter = out.reduce((s, p, i) => {
+    const q = out[(i + 1) % out.length]!;
+    return s + Math.hypot(q.x - p.x, q.z - p.z);
+  }, 0);
+  const maxJogMm = Math.max(600, perimeter * 0.015);
+
+  let changed = true;
+  while (changed && out.length > 6) {
+    changed = false;
+    const n = out.length;
+    for (let i = 0; i < n; i++) {
+      const prevI = (i - 1 + n) % n;
+      const nextI = (i + 1) % n;
+      const nnI = (i + 2) % n;
+      const a = out[prevI]!;
+      const b = out[i]!;
+      const c = out[nextI]!;
+      const d = out[nnI]!;
+      const d1x = b.x - a.x;
+      const d1z = b.z - a.z;
+      const d2x = c.x - b.x;
+      const d2z = c.z - b.z;
+      const d3x = d.x - c.x;
+      const d3z = d.z - c.z;
+      const l1 = Math.hypot(d1x, d1z);
+      const l2 = Math.hypot(d2x, d2z);
+      const l3 = Math.hypot(d3x, d3z);
+      if (l1 < 1e-9 || l2 < 1e-9 || l3 < 1e-9) continue;
+      const parallel13 = Math.abs((d1x * d3x + d1z * d3z) / (l1 * l3));
+      const perp12 = Math.abs((d1x * d2x + d1z * d2z) / (l1 * l2));
+      if (parallel13 < 0.985 || perp12 > 0.2) continue;
+      if (l2 > maxJogMm || l2 > 0.33 * Math.max(l1, l3)) continue;
+
+      const stepMostlyZ = Math.abs(d2z) > Math.abs(d2x);
+      if (stepMostlyZ) out[nnI]!.z = out[i]!.z;
+      else out[nnI]!.x = out[i]!.x;
+
+      const rmA = Math.max(i, nextI);
+      const rmB = Math.min(i, nextI);
+      out.splice(rmA, 1);
+      out.splice(rmB, 1);
+      changed = true;
+      break;
+    }
+  }
+  return out.length >= 3 ? out : pts;
+}
+
 export interface BuildGraphOptions {
   /** Wall lengths from plan dimensions (mm); used for scaling and closed-loop */
   wallLengthsMm?: number[];
@@ -229,6 +286,7 @@ export function buildGraphFromFootprint(
     const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm, contourOpts);
     mm = contourPts.map((p) => ({ x: p.x, z: p.y }));
   }
+  mm = collapseTinyOrthogonalJogs(mm);
 
   // Snap / dedupe: merge vertices that are effectively identical (vision output often repeats endpoints).
   const tolMm = 1; // 1mm tolerance for node snapping
