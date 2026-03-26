@@ -1170,7 +1170,7 @@ function ScaffoldPageContent() {
                 }`}
               >
                 <ScanLine className="h-4 w-4" />
-                AI抽出
+                {t('scaffoldExtra', 'aiExtractTab')}
               </button>
               <button
                 onClick={() => setInputMode('drawing')}
@@ -1181,7 +1181,7 @@ function ScaffoldPageContent() {
                 }`}
               >
                 <Upload className="h-4 w-4" />
-                ファイルアップロード
+                {t('scaffoldExtra', 'fileUploadTab')}
               </button>
               <button
                 onClick={() => setInputMode('cad_draw')}
@@ -1192,7 +1192,7 @@ function ScaffoldPageContent() {
                 }`}
               >
                 <PenTool className="h-4 w-4" />
-                手描きCAD
+                {t('scaffoldExtra', 'cadDrawTab')}
               </button>
             </div>
           )}
@@ -1408,7 +1408,7 @@ function ScaffoldPageContent() {
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                       <Check className="h-4 w-4" />
-                      AI抽出完了 — 下のテーブルで寸法を確認・修正してください
+                      {t('scaffoldExtra', 'extractionComplete')}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-2">
@@ -1430,7 +1430,7 @@ function ScaffoldPageContent() {
                       className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      別のファイルをアップロード
+                      {t('scaffoldExtra', 'uploadAnotherFile')}
                     </button>
                   </div>
                 </div>
@@ -1865,10 +1865,10 @@ function ScaffoldPageContent() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <PenTool className="h-5 w-5 text-emerald-600" />
-              手描きCAD — 図面作成
+              {t('scaffoldExtra', 'cadDrawTitle')}
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              ポリラインツールで建物の外形を描画し、寸法を入力してください。基準寸法ボタンで1辺の実寸を設定すると自動でスケール計算されます。
+              {t('scaffoldExtra', 'cadDrawDescription')}
             </p>
             <CadDrawingCanvas
               buildingHeightMm={buildingHeightMm ?? 3000}

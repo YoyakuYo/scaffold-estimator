@@ -917,9 +917,16 @@ export const translations = {
 
   // ─── Scaffold Input Extras ──────────────────────────────────
   scaffoldExtra: {
-    manualInput: { ja: '手動入力', en: 'Manual Input', fr: 'Manual Input' },
-    drawingUpload: { ja: '図面アップロード', en: 'Drawing Upload', fr: 'Drawing Upload' },
-    quickBuilder: { ja: 'クイックビルダー', en: 'Quick Shape Builder', fr: 'Quick Shape Builder' },
+    manualInput: { ja: '手動入力', en: 'Manual Input', fr: 'Saisie manuelle' },
+    drawingUpload: { ja: '図面アップロード', en: 'Drawing Upload', fr: 'Televersement de plans' },
+    quickBuilder: { ja: 'クイックビルダー', en: 'Quick Shape Builder', fr: 'Constructeur rapide' },
+    aiExtractTab: { ja: 'AI抽出', en: 'AI Extraction', fr: 'Extraction IA' },
+    fileUploadTab: { ja: 'ファイルアップロード', en: 'File Upload', fr: 'Televersement de fichier' },
+    cadDrawTab: { ja: '手描きCAD', en: 'Manual CAD Drawing', fr: 'Dessin CAO manuel' },
+    cadDrawTitle: { ja: '手描きCAD — 図面作成', en: 'Manual CAD Drawing — Create Plan', fr: 'Dessin CAO manuel — Creer un plan' },
+    cadDrawDescription: { ja: 'ポリラインツールで建物の外形を描画し、寸法を入力してください。基準寸法ボタンで1辺の実寸を設定すると自動でスケール計算されます。', en: 'Draw the building outline using the polyline tool and enter dimensions. Use the calibration button to set a real-world distance for one edge to auto-calculate scale.', fr: 'Dessinez le contour du batiment avec l\'outil polyligne et entrez les dimensions. Utilisez le bouton de calibration pour definir une distance reelle sur un cote afin de calculer l\'echelle automatiquement.' },
+    extractionComplete: { ja: 'AI抽出完了 — 下のテーブルで寸法を確認・修正してください', en: 'AI extraction complete — Review and edit dimensions in the table below', fr: 'Extraction IA terminee — Verifiez et modifiez les dimensions dans le tableau ci-dessous' },
+    uploadAnotherFile: { ja: '別のファイルをアップロード', en: 'Upload another file', fr: 'Televerser un autre fichier' },
     scaffoldType: { ja: '足場タイプ', en: 'Scaffold Type', fr: 'Scaffold Type' },
     frameSize: { ja: '建枠サイズ', en: 'Frame Size', fr: 'Frame Size' },
     frameSizeHint: { ja: 'レベル高さ = 建枠サイズ', en: 'Level height = frame size', fr: 'Level height = frame size' },

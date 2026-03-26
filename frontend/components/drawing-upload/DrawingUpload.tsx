@@ -278,53 +278,93 @@ export function DrawingUpload({
     }
   }, []);
 
-  // ── Process via backend (image/PDF/CAD) ──
+  // ── Process via AI vision API (image/PDF) — auto-extract shape and dimensions ──
   const processBackend = useCallback(async (f: File, fk: FileKind) => {
     try {
-      setStatus('ファイルをアップロード・処理中...');
-      const res = await drawingsApi.upload(f, 'default-project');
+      setStatus('ファイルを解析中…建物形状と寸法を自動検出しています');
+      const { visionBimApi } = await import('@/lib/api/vision-bim');
 
-      if (res.status === 'failed') {
-        setErrMsg(res.message || '処理に失敗しました');
-        setPhase('error');
-        return;
+      try {
+        const result = await visionBimApi.extractDimensions(f);
+
+        if (result.vertices && result.vertices.length >= 3) {
+          const verts = result.vertices as Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+          const hasMm = verts.some(v => (v.x ?? 0) > 100 || (v.y ?? 0) > 100);
+          const pts: Vertex[] = verts.map(v => ({
+            x: v.x ?? v.xFrac ?? 0,
+            y: v.y ?? v.yFrac ?? 0,
+          }));
+
+          const wallMm = result.wallLengthsMm && result.wallLengthsMm.length === pts.length
+            ? result.wallLengthsMm
+            : recalcLengths(pts);
+
+          setShape({ verts: pts, wallMm, coordsAreMm: hasMm });
+
+          if (result.buildingHeightMm && result.buildingHeightMm >= 1000) {
+            onBuildingHeightChange(result.buildingHeightMm);
+          }
+
+          const shapeType = pts.length === 4 ? '矩形' :
+            pts.length === 6 ? 'L形' :
+            pts.length === 8 ? 'Z形/U形/T形' :
+            `${pts.length}角形`;
+          setStatus(`${shapeType}（${pts.length}辺）の建物形状を検出しました。クリックして編集できます。`);
+          setPhase('editor');
+          return;
+        }
+      } catch (visionErr: any) {
+        console.warn('Vision API extraction failed, falling back to basic upload:', visionErr?.message);
       }
 
-      // CAD pipeline result (DWG/JWW)
-      if (res.cadData?.wallSegments && res.cadData.wallSegments.length >= 3) {
-        const ws = res.cadData.wallSegments;
-        const pts = ws.map((s: CadWallSegment) => ({ x: s.start.x, y: -s.start.y }));
-        setShape({ verts: pts, wallMm: ws.map((s: CadWallSegment) => Math.round(s.length)), coordsAreMm: true });
-        if (res.cadData.buildingHeight) onBuildingHeightChange(res.cadData.buildingHeight);
-        setStatus(`${ws.length}辺の建物形状を検出 (CAD)`);
-        setPhase('editor');
-        return;
-      }
+      // Fallback: basic backend upload for OCR
+      try {
+        const res = await drawingsApi.upload(f, 'default-project');
 
-      // Image/PDF OCR extraction
-      if (res.extractedDimensions) {
-        const ed = res.extractedDimensions;
-        const n = ed.walls.north?.lengthMm || 0;
-        const e = ed.walls.east?.lengthMm || 0;
-        const s = ed.walls.south?.lengthMm || n;
-        const w = ed.walls.west?.lengthMm || e;
-
-        if (n > 0 && e > 0) {
-          const pts: Vertex[] = [
-            { x: 0, y: 0 }, { x: n, y: 0 },
-            { x: n, y: e }, { x: 0, y: e },
-          ];
-          setShape({ verts: pts, wallMm: [n, e, s, w], coordsAreMm: true });
-          setStatus('壁面寸法を検出しました。クリックして編集できます。');
-        } else {
-          setShape({ verts: [], wallMm: [], coordsAreMm: false });
-          setStatus('寸法を自動検出できません。クリックして頂点を指定し、寸法を入力してください。');
-          setTracing(true);
+        if (res.status === 'failed') {
+          setErrMsg(res.message || '処理に失敗しました');
+          setPhase('error');
+          return;
         }
 
-        const height = ed.buildingHeightMm || ed.estimatedBuildingHeightMm;
-        if (height && height > 0) onBuildingHeightChange(height);
-      } else {
+        if (res.cadData?.wallSegments && res.cadData.wallSegments.length >= 3) {
+          const ws = res.cadData.wallSegments;
+          const pts = ws.map((s: CadWallSegment) => ({ x: s.start.x, y: -s.start.y }));
+          setShape({ verts: pts, wallMm: ws.map((s: CadWallSegment) => Math.round(s.length)), coordsAreMm: true });
+          if (res.cadData.buildingHeight) onBuildingHeightChange(res.cadData.buildingHeight);
+          setStatus(`${ws.length}辺の建物形状を検出 (CAD)`);
+          setPhase('editor');
+          return;
+        }
+
+        if (res.extractedDimensions) {
+          const ed = res.extractedDimensions;
+          const n = ed.walls.north?.lengthMm || 0;
+          const e = ed.walls.east?.lengthMm || 0;
+          const s = ed.walls.south?.lengthMm || n;
+          const w = ed.walls.west?.lengthMm || e;
+
+          if (n > 0 && e > 0) {
+            const pts: Vertex[] = [
+              { x: 0, y: 0 }, { x: n, y: 0 },
+              { x: n, y: e }, { x: 0, y: e },
+            ];
+            setShape({ verts: pts, wallMm: [n, e, s, w], coordsAreMm: true });
+            setStatus('壁面寸法を検出しました。クリックして編集できます。');
+          } else {
+            setShape({ verts: [], wallMm: [], coordsAreMm: false });
+            setStatus('寸法を自動検出できません。クリックして頂点を指定し、寸法を入力してください。');
+            setTracing(true);
+          }
+
+          const height = ed.buildingHeightMm || ed.estimatedBuildingHeightMm;
+          if (height && height > 0) onBuildingHeightChange(height);
+        } else {
+          setShape({ verts: [], wallMm: [], coordsAreMm: false });
+          setStatus('自動検出できません。クリックして頂点を指定してください。');
+          setTracing(true);
+        }
+      } catch {
         setShape({ verts: [], wallMm: [], coordsAreMm: false });
         setStatus('自動検出できません。クリックして頂点を指定してください。');
         setTracing(true);

@@ -36,8 +36,9 @@ export function getAiBimDefaults() {
 export type BuildingShape =
   | 'rectangle'    // 4 vertices, 0 reflex
   | 'l-shape'      // 6 vertices, 1 reflex
-  | 'u-shape'      // 8 vertices, 2 reflex (courtyard)
-  | 't-shape'      // 8 vertices, 2 reflex (stem + bar)
+  | 'z-shape'      // 8 vertices, 2 reflex (two offset wings, like Z or S)
+  | 'u-shape'      // 8 vertices, 2 reflex (courtyard opening on one side)
+  | 't-shape'      // 8 vertices, 2 reflex (stem + bar, center protrusion)
   | 'cross'        // 12 vertices, 4 reflex
   | 'irregular';   // non-orthogonal or complex
 
@@ -187,7 +188,8 @@ export function classifyBuildingShape(
   } else if (n === 6 && reflexCount === 1) {
     shape = 'l-shape';
   } else if (n === 8 && reflexCount === 2) {
-    shape = distinguishUvsT(pts, reflexIndices) ? 't-shape' : 'u-shape';
+    const shapeType8 = classify8VertexShape(pts, reflexIndices);
+    shape = shapeType8;
   } else if (n === 12 && reflexCount === 4) {
     shape = 'cross';
   } else {
@@ -210,20 +212,49 @@ export function classifyBuildingShape(
 }
 
 /**
- * Distinguish T-shape from U-shape based on reflex corner positions.
- * T-shape: reflex corners are adjacent (stem meets bar).
- * U-shape: reflex corners are separated by several edges (courtyard opening).
+ * Classify 8-vertex shapes with 2 reflex corners into Z-shape, U-shape, or T-shape.
+ *
+ * Z-shape: Two offset wings — reflex corners are on OPPOSITE sides of the polygon.
+ *   The two reflex corners create a staircase pattern (diagonal relationship).
+ * U-shape: Courtyard — reflex corners are adjacent, creating an opening on one side.
+ * T-shape: Center protrusion — reflex corners are adjacent, stem meets bar.
  */
-function distinguishUvsT(pts: Point2D[], reflexIndices: number[]): boolean {
-  if (reflexIndices.length !== 2) return false;
+function classify8VertexShape(pts: Point2D[], reflexIndices: number[]): 'z-shape' | 'u-shape' | 't-shape' {
+  if (reflexIndices.length !== 2) return 'u-shape';
   const n = pts.length;
   const [r1, r2] = reflexIndices;
   const dist1 = Math.abs(r2 - r1);
   const dist2 = n - dist1;
   const minDist = Math.min(dist1, dist2);
-  // T-shape: reflex corners are 2 apart (adjacent edges form the stem junction)
-  // U-shape: reflex corners are farther apart (forming courtyard opening)
-  return minDist <= 2;
+
+  // Z-shape detection: reflex corners are far apart (on opposite sides)
+  // In a Z with 8 vertices, reflex corners are typically 4 apart (diagonal).
+  if (minDist === 4) {
+    return 'z-shape';
+  }
+
+  // Also detect Z by checking if reflex corners are on opposite sides of bounding box
+  if (minDist >= 3) {
+    const cx = (Math.min(...pts.map(p => p.x)) + Math.max(...pts.map(p => p.x))) / 2;
+    const cy = (Math.min(...pts.map(p => p.y)) + Math.max(...pts.map(p => p.y))) / 2;
+    const p1 = pts[r1];
+    const p2 = pts[r2];
+    const side1x = p1.x < cx ? 'left' : 'right';
+    const side1y = p1.y < cy ? 'top' : 'bottom';
+    const side2x = p2.x < cx ? 'left' : 'right';
+    const side2y = p2.y < cy ? 'top' : 'bottom';
+    if (side1x !== side2x && side1y !== side2y) {
+      return 'z-shape';
+    }
+  }
+
+  // T-shape: reflex corners are close together (adjacent, stem meets bar)
+  if (minDist <= 2) {
+    return 't-shape';
+  }
+
+  // Default: U-shape
+  return 'u-shape';
 }
 
 /**

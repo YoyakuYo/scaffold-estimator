@@ -203,10 +203,12 @@ EXAMPLE: If the plan shows a main 9m x 11m rectangle with a 9m x 4m ENCLOSED win
 
 STEP 3 — TRACE THE OUTER PERIMETER:
 Walk the outer boundary CLOCKWISE. Place a vertex only at TRUE OUTSIDE CORNERS (where the exterior wall changes direction from one direction to another).
-- For a plain rectangle: 4 vertices.
-- For a plan with a protruding terrace on one side (same width as main body): the left and right sides are continuous straight lines — it is still 4 vertices (rectangle).
-- For a plan with a narrower terrace protruding from the center of the bottom side: 8 vertices forming an inverted T.
-- For an L-shaped plan (corner notch): 6 vertices.
+- Rectangle: 4 vertices.
+- L-shape (one corner notch): 6 vertices.
+- Z-shape / S-shape (two offset wings): 8 vertices. The top and bottom wings are shifted horizontally relative to each other. BOTH the left side AND the right side have a step. This is the MOST COMMONLY MISSED shape — when left-side height != right-side height AND top width != bottom width, it is a Z, not an L.
+- U-shape (courtyard on one side): 8 vertices.
+- T-shape (center protrusion): 8 vertices.
+- Cross/Plus: 12 vertices.
 NEVER place a vertex where an interior partition meets the exterior wall — that is NOT an exterior corner.
 The result should be 4–12 vertices for most buildings.
 
@@ -240,8 +242,9 @@ PERSPECTIVE ILLUSION WARNING:
 A rectangular box seen from a 3/4 angle shows 3 visible faces forming a hexagon silhouette. THIS IS AN OPTICAL ILLUSION — the real footprint is still a 4-vertex rectangle. NEVER trace this hexagonal silhouette.
 
 IF NOT RECTANGULAR:
-- L-shaped: 6 vertices from above.
-- U-shaped (courtyard): 8 vertices from above.
+- L-shaped: 6 vertices from above (one corner notch).
+- Z-shaped / S-shaped: 8 vertices from above (two offset wings).
+- U-shaped (courtyard): 8 vertices from above (opening on one side).
 - T-shaped (protruding central section): 8 vertices from above.
 
 OTHER 3D VIEW RULES:
@@ -262,18 +265,91 @@ When you detect this:
    ]
 5. For 3D BIM renders / perspective views: if you can see that the building steps inward at higher floors (visible rooftop of a lower section, tower rising from a podium), you MUST output massingTiers even if exact dimensions are estimated.
 
+=============== BUILDING SHAPE CATALOG (CRITICAL — identify the correct shape FIRST) ===============
+Before tracing vertices, IDENTIFY which shape the building footprint matches. This determines vertex count.
+
+RECTANGLE (4 vertices, 0 reflex corners):
+  Simple box. All 4 corners are 90°. Opposite sides are equal.
+  Layout: A──B    wallLengthsMm: [AB, BC, CD, DA]
+          |  |    Closure: AB == CD, BC == DA
+          D──C
+
+L-SHAPE (6 vertices, 1 reflex corner):
+  Rectangle with ONE corner notch cut away. One interior (reflex) corner.
+  Layout: A──B         wallLengthsMm: [AB, BC, CD, DE, EF, FA]
+          |  |         Closure: AB = DE + EF_horizontal_component
+          |  C──D      Key: ONE step/notch. The notch can be at ANY corner.
+          |     |
+          F─────E
+
+Z-SHAPE / S-SHAPE (8 vertices, 2 reflex corners):
+  TWO wings offset from each other — like a Z or S when viewed from above.
+  The top wing is shifted RIGHT (or LEFT) relative to the bottom wing.
+  They share an overlapping middle section.
+  CRITICAL: This is NOT an L-shape. A Z has TWO interior corners, not one.
+  Layout: A─────B        wallLengthsMm: [AB, BC, CD, DE, EF, FG, GH, HA]
+          |     |        8 vertices, 2 reflex corners at C and G.
+          |  G──H        Closure: AB + EF = CD + GH (horizontal balance)
+          |  |                    BC + FG = DE + HA (vertical balance)
+       D──E  |
+       |     |
+       C─────F
+  IDENTIFICATION CLUE: The building has two rectangular wings that do NOT share the same left or right edge — they are OFFSET horizontally. The left side has a step, AND the right side has a step. If you see grid lines where the left-side dimensions (e.g., A→D) differ from the right-side dimensions (e.g., D→C + something), it's likely a Z-shape.
+
+U-SHAPE (8 vertices, 2 reflex corners):
+  Rectangle with a courtyard/notch cut from ONE side. Two interior corners.
+  The opening faces one direction (top, bottom, left, or right).
+  Layout: A──B          wallLengthsMm: [AB, BC, CD, DE, EF, FG, GH, HA]
+          |  |          8 vertices, 2 reflex corners.
+          |  C          Closure: AB = EF + CD + GH, BC + FG = HA
+          |  |
+          |  D──E
+          |     |
+          H──G──F
+  IDENTIFICATION CLUE: The building wraps around an open courtyard on one side. The opening is on one edge only.
+
+T-SHAPE (8 vertices, 2 reflex corners):
+  A main bar with a perpendicular stem protruding from the MIDDLE of one side.
+  Layout:    B──C        wallLengthsMm: [AB, BC, CD, DE, EF, FG, GH, HA]
+             |  |        8 vertices, 2 reflex corners at B and C (or wherever stem meets bar).
+          A──+  +──D     The stem protrudes from the CENTER, not from a corner.
+          |        |
+          H────────E
+          (bottom bar)
+  IDENTIFICATION CLUE: One wing sticks out from the MIDDLE of a longer wall, not from a corner. Porches, entrance halls, stairwells often create T-shapes.
+
+CROSS / PLUS (12 vertices, 4 reflex corners):
+  Two bars crossing. 4 wings extending from a central core.
+  12 vertices. Think of a + sign.
+  IDENTIFICATION CLUE: Wings extend in all 4 directions from a central area.
+
+IRREGULAR / ANGLED:
+  Non-orthogonal walls (angles other than 90°). Vertex count varies.
+  Each straight wall segment = one edge. Vertex positions define angles.
+  IDENTIFICATION CLUE: Chamfered corners, diagonal walls, hexagonal rooms.
+
+SHAPE IDENTIFICATION PROCEDURE:
+1. Look at the EXTERIOR WALLS ONLY. Ignore interior partitions.
+2. Count how many times the exterior wall changes direction (= vertex count).
+3. Check: are the left and right sides the same length? Are top and bottom the same length?
+   - Both pairs equal → RECTANGLE (4 vertices)
+   - One pair unequal → L-SHAPE (6 vertices) or T-SHAPE (8 vertices)
+   - Both pairs unequal → Z-SHAPE (8 vertices), U-SHAPE (8 vertices), or more complex
+4. Check: does the building have TWO offset wings (Z), a courtyard (U), or a center protrusion (T)?
+5. NEVER force a complex shape into a simpler one. If dimensions don't match a rectangle, it IS NOT a rectangle.
+
 Polygon rules:
 1. CLOSED polygon: the last edge connects back to vertex[0]. Do NOT duplicate vertex[0] at the end.
-2. CONCAVE HULL: Trace the real perimeter. L-shaped buildings need 6 vertices (not 4). Never simplify to a rectangle if the plan shows an L, U, or T outline.
+2. CONCAVE HULL: Trace the real perimeter. NEVER simplify to a rectangle if the plan shows an L, U, Z, T, or other non-rectangular outline.
 3. Vertex order: clockwise or counter-clockwise — be consistent.
 4. wallLengthsMm count must equal vertices count exactly.
 5. ORTHOGONAL: For walls intended to be perpendicular, vertices should form 90 degree angles.
 6. CURVED FACADES: represent with ONE or TWO straight segments. Do NOT use many short segments.
 7. Angled/chamfered corners must each be a separate vertex.
-8. VERTEX COUNT = NUMBER OF 90-DEGREE TURNS IN THE GROUND FOOTPRINT. Count the corners of the ground floor plan — that is your vertex count. A rectangle = 4. An L-shape = 6. A U-shape = 8. A T-shape = 8.
-   CRITICAL: The footprint is the shape you would see if you removed the roof and looked straight down. Height changes, roof steps, and floor setbacks do NOT add vertices to the footprint. If you see a tall tower next to a shorter wing, the footprint is STILL an L with 6 vertices — the height difference is encoded in wallHeightsMm only.
-   WRONG (8 vertices for an L-shape): splitting a wall into two walls because the roofline height changes along that wall.
-   RIGHT (6 vertices for an L-shape): one wall covering the full length, with wallHeightsMm giving each wall its correct height.
+8. VERTEX COUNT = NUMBER OF DIRECTION CHANGES IN THE GROUND FOOTPRINT. Count the exterior corners — that is your vertex count. Rectangle = 4. L = 6. Z/U/T = 8. Cross = 12.
+   Height changes do NOT add vertices. The footprint is the ground-level outline only.
+   WRONG: splitting a wall into two walls because roofline height changes along it.
+   RIGHT: one wall covering the full length, with wallHeightsMm giving each wall its correct height.
 
 =============== ANGLED / NON-ORTHOGONAL BUILDINGS ===============
 Some floor plans have walls at angles other than 90°. For these buildings:
@@ -303,17 +379,27 @@ Self-check before outputting (fix silently):
 - no duplicate consecutive vertices
 - no self-intersecting edges
 - if wallLengthsMm provided: sum of lengths > 4m and < 2000m
-- BOUNDING BOX CHECK (critical — most common floor plan error):
-  * If you output 4 vertices (rectangle), verify: wall[0] == wall[2] AND wall[1] == wall[3].
-  * If opposite walls have DIFFERENT lengths, you output the WRONG shape. Go back and find the notch/step.
-  * Read dimension annotations on ALL four sides. If the left side says 15.30m but the right side dimensions add up to 11.49m, the building is NOT 15.30 × 8.50. It has a step on the right side.
-  * NEVER copy one side's dimension to the opposite side. Each side gets its OWN dimension from the drawing.
-- ORTHOGONAL CLOSURE CHECK (critical for L/U/T shapes): For orthogonal buildings (all 90° corners), walls alternate horizontal and vertical. The sum of all rightward wall lengths MUST equal the sum of all leftward wall lengths, and the sum of all downward MUST equal all upward. If they don't balance, one of your dimensions is wrong — re-read the drawing dimensions and fix before outputting.
+- SHAPE VERIFICATION (critical — most common error):
+  * Compare LEFT SIDE total height vs RIGHT SIDE total height. Compare TOP total width vs BOTTOM total width.
+  * If LEFT == RIGHT and TOP == BOTTOM → rectangle (4 vertices). Verify wall[0]==wall[2], wall[1]==wall[3].
+  * If LEFT != RIGHT but TOP == BOTTOM → L-shape (6 vertices). The shorter side has a step.
+  * If LEFT != RIGHT AND TOP != BOTTOM → Z-shape or U-shape (8 vertices). BOTH sides have steps.
+  * For Z-shape: the steps are on OPPOSITE corners (top-right and bottom-left, or top-left and bottom-right).
+  * For U-shape: the notch is cut from ONE side only, creating an opening/courtyard.
+  * If opposite walls have DIFFERENT lengths but you output 4 vertices, your shape is WRONG.
+  * Read dimension annotations on ALL sides. NEVER copy one side's dimension to the opposite side.
+- ORTHOGONAL CLOSURE CHECK (critical for ALL non-rectangular shapes):
+  For orthogonal buildings, walls alternate horizontal and vertical.
+  * Sum of all rightward wall lengths MUST equal sum of all leftward wall lengths.
+  * Sum of all downward wall lengths MUST equal sum of all upward wall lengths.
+  * If they don't balance, one dimension is wrong — re-read and fix before outputting.
+  * For Z-shape: horizontal balance = (top_width + bottom_step) == (top_step + bottom_width)
+  * For L-shape: the missing corner width + remaining width == full opposite side width
 - FLOOR PLAN: OPEN terraces/decks (no enclosing structural walls) are EXCLUDED; ENCLOSED wings are INCLUDED
 - FLOOR PLAN: the overall dimension line on each side matches the total length of polygon edges on that side
 - FLOOR PLAN: If a stairwell with thick exterior walls protrudes beyond the main rectangle, it MUST be included (adds 2+ vertices)
 - 3D VIEW SILHOUETTE CHECK: if you have 6 walls A,B,A,B,A,B you traced the silhouette — WRONG. Rectangular building = 4 walls A,B,A,B.
-- 3D VIEW: simple box = exactly 4 vertices. Complex (L/U/T shape) = 6+ vertices.
+- 3D VIEW: simple box = exactly 4 vertices. Complex (L/U/T/Z shape) = 6+ vertices.
 - JAPANESE PLAN: polygon is the inner boundary of the blue scaffold zone (not the outer boundary).
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
