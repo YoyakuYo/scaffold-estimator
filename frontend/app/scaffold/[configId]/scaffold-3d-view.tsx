@@ -17,7 +17,11 @@ import {
   addCoupler,
   BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
-import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
+import {
+  buildFootprintPolygonXZ,
+  hasPlausiblePolygonEdges,
+  outlineMatchesWallLengths,
+} from '@/lib/scaffold-footprint-polygon';
 import {
   normaliseMassingTierVerticesToGroundFootprint,
   clampFootprintVerticesToGroundPolygon,
@@ -1265,13 +1269,14 @@ export default function Scaffold3DView({
 
       const groundWallLensMm =
         tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
+      // Plan → metres must exist for every saved outline, not only when massing tiers
+      // are present — otherwise 3D falls back to length-only reconstruction and can lose
+      // L/U shapes while the 2D plan still matches polygonVertices.
       const bimPlan =
-        massingTiersSorted.length > 0 &&
-        Array.isArray(storedVerts) &&
-        storedVerts.length >= 3
+        Array.isArray(storedVerts) && storedVerts.length >= 3
           ? computeBimPreviewPlanToM({
               outline: storedVerts as any[],
-              massingTiers: massingTiersSorted,
+              massingTiers: massingTiersSorted.length > 0 ? massingTiersSorted : undefined,
               wallLengthsMm:
                 groundWallLensMm.length > 0 ? groundWallLensMm : walls.map((w) => w.wallLengthMm ?? 0),
             })
@@ -1552,10 +1557,27 @@ export default function Scaffold3DView({
         return null;
       })();
 
-      // Keep scaffold tier vertices from wall-length reconstruction / massing mapping.
-      // fullBuildingOutline is used only for the ground line overlay and IFC alignment
-      // so we never replace tier verts with a plan-mapped outline that can disagree
-      // with per-wall indices (SHAPE_RULES / façade placement).
+      // When the stored outline maps 1:1 to ground-tier walls and each edge length
+      // matches the calculated wall length, use it as the scaffold polygon so 3D wall
+      // indices align with the plan (same as promoting fullBuildingOutline before).
+      // Shorter probes + no promotion caused broken / partial L-shape runs when
+      // length-only reconstruction returned the wrong vertex count.
+      {
+        const groundTierWallCount = tierGroups[0]?.walls.length ?? 0;
+        const tg0walls = tierGroups[0]?.walls ?? [];
+        if (
+          fullBuildingOutline &&
+          fullBuildingOutline.length === groundTierWallCount &&
+          groundTierWallCount >= 3 &&
+          tierPolygons[0] !== undefined &&
+          hasPlausiblePolygonEdges(fullBuildingOutline, tg0walls) &&
+          outlineMatchesWallLengths(fullBuildingOutline, tg0walls)
+        ) {
+          tierPolygons[0].verts = fullBuildingOutline;
+          tierPolygons[0].footprintFromMassing = true;
+          verts = fullBuildingOutline;
+        }
+      }
 
       // Center the polygon
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
@@ -1938,8 +1960,9 @@ export default function Scaffold3DView({
         const tx = nearStart.x - cx;
         const tz = nearStart.z - cz;
 
-        // Tier-wall elevation: scaffold starts at baseHeightMm instead of ground
-        const baseYM = ((wall as any).baseHeightMm ?? 0) / 1000;
+        // Tier elevation: upper tiers use baseHeightMm. Single-tier configs ignore it —
+        // corrupted baseHeightMm from bad saves would float the whole scaffold in +Y.
+        const baseYM = hasTiers ? ((wall as any).baseHeightMm ?? 0) / 1000 : 0;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -2132,8 +2155,8 @@ export default function Scaffold3DView({
 
           const wallA = walls[globalWi];
           const wallB = walls[globalNext];
-          const baseA = ((wallA as any).baseHeightMm ?? 0) / 1000;
-          const baseB = ((wallB as any).baseHeightMm ?? 0) / 1000;
+          const baseA = hasTiers ? ((wallA as any).baseHeightMm ?? 0) / 1000 : 0;
+          const baseB = hasTiers ? ((wallB as any).baseHeightMm ?? 0) / 1000 : 0;
           if (Math.abs(baseA - baseB) > 0.05) continue;
           const baseYM_corner = baseA;
           const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);

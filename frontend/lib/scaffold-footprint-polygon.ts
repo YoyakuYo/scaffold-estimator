@@ -62,7 +62,8 @@ function* storedPolygonRotations(sv: FootprintVertexXZ[]): Generator<FootprintVe
   }
 }
 
-function hasPlausiblePolygonEdges(
+/** Non-degenerate closed ring: vertex count = wall count, each edge ≥ 0.1 m. */
+export function hasPlausiblePolygonEdges(
   verts: FootprintVertexXZ[],
   walls: Array<{ wallLengthMm?: number }>,
 ): boolean {
@@ -74,6 +75,29 @@ function hasPlausiblePolygonEdges(
     if (!p1 || !p2) return false;
     const len = Math.hypot(p2.x - p1.x, p2.z - p1.z);
     if (!Number.isFinite(len) || len < 0.1) return false;
+  }
+  return true;
+}
+
+/** True when each polygon edge length (m) matches wall i length within tolerance. */
+export function outlineMatchesWallLengths(
+  verts: FootprintVertexXZ[],
+  walls: Array<{ wallLengthMm?: number }>,
+  relTol = 0.06,
+  absTolM = 0.35,
+): boolean {
+  const n = walls.length;
+  if (verts.length !== n || n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const p1 = verts[i]!;
+    const p2 = verts[(i + 1) % n]!;
+    const geomM = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    const refMm = walls[i]?.wallLengthMm;
+    if (typeof refMm !== 'number' || !Number.isFinite(refMm)) return false;
+    const refM = Math.max(0.6, refMm / 1000);
+    if (!Number.isFinite(geomM) || geomM < 0.05) return false;
+    const diff = Math.abs(geomM - refM);
+    if (diff > Math.max(absTolM, refM * relTol)) return false;
   }
   return true;
 }
