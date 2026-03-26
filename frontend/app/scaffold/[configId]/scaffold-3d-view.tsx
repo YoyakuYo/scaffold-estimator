@@ -1194,7 +1194,7 @@ export default function Scaffold3DView({
           tierGroups.push({ tierIndex: ti, baseHeightMm: entry.baseHeightMm, walls: entry.walls, wallIndices: entry.wallIndices });
         }
       }
-      const hasTiers = tierGroups.length > 1;
+      let hasTiers = tierGroups.length > 1;
 
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices ?? (result as any)?.polygonVertices;
@@ -1266,6 +1266,20 @@ export default function Scaffold3DView({
         }
         return raw;
       })();
+
+      // Some legacy/non-tier configs carry stale tierIndex/baseHeight on walls.
+      // If we do not actually have massing tiers, force one ground-tier group so
+      // 3D uses the same wall loop as plan view and starts at GL.
+      const hasMassingTierGeometry = massingTiersSorted.length > 0;
+      if (!hasMassingTierGeometry && tierGroups.length > 1) {
+        tierGroups.splice(0, tierGroups.length, {
+          tierIndex: 0,
+          baseHeightMm: 0,
+          walls,
+          wallIndices: walls.map((_, i) => i),
+        });
+      }
+      hasTiers = hasMassingTierGeometry && tierGroups.length > 1;
 
       const groundWallLensMm =
         tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
@@ -1682,7 +1696,7 @@ export default function Scaffold3DView({
       const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
       // AI BIM stepped buildings should keep scaffold on setback facades too
       // (including walls rising from the smaller building roof).
-      const enableExteriorOnlyFilter = !isAiBim;
+      const enableExteriorOnlyFilter = !isAiBim && hasMassingTierGeometry;
       if (enableExteriorOnlyFilter && hasTiers && tierGroups.length > 1) {
         const CO_EDGE_THRESHOLD = 0.15;
         for (let tgi = 1; tgi < tierGroups.length; tgi++) {
