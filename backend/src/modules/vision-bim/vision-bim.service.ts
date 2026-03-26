@@ -304,9 +304,15 @@ Self-check before outputting (fix silently):
 - no duplicate consecutive vertices
 - no self-intersecting edges
 - if wallLengthsMm provided: sum of lengths > 4m and < 2000m
-- ORTHOGONAL CLOSURE CHECK (critical for L/U/T shapes): For orthogonal buildings (all 90° corners), walls alternate horizontal and vertical. The sum of all rightward wall lengths MUST equal the sum of all leftward wall lengths, and the sum of all downward MUST equal all upward. If they don't balance, one of your dimensions is wrong — re-read the drawing dimensions and fix before outputting. Example: an 8-wall U-shape with walls [60,20,20,30,40,10,40,35] — the vertical walls 20+30=50 vs 10+35=45 are off by 5m, meaning one vertical dimension is wrong.
+- BOUNDING BOX CHECK (critical — most common floor plan error):
+  * If you output 4 vertices (rectangle), verify: wall[0] == wall[2] AND wall[1] == wall[3].
+  * If opposite walls have DIFFERENT lengths, you output the WRONG shape. Go back and find the notch/step.
+  * Read dimension annotations on ALL four sides. If the left side says 15.30m but the right side dimensions add up to 11.49m, the building is NOT 15.30 × 8.50. It has a step on the right side.
+  * NEVER copy one side's dimension to the opposite side. Each side gets its OWN dimension from the drawing.
+- ORTHOGONAL CLOSURE CHECK (critical for L/U/T shapes): For orthogonal buildings (all 90° corners), walls alternate horizontal and vertical. The sum of all rightward wall lengths MUST equal the sum of all leftward wall lengths, and the sum of all downward MUST equal all upward. If they don't balance, one of your dimensions is wrong — re-read the drawing dimensions and fix before outputting.
 - FLOOR PLAN: OPEN terraces/decks (no enclosing structural walls) are EXCLUDED; ENCLOSED wings are INCLUDED
 - FLOOR PLAN: the overall dimension line on each side matches the total length of polygon edges on that side
+- FLOOR PLAN: If a stairwell with thick exterior walls protrudes beyond the main rectangle, it MUST be included (adds 2+ vertices)
 - 3D VIEW SILHOUETTE CHECK: if you have 6 walls A,B,A,B,A,B you traced the silhouette — WRONG. Rectangular building = 4 walls A,B,A,B.
 - 3D VIEW: simple box = exactly 4 vertices. Complex (L/U/T shape) = 6+ vertices.
 - JAPANESE PLAN: polygon is the inner boundary of the blue scaffold zone (not the outer boundary).
@@ -899,15 +905,28 @@ If this image shows a building in perspective, isometric, or 3D (you can see wal
 - You MUST reconstruct the TOP-DOWN plan footprint — NOT trace the visible outline/silhouette.
 - A rectangular building in 3D perspective looks like a hexagon or pentagon — but the real footprint is a RECTANGLE with EXACTLY 4 vertices and 4 walls.
 - Ask yourself: "Is this building a simple box?" If yes → output exactly 4 vertices: [{x:0,y:0}, {x:W,y:0}, {x:W,y:D}, {x:0,y:D}].
-- Estimate W (width) and D (depth) from proportions. A 2-story house ~12m long and ~6m deep = vertices in mm.
 - IGNORE terraces, ramps, canopies — they are NOT the building footprint.
-- NEVER output 5 or 6 vertices for a rectangular building. That means you traced the perspective outline.
+- NEVER output 5 or 6 vertices for a rectangular building.
+
+CRITICAL — IS THIS A FLOOR PLAN?
+If this image shows rooms, furniture, bathrooms, staircases, or corridors:
+- DO NOT just output a bounding rectangle. MOST floor plans are NOT simple rectangles.
+- CHECK: Do the LEFT side and RIGHT side have DIFFERENT total heights? If YES → NOT a rectangle. It is L-shaped or more complex.
+- CHECK: Does one side have a protruding stairwell, elevator shaft, or wing? If YES → NOT a rectangle.
+- CHECK: Are there thick exterior walls that form a notch, step, or L-shape? If YES → trace ALL corners of that shape.
+- COMMON ERROR: Taking the largest dimension from each axis and making a bounding box. This is ALWAYS WRONG for non-rectangular buildings. Each wall side must use ITS OWN dimension, not the opposite side's dimension.
+- EXAMPLE: If the LEFT side = 15,300mm but the RIGHT side = 11,490mm, this is NOT a rectangle. The right side is shorter because there is a step/notch. Output 6+ vertices for the L-shape.
+- RULE: If opposite sides have DIFFERENT lengths (left ≠ right, or top ≠ bottom), the building is NOT rectangular. Find where the step/notch is and add vertices there.
+- STAIRWELLS: Stairwell enclosures near the building perimeter often protrude outward. Look for stair symbols (parallel lines) inside thick-walled enclosures at the building edge. These create L/T shapes.
 
 COORDINATE SYSTEM: x increases RIGHT, y increases DOWNWARD (image pixel coords). Top-left = {x:0,y:0}.
 
 JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the SCAFFOLD AREA, NOT the building. Trace the INNER edge (building wall face).
 
-VERTEX COUNT GUIDE: rectangle=4, trapezoid=4, L-shape=6. If you output 5+ vertices for a simple box building, you are WRONG — go back and output 4.
+ANTI-BOUNDING-BOX CHECK: Before outputting, verify:
+1. For a 4-vertex rectangle: wall[0] must equal wall[2], and wall[1] must equal wall[3]. If they don't match, you have the WRONG shape — add vertices.
+2. Read ALL dimension annotations on ALL four sides. If any side has a DIFFERENT dimension from its opposite side, the building is NOT rectangular.
+3. If you see sub-dimensions that add up to LESS than the opposite side (e.g., right side 2.50+6.00+1.83=10.33m vs left side 15.30m), the right side is SHORTER and there must be a step/notch.
 
 Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).`,
               },
@@ -1239,6 +1258,10 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       } else {
         parsed.obstacles = undefined;
       }
+      // Detect bounding-box error: AI returned a rectangle but opposite sides
+      // have very different lengths — this means it used a bounding box instead
+      // of tracing the actual shape. Log a strong warning so the user knows.
+      this.detectBoundingBoxError(parsed);
       // 3D BIM screenshot: 6-vertex convex "hex" is often a perspective illusion of a rectangular box.
       this.maybeCollapsePerspectiveSilhouette(parsed);
       // Remove collinear intermediate vertices caused by grid-line tracing.
@@ -1621,6 +1644,46 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
    * Logs warnings for potential extraction errors but does not reject the result.
    * This catches hallucinated dimensions, wrong vertex counts, and closure violations.
    */
+  /**
+   * Detect when the AI returned a bounding-box rectangle instead of the real shape.
+   * A 4-vertex rectangle where opposite sides have very different lengths (>20% diff)
+   * strongly suggests the AI found the max X and max Y dimensions and made a box.
+   * This is the #1 floor plan extraction error.
+   */
+  private detectBoundingBoxError(parsed: VisionFootprintResult): void {
+    const n = parsed.vertices?.length;
+    if (n !== 4 || !parsed.wallLengthsMm || parsed.wallLengthsMm.length !== 4) return;
+
+    const wl = parsed.wallLengthsMm;
+    const diff02 = Math.abs(wl[0] - wl[2]);
+    const diff13 = Math.abs(wl[1] - wl[3]);
+    const avg02 = (wl[0] + wl[2]) / 2;
+    const avg13 = (wl[1] + wl[3]) / 2;
+
+    // For a true rectangle, opposite sides must be nearly equal
+    const ratio02 = avg02 > 0 ? diff02 / avg02 : 0;
+    const ratio13 = avg13 > 0 ? diff13 / avg13 : 0;
+
+    if (ratio02 > 0.15 || ratio13 > 0.15) {
+      this.logger.warn(
+        `BOUNDING-BOX ERROR DETECTED: AI returned 4-vertex rectangle but opposite sides differ significantly. ` +
+        `wall[0]=${wl[0]}mm vs wall[2]=${wl[2]}mm (${(ratio02 * 100).toFixed(0)}% diff), ` +
+        `wall[1]=${wl[1]}mm vs wall[3]=${wl[3]}mm (${(ratio13 * 100).toFixed(0)}% diff). ` +
+        `This likely means the AI used a bounding box instead of tracing the actual building shape. ` +
+        `The building is probably L-shaped, T-shaped, or has a protruding stairwell/wing. ` +
+        `User should verify the footprint in the editor and add missing vertices.`,
+      );
+    }
+
+    // Also check: for a simple rectangle, all wall lengths should be > 0
+    // and the two pairs should make geometric sense
+    if (wl[0] === wl[1] && wl[1] === wl[2] && wl[2] === wl[3]) {
+      this.logger.warn(
+        `SUSPICIOUS: All 4 wall lengths are identical (${wl[0]}mm) — AI may have failed to read individual dimensions.`,
+      );
+    }
+  }
+
   private validateShapeExtraction(parsed: VisionFootprintResult): void {
     const n = parsed.vertices.length;
     if (n < 3) return;
