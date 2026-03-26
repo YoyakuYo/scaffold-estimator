@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
+import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 
@@ -46,7 +47,7 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
   ),
 });
 
-type TabView = 'table' | 'perside' | '2d' | 'plan' | '3d';
+type TabView = 'table' | 'perside' | 'breakdown' | '2d' | 'plan' | '3d';
 
 /** Cumulative per-level summary: approximate quantities up to visibleLevels (scale by visibleLevels/totalLevels). */
 function getLevelSummary(
@@ -83,9 +84,10 @@ function ScaffoldResultPage() {
   // Support ?tab=3d, ?tab=2d from external links
   const initialTab = (searchParams.get('tab') as TabView) || 'table';
   const [activeTab, setActiveTab] = useState<TabView>(
-    ['table', 'perside', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
+    ['table', 'perside', 'breakdown', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
   );
   const [visibleLevels, setVisibleLevels] = useState<number>(1);
+  const [materialPrices, setMaterialPrices] = useState<Record<string, number>>({});
 
   // Fetch config (includes calculationResult)
   const { data: config, isLoading } = useQuery<ScaffoldConfiguration>({
@@ -460,6 +462,17 @@ function ScaffoldResultPage() {
             {t('resultExtra', 'tabPerSide')}
           </button>
           <button
+            onClick={() => setActiveTab('breakdown')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'breakdown'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Ruler className="h-4 w-4" />
+            材料明細
+          </button>
+          <button
             onClick={() => setActiveTab('2d')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === '2d'
@@ -497,6 +510,18 @@ function ScaffoldResultPage() {
         {/* Tab Content */}
         {activeTab === 'table' && <QuotationTable result={result} />}
         {activeTab === 'perside' && <PerSideBreakdown result={result} />}
+        {activeTab === 'breakdown' && result.walls && (
+          <MaterialBreakdownTable
+            walls={result.walls}
+            summary={result.summary ?? []}
+            buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
+            scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
+            totalLevels={maxLevels}
+            levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
+            prices={materialPrices}
+            onPriceChange={(code, price) => setMaterialPrices((prev) => ({ ...prev, [code]: price }))}
+          />
+        )}
         {activeTab === '2d' && <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />}
         {activeTab === 'plan' && <ScaffoldPlanView result={resultForViz ?? resultMergedForViz ?? result} />}
         {activeTab === '3d' && (

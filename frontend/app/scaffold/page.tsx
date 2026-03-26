@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
-import { AiBimFootprintEditor } from '@/components/ai-bim-footprint-editor';
 import { visionBimApi, type VisionFootprintResult, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
@@ -42,6 +41,11 @@ import {
 } from '@/lib/bim-facade-colors';
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
+
+const CadDrawingCanvas = dynamic(
+  () => import('@/components/cad-drawing-canvas').then(m => ({ default: m.CadDrawingCanvas })),
+  { ssr: false, loading: () => <div className="h-96 flex items-center justify-center text-gray-400 bg-gray-900 rounded-xl">CADキャンバスを読み込み中…</div> },
+);
 
 // Dynamic import for DrawingUpload (uses browser APIs)
 const DrawingUpload = dynamic(
@@ -136,15 +140,7 @@ function correctWallLengthsMm(lengths: number[] | undefined): number[] | undefin
   return out;
 }
 
-type IfcPreviewMesh = {
-  vertices: Float32Array;
-  indices: Uint32Array;
-  color: { r: number; g: number; b: number; a: number };
-  elementType: import('@/lib/ifc-loader').IfcElementType;
-  expressID: number;
-};
-
-const IFC_PREVIEW_MESH_CACHE = new Map<string, IfcPreviewMesh[]>();
+// IFC support removed
 
 type PreviewPlanVertex = { x?: number; y?: number; xFrac?: number; yFrac?: number };
 
@@ -278,15 +274,13 @@ function BuildingShapeSvg({
   );
 }
 
-/** 3D building preview — renders extruded footprint with Three.js (for AI BIM confirmation). */
+/** 3D building preview — renders extruded footprint with Three.js (for confirmation). */
 function Building3DPreview({
   outline,
   buildingHeightMm,
   wallLengthsMm,
   wallHeightsMm,
   massingTiers,
-  ifcFileUrl,
-  ifcArrayBuffer,
   className,
   style,
 }: {
@@ -295,8 +289,6 @@ function Building3DPreview({
   wallLengthsMm?: number[];
   wallHeightsMm?: number[];
   massingTiers?: VisionMassingTier[];
-  ifcFileUrl?: string;
-  ifcArrayBuffer?: ArrayBuffer;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -532,124 +524,6 @@ function Building3DPreview({
       dirLight.position.set(extent, extent * 1.5, extent * 0.8);
       scene.add(dirLight);
 
-      // Optional: overlay actual IFC mesh in preview (same footprint frame).
-      const ifcSource = ifcArrayBuffer || ifcFileUrl;
-      let previewBimMats: any = null;
-      if (ifcSource) {
-        (async () => {
-          try {
-            const cacheKey = typeof ifcSource === 'string' ? ifcSource : '__local_ifc__';
-            let meshes = IFC_PREVIEW_MESH_CACHE.get(cacheKey);
-            if (!meshes) {
-              let arrayBuffer: ArrayBuffer;
-              if (ifcArrayBuffer) {
-                arrayBuffer = ifcArrayBuffer;
-              } else {
-                const response = await fetch(ifcFileUrl!);
-                if (!response.ok) {
-                  console.warn('[Building3DPreview] IFC fetch failed:', response.status);
-                  return;
-                }
-                arrayBuffer = await response.arrayBuffer();
-              }
-              const { parseIfcToMeshes } = await import('@/lib/ifc-loader');
-              meshes = await parseIfcToMeshes(arrayBuffer);
-              IFC_PREVIEW_MESH_CACHE.set(cacheKey, meshes);
-            }
-            if (disposed || !meshes || meshes.length === 0) return;
-
-            let minMx = Infinity; let maxMx = -Infinity;
-            let minMy = Infinity; let maxMy = -Infinity;
-            let minMz = Infinity; let maxMz = -Infinity;
-            for (const mesh of meshes) {
-              const stride = 6;
-              for (let vi = 0; vi < mesh.vertices.length; vi += stride) {
-                const x = mesh.vertices[vi];
-                const y = mesh.vertices[vi + 1];
-                const z = mesh.vertices[vi + 2];
-                if (x < minMx) minMx = x; if (x > maxMx) maxMx = x;
-                if (y < minMy) minMy = y; if (y > maxMy) maxMy = y;
-                if (z < minMz) minMz = z; if (z > maxMz) maxMz = z;
-              }
-            }
-            if (!Number.isFinite(minMx) || !Number.isFinite(maxMx)) return;
-
-            const rawSpanX = Math.max(maxMx - minMx, 1e-6);
-            const rawSpanY = Math.max(maxMy - minMy, 1e-6);
-            const rawSpanZ = Math.max(maxMz - minMz, 1e-6);
-            const rawMaxSpan = Math.max(rawSpanX, rawSpanY, rawSpanZ);
-            const rawToM = rawMaxSpan > 500 ? 0.001 : 1;
-
-            const ifcSpanX = rawSpanX * rawToM;
-            const ifcSpanY = rawSpanY * rawToM;
-            const ifcSpanZ = rawSpanZ * rawToM;
-            const targetSpanX = Math.max(planSpanXM, 1e-6);
-            const targetSpanZ = Math.max(planSpanZM, 1e-6);
-            const scaleXY = Math.min(targetSpanX / ifcSpanX, targetSpanZ / ifcSpanZ);
-            const scaleY = ifcSpanY > 1e-6 ? (heightM / ifcSpanY) : scaleXY;
-
-            const centerX = (minMx + maxMx) / 2;
-            const centerZ = (minMz + maxMz) / 2;
-
-            const ifcGroup = new THREE.Group();
-            for (const meshData of meshes) {
-              const stride = 6;
-              const vertCount = meshData.vertices.length / stride;
-              const positions = new Float32Array(vertCount * 3);
-              const normals = new Float32Array(vertCount * 3);
-              for (let vi = 0; vi < vertCount; vi++) {
-                positions[vi * 3] = (meshData.vertices[vi * stride] - centerX) * rawToM * scaleXY;
-                positions[vi * 3 + 1] = (meshData.vertices[vi * stride + 1] - minMy) * rawToM * scaleY;
-                positions[vi * 3 + 2] = (meshData.vertices[vi * stride + 2] - centerZ) * rawToM * scaleXY;
-                normals[vi * 3] = meshData.vertices[vi * stride + 3];
-                normals[vi * 3 + 1] = meshData.vertices[vi * stride + 4];
-                normals[vi * 3 + 2] = meshData.vertices[vi * stride + 5];
-              }
-
-              const geo = new THREE.BufferGeometry();
-              geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-              geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-              geo.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
-
-              let mat: THREE.Material;
-              try {
-                const { createBimMaterialSet, getMaterialForElement } = await import('@/lib/ifc-bim-materials');
-                if (!previewBimMats) previewBimMats = createBimMaterialSet(THREE);
-                mat = getMaterialForElement(previewBimMats, meshData.elementType, meshData.expressID) as THREE.Material;
-              } catch {
-                mat = new THREE.MeshStandardMaterial({
-                  color: new THREE.Color(meshData.color.r, meshData.color.g, meshData.color.b),
-                  transparent: true,
-                  opacity: Math.max(0.35, Math.min(0.92, meshData.color.a)),
-                  side: THREE.DoubleSide, roughness: 0.75, metalness: 0.1,
-                });
-              }
-              if (meshData.elementType === 'opening') continue;
-              const m = new THREE.Mesh(geo, mat);
-              m.castShadow = true; m.receiveShadow = true;
-              ifcGroup.add(m);
-            }
-            if (disposed) return;
-            scene.add(ifcGroup);
-            fallbackGroup.visible = false;
-            cleanupFns.push(() => {
-              scene.remove(ifcGroup);
-              ifcGroup.traverse((obj) => {
-                const mesh = obj as THREE.Mesh;
-                if ((mesh as any).isMesh) {
-                  mesh.geometry?.dispose?.();
-                  const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-                  if (Array.isArray(material)) material.forEach((m) => m.dispose());
-                  else material?.dispose?.();
-                }
-              });
-            });
-          } catch {
-            // Keep fallback extruded preview when IFC loading fails.
-          }
-        })();
-      }
-
       // Camera
       const dist = Math.max(extent * 1.8, heightM * 2, 8);
       // Camera from south (+Z) with small east offset so +X maps strongly
@@ -731,7 +605,7 @@ function Building3DPreview({
         rendererRef.current = null;
       }
     };
-  }, [outline, buildingHeightMm, wallLengthsMm, wallHeightsMm, massingTiers, ifcFileUrl, ifcArrayBuffer]);
+  }, [outline, buildingHeightMm, wallLengthsMm, wallHeightsMm, massingTiers]);
 
   if (outline.length < 3) return <div className={className} style={style} />;
   if (previewError) {
@@ -919,7 +793,7 @@ function ScaffoldPageContent() {
   };
 
   // ─── Input Mode ────────────────────────────────────────
-  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_bim'>('drawing');
+  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_bim' | 'cad_draw'>('drawing');
   const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>('drawing');
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
@@ -934,8 +808,6 @@ function ScaffoldPageContent() {
     wallLengthsFromDimText?: boolean;
     heightConfidence?: 'high' | 'medium' | 'low';
     drawingType?: 'plan' | '3d' | 'elevation' | 'section';
-    ifcFileUrl?: string;
-    ifcArrayBuffer?: ArrayBuffer;
     isStepped?: boolean;
     obstacles?: Array<
       | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
@@ -1286,30 +1158,41 @@ function ScaffoldPageContent() {
           </h1>
           <p className="mt-1 text-sm text-gray-600">{t('scaffold', 'subtitle')}</p>
 
-          {/* ─── Mode Selector (2 sections) ─── */}
+          {/* ─── Mode Selector (3 sections) ─── */}
           {!editConfigId && (
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => setInputMode('drawing')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                  inputMode !== 'ai_bim'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <PenTool className="h-4 w-4" />
-                {t('scaffoldExtra', 'manualInput')}
-              </button>
+            <div className="flex flex-wrap gap-2 mt-4">
               <button
                 onClick={() => setInputMode('ai_bim')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                   inputMode === 'ai_bim'
                     ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
                     : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
                 <ScanLine className="h-4 w-4" />
-                {t('scaffold', 'aiBimMode')}
+                AI抽出
+              </button>
+              <button
+                onClick={() => setInputMode('drawing')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  inputMode === 'drawing'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <Upload className="h-4 w-4" />
+                ファイルアップロード
+              </button>
+              <button
+                onClick={() => setInputMode('cad_draw')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  inputMode === 'cad_draw'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <PenTool className="h-4 w-4" />
+                手描きCAD
               </button>
             </div>
           )}
@@ -1352,24 +1235,16 @@ function ScaffoldPageContent() {
               <input
                 type="file"
                 className="hidden"
-                accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.dxf,.dwg,.jww,.ifc,.pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,application/dxf,application/pdf"
+                accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.dxf,.pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,application/dxf,application/pdf"
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   setAiBimError(null);
                   setAiBimUploading(true);
                   try {
-                    const isIfc = file.name.toLowerCase().endsWith('.ifc');
-                    let ifcArrayBuffer: ArrayBuffer | undefined;
-                    if (isIfc) {
-                      ifcArrayBuffer = await file.arrayBuffer();
-                    }
-                    const { cacheIfcBuffer } = await import('@/lib/ifc-buffer-cache');
-                    const raw = isIfc
-                      ? await visionBimApi.fromIfc(file)
-                      : await visionBimApi.analyze(file);
+                    const raw = await visionBimApi.analyze(file);
                     let bimFacadeColors: CreateScaffoldConfigDto['bimFacadeColors'];
-                    if (!isIfc && isRasterImageUpload(file)) {
+                    if (isRasterImageUpload(file)) {
                       try {
                         const extracted = await extractBimFacadeColorsFromImageFile(file);
                         if (extracted) bimFacadeColors = extracted;
@@ -1383,9 +1258,7 @@ function ScaffoldPageContent() {
                     const refMm = footprint.vertices.some((v) => 'xFrac' in v)
                       ? (footprint.scaleDenominator ? 20000 : 10000)
                       : undefined;
-                    const wallLengthsMm = isIfc
-                      ? footprint.wallLengthsMm
-                      : (correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm);
+                    const wallLengthsMm = correctWallLengthsMm(footprint.wallLengthsMm) ?? footprint.wallLengthsMm;
                     // If AI returned pixel-scale wall heights (all < 1800mm), treat buildingHeightMm as authoritative
                     // and ignore per-wall heights (they'll be overridden by the sanitizer on submit anyway).
                     const wallHeightsMmRaw = footprint.wallHeightsMm;
@@ -1481,14 +1354,9 @@ function ScaffoldPageContent() {
                       ...(effectiveMassingTiers && effectiveMassingTiers.length > 0 && { massingTiers: effectiveMassingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
-                      ...(footprint.ifcFileUrl && { ifcFileUrl: footprint.ifcFileUrl }),
                     };
                     const isStepped = Array.isArray(wallHeightsMm) && wallHeightsMm.length > 0
                       && new Set(walls.map((w) => w.wallHeightMm)).size > 1;
-                    if (ifcArrayBuffer) {
-                      if (footprint.ifcFileUrl) await cacheIfcBuffer(footprint.ifcFileUrl, ifcArrayBuffer);
-                      await cacheIfcBuffer('__latest_ifc__', ifcArrayBuffer);
-                    }
                     setAiBimPreview({
                       buildingHeightMm: footprint.buildingHeightMm,
                       walls,
@@ -1499,8 +1367,6 @@ function ScaffoldPageContent() {
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
                       heightConfidence: footprint.heightConfidence,
                       drawingType: footprint.drawingType,
-                      ifcFileUrl: footprint.ifcFileUrl,
-                      ifcArrayBuffer,
                       isStepped,
                       obstacles,
                       dto,
@@ -1537,61 +1403,36 @@ function ScaffoldPageContent() {
 
             {aiBimPreview && (
               <div className="flex flex-col lg:flex-row gap-4">
-                {/* ── LEFT PANEL: AutoCAD-style Drawing Area ── */}
+                {/* ── LEFT PANEL: 2D Plan Preview + Shape SVG ── */}
                 <div className="w-full lg:w-[480px] lg:min-w-[420px] lg:flex-shrink-0 space-y-3">
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                       <Check className="h-4 w-4" />
-                      {t('scaffold', 'aiBimExtractedComplete')}
+                      AI抽出完了 — 下のテーブルで寸法を確認・修正してください
                     </p>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-gray-500">
-                      {t('scaffold', 'aiBimPreviewTitle')}
-                    </span>
-                    <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer w-fit">
-                      <input
-                        type="checkbox"
-                        checked={aiBimCompareExtract}
-                        onChange={(e) => setAiBimCompareExtract(e.target.checked)}
-                        disabled={!aiBimExtractOutline}
-                        className="rounded border-gray-300"
-                      />
-                      {t('scaffold', 'aiBimCompareExtract')}
-                    </label>
+                  <div className="bg-white rounded-lg border border-gray-200 p-2">
+                    <BuildingShapeSvg
+                      outline={aiBimPreview.buildingOutline}
+                      wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                      className="w-full h-64"
+                    />
                   </div>
-                  <AiBimFootprintEditor
-                    outline={aiBimPreview.buildingOutline}
-                    baselineOutline={aiBimExtractOutline ?? undefined}
-                    showBaseline={aiBimCompareExtract && !!aiBimExtractOutline}
-                    showDimensions={true}
-                    showXYGrid={true}
-                    onChange={handleAiBimOutlineEdit}
-                    onResetToBaseline={
-                      aiBimExtractOutline
-                        ? () =>
-                            handleAiBimOutlineEdit(
-                              aiBimExtractOutline.map((p) => ({
-                                xFrac: p.xFrac,
-                                yFrac: p.yFrac,
-                              })),
-                            )
-                        : undefined
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAiBimPreview(null);
-                      setAiBimExtractOutline(null);
-                      setAiBimCompareExtract(false);
-                      setAiBimError(null);
-                    }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    {t('scaffold', 'aiBimUploadAnother')}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAiBimPreview(null);
+                        setAiBimExtractOutline(null);
+                        setAiBimCompareExtract(false);
+                        setAiBimError(null);
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      別のファイルをアップロード
+                    </button>
+                  </div>
                 </div>
                 {/* ── RIGHT PANEL: Review, Wall Table, 3D, Settings ── */}
                 <div className="flex-1 min-w-0 border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
@@ -1821,8 +1662,6 @@ function ScaffoldPageContent() {
                             : undefined
                       }
                       massingTiers={aiBimPreview.massingTiers}
-                      ifcFileUrl={aiBimPreview.ifcFileUrl}
-                      ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}
                       className="w-full rounded-lg border border-gray-200 bg-slate-50"
                       style={{ height: 320 }}
                     />
@@ -1998,14 +1837,8 @@ function ScaffoldPageContent() {
                           ...dtoBase,
                           walls: sanitizedWalls,
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
-                          ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
-                        if (aiBimPreview.ifcArrayBuffer) {
-                          const { cacheIfcBuffer: cacheIfc } = await import('@/lib/ifc-buffer-cache');
-                          await cacheIfc(data.config.id, aiBimPreview.ifcArrayBuffer);
-                          if (aiBimPreview.ifcFileUrl) await cacheIfc(aiBimPreview.ifcFileUrl, aiBimPreview.ifcArrayBuffer);
-                        }
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
                       } catch (err: any) {
                         setAiBimError(err?.message ?? t('scaffold', 'aiBimCreateFailed'));
@@ -2025,9 +1858,51 @@ function ScaffoldPageContent() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
+          CAD DRAWING MODE — Manual plan drawing with polyline/dimension
+         ═══════════════════════════════════════════════════════ */}
+      {inputMode === 'cad_draw' && !editConfigId && (
+        <div className="max-w-[1800px] mx-auto px-4 pb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <PenTool className="h-5 w-5 text-emerald-600" />
+              手描きCAD — 図面作成
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              ポリラインツールで建物の外形を描画し、寸法を入力してください。基準寸法ボタンで1辺の実寸を設定すると自動でスケール計算されます。
+            </p>
+            <CadDrawingCanvas
+              buildingHeightMm={buildingHeightMm ?? 3000}
+              onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
+              onComplete={(result) => {
+                const mapped: WallState[] = result.walls.map((w, i) => ({
+                  side: w.side,
+                  enabled: true,
+                  lengthMm: w.wallLengthMm,
+                  heightMm: w.wallHeightMm,
+                  stairAccessCount: w.stairAccessCount,
+                  kaidanCount: 0,
+                  kaidanOffsets: [],
+                  isMultiSegment: false,
+                  segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
+                }));
+                setWalls(mapped);
+                setBuildingHeightMm(result.buildingHeightMm);
+                setPolygonVertices(
+                  result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac })),
+                );
+                setPrefilled(true);
+                setInputMode('drawing');
+              }}
+              className="w-full"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
-      {(inputMode !== 'ai_bim' || editConfigId) && (<>
+      {(inputMode !== 'ai_bim' && inputMode !== 'cad_draw' || editConfigId) && (<>
       {/* Sub-tab selector */}
       {!editConfigId && (
         <div className="max-w-[1600px] mx-auto px-4 mb-4">

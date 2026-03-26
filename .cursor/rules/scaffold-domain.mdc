@@ -137,39 +137,46 @@ Adjacent spans share the post/frame at the boundary:
 2. **2D足場図 (SVG)** — Per-wall 2D assembly view with print/PDF/DXF export
 3. **3D足場図 (Three.js)** — Interactive 3D view with polygon layout
 
-## AI Features (AI機能)
+## Input Modes (3 sections on scaffold/page.tsx)
 
-### Vision AI Drawing Reader
-- **Service**: [vision-analysis.service.ts](mdc:backend/src/modules/ai/vision-analysis.service.ts)
-- **Controller**: [ai.controller.ts](mdc:backend/src/modules/ai/ai.controller.ts)
-- **Frontend**: [ai/page.tsx](mdc:frontend/app/ai/page.tsx) - Vision tab
-- Uses GPT-4o Vision to analyze construction drawings and extract:
-  - Building shape, height, floor count
-  - Structure type (改修工事/S造/RC造)
-  - Wall dimensions (side, length, height)
+### 1. AI Extraction (AI抽出)
+- Upload image (PNG/JPEG/WebP/GIF/BMP), PDF, or DXF
+- AI (Claude Vision via Anthropic SDK) analyzes drawing and extracts:
+  - Building exterior footprint polygon (vertices)
+  - Wall dimensions (wallLengthsMm)
+  - Building height (buildingHeightMm)
   - Drawing type, scale, confidence score
-- **API**: `POST /api/v1/ai/vision/analyze` (base64) or `/ai/vision/analyze-file` (file upload)
+  - Obstacles (doors, balconies, AC units, pillars)
+- **Backend Service**: [vision-bim.service.ts](mdc:backend/src/modules/vision-bim/vision-bim.service.ts)
+- **Backend Controller**: [vision-bim.controller.ts](mdc:backend/src/modules/vision-bim/vision-bim.controller.ts)
+- **API**: `POST /api/v1/vision-bim/analyze` (multipart file upload)
+- **API Client**: [vision-bim.ts](mdc:frontend/lib/api/vision-bim.ts)
+- Requires `ANTHROPIC_API_KEY` environment variable
+- IFC/BIM files are NOT supported (removed)
+- PDF files are converted to images via Sharp before AI analysis
+- DXF files are parsed deterministically (no AI needed)
+- Silent fallbacks are NOT used — errors are thrown clearly
 
-### Chat Estimation Assistant
-- **Service**: [chat-assistant.service.ts](mdc:backend/src/modules/ai/chat-assistant.service.ts)
-- **Frontend**: [ai/page.tsx](mdc:frontend/app/ai/page.tsx) - Chat tab
-- Natural language chat interface for scaffold estimation questions
-- Can suggest scaffold configurations as structured JSON actions
-- **API**: `POST /api/v1/ai/chat`
+### 2. File Upload (ファイルアップロード)
+- Upload dimensioned drawings for manual extraction
+- Uses DrawingUpload component with DXF client-side parsing
+- Also supports Quick Shape Builder for simple shapes
 
-### Anomaly Detection / Quality Review
-- **Service**: [anomaly-detection.service.ts](mdc:backend/src/modules/ai/anomaly-detection.service.ts)
-- **Frontend**: [ai/page.tsx](mdc:frontend/app/ai/page.tsx) - Quality Review tab
-- Two-layer detection:
-  1. Rule-based checks (always works): wall count, height sanity, stair access, scaffold width
-  2. AI-powered analysis (when OpenAI available): ratio checks, missing components, safety concerns
-- **API**: `POST /api/v1/ai/anomaly-detect`
+### 3. Manual CAD Drawing (手描きCAD)
+- AutoCAD-like canvas for manually drawing building plans
+- **Component**: [cad-drawing-canvas.tsx](mdc:frontend/components/cad-drawing-canvas.tsx)
+- Features: polyline tool, rectangle tool, snap-to-grid, zoom/pan
+- Calibration: set known real-world distance for auto-scale
+- Dimension editing: click any edge to enter exact mm length
+- On complete: generates vertices + wall inputs for scaffold calculation
 
-### AI Module Setup
-- **Module**: [ai.module.ts](mdc:backend/src/modules/ai/ai.module.ts)
-- **Service**: [ai.service.ts](mdc:backend/src/modules/ai/ai.service.ts)
-- Requires `OPENAI_API_KEY` environment variable
-- Gracefully degrades when API key not set (rule-based checks still work)
+## Material Breakdown (材料明細)
+- **Component**: [material-breakdown-table.tsx](mdc:frontend/components/material-breakdown-table.tsx)
+- Per-floor, per-side breakdown of all scaffold materials
+- Expandable rows showing quantities at each floor level for each wall
+- Editable pricing: click unit price to enter cost per material
+- Auto-calculates total cost from quantities × prices
+- Shows on result page under "材料明細" tab
 
 ## User Management & Authentication
 
@@ -217,17 +224,22 @@ Adjacent spans share the post/frame at the boundary:
 
 ### Frontend Pages
 - Dashboard: [dashboard/page.tsx](mdc:frontend/app/dashboard/page.tsx) - Marketing-focused landing page
-- Scaffold calculator: [scaffold/page.tsx](mdc:frontend/app/scaffold/page.tsx)
-- Scaffold result: [scaffold/[configId]/page.tsx](mdc:frontend/app/scaffold/[configId]/page.tsx)
-- AI Assistant: [ai/page.tsx](mdc:frontend/app/ai/page.tsx)
+- Scaffold calculator: [scaffold/page.tsx](mdc:frontend/app/scaffold/page.tsx) - 3 input modes: AI extraction, file upload, CAD drawing
+- Scaffold result: [scaffold/[configId]/page.tsx](mdc:frontend/app/scaffold/[configId]/page.tsx) - Results with material breakdown
 - User Management: [users/page.tsx](mdc:frontend/app/users/page.tsx)
 - User Profile: [profile/page.tsx](mdc:frontend/app/profile/page.tsx)
 - 2D view: [scaffold-2d-view.tsx](mdc:frontend/app/scaffold/[configId]/scaffold-2d-view.tsx)
 - 3D view: [scaffold-3d-view.tsx](mdc:frontend/app/scaffold/[configId]/scaffold-3d-view.tsx)
 
+### Components
+- CAD Drawing Canvas: [cad-drawing-canvas.tsx](mdc:frontend/components/cad-drawing-canvas.tsx)
+- Material Breakdown Table: [material-breakdown-table.tsx](mdc:frontend/components/material-breakdown-table.tsx)
+- Quick Shape Builder: [quick-shape-builder.tsx](mdc:frontend/components/quick-shape-builder.tsx)
+- Drawing Upload: [DrawingUpload.tsx](mdc:frontend/components/drawing-upload/DrawingUpload.tsx)
+
 ### API Clients
 - Scaffold configs: [scaffold-configs.ts](mdc:frontend/lib/api/scaffold-configs.ts)
-- AI features: [ai.ts](mdc:frontend/lib/api/ai.ts)
+- Vision/extraction: [vision-bim.ts](mdc:frontend/lib/api/vision-bim.ts)
 - User management: [users.ts](mdc:frontend/lib/api/users.ts)
 - Authentication: [auth.ts](mdc:frontend/lib/api/auth.ts)
 

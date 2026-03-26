@@ -2,9 +2,7 @@ import apiClient from './client';
 
 export interface VisionMassingTier {
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
-  /** Cumulative top height of this mass tier in mm. */
   topHeightMm: number;
-  /** Optional bottom height of this tier in mm. Defaults to previous tier top / ground. */
   baseHeightMm?: number;
 }
 
@@ -14,34 +12,17 @@ export interface VisionFootprintResult {
   groundLineY?: number;
   eavesLineY?: number;
   confidence?: number;
-  /** Scale from drawing (e.g. 100 for S=1/100). */
   scaleDenominator?: number;
-  /** Per-edge lengths in mm (one per vertex/edge); from dimension text on plan. */
   wallLengthsMm?: number[];
-  /** Inferred from plan: 枠組足場 (1829 etc.) vs くさび式 (600/900 etc.). */
   scaffoldTypeHint?: 'kusabi' | 'wakugumi';
   spanSizeMm?: number;
-  /** For 枠組: 1700, 1800, or 1900. */
   frameSizeMm?: number;
-  /** True when wallLengthsMm came from explicit dimension text on the plan. */
   wallLengthsFromDimText?: boolean;
-  /** Number of floors detected (for height estimation from 3D views). */
   floorCount?: number;
-  /**
-   * Per-edge wall heights in mm (one per polygon edge, same order as vertices).
-   * For stepped/tiered buildings where different facades have different heights.
-   * When omitted, all walls use buildingHeightMm uniformly.
-   */
   wallHeightsMm?: number[];
-  /** Optional stacked building masses for setback / terrace buildings. */
   massingTiers?: VisionMassingTier[];
-  /** Confidence in the extracted building height: 'high', 'medium', or 'low'. */
   heightConfidence?: 'high' | 'medium' | 'low';
-  /** Type of drawing: 'plan', '3d', 'elevation', 'section'. */
   drawingType?: 'plan' | '3d' | 'elevation' | 'section';
-  /** URL to the stored IFC file for frontend 3D rendering. */
-  ifcFileUrl?: string;
-  /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */
   obstacles?: Array<
     | {
         type: 'balcony' | 'ac';
@@ -62,7 +43,10 @@ export interface VisionFootprintResult {
 }
 
 export const visionBimApi = {
-  /** Upload image (photo or blueprint); returns footprint JSON for BuildingGraph. */
+  /**
+   * AI Extraction: Upload image (PNG/JPEG/WebP/GIF/BMP), PDF, or DXF.
+   * AI analyzes the drawing and extracts footprint, dimensions, and building height.
+   */
   analyze: async (file: File): Promise<VisionFootprintResult> => {
     const form = new FormData();
     form.append('file', file);
@@ -74,12 +58,16 @@ export const visionBimApi = {
     return response.data;
   },
 
-  /** Upload IFC (BIM) file; returns footprint JSON extracted from 3D geometry. */
-  fromIfc: async (file: File): Promise<VisionFootprintResult> => {
+  /**
+   * Dimension Extraction: Upload image (PNG/JPEG/WebP), PDF, or DXF.
+   * Extracts dimensions and shape from clearly dimensioned drawings.
+   * For DXF: deterministic parse. For images/PDFs: AI-assisted dimension reading.
+   */
+  extractDimensions: async (file: File): Promise<VisionFootprintResult> => {
     const form = new FormData();
     form.append('file', file);
     const response = await apiClient.post<VisionFootprintResult>(
-      '/vision-bim/from-ifc',
+      '/vision-bim/extract-dimensions',
       form,
       { timeout: 120000 },
     );

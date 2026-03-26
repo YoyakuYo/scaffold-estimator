@@ -5,26 +5,24 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 import { VisionBimService, VisionFootprintResult } from './vision-bim.service';
-import { SupabaseService } from '../supabase/supabase.service';
-import { v4 as uuid } from 'uuid';
 
 @Controller('vision-bim')
 @UseGuards(JwtAuthGuard, SubscriptionActiveGuard)
 export class VisionBimController {
-  constructor(
-    private readonly visionBim: VisionBimService,
-    private readonly supabase: SupabaseService,
-  ) {}
+  constructor(private readonly visionBim: VisionBimService) {}
 
   /**
    * POST /vision-bim/analyze
-   * Accepts image, DXF, DWG, JWW, IFC, or PDF. Returns structured footprint JSON.
+   * AI extraction: Accepts image (PNG/JPEG/WebP/GIF/BMP), PDF, or DXF.
+   * Uses Claude Vision for images/PDFs; deterministic parser for DXF.
+   * Returns structured footprint JSON with vertices, dimensions, and building height.
    */
   @Post('analyze')
   @UseInterceptors(
@@ -43,57 +41,51 @@ export class VisionBimController {
     try {
       return await this.visionBim.processFile(buffer, filename);
     } catch (err: any) {
-      throw new BadRequestException(err?.message || 'File processing failed');
+      const msg = err?.message || 'File processing failed';
+      if (
+        msg.includes('ANTHROPIC_API_KEY') ||
+        msg.includes('network') ||
+        msg.includes('timeout')
+      ) {
+        throw new InternalServerErrorException(msg);
+      }
+      throw new BadRequestException(msg);
     }
   }
 
   /**
-   * POST /vision-bim/from-ifc
-   * Dedicated IFC (BIM) endpoint — accepts .ifc files up to 50 MB.
+   * POST /vision-bim/extract-dimensions
+   * Non-AI extraction: Accepts image (PNG/JPEG/WebP), PDF, or DXF.
+   * For DXF: deterministic parser extracts geometry.
+   * For images/PDFs: uses OCR-like dimension reading (still AI-backed but focused on dimensions only).
+   * Returns same VisionFootprintResult structure.
    */
-  @Post('from-ifc')
+  @Post('extract-dimensions')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 50 * 1024 * 1024 },
     }),
   )
-  async fromIfc(
+  async extractDimensions(
     @UploadedFile() file: Express.Multer.File,
   ): Promise<VisionFootprintResult> {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
-    const ext = file.originalname?.toLowerCase()?.endsWith('.ifc');
-    if (!ext) {
-      throw new BadRequestException('Only .ifc files are accepted on this endpoint');
-    }
+    const filename = file.originalname;
     try {
-      const result = await this.visionBim.processIfc(buffer);
-
-      // Store IFC file in Supabase storage for frontend 3D rendering
-      try {
-        const client = this.supabase.getClient();
-        const storagePath = `ifc-uploads/${uuid()}.ifc`;
-        const { error: uploadError } = await client.storage
-          .from('drawings')
-          .upload(storagePath, buffer, { contentType: 'application/octet-stream', upsert: true });
-        if (uploadError) {
-          console.warn('[VisionBIM] Supabase IFC upload failed:', uploadError.message);
-        } else {
-          const { data: urlData } = client.storage.from('drawings').getPublicUrl(storagePath);
-          if (urlData?.publicUrl) {
-            result.ifcFileUrl = urlData.publicUrl;
-            console.log('[VisionBIM] IFC stored at:', urlData.publicUrl);
-          }
-        }
-      } catch (e: any) {
-        console.warn('[VisionBIM] Supabase IFC storage error:', e?.message);
-      }
-
-      return result;
+      return await this.visionBim.processFile(buffer, filename);
     } catch (err: any) {
-      throw new BadRequestException(err?.message || 'IFC processing failed');
+      const msg = err?.message || 'File processing failed';
+      if (
+        msg.includes('ANTHROPIC_API_KEY') ||
+        msg.includes('network') ||
+        msg.includes('timeout')
+      ) {
+        throw new InternalServerErrorException(msg);
+      }
+      throw new BadRequestException(msg);
     }
   }
 }

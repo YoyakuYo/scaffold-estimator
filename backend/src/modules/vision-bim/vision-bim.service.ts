@@ -93,11 +93,10 @@ export interface VisionFootprintResult {
   >;
 }
 
-/** Supported CAD/plan extensions (lowercase). */
-const CAD_EXTENSIONS = ['.dxf', '.dwg', '.jww'];
+/** Supported file extensions (lowercase). Only images, PDFs, and DXF are accepted. */
+const CAD_EXTENSIONS = ['.dxf'];
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const PDF_EXTENSIONS = ['.pdf'];
-const IFC_EXTENSIONS = ['.ifc'];
 
 const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, photo, or 3D BIM render) and extract the building exterior footprint, dimensions, and scaffold hints.
 
@@ -340,32 +339,59 @@ export class VisionBimService {
     const isPdf = PDF_EXTENSIONS.includes(ext) || (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44);
     const isImage = IMAGE_EXTENSIONS.includes(ext) || this.looksLikeImage(buffer);
 
-    if (ext === '.dwg' || ext === '.jww') {
-      if (!isDxfBuffer) {
-        throw new Error(
-          'DWG/JWW はサーバーで直接解析できません。CADで DXF 形式にエクスポートしてからアップロードしてください。 / ' +
-          'Please export the file as DXF from your CAD software and upload the DXF file.',
-        );
-      }
+    // Reject unsupported formats with a clear error
+    if (ext === '.ifc') {
+      throw new Error(
+        'IFC files are no longer supported. Please export as DXF or upload an image/PDF of the plan.',
+      );
     }
+    if (ext === '.dwg' || ext === '.jww') {
+      throw new Error(
+        'DWG/JWW はサーバーで直接解析できません。CADで DXF 形式にエクスポートしてからアップロードしてください。 / ' +
+        'Please export the file as DXF from your CAD software and upload the DXF file.',
+      );
+    }
+
     if (isDxf) {
       return this.processDxf(buffer);
     }
-    const isIfc = IFC_EXTENSIONS.includes(ext) || this.looksLikeIfc(buffer);
-    if (isIfc) {
-      return this.processIfc(buffer);
-    }
     if (isPdf) {
-      throw new Error(
-        'PDFファイルは直接解析できません。画像（JPEG/PNG）に変換するか、CADデータの場合はDXF形式でエクスポートしてアップロードしてください。 / ' +
-        'PDF files cannot be analyzed directly. Please convert to an image (JPEG/PNG) for photo analysis, or export as DXF from your CAD software.',
-      );
+      return this.processPdf(buffer);
     }
     if (isImage) {
       return this.processImage(buffer);
     }
-    this.logger.warn('Unknown file type; trying as image');
-    return this.processImage(buffer);
+
+    throw new Error(
+      'サポートされていないファイル形式です。画像（PNG/JPEG）、PDF、またはDXFをアップロードしてください。 / ' +
+      'Unsupported file format. Please upload an image (PNG/JPEG), PDF, or DXF file.',
+    );
+  }
+
+  /**
+   * Convert PDF to image using Sharp, then process with vision AI.
+   * Extracts the first page as a PNG image for analysis.
+   */
+  private async processPdf(buffer: Buffer): Promise<VisionFootprintResult> {
+    this.logger.log('Processing PDF: converting to image for AI analysis...');
+    try {
+      const sharp = (await import('sharp')).default;
+      const pngBuffer = await sharp(buffer, { density: 300 })
+        .png()
+        .toBuffer();
+      this.logger.log(`PDF converted to PNG: ${pngBuffer.length} bytes`);
+      return this.processImage(pngBuffer);
+    } catch (sharpErr: any) {
+      this.logger.warn(`Sharp PDF conversion failed: ${sharpErr?.message}. Trying raw buffer as image...`);
+      try {
+        return this.processImage(buffer);
+      } catch {
+        throw new Error(
+          'PDFの画像変換に失敗しました。PDFを画像（PNG/JPEG）に変換してから再度アップロードしてください。 / ' +
+          'PDF to image conversion failed. Please convert the PDF to an image (PNG/JPEG) and upload again.',
+        );
+      }
+    }
   }
 
   private looksLikeDxf(buffer: Buffer): boolean {
@@ -390,11 +416,7 @@ export class VisionBimService {
     return 'image/png';
   }
 
-  private looksLikeIfc(buffer: Buffer): boolean {
-    if (buffer.length < 20) return false;
-    const head = buffer.slice(0, 100).toString('utf8');
-    return head.includes('ISO-10303-21') || head.includes('HEADER;');
-  }
+  // IFC support removed — only images, PDFs, and DXF accepted
 
   /**
    * Parse DXF buffer and extract building footprint (closed polyline or bounding outline) and height.
@@ -413,8 +435,10 @@ export class VisionBimService {
       const parser = new DxfParser();
       const dxf = parser.parse(text);
       if (!dxf || !dxf.entities) {
-        this.logger.warn('DXF parse returned no entities');
-        return this.getFallbackFootprint();
+        throw new Error(
+          'DXFファイルの解析に失敗しました。有効なDXFファイルか確認してください。 / ' +
+          'DXF file parsing failed — no entities found. Please verify the file is a valid DXF.',
+        );
       }
       const unit = this.detectDxfUnit(dxf);
       const scaleToMm = unit === 'm' ? 1000 : unit === 'cm' ? 10 : 1;
@@ -598,7 +622,10 @@ export class VisionBimService {
       return { vertices, buildingHeightMm, confidence: 0.8, ...(obstacles && { obstacles }) };
     } catch (err) {
       this.logger.error('DXF processing failed', (err as Error)?.message);
-      return this.getFallbackFootprint();
+      throw new Error(
+        `DXFファイルの処理中にエラーが発生しました: ${(err as Error)?.message || 'unknown'} / ` +
+        `DXF processing failed: ${(err as Error)?.message || 'unknown'}`,
+      );
     }
   }
 
