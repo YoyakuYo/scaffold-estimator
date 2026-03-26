@@ -335,7 +335,8 @@ export default function Scaffold3DView({
   const isAiBimFromMode = complianceMode === 'ai_bim';
   const isAiBim = isAiBimFromMode ||
     (Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3) ||
-    !!(result as any)?.ifcFileUrl;
+    !!(result as any)?.ifcFileUrl ||
+    (Array.isArray((result as any)?.massingTiers) && (result as any).massingTiers.length > 0);
   const ifcFileUrl: string | undefined =
     typeof (result as any)?.ifcFileUrl === 'string' ? (result as any).ifcFileUrl : undefined;
   const hasIfcSource = !!ifcFileUrl;
@@ -1279,19 +1280,32 @@ export default function Scaffold3DView({
 
       const tierPolygons: Array<{ verts: PointXZ[]; footprintFromMassing: boolean }> = [];
 
+      const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
+        if (poly.length !== wallCount || wallCount < 3) return false;
+        for (let i = 0; i < wallCount; i++) {
+          const ep1 = poly[i];
+          const ep2 = poly[(i + 1) % wallCount];
+          if (!ep1 || !ep2) return false;
+          const len = Math.hypot(ep2.x - ep1.x, ep2.z - ep1.z);
+          if (!Number.isFinite(len) || len < 0.05) return false;
+        }
+        return true;
+      };
+
       {
         const tg0 = tierGroups[0];
         let tverts: PointXZ[] = [];
         let tok = false;
         let groundFromMassing = false;
 
-          // Prefer bimPlan-mapped full outline when it matches ground-tier wall count exactly.
-        // storedVerts (polygonVertices) are ordered edge-by-edge matching wall indices,
-        // so toPlanM(storedVerts) gives the correct shape, orientation, and scale.
+          // Prefer bimPlan-mapped full outline when it matches ground-tier wall count exactly
+        // AND produces non-degenerate edges.  Reject outlines where any mapped edge is
+        // shorter than 50 mm — those collapse walls to near-zero length in the render loop.
         if (!tok && bimPlan && storedVerts && storedVerts.length === tg0.walls.length) {
           const mapped = bimPlan.toPlanM(storedVerts as any[]);
           if (mapped.length === tg0.walls.length &&
-              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
+              hasUsableTierEdges(mapped, tg0.walls.length)) {
             tverts = mapped;
             tok = true;
             groundFromMassing = true;
@@ -1311,7 +1325,8 @@ export default function Scaffold3DView({
           if (groundMassing) {
             const mapped = bimPlan.toPlanM(groundMassing.vertices as any);
             if (mapped.length === tg0.walls.length &&
-                mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+                mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
+                hasUsableTierEdges(mapped, tg0.walls.length)) {
               tverts = mapped;
               tok = true;
               groundFromMassing = true;
@@ -1377,7 +1392,9 @@ export default function Scaffold3DView({
 
         if (bimPlan && candidate && candidate.vertices.length === nW) {
           const mapped = bimPlan.toPlanM(candidate.vertices as any);
-          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
+          if (mapped.length === nW &&
+              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
+              hasUsableTierEdges(mapped, nW)) {
             tverts = mapped;
             footprintFromMassing = true;
           }
@@ -1432,17 +1449,6 @@ export default function Scaffold3DView({
 
       // Vertex count per tier MUST equal that tier's wall count, or tierV[localIdx] throws (blank 3D).
       const groundFootprint = () => tierPolygons[0]?.verts ?? verts;
-      const hasUsableTierEdges = (poly: PointXZ[], wallCount: number): boolean => {
-        if (poly.length !== wallCount || wallCount < 3) return false;
-        for (let i = 0; i < wallCount; i++) {
-          const p1 = poly[i];
-          const p2 = poly[(i + 1) % wallCount];
-          if (!p1 || !p2) return false;
-          const len = Math.hypot(p2.x - p1.x, p2.z - p1.z);
-          if (!Number.isFinite(len) || len < 0.05) return false;
-        }
-        return true;
-      };
       for (let tgi = 0; tgi < tierPolygons.length; tgi++) {
         const tp = tierPolygons[tgi];
         const tg = tierGroups[tgi];
@@ -1552,18 +1558,19 @@ export default function Scaffold3DView({
         return null;
       })();
 
-      // When fullBuildingOutline matches the ground tier wall count exactly,
-      // promote it as the scaffold polygon so that scaffold edge positions,
-      // IFC building placement, and outline all share one coordinate system.
-      // This prevents the scaffold from wrapping wrong faces when the
-      // buildFootprintPolygonXZ reconstruction has a different orientation.
+      // When fullBuildingOutline matches the ground tier wall count exactly
+      // AND every edge is long enough to be usable, promote it as the scaffold
+      // polygon so scaffold edge positions, IFC building placement, and outline
+      // all share one coordinate system.  Reject outlines with degenerate
+      // (near-zero) edges — these cause walls to be skipped in the render loop.
       {
         const groundTierWallCount = tierGroups[0]?.walls.length ?? 0;
         if (
           fullBuildingOutline &&
           fullBuildingOutline.length === groundTierWallCount &&
           groundTierWallCount >= 3 &&
-          tierPolygons[0] !== undefined
+          tierPolygons[0] !== undefined &&
+          hasUsableTierEdges(fullBuildingOutline, groundTierWallCount)
         ) {
           tierPolygons[0].verts = fullBuildingOutline;
           tierPolygons[0].footprintFromMassing = true;
@@ -1793,16 +1800,46 @@ export default function Scaffold3DView({
           }
         }
 
-        const v1 = { x: p1.x + tierOffX, z: p1.z + tierOffZ };
-        const v2 = { x: p2.x + tierOffX, z: p2.z + tierOffZ };
+        let v1 = { x: p1.x + tierOffX, z: p1.z + tierOffZ };
+        let v2 = { x: p2.x + tierOffX, z: p2.z + tierOffZ };
 
         // Edge direction on XZ plane
-        const dx = v2.x - v1.x;
-        const dz = v2.z - v1.z;
-        const edgeLen = Math.hypot(dx, dz);
+        let dx = v2.x - v1.x;
+        let dz = v2.z - v1.z;
+        let edgeLen = Math.hypot(dx, dz);
+
+        // When polygon produces a degenerate edge (near-coincident vertices),
+        // reconstruct the edge from the wall's own wallLengthMm and the direction
+        // of the nearest valid polygon edge.  This prevents walls from being silently
+        // dropped when the BIM outline has duplicate/collapsed vertices.
         if (edgeLen < 0.001) {
-          skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] = (skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] ?? 0) + 1;
-          continue;
+          const wallLenM = Math.max((wall.wallLengthMm ?? 600) / 1000, 0.6);
+          let dirX = 1, dirZ = 0;
+          const tryPrev = localIdx > 0 ? localIdx - 1 : (tierV.length - 1);
+          const tryNext = (localIdx + 2) % tierV.length;
+          const prevV = tierV[tryPrev], nextV = tierV[tryNext];
+          if (prevV && p1) {
+            const pdx = p1.x - prevV.x, pdz = p1.z - prevV.z;
+            const pl = Math.hypot(pdx, pdz);
+            if (pl > 0.01) {
+              const perpX = -pdz / pl, perpZ = pdx / pl;
+              dirX = perpX; dirZ = perpZ;
+            }
+          } else if (nextV && p2) {
+            const ndx = nextV.x - p2.x, ndz = nextV.z - p2.z;
+            const nl = Math.hypot(ndx, ndz);
+            if (nl > 0.01) { dirX = ndx / nl; dirZ = ndz / nl; }
+          }
+          v2 = { x: v1.x + dirX * wallLenM, z: v1.z + dirZ * wallLenM };
+          dx = v2.x - v1.x; dz = v2.z - v1.z;
+          edgeLen = Math.hypot(dx, dz);
+          if (edgeLen < 0.001) {
+            skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] = (skipReasons[`edgeLen(${edgeLen.toFixed(6)})`] ?? 0) + 1;
+            continue;
+          }
+          if (typeof window !== 'undefined') {
+            console.warn(`[3D] Wall ${i} had degenerate edge, reconstructed from wallLengthMm=${wall.wallLengthMm}`);
+          }
         }
         const edgeUx = dx / edgeLen;
         const edgeUz = dz / edgeLen;
@@ -1898,14 +1935,21 @@ export default function Scaffold3DView({
           endT = edgeLen;
         }
 
-        const nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
-        const nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
-        const nearDx = nearEnd.x - nearStart.x;
-        const nearDz = nearEnd.z - nearStart.z;
-        const alignedLen = Math.hypot(nearDx, nearDz);
+        let nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
+        let nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
+        let nearDx = nearEnd.x - nearStart.x;
+        let nearDz = nearEnd.z - nearStart.z;
+        let alignedLen = Math.hypot(nearDx, nearDz);
         if (alignedLen < 1e-6) {
-          skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] = (skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] ?? 0) + 1;
-          continue;
+          nearStart = fallbackStart;
+          nearEnd = fallbackEnd;
+          nearDx = nearEnd.x - nearStart.x;
+          nearDz = nearEnd.z - nearStart.z;
+          alignedLen = Math.hypot(nearDx, nearDz);
+          if (alignedLen < 1e-6) {
+            skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] = (skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] ?? 0) + 1;
+            continue;
+          }
         }
 
         // Tier-specific corner flags

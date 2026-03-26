@@ -443,7 +443,14 @@ export function buildFootprintPolygonXZ(
   const dist = Math.hypot(dx, dz);
   if (dist >= 1e-6) {
     const scale = lastLenM / dist;
-    verts[0] = { x: cx + dx * scale, z: cz + dz * scale };
+    const closedV0 = { x: cx + dx * scale, z: cz + dz * scale };
+    // Only reposition verts[0] if it doesn't collapse the first edge (0→1).
+    // A near-coincident verts[0] and verts[1] would create a degenerate edge
+    // that silently drops an entire wall face in the 3D renderer.
+    const firstEdgeLen = Math.hypot(closedV0.x - verts[1].x, closedV0.z - verts[1].z);
+    if (firstEdgeLen >= 0.05) {
+      verts[0] = closedV0;
+    }
   }
   return verts;
 }
