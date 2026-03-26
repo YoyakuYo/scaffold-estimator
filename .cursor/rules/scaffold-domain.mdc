@@ -123,6 +123,18 @@ Adjacent spans share the post/frame at the boundary:
 - Stair replaces 1 full anchi per level per access point (for width ≥ 900mm)
 - For 600mm width: extended bay pattern (no anchi removal)
 
+### Corner Rule (足場コーナー詳細図) — BOTH Kusabi AND Wakugumi
+At every polygon corner where two walls meet:
+1. **300mm overrun**: Last two posts of each wall extend 300mm past the building corner
+2. **Corner span**: First and last span of each wall are always the smallest standard span:
+   - Kusabi: **600mm** corner span
+   - Wakugumi: **610mm** corner span
+3. **Span layout**: `[corner_span, ...middle_spans, corner_span]` where middle fills the remaining length
+4. **Post sharing**: The corner post is shared between adjacent walls (no double posts)
+5. **Backend**: `fitSpansToWallLengthWithCorner()` / `fitSpansToWallLengthWithCornerWakugumi()`
+6. **3D view**: `buildWallScaffold()` with `dropLeadingCorner600=true` at start corners and `flushDeckAtCornerEnd=true` at end corners
+7. Example: Wall 10,000mm → spans = [600, 1800, 1800, 1800, 1800, 1800, 600] (sum = 10,200 = wall + 2×corner_overrun_gap absorbed)
+
 ### Jack Base
 - Range: 0~300mm adjustable
 - Count only, no size spec in quotation

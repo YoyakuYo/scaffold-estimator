@@ -40,9 +40,11 @@ const PIPE_SEG = 10;
 const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
-// Corner detail base rule on source wall: 300mm overrun + 600mm corner span
+// Corner detail base rule (足場コーナー詳細図): 300mm overrun past building corner + corner span.
+// Kusabi: 600mm corner span. Wakugumi: 610mm corner span. Both use 300mm overrun.
 const CORNER_OVERRUN_M = 0.3;
-const CORNER_TURN_SPAN_M = 0.6;
+const CORNER_TURN_SPAN_KUSABI_M = 0.6;
+const CORNER_TURN_SPAN_WAKUGUMI_M = 0.61;
 /** Offset from building wall to inner posts (always 300mm). */
 const WALL_TO_INNER_POSTS_MM = 300;
 /** Spans (planks) can overrun toward the wall by this amount (m). */
@@ -762,10 +764,12 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
+        // Drop leading corner span (600mm kusabi / 610mm wakugumi) when reusing previous wall's corner post
+        const isCornerSpan = (s: number) => s <= 620 && s >= 590;
         const trimmedSpans = (
           dropLeadingCorner600 &&
           baseSpans.length > 1 &&
-          Math.abs(baseSpans[0] - 600) <= 1
+          isCornerSpan(baseSpans[0])
         ) ? baseSpans.slice(1) : baseSpans;
         const allSpans: number[] = trimmedSpans.length > 0 ? trimmedSpans : baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
@@ -1961,16 +1965,19 @@ export default function Scaffold3DView({
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        // Keep 3D wall runs strictly within the traced wall segment.
-        // Corner overrun/turn-span extension is disabled so scaffold never exceeds wall edges.
+        // Corner rule (足場コーナー詳細図): at polygon corners, apply 300mm overrun + 600mm corner span.
+        // dropLeadingCorner600 = true when this wall's START connects to the previous wall's end at a corner.
+        // flushDeckAtCornerEnd = true when this wall's END connects to the next wall's start at a corner.
+        const applyCornerAtStart = isStartCorner;
+        const applyCornerAtEnd = isEndCorner;
         const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
           spanCaps[i],
           false,
           false,
-          false,
-          false,
+          applyCornerAtStart,
+          applyCornerAtEnd,
         );
 
         // Scale scaffold run to fit polygon edge. With the ortho builder, edge ≈ wallLength
