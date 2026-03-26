@@ -1938,28 +1938,38 @@ function ScaffoldPageContent() {
                       setAiBimConfirming(true);
                       try {
                         const outline = aiBimPreview.buildingOutline;
-                        // Auto-decompose walls for stepped/setback buildings
+                        // Auto-decompose walls for stepped/setback buildings.
+                        // ONLY decompose when tiers have genuinely DIFFERENT footprints
+                        // (setback/podium+tower). For simple L/U/T shapes where all walls
+                        // have the same height (or heights differ but footprint is the same),
+                        // skip decomposition to preserve the correct wall count.
                         let finalWalls = aiBimPreview.dto.walls;
-                        if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 0) {
-                          const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
-                          const decomposed = decomposeTierWalls(
-                            aiBimPreview.dto.walls,
-                            aiBimPreview.massingTiers,
-                            aiBimPreview.buildingHeightMm,
+                        if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 1) {
+                          // Check if tiers have different footprint vertex counts
+                          // (indicating genuinely different shapes, not just height zones)
+                          const tierVertCounts = aiBimPreview.massingTiers.map(
+                            (t: any) => Array.isArray(t.vertices) ? t.vertices.length : 0,
                           );
-                          if (decomposed.length > 0 && decomposed !== aiBimPreview.dto.walls) {
-                            finalWalls = decomposed;
+                          const hasDifferentFootprints = new Set(tierVertCounts.filter(c => c >= 3)).size > 1;
+                          if (hasDifferentFootprints) {
+                            const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
+                            const decomposed = decomposeTierWalls(
+                              aiBimPreview.dto.walls,
+                              aiBimPreview.massingTiers,
+                              aiBimPreview.buildingHeightMm,
+                            );
+                            if (decomposed.length > 0 && decomposed.length <= aiBimPreview.dto.walls.length * 3) {
+                              finalWalls = decomposed;
+                            }
                           }
                         }
-                        // When walls still have uniform max height but isStepped,
-                        // ensure per-wall heights from the preview are preserved
+                        // When walls have different heights (stepped building but same footprint),
+                        // preserve per-wall heights from the preview without decomposing
                         if (aiBimPreview.isStepped && finalWalls === aiBimPreview.dto.walls) {
-                          finalWalls = aiBimPreview.walls.map((pw) => {
-                            const match = finalWalls.find((fw) => fw.side === pw.side);
-                            return match
-                              ? { ...match, wallHeightMm: pw.wallHeightMm }
-                              : { ...pw };
-                          });
+                          finalWalls = aiBimPreview.walls.map((pw) => ({
+                            ...pw,
+                            wallHeightMm: pw.wallHeightMm ?? aiBimPreview.buildingHeightMm,
+                          }));
                         }
                         // Enforce minimum wall dimensions to prevent 0-level scaffold
                         // (can happen when AI returns pixel-scale coordinates instead of real mm)
@@ -1970,8 +1980,16 @@ function ScaffoldPageContent() {
                           wallHeightMm: Math.max(w.wallHeightMm ?? aiBimPreview.buildingHeightMm, MIN_WALL_HEIGHT_MM),
                           wallLengthMm: Math.max(w.wallLengthMm, MIN_WALL_LENGTH_MM),
                         }));
+                        // Only include massingTiers in DTO when walls were actually decomposed.
+                        // When decomposition was skipped (same footprint tiers), strip them
+                        // to prevent the 3D view from creating erroneous tier groups.
+                        const wallsWereDecomposed = finalWalls !== aiBimPreview.dto.walls && finalWalls !== aiBimPreview.walls;
+                        const dtoBase = { ...aiBimPreview.dto };
+                        if (!wallsWereDecomposed) {
+                          delete (dtoBase as any).massingTiers;
+                        }
                         const dto = {
-                          ...aiBimPreview.dto,
+                          ...dtoBase,
                           walls: sanitizedWalls,
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
                           ...(aiBimPreview.ifcFileUrl && { ifcFileUrl: aiBimPreview.ifcFileUrl }),
