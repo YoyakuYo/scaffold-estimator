@@ -260,7 +260,10 @@ function collapseTinyOrthogonalJogs(
 
     let collapsed = false;
     for (const best of candidates) {
-      if (best.ratio >= 0.90) break;
+      // For 8→6 collapse (typical L-shape artifact), allow higher ratio
+      // since the step edge can be a significant fraction of adjacent edges.
+      const ratioLimit = out.length === 8 && candidates.length >= 2 ? 0.98 : 0.90;
+      if (best.ratio >= ratioLimit) break;
 
       const sim = out.map((p) => ({ x: p.x, z: p.z }));
       if (best.vertical) sim[best.nnI]!.z = sim[best.i]!.z;
@@ -270,8 +273,10 @@ function collapseTinyOrthogonalJogs(
       const areaChange = Math.abs(polyArea(sim) - currentArea) / Math.max(currentArea, 1);
 
       // Match backend two-stage guard so preview and persisted result stay aligned.
+      // For 8→6 specifically, relax the area guard since the step can be real geometry.
       const canUseRelaxedFirstPass = out.length > 6 && best.ratio < 0.75 && areaChange <= 0.20;
-      if (areaChange > 0.08 && !canUseRelaxedFirstPass) continue;
+      const canUseL8to6 = out.length === 8 && candidates.length >= 2 && areaChange <= 0.25;
+      if (areaChange > 0.08 && !canUseRelaxedFirstPass && !canUseL8to6) continue;
 
       if (best.vertical) out[best.nnI]!.z = out[best.i]!.z;
       else out[best.nnI]!.x = out[best.i]!.x;

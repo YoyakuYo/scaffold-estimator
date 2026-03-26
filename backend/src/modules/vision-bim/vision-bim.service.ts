@@ -1348,22 +1348,21 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     }
     if (indexed.length < 4) return;
 
-    // ── Pass 1c: collapse spurious orthogonal steps at height boundaries ────
+    // ── Pass 1c: collapse spurious orthogonal steps ────
     // When a 3D BIM render is analysed, the AI often traces the silhouette at
     // the height-change boundary, inserting a "step" pattern of 3 consecutive
     // edges (dir, perpendicular-step, dir-again).  This turns a 6-wall L-shape
     // into an 8-wall shape.
     //
-    // Algorithm: find ALL step triplets at height boundaries, then collapse
-    // ONLY the one whose removal adds the MOST area (= it was a notch/dent
-    // caused by the silhouette, not a real protrusion like the L-corner).
-    // Only collapse when there are ≥2 candidates so we never destroy the
-    // last real step of an L/U/T shape.
+    // Algorithm: find ALL step triplets, then collapse the one whose removal
+    // adds the MOST area (= it was a notch/dent caused by the silhouette,
+    // not a real protrusion like the L-corner).
     //
-    // After collapsing, the adjacent vertex is shifted to maintain
-    // orthogonality (the step was perpendicular, so one coordinate must
-    // be aligned with the pre-step edge).
-    if (originalWallHeights && indexed.length > 6) {
+    // Runs with OR without wallHeightsMm — when heights are missing, we still
+    // collapse the smallest step if there are 2+ candidates (one is a real
+    // L-corner step, the other is the artifact). When heights ARE present,
+    // we additionally require a height-change boundary for collapse.
+    if (indexed.length > 6) {
       const edgeDir1c = (a: { x: number; y: number }, b: { x: number; y: number }) => {
         const dx = b.x - a.x, dy = b.y - a.y;
         const len = Math.hypot(dx, dy);
@@ -1406,15 +1405,17 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           if (!sameAxis1c(d1, d3)) continue;
           if (!perp1c(d1, d2)) continue;
 
-          // Height boundary check
-          const h0 = originalWallHeights[indexed[prevI].origIdx] ?? 0;
-          const h1 = originalWallHeights[indexed[i].origIdx] ?? 0;
-          const h2 = originalWallHeights[indexed[nextI].origIdx] ?? 0;
-          if (
-            Math.abs(h0 - h1) <= 500 &&
-            Math.abs(h1 - h2) <= 500 &&
-            Math.abs(h0 - h2) <= 500
-          ) continue;
+          // Height boundary check (only enforced when wallHeightsMm was provided)
+          if (originalWallHeights) {
+            const h0 = originalWallHeights[indexed[prevI].origIdx] ?? 0;
+            const h1 = originalWallHeights[indexed[i].origIdx] ?? 0;
+            const h2 = originalWallHeights[indexed[nextI].origIdx] ?? 0;
+            if (
+              Math.abs(h0 - h1) <= 500 &&
+              Math.abs(h1 - h2) <= 500 &&
+              Math.abs(h0 - h2) <= 500
+            ) continue;
+          }
 
           // Compute area gain from collapsing this step
           const d2Vertical = Math.abs(d2.dy) > Math.abs(d2.dx);

@@ -748,7 +748,7 @@ export function AiBimFootprintEditor({
         role="img"
         viewBox={viewBox}
         className="w-full block touch-none select-none bg-white"
-        style={{ minHeight: 220, maxHeight: 400 }}
+        style={{ minHeight: 320, maxHeight: 600 }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}

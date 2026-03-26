@@ -1327,8 +1327,8 @@ function ScaffoldPageContent() {
           AI BIM MODE — Vision-to-BIM upload
          ═══════════════════════════════════════════════════════ */}
       {inputMode === 'ai_bim' && !editConfigId && (
-        <div className="max-w-[1200px] mx-auto px-4 pb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <div className="max-w-[1800px] mx-auto px-4 pb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <ScanLine className="h-5 w-5 text-violet-600" />
               {t('scaffold', 'aiBimModeTitle')}
@@ -1530,17 +1530,49 @@ function ScaffoldPageContent() {
             )}
 
             {aiBimPreview && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* ── LEFT PANEL: AutoCAD-style Drawing Area ── */}
+                <div className="w-full lg:w-[480px] lg:min-w-[420px] lg:flex-shrink-0 space-y-3">
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm font-medium text-green-800 flex items-center gap-2">
-                      <Check className="h-5 w-5" />
+                      <Check className="h-4 w-4" />
                       {t('scaffold', 'aiBimExtractedComplete')}
                     </p>
-                    <p className="text-xs text-green-900/85 mt-2 leading-relaxed">
-                      {t('scaffold', 'aiBimFootprintWorkflowNote')}
-                    </p>
                   </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-gray-500">
+                      {t('scaffold', 'aiBimPreviewTitle')}
+                    </span>
+                    <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer w-fit">
+                      <input
+                        type="checkbox"
+                        checked={aiBimCompareExtract}
+                        onChange={(e) => setAiBimCompareExtract(e.target.checked)}
+                        disabled={!aiBimExtractOutline}
+                        className="rounded border-gray-300"
+                      />
+                      {t('scaffold', 'aiBimCompareExtract')}
+                    </label>
+                  </div>
+                  <AiBimFootprintEditor
+                    outline={aiBimPreview.buildingOutline}
+                    baselineOutline={aiBimExtractOutline ?? undefined}
+                    showBaseline={aiBimCompareExtract && !!aiBimExtractOutline}
+                    showDimensions={true}
+                    showXYGrid={true}
+                    onChange={handleAiBimOutlineEdit}
+                    onResetToBaseline={
+                      aiBimExtractOutline
+                        ? () =>
+                            handleAiBimOutlineEdit(
+                              aiBimExtractOutline.map((p) => ({
+                                xFrac: p.xFrac,
+                                yFrac: p.yFrac,
+                              })),
+                            )
+                        : undefined
+                    }
+                  />
                   <button
                     type="button"
                     onClick={() => {
@@ -1549,13 +1581,14 @@ function ScaffoldPageContent() {
                       setAiBimCompareExtract(false);
                       setAiBimError(null);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
                   >
-                    <RotateCcw className="h-4 w-4" />
+                    <RotateCcw className="h-3.5 w-3.5" />
                     {t('scaffold', 'aiBimUploadAnother')}
                   </button>
                 </div>
-                <div className="border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
+                {/* ── RIGHT PANEL: Review, Wall Table, 3D, Settings ── */}
+                <div className="flex-1 min-w-0 border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
                   <h3 className="text-sm font-semibold text-gray-800">{t('scaffold', 'aiBimReviewTitle')}</h3>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -1766,63 +1799,27 @@ function ScaffoldPageContent() {
                       <p className="text-xs text-slate-500 mt-1">{t('result', 'obstacleNote')}</p>
                     </div>
                   )}
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs font-medium text-gray-500">
-                        {t('scaffold', 'aiBimPreviewTitle')}
-                      </span>
-                      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer w-fit">
-                        <input
-                          type="checkbox"
-                          checked={aiBimCompareExtract}
-                          onChange={(e) => setAiBimCompareExtract(e.target.checked)}
-                          disabled={!aiBimExtractOutline}
-                          className="rounded border-gray-300"
-                        />
-                        {t('scaffold', 'aiBimCompareExtract')}
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-                      <AiBimFootprintEditor
-                        outline={aiBimPreview.buildingOutline}
-                        baselineOutline={aiBimExtractOutline ?? undefined}
-                        showBaseline={aiBimCompareExtract && !!aiBimExtractOutline}
-                        onChange={handleAiBimOutlineEdit}
-                        onResetToBaseline={
-                          aiBimExtractOutline
-                            ? () =>
-                                handleAiBimOutlineEdit(
-                                  aiBimExtractOutline.map((p) => ({
-                                    xFrac: p.xFrac,
-                                    yFrac: p.yFrac,
-                                  })),
-                                )
+                  <div className="space-y-2">
+                    <span className="text-xs font-medium text-gray-500 block">
+                      {t('scaffold', 'aiBimPreview3d')}
+                    </span>
+                    <Building3DPreview
+                      outline={aiBimPreview.buildingOutline}
+                      buildingHeightMm={aiBimPreview.buildingHeightMm}
+                      wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                      wallHeightsMm={
+                        aiBimPreview.massingTiers?.length
+                          ? undefined
+                          : aiBimPreview.isStepped
+                            ? aiBimPreview.walls.map((w) => w.wallHeightMm)
                             : undefined
-                        }
-                      />
-                      <div className="space-y-2 min-h-0">
-                        <span className="text-xs font-medium text-gray-500 block">
-                          {t('scaffold', 'aiBimPreview3d')}
-                        </span>
-                        <Building3DPreview
-                          outline={aiBimPreview.buildingOutline}
-                          buildingHeightMm={aiBimPreview.buildingHeightMm}
-                          wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                          wallHeightsMm={
-                            aiBimPreview.massingTiers?.length
-                              ? undefined
-                              : aiBimPreview.isStepped
-                                ? aiBimPreview.walls.map((w) => w.wallHeightMm)
-                                : undefined
-                          }
-                          massingTiers={aiBimPreview.massingTiers}
-                          ifcFileUrl={aiBimPreview.ifcFileUrl}
-                          ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}
-                          className="w-full rounded-lg border border-gray-200 bg-slate-50"
-                          style={{ height: 320 }}
-                        />
-                      </div>
-                    </div>
+                      }
+                      massingTiers={aiBimPreview.massingTiers}
+                      ifcFileUrl={aiBimPreview.ifcFileUrl}
+                      ifcArrayBuffer={aiBimPreview.ifcArrayBuffer}
+                      className="w-full rounded-lg border border-gray-200 bg-slate-50"
+                      style={{ height: 320 }}
+                    />
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                     {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
