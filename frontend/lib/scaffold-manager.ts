@@ -77,10 +77,15 @@ export class ScaffoldManager {
     vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>,
     buildingHeightMm: number,
     refLengthMm?: number,
-    options?: { wallLengthsMm?: number[]; wallHeightsMm?: number[] },
+    options?: {
+      wallLengthsMm?: number[];
+      wallHeightsMm?: number[];
+      allowSingleStepCollapse?: boolean;
+    },
   ): { walls: WallInput[]; buildingOutline: FootprintVertex[] } {
     const graph = buildGraphFromFootprint(vertices, refLengthMm, {
       wallLengthsMm: options?.wallLengthsMm,
+      allowSingleStepCollapse: options?.allowSingleStepCollapse,
     });
     this.state = {
       ...this.state,

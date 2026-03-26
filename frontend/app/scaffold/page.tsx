@@ -1401,7 +1401,13 @@ function ScaffoldPageContent() {
                       footprint.vertices,
                       footprint.buildingHeightMm,
                       refMm,
-                      { wallLengthsMm, wallHeightsMm: wallHeightsForGraph },
+                      {
+                        wallLengthsMm,
+                        wallHeightsMm: wallHeightsForGraph,
+                        allowSingleStepCollapse:
+                          footprint.drawingType === '3d' &&
+                          footprint.wallLengthsFromDimText !== true,
+                      },
                     );
                     // Normalize massingTier vertices to mm (same coordinate space as buildingOutline).
                     // Compare massingTier vertices directly against buildingOutline — NOT

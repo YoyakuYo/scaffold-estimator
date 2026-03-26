@@ -209,9 +209,11 @@ function normalizeFootprintToMm(
  */
 function collapseTinyOrthogonalJogs(
   pts: Array<{ x: number; z: number }>,
+  options?: { allowSingleStepCollapse?: boolean },
 ): Array<{ x: number; z: number }> {
   if (pts.length <= 4) return pts;
   const out = pts.map((p) => ({ x: p.x, z: p.z }));
+  const allowSingleStepCollapse = options?.allowSingleStepCollapse === true;
 
   const polyArea = (verts: Array<{ x: number; z: number }>): number => {
     let a = 0;
@@ -220,6 +222,30 @@ function collapseTinyOrthogonalJogs(
       a += verts[i].x * verts[j].z - verts[j].x * verts[i].z;
     }
     return Math.abs(a / 2);
+  };
+  const signedArea2 = (verts: Array<{ x: number; z: number }>): number => {
+    let a = 0;
+    for (let i = 0; i < verts.length; i++) {
+      const j = (i + 1) % verts.length;
+      a += verts[i].x * verts[j].z - verts[j].x * verts[i].z;
+    }
+    return a;
+  };
+  const reflexCount = (verts: Array<{ x: number; z: number }>): number => {
+    if (verts.length < 4) return 0;
+    const ccw = signedArea2(verts) > 0;
+    let count = 0;
+    for (let i = 0; i < verts.length; i++) {
+      const prev = verts[(i - 1 + verts.length) % verts.length]!;
+      const curr = verts[i]!;
+      const next = verts[(i + 1) % verts.length]!;
+      const cross =
+        (curr.x - prev.x) * (next.z - curr.z) -
+        (curr.z - prev.z) * (next.x - curr.x);
+      const isReflex = ccw ? cross < 0 : cross > 0;
+      if (isReflex) count++;
+    }
+    return count;
   };
 
   let changed = true;
@@ -263,7 +289,6 @@ function collapseTinyOrthogonalJogs(
       // For 8→6 collapse (typical L-shape artifact), allow higher ratio
       // since the step edge can be a significant fraction of adjacent edges.
       const ratioLimit = out.length === 8 && candidates.length >= 2 ? 0.98 : 0.90;
-      if (best.ratio >= ratioLimit) break;
 
       const sim = out.map((p) => ({ x: p.x, z: p.z }));
       if (best.vertical) sim[best.nnI]!.z = sim[best.i]!.z;
@@ -276,7 +301,15 @@ function collapseTinyOrthogonalJogs(
       // For 8→6 specifically, relax the area guard since the step can be real geometry.
       const canUseRelaxedFirstPass = out.length > 6 && best.ratio < 0.75 && areaChange <= 0.20;
       const canUseL8to6 = out.length === 8 && candidates.length >= 2 && areaChange <= 0.25;
-      if (areaChange > 0.08 && !canUseRelaxedFirstPass && !canUseL8to6) continue;
+      const canUseSingleCandidateLShapeFix =
+        allowSingleStepCollapse &&
+        out.length === 8 &&
+        candidates.length === 1 &&
+        sim.length === 6 &&
+        reflexCount(sim) === 1 &&
+        areaChange <= 0.25;
+      if (areaChange > 0.08 && !canUseRelaxedFirstPass && !canUseL8to6 && !canUseSingleCandidateLShapeFix) continue;
+      if (best.ratio >= ratioLimit && !canUseSingleCandidateLShapeFix) break;
 
       if (best.vertical) out[best.nnI]!.z = out[best.i]!.z;
       else out[best.nnI]!.x = out[best.i]!.x;
@@ -293,6 +326,8 @@ function collapseTinyOrthogonalJogs(
 export interface BuildGraphOptions {
   /** Wall lengths from plan dimensions (mm); used for scaling and closed-loop */
   wallLengthsMm?: number[];
+  /** Allow one safe 8→6 step collapse for 3D L-shape perspective artifacts. */
+  allowSingleStepCollapse?: boolean;
 }
 
 /**
@@ -319,7 +354,9 @@ export function buildGraphFromFootprint(
     const contourPts = applyContourExtraction(pts2d, options?.wallLengthsMm, contourOpts);
     mm = contourPts.map((p) => ({ x: p.x, z: p.y }));
   }
-  mm = collapseTinyOrthogonalJogs(mm);
+  mm = collapseTinyOrthogonalJogs(mm, {
+    allowSingleStepCollapse: options?.allowSingleStepCollapse,
+  });
 
   // Snap / dedupe: merge vertices that are effectively identical (vision output often repeats endpoints).
   const tolMm = 1; // 1mm tolerance for node snapping

@@ -1406,6 +1406,36 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         }
         return a;
       };
+      const reflexCount2 = (arr: { x: number; y: number }[]) => {
+        if (arr.length < 4) return 0;
+        const ccw = signedArea2(arr) > 0;
+        let count = 0;
+        for (let j = 0; j < arr.length; j++) {
+          const prev = arr[(j - 1 + arr.length) % arr.length];
+          const curr = arr[j];
+          const next = arr[(j + 1) % arr.length];
+          const cross =
+            (curr.x - prev.x) * (next.y - curr.y) -
+            (curr.y - prev.y) * (next.x - curr.x);
+          const isReflex = ccw ? cross < 0 : cross > 0;
+          if (isReflex) count++;
+        }
+        return count;
+      };
+      const buildCollapsedStepTrial = (
+        source: Array<{ x: number; y: number; origIdx: number }>,
+        candidate: { i: number; nextIdx: number; nextNextIdx: number; d2Vertical: boolean; alignCoord: number },
+      ) => {
+        const trial = source.map((p) => ({ x: p.x, y: p.y }));
+        if (candidate.d2Vertical) {
+          trial[candidate.nextNextIdx].y = candidate.alignCoord;
+        } else {
+          trial[candidate.nextNextIdx].x = candidate.alignCoord;
+        }
+        const toRemove = [candidate.i, candidate.nextIdx].sort((a, b) => b - a);
+        for (const ri of toRemove) trial.splice(ri, 1);
+        return trial;
+      };
 
       let stepChanged = true;
       while (stepChanged && indexed.length > 6) {
@@ -1444,14 +1474,13 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           const d2Vertical = Math.abs(d2.dy) > Math.abs(d2.dx);
           const alignCoord = d2Vertical ? indexed[i].y : indexed[i].x;
 
-          const trial = indexed.map(p => ({ x: p.x, y: p.y }));
-          if (d2Vertical) {
-            trial[nnI].y = alignCoord;
-          } else {
-            trial[nnI].x = alignCoord;
-          }
-          const toRemove = [i, nextI].sort((a2, b) => b - a2);
-          for (const ri of toRemove) trial.splice(ri, 1);
+          const trial = buildCollapsedStepTrial(indexed, {
+            i,
+            nextIdx: nextI,
+            nextNextIdx: nnI,
+            d2Vertical,
+            alignCoord,
+          });
 
           const areaBefore = Math.abs(signedArea2(indexed));
           const areaAfter = Math.abs(signedArea2(trial));
@@ -1460,12 +1489,30 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           candidates.push({ i, nextIdx: nextI, nextNextIdx: nnI, areaGain, d2Vertical, alignCoord });
         }
 
-        if (candidates.length < 2) break; // keep the last real step
-
         // Pick the candidate with the LARGEST area gain (= biggest notch)
         candidates.sort((a, b) => b.areaGain - a.areaGain);
         const best = candidates[0];
+        if (!best) break;
         if (best.areaGain <= 0) break; // no notch to collapse
+
+        const singleCandidateLShapeFix =
+          candidates.length === 1 &&
+          indexed.length === 8 &&
+          parsed.drawingType === '3d' &&
+          parsed.wallLengthsFromDimText !== true;
+
+        if (candidates.length < 2 && !singleCandidateLShapeFix) break; // keep the last real step
+        if (singleCandidateLShapeFix) {
+          const trial = buildCollapsedStepTrial(indexed, best);
+          const areaBefore = Math.abs(signedArea2(indexed));
+          const areaAfter = Math.abs(signedArea2(trial));
+          const areaChange = Math.abs(areaAfter - areaBefore) / Math.max(areaBefore, 1);
+          const safeLShape =
+            trial.length === 6 &&
+            reflexCount2(trial) === 1 &&
+            areaChange <= 0.25;
+          if (!safeLShape) break;
+        }
 
         // Apply the collapse
         if (best.d2Vertical) {
