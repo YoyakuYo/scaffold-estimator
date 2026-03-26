@@ -514,7 +514,7 @@ function ScaffoldResultPage() {
           <MaterialBreakdownTable
             walls={result.walls}
             summary={result.summary ?? []}
-            buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
+            buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m: number, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
             scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
             totalLevels={maxLevels}
             levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
