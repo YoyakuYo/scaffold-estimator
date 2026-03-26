@@ -1280,6 +1280,9 @@ export default function Scaffold3DView({
         });
       }
       hasTiers = hasMassingTierGeometry && tierGroups.length > 1;
+      const minTierBaseMm = hasTiers
+        ? Math.min(...tierGroups.map((tg) => tg.baseHeightMm ?? 0))
+        : 0;
 
       const groundWallLensMm =
         tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
@@ -1974,9 +1977,16 @@ export default function Scaffold3DView({
         const tx = nearStart.x - cx;
         const tz = nearStart.z - cz;
 
+        // Tier elevation: normalize to the minimum tier base so the lowest scaffold
+        // always starts from ground level in the 3D scene.
+        // Single-tier configs ignore baseHeightMm.
+        //
+        // Example: legacy data can have all baseHeightMm shifted by +3000mm;
+        // subtracting minTierBaseMm anchors the lowest tier back to GL.
         // Tier elevation: upper tiers use baseHeightMm. Single-tier configs ignore it —
         // corrupted baseHeightMm from bad saves would float the whole scaffold in +Y.
-        const baseYM = hasTiers ? ((wall as any).baseHeightMm ?? 0) / 1000 : 0;
+        const wallBaseMm = hasTiers ? ((wall as any).baseHeightMm ?? minTierBaseMm) : 0;
+        const baseYM = hasTiers ? Math.max(0, (wallBaseMm - minTierBaseMm) / 1000) : 0;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -2169,8 +2179,12 @@ export default function Scaffold3DView({
 
           const wallA = walls[globalWi];
           const wallB = walls[globalNext];
-          const baseA = hasTiers ? ((wallA as any).baseHeightMm ?? 0) / 1000 : 0;
-          const baseB = hasTiers ? ((wallB as any).baseHeightMm ?? 0) / 1000 : 0;
+          const baseA = hasTiers
+            ? Math.max(0, ((((wallA as any).baseHeightMm ?? minTierBaseMm) - minTierBaseMm) / 1000))
+            : 0;
+          const baseB = hasTiers
+            ? Math.max(0, ((((wallB as any).baseHeightMm ?? minTierBaseMm) - minTierBaseMm) / 1000))
+            : 0;
           if (Math.abs(baseA - baseB) > 0.05) continue;
           const baseYM_corner = baseA;
           const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
