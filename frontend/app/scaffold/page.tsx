@@ -232,7 +232,7 @@ function normalizeMassingTiersForPreview(
     });
 }
 
-/** Renders building footprint outline as SVG (for AI BIM double-check panel). */
+/** Renders building footprint outline as SVG (for AI extraction confirmation). */
 function BuildingShapeSvg({
   outline,
   wallLengthsMm,
@@ -1207,7 +1207,7 @@ function ScaffoldPageContent() {
         </div>
 
       {/* ═══════════════════════════════════════════════════════
-          AI BIM MODE — Vision-to-BIM upload
+          AI EXTRACTION MODE
          ═══════════════════════════════════════════════════════ */}
       {inputMode === 'ai_bim' && !editConfigId && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
@@ -1667,7 +1667,7 @@ function ScaffoldPageContent() {
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-4">
-                    {/* Scaffold type + width + post/frame size (AI BIM overrides) */}
+                    {/* Scaffold type + width + post/frame size */}
                     <div className="rounded-lg border border-violet-200 bg-white p-3 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-violet-700">{t('scaffold', 'aiBimConditionsTitle')}</span>

@@ -49,7 +49,7 @@ interface ShapeState {
 function fileKind(name: string): FileKind {
   const ext = name.split('.').pop()?.toLowerCase() || '';
   if (ext === 'dxf') return 'dxf';
-  if (ext === 'dwg' || ext === 'jww') return 'cad';
+  if (ext === 'dwg' || ext === 'jww') return 'cad'; // legacy: backend rejects these with a clear message
   if (ext === 'pdf') return 'pdf';
   return 'image';
 }
@@ -104,14 +104,18 @@ function recalcLengths(verts: Vertex[]): number[] {
 }
 
 const ACCEPT = {
-  'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tif', '.tiff'],
+  'image/png': ['.png'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/webp': ['.webp'],
+  'image/gif': ['.gif'],
+  'image/bmp': ['.bmp'],
   'application/pdf': ['.pdf'],
   'application/dxf': ['.dxf'],
   'image/vnd.dxf': ['.dxf'],
-  'application/octet-stream': ['.dwg', '.jww', '.dxf'],
+  'application/octet-stream': ['.dxf'],
 };
 
-const FILE_LABELS = ['PDF', 'DXF', 'DWG', 'JWW', 'JPG', 'PNG', 'BMP', 'WebP', 'SVG', 'TIFF'];
+const FILE_LABELS = ['PDF', 'DXF', 'JPG', 'PNG'];
 
 // ═══════════════════════════════════════════════════════════════
 // Component
@@ -355,7 +359,7 @@ export function DrawingUpload({
   }, [processDxf, processBackend]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop, accept: ACCEPT, maxFiles: 1, maxSize: 100 * 1024 * 1024,
+    onDrop, accept: ACCEPT, maxFiles: 1, maxSize: 50 * 1024 * 1024,
   });
 
   // ── Reset ──
@@ -472,7 +476,7 @@ export function DrawingUpload({
                 </span>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-3">最大100MB — 図面・写真・CADファイル対応</p>
+            <p className="text-xs text-gray-400 mt-3">最大50MB — 画像・PDF・DXF対応</p>
           </div>
         </div>
       </div>
