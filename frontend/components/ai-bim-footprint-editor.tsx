@@ -207,23 +207,31 @@ type EditTool =
   | 'chordAB'
   | 'drawPolyline'
   | 'drawRect'
-  | 'drawCircle';
+  | 'drawCircle'
+  | 'deleteWall'
+  | 'addWall';
 
 type Props = {
   outline: AiBimOutlinePoint[];
   baselineOutline?: AiBimOutlinePoint[] | null;
   showBaseline: boolean;
+  showDimensions?: boolean;
+  showXYGrid?: boolean;
   onChange: (next: AiBimOutlinePoint[]) => void;
   onResetToBaseline?: () => void;
 };
 
 /**
- * CAD-style footprint: draw polyline / rect / circle to replace outline, plus vertex edits (move, split, chord, remove).
+ * CAD-style footprint editor: draw polyline / rect / circle to replace outline,
+ * plus vertex edits (move, split, chord, remove, delete wall, add wall).
+ * Shows dimension labels on every edge and XY grid notation.
  */
 export function AiBimFootprintEditor({
   outline,
   baselineOutline,
   showBaseline,
+  showDimensions = true,
+  showXYGrid = true,
   onChange,
   onResetToBaseline,
 }: Props) {
@@ -405,7 +413,7 @@ export function AiBimFootprintEditor({
         }
         return;
       }
-      if (editTool === 'removeVertex') {
+      if (editTool === 'removeVertex' || editTool === 'deleteWall') {
         const next = removeVertexAt(outline, idx);
         if (next) onChange(next);
         else if (n <= 3) flash(t('scaffold', 'aiBimFootprintErrRemoveMinEdges'));
@@ -535,12 +543,25 @@ export function AiBimFootprintEditor({
         return;
       }
 
-      if (editTool === 'split') {
+      if (editTool === 'split' || editTool === 'addWall') {
         const edge = pickEdgeAt(w.x, w.y, true);
         if (edge == null) return;
         const next = insertVertexOnEdge(outline, edge, w.x, w.y);
         if (next) onChange(next);
         else flash(t('scaffold', 'aiBimFootprintErrSplitShort'));
+        return;
+      }
+
+      if (editTool === 'deleteWall') {
+        const edge = pickEdgeAt(w.x, w.y, true);
+        if (edge == null) return;
+        if (n <= 3) {
+          flash(t('scaffold', 'aiBimFootprintErrRemoveMinEdges'));
+          return;
+        }
+        const next = removeVertexAt(outline, (edge + 1) % n);
+        if (next) onChange(next);
+        else flash(t('scaffold', 'aiBimFootprintErrRemoveLong'));
         return;
       }
 
@@ -590,13 +611,17 @@ export function AiBimFootprintEditor({
       ? t('scaffold', 'aiBimFootprintHintMove')
       : editTool === 'split'
         ? t('scaffold', 'aiBimFootprintHintSplit')
-        : editTool === 'chordAB'
-          ? chordFirstIdx == null
-            ? t('scaffold', 'aiBimFootprintHintChordPickA')
-            : t('scaffold', 'aiBimFootprintHintChordPickB')
-          : editTool === 'drawPolyline'
-            ? t('scaffold', 'aiBimFootprintHintDrawPoly')
-            : editTool === 'drawRect'
+        : editTool === 'deleteWall'
+          ? 'クリックで壁を削除 / Click a wall edge to delete it'
+          : editTool === 'addWall'
+            ? 'クリックで壁を追加（エッジに頂点を挿入） / Click an edge to add a wall (insert vertex)'
+            : editTool === 'chordAB'
+              ? chordFirstIdx == null
+                ? t('scaffold', 'aiBimFootprintHintChordPickA')
+                : t('scaffold', 'aiBimFootprintHintChordPickB')
+              : editTool === 'drawPolyline'
+                ? t('scaffold', 'aiBimFootprintHintDrawPoly')
+                : editTool === 'drawRect'
               ? rectCornerA == null
                 ? t('scaffold', 'aiBimFootprintHintDrawRect1')
                 : t('scaffold', 'aiBimFootprintHintDrawRect2')
@@ -624,7 +649,7 @@ export function AiBimFootprintEditor({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50/90">
-        {(['move', 'split', 'chordAB', 'removeVertex'] as const).map((tool) => (
+        {(['move', 'split', 'chordAB', 'removeVertex', 'deleteWall', 'addWall'] as const).map((tool) => (
           <button
             key={tool}
             type="button"
@@ -637,7 +662,7 @@ export function AiBimFootprintEditor({
             }}
             className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
               editTool === tool
-                ? 'bg-violet-600 text-white border-violet-600'
+                ? tool === 'deleteWall' ? 'bg-red-600 text-white border-red-600' : 'bg-violet-600 text-white border-violet-600'
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >
@@ -647,7 +672,11 @@ export function AiBimFootprintEditor({
                 ? t('scaffold', 'aiBimFootprintToolSplit')
                 : tool === 'chordAB'
                   ? t('scaffold', 'aiBimFootprintToolChord')
-                  : t('scaffold', 'aiBimFootprintToolRemove')}
+                  : tool === 'removeVertex'
+                    ? t('scaffold', 'aiBimFootprintToolRemove')
+                    : tool === 'deleteWall'
+                      ? '壁削除'
+                      : '壁追加'}
           </button>
         ))}
         {editTool === 'chordAB' && chordFirstIdx != null && (
@@ -863,6 +892,78 @@ export function AiBimFootprintEditor({
         {editTool === 'drawCircle' && circleCenter && !draftHover ? (
           <circle cx={circleCenter.xFrac} cy={circleCenter.yFrac} r={vh * 0.8} fill="#ea580c" stroke="#fff" strokeWidth={strokeW * 0.4} style={{ pointerEvents: 'none' }} />
         ) : null}
+        {/* Dimension labels on each edge */}
+        {showDimensions && n >= 3 && outline.map((p, idx) => {
+          const j = (idx + 1) % n;
+          const ax = p.xFrac, ay = p.yFrac;
+          const bx = outline[j].xFrac, by = outline[j].yFrac;
+          const mx = (ax + bx) / 2;
+          const my = (ay + by) / 2;
+          const len = Math.round(Math.hypot(bx - ax, by - ay));
+          const dx = bx - ax, dy = by - ay;
+          const edgeLen = Math.hypot(dx, dy);
+          if (edgeLen < 1) return null;
+          const nx = -dy / edgeLen, ny = dx / edgeLen;
+          const labelOffset = Math.max(vbW, vbH) * 0.035;
+          const lx = mx + nx * labelOffset;
+          const ly = my + ny * labelOffset;
+          const fontSize = Math.max(vbW, vbH) * 0.022;
+          const isHoriz = Math.abs(dx) >= Math.abs(dy);
+          const axisLabel = isHoriz ? 'Y' : 'X';
+          const isSelected = selectedEdge === idx;
+          return (
+            <g key={`dim-${idx}`} style={{ pointerEvents: 'none' }}>
+              <line x1={ax} y1={ay} x2={bx} y2={by}
+                stroke={isSelected ? '#f59e0b' : '#94a3b8'}
+                strokeWidth={strokeW * 0.3}
+                strokeDasharray={`${Math.max(vbW, vbH) * 0.006} ${Math.max(vbW, vbH) * 0.004}`}
+              />
+              <text
+                x={lx} y={ly}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={isSelected ? '#d97706' : '#475569'}
+                fontSize={fontSize}
+                fontWeight={isSelected ? 'bold' : 'normal'}
+                fontFamily="monospace"
+              >
+                {len.toLocaleString()}mm
+              </text>
+              {showXYGrid && (
+                <text
+                  x={lx} y={ly + fontSize * 1.3}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="#7c3aed"
+                  fontSize={fontSize * 0.75}
+                  fontWeight="bold"
+                  fontFamily="monospace"
+                >
+                  {axisLabel}{idx + 1}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {/* Vertex index labels */}
+        {n >= 3 && outline.map((p, idx) => {
+          const fontSize = Math.max(vbW, vbH) * 0.018;
+          return (
+            <text
+              key={`vlbl-${idx}`}
+              x={p.xFrac} y={p.yFrac - vh * 1.8}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="#4f46e5"
+              fontSize={fontSize}
+              fontWeight="bold"
+              fontFamily="monospace"
+              style={{ pointerEvents: 'none' }}
+            >
+              V{idx}
+            </text>
+          );
+        })}
         {outline.map((p, idx) => {
           const r = vh;
           const isEdgeVert =
@@ -870,6 +971,7 @@ export function AiBimFootprintEditor({
             selectedEdge != null &&
             (idx === selectedEdge || idx === (selectedEdge + 1) % n);
           const isRemoveHot = editTool === 'removeVertex' && n > 3;
+          const isDeleteWall = editTool === 'deleteWall' && n > 3;
           const isChordPick = editTool === 'chordAB' && chordFirstIdx === idx;
           return (
             <g key={idx} style={{ pointerEvents: isDrawTool ? 'none' : 'auto' }}>

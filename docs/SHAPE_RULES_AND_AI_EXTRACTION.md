@@ -1,437 +1,415 @@
-# Building Shape Rules & AI Extraction Guide
+# Building Shape Rules for AI Extraction & Scaffold Calculation
 
-## Purpose
-This document defines the exhaustive rules for AI extraction of building shapes from
-BIM/IFC files, PDF images, CAD drawings, and 3D renders. It also defines the scaffold
-calculation rules for each shape type, including corner closing, the 300mm overhang rule,
-and PATTANKO placement.
+## 1. Shape Classification System
+
+Every building footprint falls into one of these categories based on vertex count and corner angles:
+
+### 1.1 Rectangle (矩形) — 4 vertices
+```
+ X1          X2
+  ┌──────────┐
+  │          │  Y1
+  │          │
+  └──────────┘
+ X4          X3
+```
+- **Vertices**: 4 (all 90° convex corners)
+- **Walls**: 4 (N=Y1, E=X2, S=Y2, W=X1)
+- **XY Notation**: X1, X2 (short sides), Y1, Y2 (long sides)
+- **Corner count**: 4 (all L-shaped, all need yokoji+deck closure)
+- **Pattanko**: 0 (all corners are 90°)
+- **Math check**: X1 == X2 (opposite sides equal), Y1 == Y2 (opposite sides equal)
+- **AI extraction**: 4 vertices, 4 wallLengthsMm entries
+- **Scaffold rule**: `fitSpansToWallLengthWithCorner(wallLengthMm)` for each wall
+  - Each wall = [600, ...middle_spans..., 600] with 300mm overrun budget
+
+### 1.2 L-Shape (L字型) — 6 vertices
+```
+ V0────────V1          Standard L
+ │          │
+ │          V2──────V3
+ │                   │
+ V5─────────────────V4
+```
+- **Vertices**: 6 (5 convex 90° + 1 reflex 270° at V2)
+- **Walls**: 6
+- **Reflex corner**: 1 at V2 (inner corner)
+- **XY Notation example**: X1(V0→V1), Y1(V1→V2), X2(V2→V3), Y2(V3→V4), X3(V4→V5), Y3(V5→V0)
+- **Math check**:
+  - Horizontal: X1 + X2 = X3 (top short + notch = bottom long)
+  - Vertical: Y1 + Y2 = Y3 (or Y3 = Y1 + Y2)
+  - Sum of rightward edges = sum of leftward edges
+  - Sum of downward edges = sum of upward edges
+- **Corner closure**: 6 corners, 5 with yokoji+deck (convex), 1 reflex corner with special handling
+- **Pattanko**: 0 if all ~90° angles
+- **AI extraction**: Must detect the concave vertex; NEVER simplify to 4-vertex rectangle
+
+#### L-Shape Variants (rotated/flipped):
+```
+ Standard L    Flipped L     Rotated L-90   Rotated L-180
+ ┌──┐          ┌──┐          ┌────────┐      ┌────────┐
+ │  │          │  │          │        │      │        │
+ │  └────┐     ┌────┘  │     └──┐     │      │     ┌──┘
+ │       │     │       │        │     │      │     │
+ └───────┘     └───────┘        └─────┘      └─────┘
+```
+All L variants have the same rules: 6 vertices, 1 reflex corner.
+
+### 1.3 U-Shape (U字型/コの字型) — 8 vertices
+```
+ V0──V1    V2──V3
+ │    │    │    │
+ │    V6──V7    │   (courtyard inside)
+ │              │
+ V5────────────V4
+```
+- **Vertices**: 8 (6 convex + 2 reflex at V6 and V7)
+- **Walls**: 8
+- **Reflex corners**: 2 (inner courtyard corners)
+- **Math check**:
+  - Bottom: X_bottom = X_left_wing + X_courtyard + X_right_wing
+  - Left height = right height (Y_left = Y_right)
+  - Courtyard depth < total depth
+  - Sum rightward = sum leftward; sum downward = sum upward
+- **AI extraction**: Detect both reflex corners for the courtyard opening
+
+#### U-Shape Variants:
+```
+ U (open top)  ∩ (open bottom)  ⊂ (open right)  ⊃ (open left)
+ ┌─┐    ┌─┐    ┌──────────┐     ┌──────────┐    ┌──────────┐
+ │ │    │ │    │          │     │          │    │          │
+ │ └────┘ │    │ ┌────┐   │     │   ┌──┐   │    │   ┌──┐  │
+ │        │    │ │    │   │     └───┘  └───┘    └───┘  └──┘
+ └────────┘    └─┘    └───┘
+```
+
+### 1.4 T-Shape (T字型) — 8 vertices
+```
+ V0────────────────V1
+ │                  │
+ V7──V6      V3──V2
+      │      │
+      V5────V4
+```
+- **Vertices**: 8 (6 convex + 2 reflex at V6 and V3)
+- **Walls**: 8
+- **Reflex corners**: 2 (where the stem meets the top bar)
+- **Math check**:
+  - Top bar width > stem width
+  - Stem is centered or offset from the bar
+  - Sum rightward = sum leftward; sum downward = sum upward
+
+### 1.5 Cross/Plus Shape (十字型) — 12 vertices
+```
+      ┌──┐
+      │  │
+ ┌────┘  └────┐
+ │            │
+ └────┐  ┌────┘
+      │  │
+      └──┘
+```
+- **Vertices**: 12 (8 convex + 4 reflex)
+- **Walls**: 12
+- **Reflex corners**: 4
+
+### 1.6 Irregular / Angled Shapes
+- Non-orthogonal buildings with walls at angles ≠ 90°
+- Each wall gets its own angle; vertex positions define the shape
+- AI must extract actual vertex positions, not approximate regular polygons
 
 ---
 
-## 1. Supported Building Shapes
+## 2. Japanese XY Axis Notation System (通り芯記号)
 
-### 1.1 Rectangle (矩形)
-- **Vertices:** 4
-- **Walls:** 4 (W, D, W, D)
-- **Corners:** 4 × 90° convex
-- **Corner type:** All L-shaped (90°)
-- **Detection from 3D:** NEVER output 5 or 6 vertices. A box in perspective is still 4 vertices.
-- **Detection from plan:** 4 outer corners, ignore interior partitions.
-- **Scaffold:** Standard closed polygon. Each corner gets yokoji + deck + habaki (L-corner treatment).
-- **Wall count check:** `sum(horizontal walls) = W+W`, `sum(vertical walls) = D+D`
+### Convention:
+- **X axis** = shorter dimension of the building (typically width/奥行き)
+- **Y axis** = longer dimension of the building (typically length/間口)
+- Grid lines are labeled sequentially: X1, X2, X3... and Y1, Y2, Y3...
+- The numbering follows the structural grid from left to right (X) and bottom to top (Y)
 
+### Mapping to Cardinal Directions:
+For a standard orientation (north at top):
+- **North/South walls** run along Y axis → labeled Y1, Y2, ...
+- **East/West walls** run along X axis → labeled X1, X2, ...
+
+### Example — Rectangle:
 ```
-  ┌──────────W──────────┐
-  │                      │
-  D                      D
-  │                      │
-  └──────────W──────────┘
-  4 vertices, 4 walls
-```
+     Y1          Y2
+ X1 ┌──────────────┐ X1
+    │              │
+ X2 └──────────────┘ X2
+     Y1          Y2
 
-### 1.2 L-Shape (L字型)
-- **Vertices:** 6
-- **Walls:** 6
-- **Corners:** 5 × 90° convex + 1 × 270° reflex (inner corner)
-- **Corner type:** 5 L-shaped corners + 1 reflex corner (PATTANKO or special treatment)
-- **Closure check:** `sum(rightward edges) = sum(leftward edges)`, `sum(downward edges) = sum(upward edges)`
-
-```
-  Standard L:              Flipped L (mirrored):      Rotated L (upside-down):
-  ┌────A────┐              ┌────A────────────┐        ┌────────────C────┐
-  │         │              │                 │        │                 │
-  B         │              B                 │        │                 B
-  │    ┌──C─┘              │         ┌───C───┘        └──C──┐          │
-  │    │                   │         │                      │          │
-  D    │                   D         │                      │          D
-  │    │                   │         │                      │          │
-  └──E─┘                   └────E────┘                 ┌──E─┘          │
-                                                       │               │
-                                                       └───────A───────┘
+ Walls: North(Y)=15000mm, East(X)=8000mm, South(Y)=15000mm, West(X)=8000mm
+ Grid:  X1→X2 = 8000mm (depth), Y1→Y2 = 15000mm (frontage)
 ```
 
-**L-Shape wall equations (orthogonal closure):**
-- Wall 0 (top horizontal): A
-- Wall 1 (right vertical): B
-- Wall 2 (step horizontal): C
-- Wall 3 (inner vertical): D - B (or the step height)
-- Wall 4 (bottom horizontal): A + C (or E = total width - A)
-- Wall 5 (left vertical): D
-- **Check:** A + C = E (total horizontal), B + (D-B) = D (total vertical)
-- More precisely: `A + C = E` AND `B + step_height = D`
-
-**AI extraction rules for L-shape:**
-1. The reflex (inner) corner is where the notch cuts inward
-2. NEVER split an L into two rectangles — it is ONE polygon with 6 vertices
-3. wallLengthsMm must have exactly 6 values
-4. The sum of parallel edges must balance (horizontal left = horizontal right)
-
-### 1.3 U-Shape (U字型 / コの字型)
-- **Vertices:** 8
-- **Walls:** 8
-- **Corners:** 6 × 90° convex + 2 × 270° reflex (inner corners)
-- **Corner type:** 6 L-shaped + 2 PATTANKO
-
+### Example — L-Shape:
 ```
-  Standard U:                    Flipped U (upside-down):
-  ┌──A──┐         ┌──A──┐       ┌──────────E──────────┐
-  │     │         │     │       │                      │
-  B     │  inner  │     B       B     ┌──C──┐          B
-  │     │  court  │     │       │     │     │          │
-  │     └───C─────┘     │       │     │     │          │
-  │                     │       └──A──┘     └────A─────┘
-  D                     D
-  │                     │
-  └─────────E───────────┘
+     Y1    Y2    Y3
+ X1 ┌──────┐         X1
+    │      │
+ X2 │      └──────┐  X2
+    │              │
+ X3 └──────────────┘  X3
+     Y1    Y2    Y3
+
+ Grid lines:
+  X1→X2 = 4000mm (upper wing depth)
+  X2→X3 = 6000mm (lower wing depth)
+  Y1→Y2 = 8000mm (wing width)
+  Y2→Y3 = 7000mm (extension width)
+
+ Walls: V0→V1=8000(Y), V1→V2=4000(X), V2→V3=7000(Y),
+        V3→V4=10000(X), V4→V5=15000(Y), V5→V0=6000(X)
 ```
 
-**U-Shape wall equations:**
-- Horizontal: `A + C + A = E` (two wings + courtyard width = total bottom)
-- Vertical: `B + (D-B) = D` on each side
-- **Check:** `2A + C = E` AND both vertical sides add up to D
-
-**AI extraction rules for U-shape:**
-1. Two reflex corners where the courtyard opens
-2. 8 vertices exactly, no more
-3. The courtyard is an OPEN AREA — scaffold wraps around the inside too
-4. Each inner wall of the courtyard gets its own scaffold run
-
-### 1.4 T-Shape (T字型)
-- **Vertices:** 8
-- **Walls:** 8
-- **Corners:** 6 × 90° convex + 2 × 270° reflex
-
-```
-  ┌────────────A────────────┐
-  │                          │
-  B                          B
-  │     ┌──C──┐              │
-  │     │     │              │
-  └──D──┘     └──────D───────┘
-              E (stem width)
-              │     │
-              F     F
-              │     │
-              └──E──┘
-```
-
-**T-Shape wall equations:**
-- Top: A (full width)
-- Stem: E (narrower)
-- **Check:** `D + E + D = A` (left gap + stem + right gap = full width)
-
-### 1.5 H-Shape (H字型)
-- **Vertices:** 12
-- **Walls:** 12
-- **Corners:** 8 × 90° convex + 4 × 270° reflex
-
-### 1.6 Courtyard / O-Shape (ロ字型)
-- **Vertices:** 4 outer + 4 inner (two polygons)
-- Treated as U-shape with very small opening or as separate inner/outer polygons
-
-### 1.7 Irregular / Angled Buildings
-- Walls at non-90° angles
-- Each wall segment is ONE edge with ONE length
-- Vertex positions define angles — lengths alone are insufficient
-- Use Pythagorean theorem for angled walls without dimension annotations
+### Grid Line Extraction from Drawings:
+1. Look for circled numbers/letters at edges of plan (通り芯符号)
+2. Horizontal grid lines → X1, X2, X3 (numbered top to bottom)
+3. Vertical grid lines → Y1, Y2, Y3 (numbered left to right)
+4. Dimension between grid lines = structural bay size
+5. Total wall length = sum of bays along that wall
 
 ---
 
-## 2. Corner Closing Rules (足場コーナー閉塞ルール)
+## 3. Scaffold Corner Rules
 
-### 2.1 The 300mm Overhang Rule
-At every building corner where two walls meet:
-- The scaffold posts extend **300mm beyond** the building corner
-- This creates a **CORNER_SPAN** of 600mm (kusabi) or 610mm (wakugumi) at the corner
-- The shared post at the corner is used by BOTH adjacent walls
-
+### 3.1 Corner Geometry (300mm Overrun Rule)
+At every corner where two walls meet at ~90°:
 ```
-  Building Corner
-        │
-        ▼
-  ──────┤
-        │←300mm→│
-        │       ├── Shared post (used by both walls)
-        │       │
-        │  600mm span (corner span)
+                    300mm overrun
+                    ←──→
+ Wall A ═══════════╤════╕
+                   │    │ 600mm corner span
+ Wall B            ╧════╛
+ (starts here)     ↑
+                   shared corner post
 ```
 
-### 2.2 L-Shaped Corner (90° convex)
-- Standard treatment: yokoji (horizontal pipe) + deck + habaki
-- Both walls share the corner post
-- Scaffold platform bridges the gap between inner and outer rows
-- **CRITICAL:** The scaffold MUST close at L-corners — no gap allowed
+- Last span of Wall A overruns past the building corner by **300mm**
+- A **600mm corner span** connects the overrun to the shared corner post
+- Wall B starts from the same shared corner post
+- Net: each wall's total span = wallLength + 300mm (absorbed in the corner budget)
 
-### 2.3 Reflex Corner (270° / inner corner)
-- PATTANKO (パッタンコ) filler plank
-- 2 PATTANKO pieces per corner per level
-- Bridges the gap where inner rows of adjacent walls don't meet
-- Size: ~250mm × 500mm cross pattern
-
-### 2.4 Corner Detection Thresholds
+### 3.2 Span Layout with Corner (`fitSpansToWallLengthWithCorner`)
+For a closed polygon (≥2 walls):
 ```
-cos(angle) < 0.35  → L-shaped corner (deck + yokoji treatment)
-cos(angle) >= 0.35 AND cos(angle) < 0.98  → Non-L corner (PATTANKO treatment)
-cos(angle) >= 0.98 → Straight (not a corner, collinear walls)
+wallLength = total wall length (mm)
+middleLength = wallLength - 2×600 - 300 = wallLength - 1500
+spans = [600, ...fitMiddle(middleLength)..., 600]
 ```
 
-### 2.5 Corner Span Calculation
-**Kusabi (くさび式):**
-- `CORNER_OVERRUN_MM = 300`
-- `CORNER_SPAN_MM = 600`
-- Wall run = wallLength + 300mm
-- First span = 600mm, Last span = 600mm
-- Middle = wallLength - 2×600 - 300 = wallLength - 1500mm (fitted with standard spans)
+### 3.3 Corner Connection Types
 
-**Wakugumi (枠組):**
-- `CORNER_OVERRUN_MM = 300`
-- `CORNER_SPAN_MM = 610`
-- Wall run = wallLength + 300mm
-- First span = 610mm, Last span = 610mm
-- Middle = wallLength - 2×610 - 300 = wallLength - 1520mm (fitted with imperial spans)
+#### a) L-Shaped Corner (90° convex) — Full Closure
+- Two yokoji pipes connecting wall A end posts to wall B start posts
+- Corner deck (quad shape) fills the gap
+- Habaki bar along the inner edge
+- This is the standard corner for rectangles and L/U/T shapes
 
----
+#### b) Reflex Corner (270° concave) — Inner Corner
+- Same yokoji + deck connection but the scaffold wraps inward
+- Normal direction flips at reflex corners
+- Deck fills the inner corner gap
 
-## 3. AI Extraction Rules by Input Type
+#### c) Non-90° Corner (obtuse/acute) — Pattanko
+- When |cos(angle)| >= 0.35 (not a clean 90°)
+- Small filler planks (pattanko) bridge the gap
+- Count: 2 per corner per level
 
-### 3.1 Floor Plans (PDF/Image)
-1. **Identify exterior shell** — thickest walls at building edge
-2. **Detect protruding sections:**
-   - INCLUDE: enclosed rooms/wings with thick structural walls
-   - INCLUDE: stairwell enclosures with thick walls
-   - EXCLUDE: open terraces (thin lines, railings, no walls)
-   - EXCLUDE: balconies, canopies, external stairs
-3. **Trace outer perimeter** clockwise, vertex at each direction change
-4. **Assign dimensions** from parallel dimension lines
-5. **Detect doors:** quarter-circle swing arcs on EXTERIOR walls only
-6. **Detect terraces:** labels like "Terrace", "Deck", "テラス", "Patio"
-
-### 3.2 3D BIM Renders / Isometric Views
-1. **Reconstruct top-down plan** — NOT the visible silhouette
-2. **Simple rectangle check:** All walls flush = 4 vertices ONLY
-3. **Perspective illusion warning:** 3/4 angle hexagon ≠ hexagonal building
-4. **Count floors** for height estimation (3000-4000mm per story)
-5. **Detect stepped rooflines** → wallHeightsMm + massingTiers
-
-### 3.3 IFC/BIM Files
-1. **Stream all meshes** and collect vertices
-2. **Select footprint plane** (XY, XZ, or YZ — smallest span axis = vertical)
-3. **Ground band filter** — bottom 30% of height for footprint
-4. **Occupancy grid** → morphological close → flood fill → boundary trace
-5. **Cleanup:** remove collinear vertices, collapse grid artifacts
-6. **Wall heights:** sample point cloud near each edge for per-wall height
-
-### 3.4 DXF/CAD Files
-1. **Score closed polylines** — prefer large area, orthogonal, building layers
-2. **LINE-based detection** — graph + rightmost-turn outer boundary walk
-3. **Pillar detection** — CIRCLE entities near perimeter
-4. **No automatic door/terrace detection** — geometry only
-
----
-
-## 4. Shape-Specific Scaffold Calculation Rules
-
-### 4.1 Rectangle (4 walls, 4 corners)
+### 3.4 Corner Closure Math
+For an L-shaped corner between Wall A (end) and Wall B (start):
 ```
-Walls: [W, D, W, D]
-Corners: 4 × L-shaped
-Posts per wall: spans + 1 (shared at corners)
-Total posts: Σ(spans_i) + 4 (sharing at 4 corners) × 2 rows
-Corner treatment: 4 × L-corner deck + yokoji per level
-PATTANKO: 0 (all corners are L-shaped)
-```
+Wall A last 2 posts:  postA[-2], postA[-1]
+Wall B first 2 posts: postB[0],  postB[1]
 
-### 4.2 L-Shape (6 walls, 6 corners)
-```
-Walls: [A, B, C, step_h, E, D] (6 values)
-Corners: 5 × L-shaped + 1 × reflex
-Posts per wall: spans_i + 1 (shared at corners)
-Corner treatment: 5 × L-corner deck + yokoji per level
-PATTANKO: 1 reflex corner × 2 per level
-Closure check: A + C = E, B + step_h = D
-```
+Yokoji pipes:
+  pipe(postA[-2] → postB[0])   — outer row
+  pipe(postA[-1] → postB[1])   — inner row
+  pipe(postA[-2] → postA[-1])  — cross bar
 
-### 4.3 U-Shape (8 walls, 8 corners)
-```
-Walls: 8 values
-Corners: 6 × L-shaped + 2 × reflex
-Corner treatment: 6 × L-corner deck + yokoji per level
-PATTANKO: 2 reflex corners × 2 per level
-Closure check: 2A + C = E (horizontal), both sides add to D (vertical)
-```
-
-### 4.4 T-Shape (8 walls, 8 corners)
-```
-Walls: 8 values
-Corners: 6 × L-shaped + 2 × reflex
-Corner treatment: 6 × L-corner deck + yokoji per level
-PATTANKO: 2 reflex corners × 2 per level
-Closure check: D + E + D = A (stem + gaps = full width)
+Deck: quad(postA[-2], postB[0], postB[1], postA[-1])
+Habaki: bar(postA[-2], postA[-1])
 ```
 
 ---
 
-## 5. Preventing AI Hallucination / Guessing
+## 4. AI Extraction Rules (Prevention of Hallucination)
 
-### 5.1 Vertex Count Validation
-| Shape      | Vertices | Walls | Convex corners | Reflex corners |
-|------------|----------|-------|----------------|----------------|
-| Rectangle  | 4        | 4     | 4              | 0              |
-| L-shape    | 6        | 6     | 5              | 1              |
-| U-shape    | 8        | 8     | 6              | 2              |
-| T-shape    | 8        | 8     | 6              | 2              |
-| H-shape    | 12       | 12    | 8              | 4              |
-| + shape    | 12       | 12    | 8              | 4              |
+### 4.1 Shape Detection Validation
+The AI MUST validate its extraction against these mathematical invariants:
 
-### 5.2 Orthogonal Closure Check
-For any orthogonal building (all 90° corners):
+#### Rectangle (4 vertices):
 ```
-sum(rightward wall lengths) MUST = sum(leftward wall lengths)
-sum(downward wall lengths) MUST = sum(upward wall lengths)
+ASSERT: wallLengthsMm.length == 4
+ASSERT: wallLengthsMm[0] ≈ wallLengthsMm[2]  (opposite sides equal)
+ASSERT: wallLengthsMm[1] ≈ wallLengthsMm[3]  (opposite sides equal)
+ASSERT: perimeter = 2 × (length + width)
 ```
-If these don't balance, a dimension is WRONG — re-read the drawing.
 
-### 5.3 Perimeter Sanity Check
-- Minimum wall: 600mm (smallest scaffold span)
-- Maximum wall: 200,000mm (200m — extremely long)
-- Total perimeter: > 4m and < 2000m
-- No duplicate consecutive vertices
-- No self-intersecting edges
+#### L-Shape (6 vertices):
+```
+ASSERT: wallLengthsMm.length == 6
+For orthogonal L (all 90° angles):
+  Horizontal edges sum: rightward = leftward
+  Vertical edges sum: downward = upward
+  Specifically: short_top + notch_horizontal = long_bottom
+  And: short_side + notch_vertical = long_side
+```
 
-### 5.4 Height Sanity Check
-- Minimum: 1000mm (1m)
-- Maximum: 300,000mm (300m — tallest buildings)
-- Floor height: 2500-4000mm typical
-- floorCount × 3000mm = reasonable height estimate
+#### U-Shape (8 vertices):
+```
+ASSERT: wallLengthsMm.length == 8
+ASSERT: 2 reflex corners detected
+  left_wing_width + courtyard_width + right_wing_width = bottom_width
+  left_height = right_height
+```
 
-### 5.5 Shape Consistency Check
-- 3D BIM render of simple box → EXACTLY 4 vertices
-- Floor plan with L-notch → EXACTLY 6 vertices
-- U-shaped courtyard → EXACTLY 8 vertices
-- wallLengthsMm count MUST = vertices count
-- wallHeightsMm count MUST = vertices count (if provided)
+#### T-Shape (8 vertices):
+```
+ASSERT: wallLengthsMm.length == 8
+ASSERT: 2 reflex corners
+  top_bar_width > stem_width
+  reflex_offset_left + stem_width + reflex_offset_right = top_bar_width
+```
 
----
+### 4.2 Terrace/Balcony Detection
+- Open terraces (no structural walls on outer edge) → EXCLUDE from polygon
+- Enclosed wings with structural walls → INCLUDE in polygon
+- Terrace dimensions → add as obstacle `type: "balcony"`, not as wall
+- Multi-story: if upper floors extend OVER a terrace, use full building dimension
 
-## 6. Terrace & Door Detection Rules
+### 4.3 Door Detection
+- Floor plans: look for arc (quarter-circle swing) on EXTERIOR walls
+- Each exterior door → obstacle `{ type: "door", wallIndex, positionMm, widthMm }`
+- Interior doors between rooms → IGNORE
+- Sliding doors on exterior walls → count as doors
 
-### 6.1 Terrace Detection
-**INCLUDE in footprint (structural):**
-- Thick walls on ALL sides
-- Same wall thickness as main building
-- Enclosed rooms/spaces
-- Labels: stairwell, elevator shaft, enclosed porch
+### 4.4 3D/BIM View Rules
+- Perspective illusion: rectangular box from 3/4 angle shows hexagonal silhouette → still 4 vertices
+- Count floors for height: typical 3000-4000mm per story
+- L/U/T shape visible from angle: reconstruct top-down footprint mentally
+- Stepped buildings: use massingTiers for setback upper floors
 
-**EXCLUDE from footprint (non-structural):**
-- Thin lines or dashed lines on outer edge
-- Railings/posts instead of walls
-- Labels: "Terrace", "Deck", "テラス", "Patio", "Balcony"
-- Open air on outer boundary
+### 4.5 IFC/BIM File Rules
+- Extract ground floor slab outline as footprint
+- Wall heights from storey data
+- Grid lines from IfcGrid entities → XY notation
+- Structural columns → obstacles of type "pillar"
 
-**Edge case:** Upper floors extending over open terrace below:
-- Use FULL building dimension for wall length (includes terrace zone)
-- Terrace level has shorter scaffold (different wallHeightsMm)
-
-### 6.2 Door Detection
-- Quarter-circle swing arcs on EXTERIOR walls
-- Sliding doors shown as arrows/dashed lines
-- IGNORE interior doors between rooms
-- Each exterior door needs a beam frame bracket on scaffold
-- Default door width: 1800mm if not dimensioned
-- Report: wallIndex (which wall), positionMm (distance from wall start), widthMm
-
----
-
-## 7. Corner Closing in 3D Visualization
-
-### 7.1 L-Corner (90° convex)
-At each L-corner between wall A and wall B:
-1. Take last 2 post positions from wall A (outer + inner row)
-2. Take first 2 post positions from wall B (outer + inner row)
-3. Draw yokoji pipes connecting them
-4. Extrude deck quadrilateral between the 4 posts
-5. Add habaki on exposed edges
-
-### 7.2 Non-L Corner (reflex / obtuse)
-At each non-90° corner:
-1. Place 2 PATTANKO pieces in cross pattern
-2. Size: ~250mm × 500mm each
-3. Centered at the midpoint of the 4 corner posts
-
-### 7.3 Corner Validation
-- Every corner in a closed polygon MUST have either L-corner or PATTANKO treatment
-- No gaps between adjacent wall scaffold runs
-- The 300mm overhang ensures overlap at corners
+### 4.6 DXF/CAD Rules
+- Largest closed polyline by area = building footprint
+- Dimension text entities → wallLengthsMm
+- Grid circles at intersections → column positions
+- Layer names may indicate structural vs. non-structural
 
 ---
 
-## 8. Image Analysis Reference (from provided images)
+## 5. Wall Counting Rules (Anti-Hallucination)
 
-### Image 1: 5-story residential block (rectangular)
-- Shape: Rectangle (4 vertices)
-- Estimated: ~40m × 12m × 15m (5 floors)
-- Scaffold: 4 walls, 4 L-corners
-- AI must NOT trace perspective hexagon
+### Rule 1: Vertex Count = Wall Count
+Every closed polygon has exactly N walls for N vertices. No exceptions.
 
-### Image 2: Corner European-style building (irregular/trapezoidal)
-- Shape: Irregular polygon (~5-6 vertices)
-- Has angled corners (not all 90°)
-- AI must trace actual wall angles, not regularize
+### Rule 2: One Wall Per Straight Edge
+A straight wall is ONE edge, even if:
+- The roofline height changes along it (use wallHeightsMm instead)
+- A structural grid line crosses it
+- Windows or doors are on it
 
-### Image 3: Detailed floor plan with rooms
-- Shape: Must extract EXTERIOR shell only
-- Ignore: bathrooms, bedrooms, kitchen walls
-- Include: stairwell if enclosed with thick walls
-- Detect: exterior doors (swing arcs on outer walls)
-- Detect: terraces/balconies (exclude from polygon)
+### Rule 3: Orthogonal Closure Check
+For buildings with all 90° corners:
+```
+Sum of all rightward edge lengths = Sum of all leftward edge lengths
+Sum of all downward edge lengths = Sum of all upward edge lengths
+```
+If these don't balance, a dimension was read incorrectly.
 
-### Image 4: Large office/commercial building
-- Shape: Rectangle or slight L (4-6 vertices)
-- Multiple floors visible → count for height
-- Rooftop structures: NOT part of footprint
+### Rule 4: Minimum/Maximum Vertex Count
+- Rectangle: exactly 4
+- L-shape: exactly 6
+- U-shape: exactly 8
+- T-shape: exactly 8
+- Cross: exactly 12
+- If you have an odd number of vertices for an orthogonal building, something is wrong
 
-### Image 5: Floor plan with dimensions in meters
-- Shape: Extract from thick outer walls
-- Convert all dimensions to mm
-- Terrace area: EXCLUDE (labeled "Terrace")
-- Detect ALL exterior doors
-
-### Image 6: Irregular angled floor plan
-- Shape: Non-orthogonal polygon
-- Each angled wall = ONE edge
-- Vertex positions MUST match actual corner locations
-- Do NOT create regular polygon
-
-### Image 7: Building with scaffold already installed
-- Shape: Extract building outline (INNER edge of scaffold/blue zone)
-- NOT the outer scaffold boundary
-
-### Image 8: Multi-wing complex building
-- Shape: Complex L or stepped
-- May need massingTiers for different heights
-- Multiple wings = more vertices
-
-### Image 9: Large modern building with glass facade
-- Shape: Rectangle or simple L
-- Height from floor count
-- Ignore canopies, entrance structures
-
-### Image 10: BIM software screenshot (IFC viewer)
-- Shape: U-shape or L-shape visible in 3D view
-- Multiple stories, glass facade visible
-- Extract from geometry data, not screenshot
+### Rule 5: Reflex Corner Count
+For orthogonal buildings with N vertices:
+- Expected reflex corners = (N - 4) / 2
+- Rectangle (4): 0 reflex
+- L-shape (6): 1 reflex
+- U-shape (8): 2 reflex
+- T-shape (8): 2 reflex
+- Cross (12): 4 reflex
 
 ---
 
-## 9. Summary: Critical Rules to Prevent Errors
+## 6. Scaffold Layout Per Shape
 
-1. **NEVER guess vertex count** — count the actual direction changes in the footprint
-2. **NEVER trace perspective silhouette** — reconstruct top-down plan from 3D views
-3. **ALWAYS close the polygon** — last edge connects back to vertex[0]
-4. **ALWAYS balance orthogonal dimensions** — horizontal sums must match, vertical sums must match
-5. **ALWAYS use 300mm overhang** at corners for scaffold closing
-6. **ALWAYS detect and count doors** on exterior walls for beam frame placement
-7. **ALWAYS distinguish terraces** (exclude) from structural wings (include)
-8. **NEVER add vertices for height changes** — use wallHeightsMm instead
-9. **NEVER use bounding box** for L/U/T shapes — trace the actual concave outline
-10. **ALWAYS verify wall count matches vertex count** — they must be equal
+### 6.1 Rectangle — 4 walls, 4 corners
+```
+All walls: fitSpansToWallLengthWithCorner(wallLengthMm)
+All corners: L-shaped (yokoji + deck)
+Pattanko: 0
+Total posts: sum of (spans_per_wall + 1) for each wall, minus shared corners
+Base yokoji: N×2 (span dir) + (N+1) (width dir) per wall
+```
+
+### 6.2 L-Shape — 6 walls, 6 corners
+```
+All walls: fitSpansToWallLengthWithCorner(wallLengthMm)
+5 convex corners: L-shaped (yokoji + deck)
+1 reflex corner: L-shaped but scaffold wraps inward
+Pattanko: 0 (all 90°)
+Special: reflex corner needs inward-facing yokoji connection
+```
+
+### 6.3 U-Shape — 8 walls, 8 corners
+```
+All walls: fitSpansToWallLengthWithCorner(wallLengthMm)
+6 convex corners: L-shaped
+2 reflex corners: inward-facing scaffold
+Pattanko: 0 (all 90°)
+```
+
+### 6.4 T-Shape — 8 walls, 8 corners
+```
+All walls: fitSpansToWallLengthWithCorner(wallLengthMm)
+6 convex corners: L-shaped
+2 reflex corners: where stem meets bar
+Pattanko: 0 (all 90°)
+```
+
+---
+
+## 7. 3D View Corner Closure Requirements
+
+For every pair of adjacent walls in the closed polygon:
+1. Detect corner type (convex vs reflex, L-shaped vs obtuse)
+2. Connect wall A last posts to wall B first posts with yokoji pipes
+3. Fill gap with corner deck (extruded quad)
+4. Add habaki bars at inner edges
+5. Repeat for every scaffold level
+
+The 3D view MUST:
+- Close all corners (no gaps between adjacent wall scaffold runs)
+- Handle reflex corners (scaffold on inside of building)
+- Support all shape types (rectangle, L, U, T, cross, irregular)
+- Apply 300mm overrun at each corner
+
+---
+
+## 8. Common AI Extraction Errors and Fixes
+
+| Error | Symptom | Fix |
+|-------|---------|-----|
+| Perspective silhouette traced | 6 vertices for rectangle | Reconstruct top-down footprint: 4 vertices |
+| Interior walls included | Too many vertices (>12) | Only trace EXTERIOR structural walls |
+| Terrace included in polygon | Extra wing without structural walls | Exclude open terraces, add as obstacle |
+| Grid lines traced | Many vertices along straight wall | One vertex per direction change only |
+| Heights split into extra walls | 8 vertices for L-shape | Keep 6 vertices, use wallHeightsMm |
+| Missing reflex corner | L-shape drawn as rectangle | Must include concave corner vertex |
+| Wrong dimension assignment | Wall length doesn't match drawing | Use parallel outermost dimension line |
+| Missing doors | No obstacle entries | Look for arc swing lines on exterior walls |
+| Mixed units | Some mm, some m | Convert ALL to mm |

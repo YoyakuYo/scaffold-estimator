@@ -233,8 +233,3 @@ Adjacent spans share the post/frame at the boundary:
 
 ### Database
 - DB migration: [015_add_scaffold_type.sql](mdc:supabase-migrations/015_add_scaffold_type.sql)
-
-### Shape Rules & AI Extraction
-- Comprehensive rules document: [SHAPE_RULES_AND_AI_EXTRACTION.md](mdc:docs/SHAPE_RULES_AND_AI_EXTRACTION.md)
-- AI BIM rules & shape validation: [ai-bim-rules.ts](mdc:frontend/lib/ai-bim-rules.ts)
-- Vision BIM extraction service: [vision-bim.service.ts](mdc:backend/src/modules/vision-bim/vision-bim.service.ts)

@@ -17,11 +17,7 @@ import {
   addCoupler,
   BIM_COLORS,
 } from '@/lib/scaffold-3d-components';
-import {
-  buildFootprintPolygonXZ,
-  hasPlausiblePolygonEdges,
-  outlineMatchesWallLengths,
-} from '@/lib/scaffold-footprint-polygon';
+import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
 import {
   normaliseMassingTierVerticesToGroundFootprint,
   clampFootprintVerticesToGroundPolygon,
@@ -1194,7 +1190,7 @@ export default function Scaffold3DView({
           tierGroups.push({ tierIndex: ti, baseHeightMm: entry.baseHeightMm, walls: entry.walls, wallIndices: entry.wallIndices });
         }
       }
-      let hasTiers = tierGroups.length > 1;
+      const hasTiers = tierGroups.length > 1;
 
       const storedVerts: Array<{ xFrac: number; yFrac: number }> | undefined =
         result?.polygonVertices ?? (result as any)?.polygonVertices;
@@ -1267,33 +1263,15 @@ export default function Scaffold3DView({
         return raw;
       })();
 
-      // Some legacy/non-tier configs carry stale tierIndex/baseHeight on walls.
-      // If we do not actually have massing tiers, force one ground-tier group so
-      // 3D uses the same wall loop as plan view and starts at GL.
-      const hasMassingTierGeometry = massingTiersSorted.length > 0;
-      if (!hasMassingTierGeometry && tierGroups.length > 1) {
-        tierGroups.splice(0, tierGroups.length, {
-          tierIndex: 0,
-          baseHeightMm: 0,
-          walls,
-          wallIndices: walls.map((_, i) => i),
-        });
-      }
-      hasTiers = hasMassingTierGeometry && tierGroups.length > 1;
-      const minTierBaseMm = hasTiers
-        ? Math.min(...tierGroups.map((tg) => tg.baseHeightMm ?? 0))
-        : 0;
-
       const groundWallLensMm =
         tierGroups[0]?.walls?.map((w) => w.wallLengthMm ?? 0) ?? [];
-      // Plan → metres must exist for every saved outline, not only when massing tiers
-      // are present — otherwise 3D falls back to length-only reconstruction and can lose
-      // L/U shapes while the 2D plan still matches polygonVertices.
       const bimPlan =
-        Array.isArray(storedVerts) && storedVerts.length >= 3
+        massingTiersSorted.length > 0 &&
+        Array.isArray(storedVerts) &&
+        storedVerts.length >= 3
           ? computeBimPreviewPlanToM({
               outline: storedVerts as any[],
-              massingTiers: massingTiersSorted.length > 0 ? massingTiersSorted : undefined,
+              massingTiers: massingTiersSorted,
               wallLengthsMm:
                 groundWallLensMm.length > 0 ? groundWallLensMm : walls.map((w) => w.wallLengthMm ?? 0),
             })
@@ -1574,21 +1552,18 @@ export default function Scaffold3DView({
         return null;
       })();
 
-      // When the stored outline maps 1:1 to ground-tier walls and each edge length
-      // matches the calculated wall length, use it as the scaffold polygon so 3D wall
-      // indices align with the plan (same as promoting fullBuildingOutline before).
-      // Shorter probes + no promotion caused broken / partial L-shape runs when
-      // length-only reconstruction returned the wrong vertex count.
+      // When fullBuildingOutline matches the ground tier wall count exactly,
+      // promote it as the scaffold polygon so that scaffold edge positions,
+      // IFC building placement, and outline all share one coordinate system.
+      // This prevents the scaffold from wrapping wrong faces when the
+      // buildFootprintPolygonXZ reconstruction has a different orientation.
       {
         const groundTierWallCount = tierGroups[0]?.walls.length ?? 0;
-        const tg0walls = tierGroups[0]?.walls ?? [];
         if (
           fullBuildingOutline &&
           fullBuildingOutline.length === groundTierWallCount &&
           groundTierWallCount >= 3 &&
-          tierPolygons[0] !== undefined &&
-          hasPlausiblePolygonEdges(fullBuildingOutline, tg0walls) &&
-          outlineMatchesWallLengths(fullBuildingOutline, tg0walls)
+          tierPolygons[0] !== undefined
         ) {
           tierPolygons[0].verts = fullBuildingOutline;
           tierPolygons[0].footprintFromMassing = true;
@@ -1699,7 +1674,7 @@ export default function Scaffold3DView({
       const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
       // AI BIM stepped buildings should keep scaffold on setback facades too
       // (including walls rising from the smaller building roof).
-      const enableExteriorOnlyFilter = !isAiBim && hasMassingTierGeometry;
+      const enableExteriorOnlyFilter = !isAiBim;
       if (enableExteriorOnlyFilter && hasTiers && tierGroups.length > 1) {
         const CO_EDGE_THRESHOLD = 0.15;
         for (let tgi = 1; tgi < tierGroups.length; tgi++) {
@@ -1826,18 +1801,14 @@ export default function Scaffold3DView({
           const midX = (v1.x + v2.x) / 2;
           const midZ = (v1.z + v2.z) / 2;
           if (!tierIsOpen && tierV.length >= 3) {
-            // Short probes only — long probes can cross opposite façades on L/U footprints
-            // and flip normals (missing walls / wrong scaffold side).
-            const probeDistances = isAiBim
-              ? [
-                  Math.max(standoffM * 0.35, 0.05),
-                  Math.max(standoffM * 0.65, 0.1),
-                ]
-              : [
-                  Math.max(standoffM * 0.5, 0.08),
-                  Math.max(standoffM * 2.0, 0.4),
-                  Math.max(standoffM * 4.0, 0.8),
-                ];
+            // Multi-distance probe for reliable outward detection at concave corners.
+            // A single small probe can land on an edge or in a thin polygon neck;
+            // voting across 3 distances avoids false flips.
+            const probeDistances = [
+              Math.max(standoffM * 0.5, 0.08),
+              Math.max(standoffM * 2.0, 0.4),
+              Math.max(standoffM * 4.0, 0.8),
+            ];
             let insideVotes = 0;
             for (const pd of probeDistances) {
               if (pointInPolygonXZ({ x: midX + nx * pd, z: midZ + nz * pd }, tierV)) insideVotes++;
@@ -1907,18 +1878,11 @@ export default function Scaffold3DView({
           endT = edgeLen;
         }
 
-        let nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
-        let nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
-        let nearDx = nearEnd.x - nearStart.x;
-        let nearDz = nearEnd.z - nearStart.z;
-        let alignedLen = Math.hypot(nearDx, nearDz);
-        if (alignedLen < 1e-6) {
-          nearStart = fallbackStart;
-          nearEnd = fallbackEnd;
-          nearDx = nearEnd.x - nearStart.x;
-          nearDz = nearEnd.z - nearStart.z;
-          alignedLen = Math.hypot(nearDx, nearDz);
-        }
+        const nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
+        const nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
+        const nearDx = nearEnd.x - nearStart.x;
+        const nearDz = nearEnd.z - nearStart.z;
+        const alignedLen = Math.hypot(nearDx, nearDz);
         if (alignedLen < 1e-6) {
           skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] = (skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] ?? 0) + 1;
           continue;
@@ -1977,16 +1941,8 @@ export default function Scaffold3DView({
         const tx = nearStart.x - cx;
         const tz = nearStart.z - cz;
 
-        // Tier elevation: normalize to the minimum tier base so the lowest scaffold
-        // always starts from ground level in the 3D scene.
-        // Single-tier configs ignore baseHeightMm.
-        //
-        // Example: legacy data can have all baseHeightMm shifted by +3000mm;
-        // subtracting minTierBaseMm anchors the lowest tier back to GL.
-        // Tier elevation: upper tiers use baseHeightMm. Single-tier configs ignore it —
-        // corrupted baseHeightMm from bad saves would float the whole scaffold in +Y.
-        const wallBaseMm = hasTiers ? ((wall as any).baseHeightMm ?? minTierBaseMm) : 0;
-        const baseYM = hasTiers ? Math.max(0, (wallBaseMm - minTierBaseMm) / 1000) : 0;
+        // Tier-wall elevation: scaffold starts at baseHeightMm instead of ground
+        const baseYM = ((wall as any).baseHeightMm ?? 0) / 1000;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -2124,6 +2080,9 @@ export default function Scaffold3DView({
       // ── Tier-aware corner connections (足場コーナー詳細図) ─
       // Iterate per tier group so upper-tier corners are connected correctly
       // and walls from different tiers never cross-connect.
+      // CORNER CLOSURE RULE: Every adjacent wall pair MUST be connected at the
+      // polygon vertex. L-shaped (~90°) corners get yokoji pipes + deck + habaki.
+      // Non-90° corners get pattanko filler planks. NO gaps allowed.
 
       const cornerGroup = new THREE.Group();
       const maxLevelsForCorners = Math.min(
@@ -2149,7 +2108,16 @@ export default function Scaffold3DView({
         for (let localWi = 0; localWi < tg.walls.length; localWi++) {
           const nextLocal = (localWi + 1) % tg.walls.length;
           if (tierOpen && nextLocal <= localWi) continue;
-          if (!(tierCornerEnd[localWi] ?? false)) continue;
+
+          // ALWAYS connect adjacent walls at corners for closed polygons.
+          // For open polylines, only connect consecutive walls.
+          const hasCorner = tierCornerEnd[localWi] ?? false;
+          if (!hasCorner && !tierOpen) {
+            // Force corner connection for closed polygons even if angle detection missed it.
+            // This ensures scaffold closes at every polygon vertex.
+          } else if (!hasCorner) {
+            continue;
+          }
 
           const globalWi = tg.wallIndices[localWi];
           const globalNext = tg.wallIndices[nextLocal];
@@ -2160,52 +2128,76 @@ export default function Scaffold3DView({
 
           const isLShaped = tierLEnd[localWi] ?? false;
 
+          // Wall A: last two posts (outer and inner row endpoints)
           const aLast = infoA.postX.length - 1;
-          const r1 = toWorldXZ(infoA.root, infoA.postX[aLast - 1], 0);
-          const r2 = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
+          const aOuterEnd = toWorldXZ(infoA.root, infoA.postX[aLast], 0);
+          const aInnerEnd = toWorldXZ(infoA.root, infoA.postX[aLast], infoA.widthM);
+          const aOuterPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], 0);
+          const aInnerPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], infoA.widthM);
 
-          const bFirstIdx = Math.min(Math.max(infoB.startPostIdx, 1), infoB.postX.length - 1);
-          let t1 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], 0);
-          let t2 = toWorldXZ(infoB.root, infoB.postX[bFirstIdx], infoB.widthM);
-          const matchDirect =
-            Math.hypot(r1.x - t1.x, r1.z - t1.z) + Math.hypot(r2.x - t2.x, r2.z - t2.z);
-          const matchCross =
-            Math.hypot(r1.x - t2.x, r1.z - t2.z) + Math.hypot(r2.x - t1.x, r2.z - t1.z);
-          if (matchCross < matchDirect) {
-            const tmp = t1;
-            t1 = t2;
-            t2 = tmp;
+          // Wall B: first posts (outer and inner row start)
+          const bIdx = Math.min(Math.max(infoB.startPostIdx, 0), infoB.postX.length - 1);
+          const bNextIdx = Math.min(bIdx + 1, infoB.postX.length - 1);
+          const bOuterStart = toWorldXZ(infoB.root, infoB.postX[bIdx], 0);
+          const bInnerStart = toWorldXZ(infoB.root, infoB.postX[bIdx], infoB.widthM);
+          const bOuterNext = toWorldXZ(infoB.root, infoB.postX[bNextIdx], 0);
+          const bInnerNext = toWorldXZ(infoB.root, infoB.postX[bNextIdx], infoB.widthM);
+
+          // Determine best pairing: outer-to-outer or outer-to-inner
+          // at the corner vertex (walls meet at polygon vertex)
+          const matchOO = Math.hypot(aOuterEnd.x - bOuterStart.x, aOuterEnd.z - bOuterStart.z);
+          const matchOI = Math.hypot(aOuterEnd.x - bInnerStart.x, aOuterEnd.z - bInnerStart.z);
+          const matchIO = Math.hypot(aInnerEnd.x - bOuterStart.x, aInnerEnd.z - bOuterStart.z);
+          const matchII = Math.hypot(aInnerEnd.x - bInnerStart.x, aInnerEnd.z - bInnerStart.z);
+
+          // For L-shaped 90° corners the outer of A meets inner of B (or vice versa)
+          let r1: PointXZ, r2: PointXZ, t1: PointXZ, t2: PointXZ;
+          if (Math.min(matchOI, matchIO) < Math.min(matchOO, matchII)) {
+            if (matchOI <= matchIO) {
+              r1 = aOuterPrev; r2 = aOuterEnd;
+              t1 = bInnerStart; t2 = bOuterStart;
+            } else {
+              r1 = aInnerPrev; r2 = aInnerEnd;
+              t1 = bOuterStart; t2 = bInnerStart;
+            }
+          } else {
+            r1 = aOuterPrev; r2 = aOuterEnd;
+            t1 = bOuterStart; t2 = bInnerStart;
           }
 
           const wallA = walls[globalWi];
           const wallB = walls[globalNext];
-          const baseA = hasTiers
-            ? Math.max(0, ((((wallA as any).baseHeightMm ?? minTierBaseMm) - minTierBaseMm) / 1000))
-            : 0;
-          const baseB = hasTiers
-            ? Math.max(0, ((((wallB as any).baseHeightMm ?? minTierBaseMm) - minTierBaseMm) / 1000))
-            : 0;
-          if (Math.abs(baseA - baseB) > 0.05) continue;
-          const baseYM_corner = baseA;
+          const baseA = ((wallA as any).baseHeightMm ?? 0) / 1000;
+          const baseB = ((wallB as any).baseHeightMm ?? 0) / 1000;
+          if (Math.abs(baseA - baseB) > 0.5) continue;
+          const baseYM_corner = Math.min(baseA, baseB);
           const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
           const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
           const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
 
+          // Corner post at the shared polygon vertex (vertical post for visual closure)
+          const cornerPostX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
+          const cornerPostZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
+
           for (let lv = 1; lv <= maxLvThisCorner; lv++) {
             const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
 
-            if (isLShaped) {
+            if (isLShaped || hasCorner) {
+              // L-shaped or any corner: full yokoji + deck closure
               // Yokoji pipes connecting wall A end to wall B start
-              addPipe(cornerGroup, r1.x, y, r1.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
-              addPipe(cornerGroup, r2.x, y, r2.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.9);
-              addPipe(cornerGroup, r1.x, y, r1.z, r2.x, y, r2.z, yokojiMat, PIPE_R * 0.8);
-              addPipe(cornerGroup, t1.x, y, t1.z, t2.x, y, t2.z, yokojiMat, PIPE_R * 0.8);
-              // Corner deck bridging the 4 posts
+              addPipe(cornerGroup, r2.x, y, r2.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+              addPipe(cornerGroup, aInnerEnd.x, y, aInnerEnd.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.9);
+              // Cross bar at wall A end
+              addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
+              // Cross bar at wall B start
+              addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
+
+              // Corner deck (quad) filling the gap between wall ends
               const firstSpanDeck = new THREE.Shape();
-              firstSpanDeck.moveTo(r1.x, -r1.z);
-              firstSpanDeck.lineTo(t1.x, -t1.z);
-              firstSpanDeck.lineTo(t2.x, -t2.z);
-              firstSpanDeck.lineTo(r2.x, -r2.z);
+              firstSpanDeck.moveTo(aOuterEnd.x, -aOuterEnd.z);
+              firstSpanDeck.lineTo(bOuterStart.x, -bOuterStart.z);
+              firstSpanDeck.lineTo(bInnerStart.x, -bInnerStart.z);
+              firstSpanDeck.lineTo(aInnerEnd.x, -aInnerEnd.z);
               firstSpanDeck.closePath();
               const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
               const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
@@ -2214,20 +2206,27 @@ export default function Scaffold3DView({
               deckMesh.castShadow = true;
               deckMesh.receiveShadow = true;
               cornerGroup.add(deckMesh);
-              // Habaki (toe boards) on ALL exposed corner edges to fully close the gap
+
+              // Habaki (toe board) at inner and outer edges of corner
               const hY = y + 0.06;
-              addPipe(cornerGroup, r1.x, hY, r1.z, r2.x, hY, r2.z, habakiMatEff, PIPE_R * 0.5);
-              addPipe(cornerGroup, t1.x, hY, t1.z, t2.x, hY, t2.z, habakiMatEff, PIPE_R * 0.5);
-              addPipe(cornerGroup, r1.x, hY, r1.z, t1.x, hY, t1.z, habakiMatEff, PIPE_R * 0.5);
-              addPipe(cornerGroup, r2.x, hY, r2.z, t2.x, hY, t2.z, habakiMatEff, PIPE_R * 0.5);
+              addPipe(cornerGroup, aOuterEnd.x, hY, aOuterEnd.z, bOuterStart.x, hY, bOuterStart.z, habakiMatEff, PIPE_R * 0.5);
+              addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
             } else {
-              const midX = (r1.x + r2.x + t1.x + t2.x) / 4;
-              const midZ = (r1.z + r2.z + t1.z + t2.z) / 4;
+              // Non-L-shaped: pattanko filler at corner
+              const midX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
+              const midZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
               const pattankoW = 0.25;
               const pattankoD = 0.5;
               addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
               addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
             }
+          }
+
+          // Corner vertical posts at level 0 (ground)
+          if (maxLvThisCorner > 0) {
+            const postH = maxLvThisCorner * LEVEL_H;
+            const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
+            addRealisticPost(THREE, cornerGroup, cornerPostX, postBaseY, cornerPostZ, postH, postMat);
           }
         }
       }

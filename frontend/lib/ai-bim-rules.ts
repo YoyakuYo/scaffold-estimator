@@ -2,21 +2,22 @@
  * Japanese BIM compliance (Shime-shiki / 締め式 足場).
  * Applied automatically in AI BIM Mode only.
  * MHLW safety standards; all dimensions in millimeters (mm).
+ *
+ * Also contains shape detection, validation, and XY axis notation utilities
+ * used by the AI extraction pipeline and scaffold calculation.
  */
 
 export const AI_BIM_RULES = {
-  /** Vertical standards spacing (支柱間隔) */
   VERTICAL_STANDARD_SPACING_MM: 1800,
-  /** Ledger spacing — primary (大桟間隔) */
   LEDGER_SPACING_PRIMARY_MM: 1800,
-  /** Ledger spacing — secondary (中桟間隔) */
   LEDGER_SPACING_SECONDARY_MM: 1200,
-  /** Handrail height minimum (手摺高さ) MHLW */
   HANDRAIL_HEIGHT_MIN_MM: 850,
-  /** Middle rail 中桟 height above platform */
   MIDDLE_RAIL_HEIGHT_MM: 450,
-  /** Level height (1 level) */
   LEVEL_HEIGHT_MM: 1800,
+  CORNER_OVERRUN_MM: 300,
+  CORNER_SPAN_MM: 600,
+  MIN_WALL_LENGTH_MM: 600,
+  JACK_BASE_MAX_MM: 300,
 } as const;
 
 export function getAiBimDefaults() {
@@ -30,97 +31,371 @@ export function getAiBimDefaults() {
   };
 }
 
-/**
- * Shape-specific extraction validation rules.
- * Used to verify AI-extracted polygons match expected shape geometry.
- */
-export const SHAPE_RULES = {
-  RECTANGLE: { vertices: 4, walls: 4, convexCorners: 4, reflexCorners: 0 },
-  L_SHAPE:   { vertices: 6, walls: 6, convexCorners: 5, reflexCorners: 1 },
-  U_SHAPE:   { vertices: 8, walls: 8, convexCorners: 6, reflexCorners: 2 },
-  T_SHAPE:   { vertices: 8, walls: 8, convexCorners: 6, reflexCorners: 2 },
-  H_SHAPE:   { vertices: 12, walls: 12, convexCorners: 8, reflexCorners: 4 },
-  PLUS:      { vertices: 12, walls: 12, convexCorners: 8, reflexCorners: 4 },
-} as const;
+// ─── Shape Classification ─────────────────────────────────
 
-export const CORNER_RULES = {
-  /** Posts extend 300mm past building corner */
-  CORNER_OVERRUN_MM: 300,
-  /** Kusabi corner span */
-  KUSABI_CORNER_SPAN_MM: 600,
-  /** Wakugumi corner span */
-  WAKUGUMI_CORNER_SPAN_MM: 610,
-  /** L-corner threshold: |cos(angle)| < this → L-shaped corner */
-  COS_L_SHAPED_MAX: 0.35,
-  /** Straight threshold: |cos(angle)| >= this → not a corner */
-  COS_STRAIGHT_MIN: 0.98,
-} as const;
+export type BuildingShape =
+  | 'rectangle'    // 4 vertices, 0 reflex
+  | 'l-shape'      // 6 vertices, 1 reflex
+  | 'u-shape'      // 8 vertices, 2 reflex (courtyard)
+  | 't-shape'      // 8 vertices, 2 reflex (stem + bar)
+  | 'cross'        // 12 vertices, 4 reflex
+  | 'irregular';   // non-orthogonal or complex
 
-/**
- * Validate orthogonal closure: for orthogonal polygons, the sum of
- * rightward edges must equal leftward, and downward must equal upward.
- */
-export function validateOrthogonalClosure(wallLengthsMm: number[]): {
-  valid: boolean;
-  horizontalGap: number;
-  verticalGap: number;
-} {
-  const n = wallLengthsMm.length;
-  if (n < 4 || n % 2 !== 0) return { valid: false, horizontalGap: 0, verticalGap: 0 };
+export interface ShapeClassification {
+  shape: BuildingShape;
+  vertexCount: number;
+  reflexCornerCount: number;
+  reflexCornerIndices: number[];
+  convexCornerCount: number;
+  isOrthogonal: boolean;
+  /** XY grid notation for the building */
+  xyGrid: XYGridInfo | null;
+  validationErrors: string[];
+}
 
-  const hWalls = wallLengthsMm.filter((_, i) => i % 2 === 0);
-  const vWalls = wallLengthsMm.filter((_, i) => i % 2 !== 0);
+export interface XYGridInfo {
+  /** X axis lines (shorter dimension, typically depth/奥行き) */
+  xLines: { label: string; positionMm: number }[];
+  /** Y axis lines (longer dimension, typically frontage/間口) */
+  yLines: { label: string; positionMm: number }[];
+  /** Per-wall axis assignment */
+  wallAxes: { wallIndex: number; axis: 'X' | 'Y'; fromLine: string; toLine: string; lengthMm: number }[];
+}
 
-  const findBestSplit = (arr: number[]): number => {
-    const k = arr.length;
-    let bestGap = Infinity;
-    for (let mask = 0; mask < (1 << k); mask++) {
-      let pos = 0, neg = 0;
-      for (let j = 0; j < k; j++) {
-        if (mask & (1 << j)) pos += arr[j]; else neg += arr[j];
-      }
-      bestGap = Math.min(bestGap, Math.abs(pos - neg));
-    }
-    return bestGap;
+type Point2D = { x: number; y: number };
+
+function vertexToPoint(v: any): Point2D {
+  return {
+    x: (v?.x ?? v?.xFrac ?? 0) as number,
+    y: (v?.y ?? v?.yFrac ?? 0) as number,
   };
+}
 
-  const hGap = findBestSplit(hWalls);
-  const vGap = findBestSplit(vWalls);
-  return { valid: hGap === 0 && vGap === 0, horizontalGap: hGap, verticalGap: vGap };
+function crossProduct2D(o: Point2D, a: Point2D, b: Point2D): number {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+function edgeAngle(a: Point2D, b: Point2D): number {
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
+function edgeLength(a: Point2D, b: Point2D): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function isAngleOrthogonal(angle: number): boolean {
+  const snapped = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+  return Math.abs(angle - snapped) < 0.15;
 }
 
 /**
- * Classify a polygon corner as L-shaped, reflex (PATTANKO), or straight.
+ * Classify a building footprint polygon.
  */
-export function classifyCorner(
-  prev: { x: number; y: number },
-  curr: { x: number; y: number },
-  next: { x: number; y: number },
-): 'l-shaped' | 'pattanko' | 'straight' {
-  const ax = curr.x - prev.x, ay = curr.y - prev.y;
-  const bx = next.x - curr.x, by = next.y - curr.y;
-  const lenA = Math.hypot(ax, ay);
-  const lenB = Math.hypot(bx, by);
-  if (lenA < 1e-9 || lenB < 1e-9) return 'straight';
-  const cosAngle = Math.abs((ax * bx + ay * by) / (lenA * lenB));
-  if (cosAngle >= CORNER_RULES.COS_STRAIGHT_MIN) return 'straight';
-  if (cosAngle < CORNER_RULES.COS_L_SHAPED_MAX) return 'l-shaped';
-  return 'pattanko';
-}
-
-/**
- * Count PATTANKO corners in a polygon (reflex corners that are not L-shaped).
- */
-export function countPattankoCorners(
-  vertices: Array<{ x: number; y: number }>,
-): number {
-  let count = 0;
+export function classifyBuildingShape(
+  vertices: Array<any>,
+  wallLengthsMm?: number[],
+): ShapeClassification {
   const n = vertices.length;
-  for (let i = 0; i < n; i++) {
-    const prev = vertices[(i - 1 + n) % n];
-    const curr = vertices[i];
-    const next = vertices[(i + 1) % n];
-    if (classifyCorner(prev, curr, next) === 'pattanko') count++;
+  const pts = vertices.map(vertexToPoint);
+  const errors: string[] = [];
+
+  if (n < 3) {
+    return {
+      shape: 'irregular',
+      vertexCount: n,
+      reflexCornerCount: 0,
+      reflexCornerIndices: [],
+      convexCornerCount: 0,
+      isOrthogonal: false,
+      xyGrid: null,
+      validationErrors: ['Too few vertices (minimum 3)'],
+    };
   }
-  return count;
+
+  // Determine winding direction (positive = CCW, negative = CW)
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area2 += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  const isCCW = area2 > 0;
+
+  // Find reflex corners
+  const reflexIndices: number[] = [];
+  let allOrthogonal = true;
+
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+    const cross = crossProduct2D(prev, curr, next);
+    const isReflex = isCCW ? cross < 0 : cross > 0;
+    if (isReflex) reflexIndices.push(i);
+
+    const angle1 = edgeAngle(prev, curr);
+    const angle2 = edgeAngle(curr, next);
+    if (!isAngleOrthogonal(angle1) || !isAngleOrthogonal(angle2)) {
+      allOrthogonal = false;
+    }
+  }
+
+  // Validate wall lengths if provided
+  if (wallLengthsMm && wallLengthsMm.length !== n) {
+    errors.push(`wallLengthsMm count (${wallLengthsMm.length}) != vertex count (${n})`);
+  }
+
+  // Orthogonal closure check
+  if (allOrthogonal && wallLengthsMm && wallLengthsMm.length === n) {
+    let sumRight = 0, sumLeft = 0, sumDown = 0, sumUp = 0;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = wallLengthsMm[i];
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) sumRight += len;
+        else sumLeft += len;
+      } else {
+        if (dy > 0) sumDown += len;
+        else sumUp += len;
+      }
+    }
+    if (Math.abs(sumRight - sumLeft) > 500) {
+      errors.push(`Horizontal imbalance: rightward=${sumRight}mm vs leftward=${sumLeft}mm (diff=${Math.abs(sumRight - sumLeft)}mm)`);
+    }
+    if (Math.abs(sumDown - sumUp) > 500) {
+      errors.push(`Vertical imbalance: downward=${sumDown}mm vs upward=${sumUp}mm (diff=${Math.abs(sumDown - sumUp)}mm)`);
+    }
+  }
+
+  // Classify shape
+  let shape: BuildingShape;
+  const reflexCount = reflexIndices.length;
+
+  if (n === 4 && reflexCount === 0) {
+    shape = 'rectangle';
+    if (wallLengthsMm && wallLengthsMm.length === 4) {
+      const tol = 500;
+      if (Math.abs(wallLengthsMm[0] - wallLengthsMm[2]) > tol) {
+        errors.push(`Opposite sides not equal: wall[0]=${wallLengthsMm[0]} vs wall[2]=${wallLengthsMm[2]}`);
+      }
+      if (Math.abs(wallLengthsMm[1] - wallLengthsMm[3]) > tol) {
+        errors.push(`Opposite sides not equal: wall[1]=${wallLengthsMm[1]} vs wall[3]=${wallLengthsMm[3]}`);
+      }
+    }
+  } else if (n === 6 && reflexCount === 1) {
+    shape = 'l-shape';
+  } else if (n === 8 && reflexCount === 2) {
+    shape = distinguishUvsT(pts, reflexIndices) ? 't-shape' : 'u-shape';
+  } else if (n === 12 && reflexCount === 4) {
+    shape = 'cross';
+  } else {
+    shape = 'irregular';
+  }
+
+  // Build XY grid
+  const xyGrid = allOrthogonal ? buildXYGrid(pts, wallLengthsMm ?? null, n) : null;
+
+  return {
+    shape,
+    vertexCount: n,
+    reflexCornerCount: reflexCount,
+    reflexCornerIndices: reflexIndices,
+    convexCornerCount: n - reflexCount,
+    isOrthogonal: allOrthogonal,
+    xyGrid,
+    validationErrors: errors,
+  };
+}
+
+/**
+ * Distinguish T-shape from U-shape based on reflex corner positions.
+ * T-shape: reflex corners are adjacent (stem meets bar).
+ * U-shape: reflex corners are separated by several edges (courtyard opening).
+ */
+function distinguishUvsT(pts: Point2D[], reflexIndices: number[]): boolean {
+  if (reflexIndices.length !== 2) return false;
+  const n = pts.length;
+  const [r1, r2] = reflexIndices;
+  const dist1 = Math.abs(r2 - r1);
+  const dist2 = n - dist1;
+  const minDist = Math.min(dist1, dist2);
+  // T-shape: reflex corners are 2 apart (adjacent edges form the stem junction)
+  // U-shape: reflex corners are farther apart (forming courtyard opening)
+  return minDist <= 2;
+}
+
+/**
+ * Build Japanese XY grid notation from orthogonal polygon.
+ * X = shorter axis (depth), Y = longer axis (frontage).
+ */
+function buildXYGrid(
+  pts: Point2D[],
+  wallLengthsMm: number[] | null,
+  n: number,
+): XYGridInfo {
+  const xs = new Set<number>();
+  const ys = new Set<number>();
+
+  for (const p of pts) {
+    xs.add(Math.round(p.x));
+    ys.add(Math.round(p.y));
+  }
+
+  const sortedX = [...xs].sort((a, b) => a - b);
+  const sortedY = [...ys].sort((a, b) => a - b);
+
+  const spanX = sortedX.length > 1 ? sortedX[sortedX.length - 1] - sortedX[0] : 0;
+  const spanY = sortedY.length > 1 ? sortedY[sortedY.length - 1] - sortedY[0] : 0;
+
+  // X = shorter axis (vertical in plan), Y = longer axis (horizontal in plan)
+  const xIsVertical = spanX <= spanY;
+
+  const xLines = (xIsVertical ? sortedX : sortedY).map((pos, i) => ({
+    label: `X${i + 1}`,
+    positionMm: Math.round(pos),
+  }));
+
+  const yLines = (xIsVertical ? sortedY : sortedX).map((pos, i) => ({
+    label: `Y${i + 1}`,
+    positionMm: Math.round(pos),
+  }));
+
+  const wallAxes: XYGridInfo['wallAxes'] = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % n];
+    const dx = Math.abs(b.x - a.x);
+    const dy = Math.abs(b.y - a.y);
+    const isHorizontal = dx > dy;
+    const len = wallLengthsMm?.[i] ?? Math.round(Math.hypot(dx, dy));
+
+    const axis: 'X' | 'Y' = (isHorizontal === xIsVertical) ? 'X' : 'Y';
+
+    // Find closest grid lines
+    const fromCoord = isHorizontal ? Math.round(Math.min(a.x, b.x)) : Math.round(Math.min(a.y, b.y));
+    const toCoord = isHorizontal ? Math.round(Math.max(a.x, b.x)) : Math.round(Math.max(a.y, b.y));
+
+    const lines = axis === 'X' ? xLines : yLines;
+    const fromLine = lines.find(l => Math.abs(l.positionMm - fromCoord) < 100)?.label ?? `${axis}?`;
+    const toLine = lines.find(l => Math.abs(l.positionMm - toCoord) < 100)?.label ?? `${axis}?`;
+
+    wallAxes.push({
+      wallIndex: i,
+      axis,
+      fromLine: fromLine === toLine ? fromLine : fromLine,
+      toLine: toLine,
+      lengthMm: len,
+    });
+  }
+
+  return { xLines, yLines, wallAxes };
+}
+
+// ─── Validation Helpers ─────────────────────────────────
+
+/**
+ * Validate AI extraction result against shape rules.
+ * Returns array of error/warning messages.
+ */
+export function validateExtraction(
+  vertices: Array<any>,
+  wallLengthsMm?: number[],
+  buildingHeightMm?: number,
+): string[] {
+  const errors: string[] = [];
+  const n = vertices.length;
+
+  if (n < 3) {
+    errors.push('ERROR: Less than 3 vertices');
+    return errors;
+  }
+
+  if (wallLengthsMm) {
+    if (wallLengthsMm.length !== n) {
+      errors.push(`ERROR: wallLengthsMm count (${wallLengthsMm.length}) does not match vertex count (${n})`);
+    }
+
+    const perimeter = wallLengthsMm.reduce((s, v) => s + v, 0);
+    if (perimeter < 4000) errors.push(`WARNING: Perimeter too small (${perimeter}mm < 4000mm)`);
+    if (perimeter > 2000000) errors.push(`WARNING: Perimeter too large (${perimeter}mm > 2000m)`);
+
+    for (let i = 0; i < wallLengthsMm.length; i++) {
+      if (wallLengthsMm[i] < 600) {
+        errors.push(`WARNING: Wall ${i} length (${wallLengthsMm[i]}mm) below minimum 600mm`);
+      }
+    }
+
+    // Check for duplicate consecutive vertices
+    const pts = vertices.map(vertexToPoint);
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      if (Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y) < 0.001) {
+        errors.push(`ERROR: Duplicate vertices at index ${i} and ${j}`);
+      }
+    }
+  }
+
+  if (buildingHeightMm !== undefined) {
+    if (buildingHeightMm < 2000) errors.push(`WARNING: Building height (${buildingHeightMm}mm) unusually low`);
+    if (buildingHeightMm > 200000) errors.push(`WARNING: Building height (${buildingHeightMm}mm) > 200m`);
+  }
+
+  // Shape-specific validation
+  const classification = classifyBuildingShape(vertices, wallLengthsMm);
+  errors.push(...classification.validationErrors);
+
+  // Orthogonal vertex count check
+  if (classification.isOrthogonal && n % 2 !== 0) {
+    errors.push(`WARNING: Orthogonal building has odd vertex count (${n}) — likely an error`);
+  }
+
+  return errors;
+}
+
+/**
+ * Count corners that need scaffold closure (yokoji+deck for L-shaped,
+ * pattanko for non-90° corners). Returns breakdown for BOM.
+ */
+export function countCornerTypes(
+  vertices: Array<any>,
+): { lShapedCorners: number; pattankoCorners: number; straightEdges: number; total: number } {
+  const n = vertices.length;
+  if (n < 3) return { lShapedCorners: 0, pattankoCorners: 0, straightEdges: 0, total: 0 };
+
+  const COS_L_SHAPED_MAX = 0.35;
+  const COS_STRAIGHT_MIN = 0.98;
+  let lShaped = 0;
+  let pattanko = 0;
+  let straight = 0;
+
+  const pts = vertices.map(vertexToPoint);
+
+  for (let j = 0; j < n; j++) {
+    const prev = pts[(j - 1 + n) % n];
+    const curr = pts[j];
+    const next = pts[(j + 1) % n];
+
+    const d1x = curr.x - prev.x;
+    const d1y = curr.y - prev.y;
+    const d2x = next.x - curr.x;
+    const d2y = next.y - curr.y;
+    const l1 = Math.hypot(d1x, d1y);
+    const l2 = Math.hypot(d2x, d2y);
+    if (l1 < 1e-9 || l2 < 1e-9) continue;
+
+    const cosAngle = (d1x * d2x + d1y * d2y) / (l1 * l2);
+    const absCos = Math.abs(cosAngle);
+
+    if (absCos >= COS_STRAIGHT_MIN) {
+      straight++;
+    } else if (absCos < COS_L_SHAPED_MAX) {
+      lShaped++;
+    } else {
+      pattanko++;
+    }
+  }
+
+  return { lShapedCorners: lShaped, pattankoCorners: pattanko, straightEdges: straight, total: n };
 }
