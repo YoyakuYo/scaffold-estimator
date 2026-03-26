@@ -1674,7 +1674,13 @@ export default function Scaffold3DView({
       const wallSkipFlags = new Array<boolean>(walls.length).fill(false);
       // AI BIM stepped buildings should keep scaffold on setback facades too
       // (including walls rising from the smaller building roof).
-      const enableExteriorOnlyFilter = !isAiBim;
+      // Also disable the filter when tiers all have the same footprint (same vertex count) —
+      // that indicates spurious tier decomposition, not a real setback building.
+      const allTiersSameFootprint = tierGroups.length > 1 && (() => {
+        const counts = tierGroups.map(tg => tg.walls.length);
+        return counts.every(c => c === counts[0]);
+      })();
+      const enableExteriorOnlyFilter = !isAiBim && !allTiersSameFootprint;
       if (enableExteriorOnlyFilter && hasTiers && tierGroups.length > 1) {
         const CO_EDGE_THRESHOLD = 0.15;
         for (let tgi = 1; tgi < tierGroups.length; tgi++) {
@@ -1757,20 +1763,34 @@ export default function Scaffold3DView({
         const tierOffX = 0;
         const tierOffZ = 0;
 
-        if (tierV.length < 2 || localIdx < 0 || localIdx >= tierV.length) {
-          skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] = (skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] ?? 0) + 1;
-          continue;
+        // When tier polygon vertex count doesn't match wall count, fall back to
+        // placing the scaffold along an estimated wall position rather than skipping.
+        // This prevents whole wall faces from going missing.
+        let p1: PointXZ | undefined;
+        let p2: PointXZ | undefined;
+        if (tierV.length >= 2 && localIdx >= 0 && localIdx < tierV.length) {
+          const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
+          if (!tpd?.isOpen || (v2Idx >= 0 && v2Idx < tierV.length)) {
+            p1 = tierV[localIdx];
+            p2 = tierV[v2Idx];
+          }
         }
-        const v2Idx = tpd?.isOpen ? localIdx + 1 : ((localIdx + 1) % tierV.length);
-        if (tpd?.isOpen && (v2Idx < 0 || v2Idx >= tierV.length)) {
-          skipReasons['openPolyIdx'] = (skipReasons['openPolyIdx'] ?? 0) + 1;
-          continue;
-        }
-        const p1 = tierV[localIdx];
-        const p2 = tierV[v2Idx];
+        // Fallback: derive wall position from the ground polygon if index is out of range
         if (!p1 || !p2) {
-          skipReasons['nullVertex'] = (skipReasons['nullVertex'] ?? 0) + 1;
-          continue;
+          const groundVerts = tierPolygons[0]?.verts ?? verts;
+          if (groundVerts.length >= 2) {
+            const fallbackIdx = localIdx % groundVerts.length;
+            const fallbackV2 = (fallbackIdx + 1) % groundVerts.length;
+            p1 = groundVerts[fallbackIdx];
+            p2 = groundVerts[fallbackV2];
+            if (!p1 || !p2) {
+              skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] = (skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] ?? 0) + 1;
+              continue;
+            }
+          } else {
+            skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] = (skipReasons[`polyVerts(tv=${tierV.length},li=${localIdx})`] ?? 0) + 1;
+            continue;
+          }
         }
 
         const v1 = { x: p1.x + tierOffX, z: p1.z + tierOffZ };
