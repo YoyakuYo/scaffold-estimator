@@ -1941,8 +1941,11 @@ export default function Scaffold3DView({
         const tx = nearStart.x - cx;
         const tz = nearStart.z - cz;
 
-        // Tier-wall elevation: scaffold starts at baseHeightMm instead of ground
-        const baseYM = ((wall as any).baseHeightMm ?? 0) / 1000;
+        // Tier-wall elevation: scaffold starts at baseHeightMm instead of ground.
+        // For ground-level walls (tierIndex 0 or undefined), always start at ground.
+        const wallTierIndex = (wall as any).tierIndex ?? 0;
+        const rawBaseH = ((wall as any).baseHeightMm ?? 0);
+        const baseYM = (wallTierIndex === 0 ? 0 : rawBaseH) / 1000;
 
         // Build a transformation matrix (Three.js Matrix4 uses column-major internally,
         // but .set() takes row-major arguments):
@@ -2167,8 +2170,10 @@ export default function Scaffold3DView({
 
           const wallA = walls[globalWi];
           const wallB = walls[globalNext];
-          const baseA = ((wallA as any).baseHeightMm ?? 0) / 1000;
-          const baseB = ((wallB as any).baseHeightMm ?? 0) / 1000;
+          const tiA = (wallA as any).tierIndex ?? 0;
+          const tiB = (wallB as any).tierIndex ?? 0;
+          const baseA = (tiA === 0 ? 0 : ((wallA as any).baseHeightMm ?? 0)) / 1000;
+          const baseB = (tiB === 0 ? 0 : ((wallB as any).baseHeightMm ?? 0)) / 1000;
           if (Math.abs(baseA - baseB) > 0.5) continue;
           const baseYM_corner = Math.min(baseA, baseB);
           const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);

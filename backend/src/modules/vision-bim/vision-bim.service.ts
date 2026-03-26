@@ -860,7 +860,7 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v6:${modelForKey}:${hash}`;
+      const cacheKey = `vision-bim:v7:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
