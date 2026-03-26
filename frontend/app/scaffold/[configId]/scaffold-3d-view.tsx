@@ -1298,14 +1298,13 @@ export default function Scaffold3DView({
         let tok = false;
         let groundFromMassing = false;
 
-          // Prefer bimPlan-mapped full outline when it matches ground-tier wall count exactly
-        // AND produces non-degenerate edges.  Reject outlines where any mapped edge is
-        // shorter than 50 mm — those collapse walls to near-zero length in the render loop.
+          // Prefer bimPlan-mapped full outline when it matches ground-tier wall count exactly.
+        // storedVerts (polygonVertices) are ordered edge-by-edge matching wall indices,
+        // so toPlanM(storedVerts) gives the correct shape, orientation, and scale.
         if (!tok && bimPlan && storedVerts && storedVerts.length === tg0.walls.length) {
           const mapped = bimPlan.toPlanM(storedVerts as any[]);
           if (mapped.length === tg0.walls.length &&
-              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
-              hasUsableTierEdges(mapped, tg0.walls.length)) {
+              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
             tverts = mapped;
             tok = true;
             groundFromMassing = true;
@@ -1325,8 +1324,7 @@ export default function Scaffold3DView({
           if (groundMassing) {
             const mapped = bimPlan.toPlanM(groundMassing.vertices as any);
             if (mapped.length === tg0.walls.length &&
-                mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
-                hasUsableTierEdges(mapped, tg0.walls.length)) {
+                mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
               tverts = mapped;
               tok = true;
               groundFromMassing = true;
@@ -1392,9 +1390,7 @@ export default function Scaffold3DView({
 
         if (bimPlan && candidate && candidate.vertices.length === nW) {
           const mapped = bimPlan.toPlanM(candidate.vertices as any);
-          if (mapped.length === nW &&
-              mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z)) &&
-              hasUsableTierEdges(mapped, nW)) {
+          if (mapped.length === nW && mapped.every((v) => Number.isFinite(v.x) && Number.isFinite(v.z))) {
             tverts = mapped;
             footprintFromMassing = true;
           }
