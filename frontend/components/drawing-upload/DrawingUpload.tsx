@@ -233,6 +233,10 @@ export function DrawingUpload({
     onSegmentEdit(idx, mm);
   }, [onSegmentEdit]);
 
+  // After adding a vertex, prompt for dimension input on the new edge
+  const [pendingDimIdx, setPendingDimIdx] = useState<number | null>(null);
+  const [pendingDimVal, setPendingDimVal] = useState('');
+
   const addTraceVertex = useCallback((pos: Vertex) => {
     setShape(prev => {
       const verts = [...prev.verts, pos];
@@ -242,8 +246,30 @@ export function DrawingUpload({
       } else {
         wallMm.push(0);
       }
+      // Prompt for dimension on the new edge (edge from prev last → new vertex)
+      if (prev.verts.length >= 1) {
+        setTimeout(() => {
+          setPendingDimIdx(wallMm.length - 1);
+          setPendingDimVal('');
+        }, 50);
+      }
       return { ...prev, verts, wallMm };
     });
+  }, []);
+
+  const applyPendingDim = useCallback(() => {
+    if (pendingDimIdx === null) return;
+    const val = parseInt(pendingDimVal, 10);
+    if (!isNaN(val) && val > 0) {
+      editWallLength(pendingDimIdx, val);
+    }
+    setPendingDimIdx(null);
+    setPendingDimVal('');
+  }, [pendingDimIdx, pendingDimVal, editWallLength]);
+
+  const skipPendingDim = useCallback(() => {
+    setPendingDimIdx(null);
+    setPendingDimVal('');
   }, []);
 
   // ── Process DXF client-side ──
@@ -600,35 +626,59 @@ export function DrawingUpload({
                   stroke="#94a3b8" strokeWidth={sw * 0.4} strokeLinecap="round" />
               ))}
 
-              {verts.length >= 3 && (
+              {/* Closed polygon fill (when shape is finalized) */}
+              {verts.length >= 3 && !tracing && (
                 <polygon
                   points={verts.map(v => `${v.x},${v.y}`).join(' ')}
                   fill="rgba(59,130,246,0.06)" stroke="#2563eb" strokeWidth={sw} strokeLinejoin="round"
                 />
               )}
 
-              {verts.length === 2 && (
+              {/* Open polyline during tracing */}
+              {tracing && verts.length >= 2 && (
+                <polyline
+                  points={verts.map(v => `${v.x},${v.y}`).join(' ')}
+                  fill="none" stroke="#2563eb" strokeWidth={sw} strokeLinejoin="round"
+                />
+              )}
+
+              {/* Closed polygon outline when finalized */}
+              {!tracing && verts.length >= 3 && (
+                <polygon
+                  points={verts.map(v => `${v.x},${v.y}`).join(' ')}
+                  fill="none" stroke="#2563eb" strokeWidth={sw} strokeLinejoin="round"
+                />
+              )}
+
+              {/* Single line with 2 points */}
+              {verts.length === 2 && !tracing && (
                 <line x1={verts[0].x} y1={verts[0].y} x2={verts[1].x} y2={verts[1].y}
                   stroke="#2563eb" strokeWidth={sw} />
               )}
 
-              {verts.length >= 3 && verts.map((v, i) => {
-                const next = verts[(i + 1) % verts.length];
+              {/* Edge dimension labels — shown for ALL edges including during tracing */}
+              {verts.length >= 2 && verts.map((v, i) => {
+                const isClosed = !tracing && verts.length >= 3;
+                const nextIdx = isClosed ? (i + 1) % verts.length : i + 1;
+                if (nextIdx >= verts.length) return null;
+                const next = verts[nextIdx];
                 const mid = midPt(v, next);
                 const norm = edgeNorm(v, next, dimOff);
                 const len = wallMm[i] || 0;
+                const isPending = pendingDimIdx === i;
 
                 return (
                   <g key={`e-${i}`}>
                     <rect
                       x={mid.x + norm.x - fs * 2.5} y={mid.y + norm.y - fs * 0.6}
                       width={fs * 5} height={fs * 1.2} rx={fs * 0.2}
-                      fill="white" fillOpacity={0.85} stroke="#dbeafe" strokeWidth={0.5}
+                      fill={isPending ? '#dbeafe' : 'white'} fillOpacity={0.9}
+                      stroke={isPending ? '#3b82f6' : '#dbeafe'} strokeWidth={isPending ? 1.5 : 0.5}
                     />
                     <text
                       x={mid.x + norm.x} y={mid.y + norm.y}
                       textAnchor="middle" dominantBaseline="middle"
-                      fontSize={fs} fontWeight="600" fill="#1e40af"
+                      fontSize={fs} fontWeight="600" fill={isPending ? '#2563eb' : len > 0 ? '#1e40af' : '#f59e0b'}
                       style={{ cursor: 'pointer', userSelect: 'none' }}
                       onClick={(e) => { e.stopPropagation(); startEdit(i); }}
                     >
@@ -669,17 +719,61 @@ export function DrawingUpload({
           )}
 
           {tracing && (
-            <div className="absolute bottom-4 left-4 right-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2 text-sm text-amber-700">
-                <MousePointer2 className="h-4 w-4" />
-                <span>クリックして建物の頂点を指定（最低3点）— 現在 {verts.length} 点</span>
-              </div>
-              {verts.length >= 3 && (
-                <button onClick={closeTrace}
-                  className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5" /> 確定
-                </button>
+            <div className="absolute bottom-4 left-4 right-4 space-y-2">
+              {/* Dimension input prompt — appears after clicking each new vertex */}
+              {pendingDimIdx !== null && verts.length >= 2 && (
+                <div className="bg-blue-50 border border-blue-300 rounded-lg px-4 py-3 flex items-center gap-3 shadow-md">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      {String.fromCharCode(65 + ((pendingDimIdx) % 26))}
+                    </span>
+                    <span className="text-xs text-blue-600 font-medium">→</span>
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      {String.fromCharCode(65 + ((pendingDimIdx + 1) % 26))}
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    value={pendingDimVal}
+                    onChange={(e) => setPendingDimVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyPendingDim();
+                      if (e.key === 'Escape') skipPendingDim();
+                    }}
+                    placeholder="寸法 (mm)"
+                    autoFocus
+                    className="w-28 px-2 py-1.5 border border-blue-300 rounded text-sm font-mono text-right focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <span className="text-xs text-blue-500">mm</span>
+                  <button onClick={applyPendingDim}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5" /> 適用
+                  </button>
+                  <button onClick={skipPendingDim}
+                    className="px-2 py-1.5 text-blue-400 text-xs hover:text-blue-600">
+                    スキップ
+                  </button>
+                </div>
               )}
+              {/* Trace mode guide bar */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-2 text-sm text-amber-700">
+                  <MousePointer2 className="h-4 w-4" />
+                  <span>
+                    {verts.length === 0
+                      ? 'クリックして最初の頂点 (A) を指定'
+                      : verts.length === 1
+                        ? '次の頂点 (B) をクリック'
+                        : `頂点をクリック（最低3点）— 現在 ${verts.length} 点`}
+                  </span>
+                </div>
+                {verts.length >= 3 && (
+                  <button onClick={closeTrace}
+                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5" /> 形状を確定 ({verts.length}点)
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -730,23 +824,39 @@ export function DrawingUpload({
               )}
             </div>
 
-            {verts.length < 3 ? (
+            {verts.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">
-                建物形状が検出されると壁面寸法が表示されます
+                図面上でクリックして頂点を指定すると壁面寸法が表示されます
               </p>
+            ) : verts.length === 1 ? (
+              <div className="text-center py-6">
+                <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center mx-auto mb-2">A</div>
+                <p className="text-sm text-gray-500">頂点 A を配置しました。次の頂点 B をクリックしてください。</p>
+              </div>
             ) : (
               <div className="space-y-1.5">
-                {verts.map((_, i) => {
-                  const len = wallMm[i] || 0;
+                {/* Show edges from the polygon (or trace-in-progress lines) */}
+                {wallMm.map((len, i) => {
+                  if (i >= verts.length) return null;
+                  const isClosed = !tracing && verts.length >= 3;
+                  const isLastOpenEdge = !isClosed && i === verts.length - 1;
+                  if (isLastOpenEdge) return null;
+
                   const isEd = editIdx === i;
+                  const isPending = pendingDimIdx === i;
                   const lA = String.fromCharCode(65 + (i % 26));
-                  const lB = String.fromCharCode(65 + ((i + 1) % verts.length % 26));
+                  const nextIdx = isClosed ? (i + 1) % verts.length : i + 1;
+                  const lB = String.fromCharCode(65 + (nextIdx % 26));
 
                   return (
                     <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                      isEd ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-gray-50 hover:bg-gray-100'
+                      isPending ? 'bg-blue-50 ring-2 ring-blue-300 animate-pulse' :
+                      isEd ? 'bg-blue-50 ring-1 ring-blue-200' :
+                      len > 0 ? 'bg-gray-50 hover:bg-gray-100' : 'bg-amber-50 border border-dashed border-amber-200'
                     }`}>
-                      <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                      <div className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
+                        isPending ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
+                      }`}>
                         {lA}
                       </div>
                       <span className="text-xs text-gray-500 w-10 flex-shrink-0">{lA}→{lB}</span>
@@ -771,15 +881,17 @@ export function DrawingUpload({
                         </div>
                       ) : (
                         <span
-                          className="text-sm font-medium text-gray-800 cursor-pointer hover:text-blue-600 flex-1 min-w-0 truncate"
+                          className={`text-sm font-medium cursor-pointer flex-1 min-w-0 truncate ${
+                            len > 0 ? 'text-gray-800 hover:text-blue-600' : 'text-amber-600 italic'
+                          }`}
                           onClick={() => startEdit(i)}
-                          title="クリックして編集"
+                          title="クリックして寸法を入力"
                         >
-                          {len > 0 ? `${fmtMm(len)} (${Math.round(len)}mm)` : '— 未設定 —'}
+                          {len > 0 ? `${fmtMm(len)} (${Math.round(len)}mm)` : '— クリックして入力 —'}
                         </span>
                       )}
 
-                      {verts.length > 3 && !isEd && (
+                      {verts.length > 3 && !isEd && !tracing && (
                         <button onClick={() => deleteVertex(i)}
                           className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0" title="頂点を削除">
                           <Trash2 className="h-3.5 w-3.5" />
@@ -788,6 +900,12 @@ export function DrawingUpload({
                     </div>
                   );
                 })}
+                {/* Show vertex count summary during tracing */}
+                {tracing && verts.length >= 2 && (
+                  <div className="text-xs text-gray-500 text-center pt-2 border-t border-gray-100 mt-2">
+                    {verts.length} 頂点 · {wallMm.filter(w => w > 0).length}/{verts.length - 1} 辺に寸法設定済み
+                  </div>
+                )}
               </div>
             )}
           </div>
