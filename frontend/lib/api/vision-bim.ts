@@ -1,5 +1,12 @@
 import apiClient from './client';
 
+/** docs/SHAPE_RULES_AND_AI_EXTRACTION.md §5 — server-side validation snapshot. */
+export interface ShapeReportValidationResult {
+  valid: boolean;
+  errors: Array<{ code: string; detail?: string }>;
+  warnings: Array<{ code: string; detail?: string }>;
+}
+
 export interface VisionMassingTier {
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
   /** Cumulative top height of this mass tier in mm. */
@@ -41,6 +48,8 @@ export interface VisionFootprintResult {
   drawingType?: 'plan' | '3d' | 'elevation' | 'section';
   /** URL to the stored IFC file for frontend 3D rendering. */
   ifcFileUrl?: string;
+  /** §5 shape rules compliance (from server after extract). */
+  shapeReportCompliance?: ShapeReportValidationResult;
   /** Detected balconies, AC areas, and pillars; affects clearance / Buragetto. */
   obstacles?: Array<
     | {

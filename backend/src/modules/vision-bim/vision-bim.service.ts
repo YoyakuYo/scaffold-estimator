@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
+import {
+  validateShapeReportCompliance,
+  type ShapeReportValidationResult,
+} from '../../common/shape-report-validation';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const DxfParser = require('dxf-parser');
@@ -91,6 +95,10 @@ export interface VisionFootprintResult {
         widthMm?: number;
       }
   >;
+  /**
+   * docs/SHAPE_RULES_AND_AI_EXTRACTION.md §5 — validation hint for clients (errors block confirm in UI).
+   */
+  shapeReportCompliance?: ShapeReportValidationResult;
 }
 
 /** Supported CAD/plan extensions (lowercase). */
@@ -401,6 +409,15 @@ export class VisionBimService {
 
   constructor(private readonly config: ConfigService) {}
 
+  private attachShapeReportCompliance(result: VisionFootprintResult): void {
+    result.shapeReportCompliance = validateShapeReportCompliance({
+      vertices: result.vertices as VisionFootprintResult['vertices'],
+      wallLengthsMm: result.wallLengthsMm ?? [],
+      wallHeightsMm: result.wallHeightsMm,
+      buildingHeightMm: result.buildingHeightMm,
+    });
+  }
+
   /**
    * Process uploaded file: image → Claude Vision; DXF/CAD → parse outline; PDF → fallback or future PDF-to-image.
    * Filename is used for type detection when magic bytes are ambiguous.
@@ -667,7 +684,21 @@ export class VisionBimService {
           ? pillars.map((p) => ({ type: 'pillar' as const, center: p.center, radiusMm: p.radiusMm }))
           : undefined;
 
-      return { vertices, buildingHeightMm, confidence: 0.8, ...(obstacles && { obstacles }) };
+      const result: VisionFootprintResult = {
+        vertices,
+        buildingHeightMm,
+        confidence: 0.8,
+        ...(obstacles && { obstacles }),
+      };
+      if (vertices.length >= 3) {
+        const n = vertices.length;
+        result.wallLengthsMm = vertices.map((v, i) => {
+          const next = vertices[(i + 1) % n]!;
+          return Math.round(Math.hypot(next.x - v.x, next.y - v.y));
+        });
+      }
+      this.attachShapeReportCompliance(result);
+      return result;
     } catch (err) {
       this.logger.error('DXF processing failed', (err as Error)?.message);
       return this.getFallbackFootprint();
@@ -1344,6 +1375,7 @@ TERRACE DETECTION CHECKLIST:
       this.cleanupPolygon(parsed);
       // Re-normalise massingTiers vertices to match the (possibly relocated) outline.
       this.normalizeMassingTiersToOutline(parsed, originalVertices);
+      this.attachShapeReportCompliance(parsed);
       // Save to cache after successful parse/cleanup.
       VisionBimService.imageCache.set(cacheKey, {
         savedAtMs: Date.now(),
@@ -1892,7 +1924,7 @@ TERRACE DETECTION CHECKLIST:
           `${wallHeightsMm ? `, wallHeights(out)=${wallHeightsMm.join('/')}mm` : ', wallHeights(out)=suppressed (tiers)'} ` +
           `${massingTiers ? `, massingTiers=${massingTiers.length}` : ''}`,
         );
-        return {
+        const ifcOut: VisionFootprintResult = {
           vertices: footprint,
           buildingHeightMm,
           wallLengthsMm,
@@ -1901,6 +1933,8 @@ TERRACE DETECTION CHECKLIST:
           wallLengthsFromDimText: true,
           confidence: 0.85,
         };
+        this.attachShapeReportCompliance(ifcOut);
+        return ifcOut;
       }
 
       // Fallback: bounding box rectangle (use ground-level bounds if available)
@@ -1918,7 +1952,7 @@ TERRACE DETECTION CHECKLIST:
         `IFC fallback bbox: plane=${plane.kind} ${(maxFx - minFx).toFixed(1)}×${(maxFy - minFy).toFixed(1)}×${spanVert.toFixed(1)}, ` +
         `toMm=${toMm}, height=${buildingHeightMm}mm`,
       );
-      return {
+      const ifcBBox: VisionFootprintResult = {
         vertices: [
           { x: x0, y: y0 }, { x: x1, y: y0 },
           { x: x1, y: y1 }, { x: x0, y: y1 },
@@ -1929,6 +1963,8 @@ TERRACE DETECTION CHECKLIST:
         wallLengthsFromDimText: true,
         confidence: 0.9,
       };
+      this.attachShapeReportCompliance(ifcBBox);
+      return ifcBBox;
     } catch (err) {
       const msg = (err as Error)?.message || String(err);
       this.logger.error('IFC processing failed', msg);
@@ -3294,7 +3330,7 @@ TERRACE DETECTION CHECKLIST:
   }
 
   private getFallbackFootprint(): VisionFootprintResult {
-    return {
+    const fb: VisionFootprintResult = {
       vertices: [
         { x: 0, y: 0 },
         { x: 10000, y: 0 },
@@ -3302,7 +3338,10 @@ TERRACE DETECTION CHECKLIST:
         { x: 0, y: 8000 },
       ],
       buildingHeightMm: 3000,
+      wallLengthsMm: [10000, 8000, 10000, 8000],
       confidence: 0,
     };
+    this.attachShapeReportCompliance(fb);
+    return fb;
   }
 }

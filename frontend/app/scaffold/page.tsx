@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -33,6 +33,7 @@ import {
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
 import { AiBimFootprintEditor } from '@/components/ai-bim-footprint-editor';
+import { validateShapeReportCompliance } from '@/lib/shape-report-validation';
 import { visionBimApi, type VisionFootprintResult, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
@@ -948,6 +949,17 @@ function ScaffoldPageContent() {
   /** Snapshot of AI-extracted footprint for compare / reset (mm polygon, same as buildingOutline). */
   const [aiBimExtractOutline, setAiBimExtractOutline] = useState<FootprintPoint[] | null>(null);
   const [aiBimCompareExtract, setAiBimCompareExtract] = useState(false);
+  const aiBimShapeReport = useMemo(() => {
+    if (!aiBimPreview) return null;
+    return validateShapeReportCompliance({
+      vertices: aiBimPreview.buildingOutline,
+      wallLengthsMm: aiBimPreview.walls.map((w) => w.wallLengthMm),
+      wallHeightsMm: aiBimPreview.isStepped
+        ? aiBimPreview.walls.map((w) => w.wallHeightMm ?? aiBimPreview.buildingHeightMm)
+        : undefined,
+      buildingHeightMm: aiBimPreview.buildingHeightMm,
+    });
+  }, [aiBimPreview]);
   const scaffoldManagerRef = useRef<ScaffoldManager | null>(null);
   if (!scaffoldManagerRef.current) scaffoldManagerRef.current = new ScaffoldManager();
 
@@ -1933,11 +1945,44 @@ function ScaffoldPageContent() {
 
                     {/* Stairs per wall */}
                   </div>
+                  {aiBimShapeReport && (aiBimShapeReport.errors.length > 0 || aiBimShapeReport.warnings.length > 0) && (
+                    <div
+                      className={`rounded-lg border p-3 text-sm space-y-2 ${
+                        !aiBimShapeReport.valid
+                          ? 'bg-red-50 border-red-200 text-red-800'
+                          : 'bg-amber-50 border-amber-200 text-amber-900'
+                      }`}
+                    >
+                      <p className="font-medium">{t('scaffold', 'aiBimShapeReportTitle')}</p>
+                      {!aiBimShapeReport.valid && (
+                        <p className="text-xs opacity-90">{t('scaffold', 'aiBimShapeReportFixErrors')}</p>
+                      )}
+                      {aiBimShapeReport.errors.length > 0 && (
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                          {aiBimShapeReport.errors.map((e, i) => (
+                            <li key={`sr-err-${i}`}>
+                              {(t('scaffold', e.code as never) as string) || e.detail || e.code}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {aiBimShapeReport.warnings.length > 0 && (
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                          {aiBimShapeReport.warnings.map((w, i) => (
+                            <li key={`sr-warn-${i}`}>
+                              {(t('scaffold', w.code as never) as string) || w.detail || w.code}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                   <button
                     type="button"
-                    disabled={aiBimConfirming}
+                    disabled={aiBimConfirming || !!(aiBimShapeReport && !aiBimShapeReport.valid)}
                     onClick={async () => {
                       if (!aiBimPreview) return;
+                      if (aiBimShapeReport && !aiBimShapeReport.valid) return;
                       setAiBimConfirming(true);
                       try {
                         const outline = aiBimPreview.buildingOutline;

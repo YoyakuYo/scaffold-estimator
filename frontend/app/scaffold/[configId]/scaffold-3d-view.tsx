@@ -1552,24 +1552,10 @@ export default function Scaffold3DView({
         return null;
       })();
 
-      // When fullBuildingOutline matches the ground tier wall count exactly,
-      // promote it as the scaffold polygon so that scaffold edge positions,
-      // IFC building placement, and outline all share one coordinate system.
-      // This prevents the scaffold from wrapping wrong faces when the
-      // buildFootprintPolygonXZ reconstruction has a different orientation.
-      {
-        const groundTierWallCount = tierGroups[0]?.walls.length ?? 0;
-        if (
-          fullBuildingOutline &&
-          fullBuildingOutline.length === groundTierWallCount &&
-          groundTierWallCount >= 3 &&
-          tierPolygons[0] !== undefined
-        ) {
-          tierPolygons[0].verts = fullBuildingOutline;
-          tierPolygons[0].footprintFromMassing = true;
-          verts = fullBuildingOutline;
-        }
-      }
+      // Keep scaffold tier vertices from wall-length reconstruction / massing mapping.
+      // fullBuildingOutline is used only for the ground line overlay and IFC alignment
+      // so we never replace tier verts with a plan-mapped outline that can disagree
+      // with per-wall indices (SHAPE_RULES / façade placement).
 
       // Center the polygon
       const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
@@ -1801,14 +1787,18 @@ export default function Scaffold3DView({
           const midX = (v1.x + v2.x) / 2;
           const midZ = (v1.z + v2.z) / 2;
           if (!tierIsOpen && tierV.length >= 3) {
-            // Multi-distance probe for reliable outward detection at concave corners.
-            // A single small probe can land on an edge or in a thin polygon neck;
-            // voting across 3 distances avoids false flips.
-            const probeDistances = [
-              Math.max(standoffM * 0.5, 0.08),
-              Math.max(standoffM * 2.0, 0.4),
-              Math.max(standoffM * 4.0, 0.8),
-            ];
+            // Short probes only — long probes can cross opposite façades on L/U footprints
+            // and flip normals (missing walls / wrong scaffold side).
+            const probeDistances = isAiBim
+              ? [
+                  Math.max(standoffM * 0.35, 0.05),
+                  Math.max(standoffM * 0.65, 0.1),
+                ]
+              : [
+                  Math.max(standoffM * 0.5, 0.08),
+                  Math.max(standoffM * 2.0, 0.4),
+                  Math.max(standoffM * 4.0, 0.8),
+                ];
             let insideVotes = 0;
             for (const pd of probeDistances) {
               if (pointInPolygonXZ({ x: midX + nx * pd, z: midZ + nz * pd }, tierV)) insideVotes++;
@@ -1878,11 +1868,18 @@ export default function Scaffold3DView({
           endT = edgeLen;
         }
 
-        const nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
-        const nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
-        const nearDx = nearEnd.x - nearStart.x;
-        const nearDz = nearEnd.z - nearStart.z;
-        const alignedLen = Math.hypot(nearDx, nearDz);
+        let nearStart = nearStartCandidate ? toWallOffsetPoint(startT) : fallbackStart;
+        let nearEnd = nearEndCandidate ? toWallOffsetPoint(endT) : fallbackEnd;
+        let nearDx = nearEnd.x - nearStart.x;
+        let nearDz = nearEnd.z - nearStart.z;
+        let alignedLen = Math.hypot(nearDx, nearDz);
+        if (alignedLen < 1e-6) {
+          nearStart = fallbackStart;
+          nearEnd = fallbackEnd;
+          nearDx = nearEnd.x - nearStart.x;
+          nearDz = nearEnd.z - nearStart.z;
+          alignedLen = Math.hypot(nearDx, nearDz);
+        }
         if (alignedLen < 1e-6) {
           skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] = (skipReasons[`alignedLen(${alignedLen.toFixed(9)})`] ?? 0) + 1;
           continue;
