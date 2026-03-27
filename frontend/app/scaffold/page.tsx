@@ -1148,6 +1148,11 @@ function ScaffoldPageContent() {
     calculateMutation.mutate({ dto, configId: null });
   };
 
+  const isAiBimIfcMode = inputMode === 'ai_bim_ifc';
+  const aiUploadAccept = isAiBimIfcMode
+    ? '.ifc,.bim,.png,.jpg,.jpeg,.gif,.webp,.bmp,model/ifc,image/png,image/jpeg,image/gif,image/webp,image/bmp'
+    : '.dxf,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp';
+
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
         {/* Header */}
@@ -1218,51 +1223,29 @@ function ScaffoldPageContent() {
         </div>
 
       {/* ═══════════════════════════════════════════════════════
-          AI EXTRACTION MODE (no direct Vision upload)
+          AI EXTRACTION / AI BIM/IFC MODES
          ═══════════════════════════════════════════════════════ */}
-      {inputMode === 'ai_extract' && !editConfigId && (
+      {(inputMode === 'ai_bim_ifc' || inputMode === 'ai_extract') && !editConfigId && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <ScanLine className="h-5 w-5 text-violet-600" />
-              {t('scaffoldExtra', 'aiExtractTab')}
-            </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              AI Vision upload has moved to <span className="font-semibold">AI BIM/IFC</span>.
-            </p>
-            <p className="text-xs text-gray-500 mb-5">
-              Use AI BIM/IFC for image/PDF DXF extraction and BIM/IFC-based workflows.
-            </p>
-            <button
-              type="button"
-              onClick={() => setInputMode('ai_bim_ifc')}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100"
-            >
-              <ArrowRight className="h-4 w-4" />
-              {t('scaffoldExtra', 'aiBimIfcTab')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════
-          AI BIM/IFC MODE
-         ═══════════════════════════════════════════════════════ */}
-      {inputMode === 'ai_bim_ifc' && !editConfigId && (
-        <div className="max-w-[1800px] mx-auto px-4 pb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <ScanLine className="h-5 w-5 text-violet-600" />
-              {t('scaffold', 'aiBimModeTitle')}
+              {isAiBimIfcMode
+                ? t('scaffold', 'aiBimModeTitle')
+                : t('scaffold', 'aiExtractModeTitle')}
             </h2>
             <p className="text-sm text-gray-600 mb-6">
               {aiBimPreview
                 ? t('scaffold', 'aiBimModeReady')
-                : t('scaffold', 'aiBimModeDescription')}
+                : isAiBimIfcMode
+                  ? t('scaffold', 'aiBimModeDescription')
+                  : t('scaffold', 'aiExtractModeDescription')}
             </p>
             {!aiBimPreview && (
               <p className="text-xs text-violet-700/90 -mt-4 mb-6">
-                {t('scaffold', 'aiBimColorSamplingHint')}
+                {isAiBimIfcMode
+                  ? t('scaffold', 'aiBimColorSamplingHint')
+                  : t('scaffold', 'aiExtractColorSamplingHint')}
               </p>
             )}
             {!aiBimPreview && (
@@ -1270,11 +1253,15 @@ function ScaffoldPageContent() {
             <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">{t('scaffold', 'aiBimUploadCta')}</span>
-              <span className="text-xs text-gray-500">{t('scaffold', 'aiBimAcceptedFormats')}</span>
+              <span className="text-xs text-gray-500">
+                {isAiBimIfcMode
+                  ? t('scaffold', 'aiBimAcceptedFormats')
+                  : t('scaffold', 'aiExtractAcceptedFormats')}
+              </span>
               <input
                 type="file"
                 className="hidden"
-                accept=".png,.jpg,.jpeg,.gif,.webp,.bmp,.dxf,.pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,application/dxf,application/pdf"
+                accept={aiUploadAccept}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
