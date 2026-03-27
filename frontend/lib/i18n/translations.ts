@@ -452,7 +452,7 @@ export const translations = {
     legendTesuri: { ja: '手摺', en: 'Handrail', fr: 'Garde-corps' },
     legendPlank: { ja: '踏板', en: 'Plank', fr: 'Plancher' },
     legendHabaki: { ja: '幅木', en: 'Toe Board', fr: 'Plinthe' },
-    legendYokoji: { ja: '布材', en: 'Yokoji', fr: 'Yokoji' },
+    legendYokoji: { ja: '幅材 / 根がらみ', en: 'Width / Negarami', fr: 'Traverse / Lisse basse' },
     legendTopGuard: { ja: '上部ガード', en: 'Top Guard', fr: 'Garde-corps sup.' },
     legendJackBase: { ja: 'ジャッキ', en: 'Jack Base', fr: 'Base de cric' },
     legendStair: { ja: '階段', en: 'Stairs', fr: 'Escaliers' },

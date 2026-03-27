@@ -1134,10 +1134,14 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
-        // Wakugumi: 端部布材 / 妻側枠 (user-selectable). Kusabi: 端部手摺 (2 heights × 2 ends, matches BOM).
+        // Connected corners are continuous turns, not terminal ends:
+        // suppress stopper at the shared corner side and keep only true free ends.
+        // Wakugumi: 端部布材 / 妻側枠 (user-selectable). Kusabi: 端部手摺 (2 heights × 2 ends, matches BOM at free ends).
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
-          const endPositions = [postX[startPostIdx], postX[postX.length - 1]];
+          const endPositions: number[] = [];
+          if (!reuseStartFromPrevCorner) endPositions.push(postX[startPostIdx]);
+          if (!flushDeckAtCornerEnd) endPositions.push(postX[postX.length - 1]);
           if (isWakugumi) {
             for (const ex of endPositions) {
               for (let lv = 1; lv <= levelsToBuild; lv++) {
@@ -1980,13 +1984,14 @@ export default function Scaffold3DView({
           applyCornerAtEnd,
         );
 
-        // Scale scaffold run to fit polygon edge. With the ortho builder, edge ≈ wallLength
-        // so fitScale ≈ 1. Clamp to [0.5, 1.1] as safety net against polygon edge mismatch.
+        // Keep corner geometry rule-true in 3D: do not compress/expand runs at corners.
+        // For non-corner walls we still allow tiny correction near 1.0 to absorb small numeric drift.
         const baseLen = Math.max(runLenM, 1e-6);
         const desiredLen = alignedLen;
         const rawScale = desiredLen / baseLen;
-        const fitScale = Number.isFinite(rawScale) && rawScale > 0
-          ? Math.max(0.5, Math.min(1.1, rawScale))
+        const isCornerConnected = applyCornerAtStart || applyCornerAtEnd;
+        const fitScale = (!isCornerConnected && Number.isFinite(rawScale) && rawScale > 0 && Math.abs(rawScale - 1) <= 0.1)
+          ? rawScale
           : 1;
         wallRoot.scale.set(fitScale, 1, 1);
 
@@ -2072,10 +2077,11 @@ export default function Scaffold3DView({
         // ── Dimension lines (span sizes + height) ──
         const dimGroup = new THREE.Group();
         const dimOffset = standoffM + wallWidthM + 0.4;
-        const startX = v1.x - cx + nx * dimOffset;
-        const startZ = v1.z - cz + nz * dimOffset;
-        const endX = v2.x - cx + nx * dimOffset;
-        const endZ = v2.z - cz + nz * dimOffset;
+        const runLenForDims = baseLen * fitScale;
+        const startX = nearStart.x - cx + nx * dimOffset;
+        const startZ = nearStart.z - cz + nz * dimOffset;
+        const endX = startX + edgeDirX * runLenForDims;
+        const endZ = startZ + edgeDirZ * runLenForDims;
         const dimY = GROUND_Y - 0.15;
 
         // Span dimension lines along wall length
