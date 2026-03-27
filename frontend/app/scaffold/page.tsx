@@ -793,7 +793,7 @@ function ScaffoldPageContent() {
   };
 
   // ─── Input Mode ────────────────────────────────────────
-  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_bim' | 'cad_draw'>('drawing');
+  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'ai_bim_ifc' | 'cad_draw'>('drawing');
   const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>('drawing');
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
@@ -1158,19 +1158,30 @@ function ScaffoldPageContent() {
           </h1>
           <p className="mt-1 text-sm text-gray-600">{t('scaffold', 'subtitle')}</p>
 
-          {/* ─── Mode Selector (3 sections) ─── */}
+          {/* ─── Mode Selector (4 sections) ─── */}
           {!editConfigId && (
             <div className="flex flex-wrap gap-2 mt-4">
               <button
-                onClick={() => setInputMode('ai_bim')}
+                onClick={() => setInputMode('ai_extract')}
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                  inputMode === 'ai_bim'
+                  inputMode === 'ai_extract'
                     ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
                     : 'border-gray-200 text-gray-500 hover:border-gray-300'
                 }`}
               >
                 <ScanLine className="h-4 w-4" />
                 {t('scaffoldExtra', 'aiExtractTab')}
+              </button>
+              <button
+                onClick={() => setInputMode('ai_bim_ifc')}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  inputMode === 'ai_bim_ifc'
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <ScanLine className="h-4 w-4" />
+                {t('scaffoldExtra', 'aiBimIfcTab')}
               </button>
               <button
                 onClick={() => setInputMode('drawing')}
@@ -1207,9 +1218,37 @@ function ScaffoldPageContent() {
         </div>
 
       {/* ═══════════════════════════════════════════════════════
-          AI EXTRACTION MODE
+          AI EXTRACTION MODE (no direct Vision upload)
          ═══════════════════════════════════════════════════════ */}
-      {inputMode === 'ai_bim' && !editConfigId && (
+      {inputMode === 'ai_extract' && !editConfigId && (
+        <div className="max-w-[1800px] mx-auto px-4 pb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <ScanLine className="h-5 w-5 text-violet-600" />
+              {t('scaffoldExtra', 'aiExtractTab')}
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              AI Vision upload has moved to <span className="font-semibold">AI BIM/IFC</span>.
+            </p>
+            <p className="text-xs text-gray-500 mb-5">
+              Use AI BIM/IFC for image/PDF DXF extraction and BIM/IFC-based workflows.
+            </p>
+            <button
+              type="button"
+              onClick={() => setInputMode('ai_bim_ifc')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100"
+            >
+              <ArrowRight className="h-4 w-4" />
+              {t('scaffoldExtra', 'aiBimIfcTab')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
+          AI BIM/IFC MODE
+         ═══════════════════════════════════════════════════════ */}
+      {inputMode === 'ai_bim_ifc' && !editConfigId && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
@@ -1902,7 +1941,7 @@ function ScaffoldPageContent() {
       {/* ═══════════════════════════════════════════════════════
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
-      {(inputMode !== 'ai_bim' && inputMode !== 'cad_draw' || editConfigId) && (<>
+      {(inputMode !== 'ai_extract' && inputMode !== 'ai_bim_ifc' && inputMode !== 'cad_draw' || editConfigId) && (<>
       {/* Sub-tab selector */}
       {!editConfigId && (
         <div className="max-w-[1600px] mx-auto px-4 mb-4">
