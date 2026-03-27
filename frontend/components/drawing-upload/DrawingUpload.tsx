@@ -13,6 +13,7 @@ import {
   Upload, Loader2, AlertCircle, FileUp, RotateCcw, Check,
   Pencil, Trash2, Building2, Ruler, MousePointer2,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -129,6 +130,8 @@ export function DrawingUpload({
   buildingHeightMm,
   onBuildingHeightChange,
 }: DrawingUploadProps) {
+  const { t } = useI18n();
+  const mmUnit = t('result', 'mm') || 'mm';
   const [phase, setPhase] = useState<Phase>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<FileKind>('image');
@@ -275,7 +278,7 @@ export function DrawingUpload({
   // ── Process DXF client-side ──
   const processDxf = useCallback(async (f: File) => {
     try {
-      setStatus('DXFファイルを解析中...');
+      setStatus(t('scaffoldExtra', 'dxfParsing') || 'Parsing DXF file...');
       const dxf = await parseDxfFile(f);
       const extraction = extractSegments(dxf);
 
@@ -289,25 +292,25 @@ export function DrawingUpload({
       if (poly && poly.points.length >= 3) {
         const pts = poly.points.map(p => ({ x: p.x, y: -p.y }));
         setShape({ verts: pts, wallMm: recalcLengths(pts), coordsAreMm: true });
-        setStatus(`${pts.length}辺の建物形状を検出しました`);
+        setStatus(`${pts.length}${t('viewer', 'edgesLabel') || 'edges'} ${t('scaffoldExtra', 'shapeDetected') || 'building shape detected'}`);
       } else {
         setShape({ verts: [], wallMm: [], coordsAreMm: true });
-        setStatus('建物形状を自動検出できません。クリックして頂点を指定してください。');
+        setStatus(t('scaffoldExtra', 'shapeAutoDetectFailedClickVertices') || 'Could not auto-detect building shape. Click to place vertices.');
         setTracing(true);
       }
 
       try { await drawingsApi.upload(f, 'default-project'); } catch { /* non-critical */ }
       setPhase('editor');
     } catch (err: any) {
-      setErrMsg(`DXF解析エラー: ${err.message}`);
+      setErrMsg(`${t('scaffoldExtra', 'dxfParsingError') || 'DXF parsing error'}: ${err.message}`);
       setPhase('error');
     }
-  }, []);
+  }, [t]);
 
   // ── Process via AI vision API (image/PDF) — auto-extract shape and dimensions ──
   const processBackend = useCallback(async (f: File, fk: FileKind) => {
     try {
-      setStatus('ファイルを解析中…建物形状と寸法を自動検出しています');
+      setStatus(t('scaffoldExtra', 'analyzingFileAutoDetecting') || 'Analyzing file and auto-detecting building shape and dimensions...');
       const { visionBimApi } = await import('@/lib/api/vision-bim');
 
       try {
@@ -331,11 +334,14 @@ export function DrawingUpload({
             onBuildingHeightChange(result.buildingHeightMm);
           }
 
-          const shapeType = pts.length === 4 ? '矩形' :
-            pts.length === 6 ? 'L形' :
-            pts.length === 8 ? 'Z形/U形/T形' :
-            `${pts.length}角形`;
-          setStatus(`${shapeType}（${pts.length}辺）の建物形状を検出しました。クリックして編集できます。`);
+          const shapeType = pts.length === 4
+            ? (t('scaffoldExtra', 'shapeRectangle') || 'Rectangle')
+            : pts.length === 6
+              ? (t('scaffoldExtra', 'shapeLType') || 'L-shape')
+              : pts.length === 8
+                ? (t('scaffoldExtra', 'shapeZUTType') || 'Z/U/T shape')
+                : `${pts.length}${t('scaffoldExtra', 'shapePolygonSuffix') || '-gon'}`;
+          setStatus(`${shapeType} (${pts.length}${t('viewer', 'edgesLabel') || 'edges'}) ${t('scaffoldExtra', 'shapeDetectedEditable') || 'building shape detected. Click to edit.'}`);
           setPhase('editor');
           return;
         }
@@ -348,7 +354,7 @@ export function DrawingUpload({
         const res = await drawingsApi.upload(f, 'default-project');
 
         if (res.status === 'failed') {
-          setErrMsg(res.message || '処理に失敗しました');
+          setErrMsg(res.message || (t('scaffoldExtra', 'processingFailed') || 'Processing failed'));
           setPhase('error');
           return;
         }
@@ -358,7 +364,7 @@ export function DrawingUpload({
           const pts = ws.map((s: CadWallSegment) => ({ x: s.start.x, y: -s.start.y }));
           setShape({ verts: pts, wallMm: ws.map((s: CadWallSegment) => Math.round(s.length)), coordsAreMm: true });
           if (res.cadData.buildingHeight) onBuildingHeightChange(res.cadData.buildingHeight);
-          setStatus(`${ws.length}辺の建物形状を検出 (CAD)`);
+          setStatus(`${ws.length}${t('viewer', 'edgesLabel') || 'edges'} ${t('scaffoldExtra', 'shapeDetectedCad') || 'building shape detected (CAD)'}`);
           setPhase('editor');
           return;
         }
@@ -376,10 +382,10 @@ export function DrawingUpload({
               { x: n, y: e }, { x: 0, y: e },
             ];
             setShape({ verts: pts, wallMm: [n, e, s, w], coordsAreMm: true });
-            setStatus('壁面寸法を検出しました。クリックして編集できます。');
+            setStatus(t('scaffoldExtra', 'wallDimensionsDetectedEditable') || 'Wall dimensions detected. Click to edit.');
           } else {
             setShape({ verts: [], wallMm: [], coordsAreMm: false });
-            setStatus('寸法を自動検出できません。クリックして頂点を指定し、寸法を入力してください。');
+            setStatus(t('scaffoldExtra', 'dimensionsAutoDetectFailedClickAndInput') || 'Could not auto-detect dimensions. Click vertices and enter dimensions.');
             setTracing(true);
           }
 
@@ -387,21 +393,21 @@ export function DrawingUpload({
           if (height && height > 0) onBuildingHeightChange(height);
         } else {
           setShape({ verts: [], wallMm: [], coordsAreMm: false });
-          setStatus('自動検出できません。クリックして頂点を指定してください。');
+          setStatus(t('scaffoldExtra', 'autoDetectFailedClickVertices') || 'Auto-detection failed. Click to place vertices.');
           setTracing(true);
         }
       } catch {
         setShape({ verts: [], wallMm: [], coordsAreMm: false });
-        setStatus('自動検出できません。クリックして頂点を指定してください。');
+        setStatus(t('scaffoldExtra', 'autoDetectFailedClickVertices') || 'Auto-detection failed. Click to place vertices.');
         setTracing(true);
       }
 
       setPhase('editor');
     } catch (err: any) {
-      setErrMsg(`処理エラー: ${err.message}`);
+      setErrMsg(`${t('viewer', 'processingError') || 'Processing error'}: ${err.message}`);
       setPhase('error');
     }
-  }, [onBuildingHeightChange]);
+  }, [onBuildingHeightChange, t]);
 
   // ── Dropzone ──
   const onDrop = useCallback(async (accepted: File[]) => {
@@ -494,8 +500,8 @@ export function DrawingUpload({
     if (shape.coordsAreMm) {
       setShape(prev => ({ ...prev, wallMm: recalcLengths(prev.verts) }));
     }
-    setStatus(`${shape.verts.length}辺の建物形状を確定しました`);
-  }, [shape.verts.length, shape.coordsAreMm]);
+    setStatus(`${shape.verts.length}${t('viewer', 'edgesLabel') || 'edges'} ${t('scaffoldExtra', 'shapeConfirmed') || 'building shape confirmed'}`);
+  }, [shape.verts.length, shape.coordsAreMm, t]);
 
   // ── Wall edit ──
   const startEdit = useCallback((i: number) => {
@@ -521,7 +527,7 @@ export function DrawingUpload({
         <div className="p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <Upload className="h-5 w-5 text-blue-600" />
-            図面アップロード
+            {t('scaffoldExtra', 'drawingUpload') || '図面アップロード'}
           </h2>
           <div
             {...getRootProps()}
@@ -532,9 +538,12 @@ export function DrawingUpload({
             <input {...getInputProps()} />
             <FileUp className={`h-12 w-12 mx-auto mb-4 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`} />
             <p className="text-base font-medium text-gray-700 mb-2">
-              {isDragActive ? 'ドロップしてアップロード' : 'ファイルをドラッグ＆ドロップ'}
+              {isDragActive
+                ? (t('scaffoldExtra', 'dropToUpload') || 'Drop to upload')
+                : (t('scaffoldExtra', 'dragAndDropFile') || 'ファイルをドラッグ＆ドロップ')}
             </p>
-            <p className="text-sm text-gray-500 mb-4">またはクリックしてファイルを選択</p>
+            <p className="text-sm text-gray-500 mb-1">{t('scaffoldExtra', 'orClickToSelect') || 'またはクリックしてファイルを選択'}</p>
+            <p className="text-xs text-gray-400 mb-3">{t('scaffoldExtra', 'noFileChosen') || 'No file chosen'}</p>
             <div className="flex flex-wrap justify-center gap-2">
               {FILE_LABELS.map(ext => (
                 <span key={ext} className="px-2.5 py-1 bg-white rounded-md border border-gray-200 text-xs font-medium text-gray-600">
@@ -542,7 +551,7 @@ export function DrawingUpload({
                 </span>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-3">最大50MB — 画像・PDF・DXF対応</p>
+            <p className="text-xs text-gray-400 mt-3">{t('scaffoldExtra', 'max50mbFormats') || '最大50MB — 画像・PDF・DXF対応'}</p>
           </div>
         </div>
       </div>
@@ -555,7 +564,7 @@ export function DrawingUpload({
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-          <p className="text-base font-medium text-gray-700">{status || '処理中...'}</p>
+          <p className="text-base font-medium text-gray-700">{status || (t('viewer', 'processingFile') || 'Processing file…')}</p>
           <p className="text-sm text-gray-500">{file?.name}</p>
         </div>
       </div>
@@ -570,7 +579,7 @@ export function DrawingUpload({
           <AlertCircle className="h-10 w-10 text-red-500" />
           <p className="text-base font-medium text-red-700">{errMsg}</p>
           <button onClick={reset} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2">
-            <RotateCcw className="h-4 w-4" /> やり直す
+            <RotateCcw className="h-4 w-4" /> {t('scaffoldExtra', 'retry') || 'Retry'}
           </button>
         </div>
       </div>
@@ -592,7 +601,7 @@ export function DrawingUpload({
         </div>
         <div className="flex items-center gap-3">
           {status && <span className="text-xs text-green-600 hidden sm:inline">{status}</span>}
-          <button onClick={reset} className="p-1.5 hover:bg-gray-200 rounded-lg" title="リセット">
+          <button onClick={reset} className="p-1.5 hover:bg-gray-200 rounded-lg" title={t('viewer', 'clear') || 'Reset'}>
             <RotateCcw className="h-4 w-4 text-gray-500" />
           </button>
         </div>
@@ -740,18 +749,18 @@ export function DrawingUpload({
                       if (e.key === 'Enter') applyPendingDim();
                       if (e.key === 'Escape') skipPendingDim();
                     }}
-                    placeholder="寸法 (mm)"
+                    placeholder={t('scaffoldExtra', 'dimensionPlaceholder') || 'Dimension (mm)'}
                     autoFocus
                     className="w-28 px-2 py-1.5 border border-blue-300 rounded text-sm font-mono text-right focus:ring-2 focus:ring-blue-500 outline-none"
                   />
-                  <span className="text-xs text-blue-500">mm</span>
+                  <span className="text-xs text-blue-500">{mmUnit}</span>
                   <button onClick={applyPendingDim}
                     className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 flex items-center gap-1">
-                    <Check className="h-3.5 w-3.5" /> 適用
+                    <Check className="h-3.5 w-3.5" /> {t('viewer', 'apply') || 'Apply'}
                   </button>
                   <button onClick={skipPendingDim}
                     className="px-2 py-1.5 text-blue-400 text-xs hover:text-blue-600">
-                    スキップ
+                    {t('scaffoldExtra', 'skip') || 'Skip'}
                   </button>
                 </div>
               )}
@@ -761,16 +770,16 @@ export function DrawingUpload({
                   <MousePointer2 className="h-4 w-4" />
                   <span>
                     {verts.length === 0
-                      ? 'クリックして最初の頂点 (A) を指定'
+                      ? (t('scaffoldExtra', 'clickFirstVertexA') || 'Click to place the first vertex (A)')
                       : verts.length === 1
-                        ? '次の頂点 (B) をクリック'
-                        : `頂点をクリック（最低3点）— 現在 ${verts.length} 点`}
+                        ? (t('scaffoldExtra', 'clickNextVertexB') || 'Click the next vertex (B)')
+                        : `${t('scaffoldExtra', 'clickVerticesMin3Current') || 'Click vertices (min 3) - current'} ${verts.length}`}
                   </span>
                 </div>
                 {verts.length >= 3 && (
                   <button onClick={closeTrace}
                     className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 flex items-center gap-1">
-                    <Check className="h-3.5 w-3.5" /> 形状を確定 ({verts.length}点)
+                    <Check className="h-3.5 w-3.5" /> {(t('scaffoldExtra', 'confirmShape') || 'Confirm shape')} ({verts.length})
                   </button>
                 )}
               </div>
@@ -781,7 +790,7 @@ export function DrawingUpload({
             <div className="absolute inset-0 flex items-center justify-center text-gray-400">
               <div className="text-center">
                 <Building2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">図面プレビュー</p>
+                <p className="text-sm">{t('scaffoldExtra', 'drawingPreview') || 'Drawing preview'}</p>
               </div>
             </div>
           )}
@@ -793,17 +802,17 @@ export function DrawingUpload({
           <div className="p-4 border-b border-gray-200">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <Building2 className="h-4 w-4 text-blue-600" />
-              建物の高さ
+              {t('viewer', 'buildingHeight') || 'Building Height'}
             </label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
                 value={buildingHeightMm || ''}
                 onChange={(e) => onBuildingHeightChange(parseInt(e.target.value, 10) || 0)}
-                placeholder="例: 10000"
+                placeholder={t('scaffoldExtra', 'heightPlaceholder') || 'e.g. 10000'}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
-              <span className="text-sm text-gray-500 w-8">mm</span>
+              <span className="text-sm text-gray-500 w-8">{mmUnit}</span>
             </div>
             {buildingHeightMm != null && buildingHeightMm > 0 && (
               <p className="text-xs text-gray-400 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
@@ -815,23 +824,23 @@ export function DrawingUpload({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <Ruler className="h-4 w-4 text-blue-600" />
-                壁面寸法
+                {t('scaffoldExtra', 'wallDimensions') || 'Wall Dimensions'}
               </h3>
               {perimeter > 0 && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  周長: {fmtMm(perimeter)}
+                  {(t('viewer', 'perimeterLabel') || 'Perimeter')}: {fmtMm(perimeter)}
                 </span>
               )}
             </div>
 
             {verts.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">
-                図面上でクリックして頂点を指定すると壁面寸法が表示されます
+                {t('scaffoldExtra', 'clickToPlaceVerticesHint') || 'Click on the drawing to place vertices and show wall dimensions'}
               </p>
             ) : verts.length === 1 ? (
               <div className="text-center py-6">
                 <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 text-xs font-bold flex items-center justify-center mx-auto mb-2">A</div>
-                <p className="text-sm text-gray-500">頂点 A を配置しました。次の頂点 B をクリックしてください。</p>
+                <p className="text-sm text-gray-500">{t('scaffoldExtra', 'vertexAPlacedClickB') || 'Vertex A is placed. Click the next vertex B.'}</p>
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -874,7 +883,7 @@ export function DrawingUpload({
                             autoFocus
                             className="w-20 px-2 py-1 border border-blue-300 rounded text-sm text-right focus:ring-1 focus:ring-blue-500 outline-none"
                           />
-                          <span className="text-xs text-gray-500">mm</span>
+                          <span className="text-xs text-gray-500">{mmUnit}</span>
                           <button onClick={commitEdit} className="p-0.5 text-green-600 hover:bg-green-50 rounded">
                             <Check className="h-3.5 w-3.5" />
                           </button>
@@ -885,15 +894,15 @@ export function DrawingUpload({
                             len > 0 ? 'text-gray-800 hover:text-blue-600' : 'text-amber-600 italic'
                           }`}
                           onClick={() => startEdit(i)}
-                          title="クリックして寸法を入力"
+                          title={t('scaffoldExtra', 'clickToInputDimension') || 'Click to input dimension'}
                         >
-                          {len > 0 ? `${fmtMm(len)} (${Math.round(len)}mm)` : '— クリックして入力 —'}
+                          {len > 0 ? `${fmtMm(len)} (${Math.round(len)}${mmUnit})` : `- ${t('scaffoldExtra', 'clickToInput') || 'click to input'} -`}
                         </span>
                       )}
 
                       {verts.length > 3 && !isEd && !tracing && (
                         <button onClick={() => deleteVertex(i)}
-                          className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0" title="頂点を削除">
+                          className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0" title={t('scaffoldExtra', 'deleteVertex') || 'Delete vertex'}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -903,7 +912,7 @@ export function DrawingUpload({
                 {/* Show vertex count summary during tracing */}
                 {tracing && verts.length >= 2 && (
                   <div className="text-xs text-gray-500 text-center pt-2 border-t border-gray-100 mt-2">
-                    {verts.length} 頂点 · {wallMm.filter(w => w > 0).length}/{verts.length - 1} 辺に寸法設定済み
+                    {verts.length} {t('scaffoldExtra', 'vertices') || 'vertices'} - {wallMm.filter(w => w > 0).length}/{verts.length - 1} {t('scaffoldExtra', 'edgesDimensioned') || 'edges dimensioned'}
                   </div>
                 )}
               </div>
@@ -915,17 +924,17 @@ export function DrawingUpload({
             {tracing ? (
               <button onClick={closeTrace} disabled={verts.length < 3}
                 className="flex-1 px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                <Check className="h-4 w-4" /> 形状を確定 ({verts.length}点)
+                <Check className="h-4 w-4" /> {(t('scaffoldExtra', 'confirmShape') || 'Confirm shape')} ({verts.length})
               </button>
             ) : verts.length >= 3 ? (
               <button onClick={() => { setTracing(true); setShape(prev => ({ ...prev, verts: [], wallMm: [] })); }}
                 className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
-                <Pencil className="h-4 w-4" /> 頂点を再指定
+                <Pencil className="h-4 w-4" /> {t('scaffoldExtra', 'reselectVertices') || 'Reselect vertices'}
               </button>
             ) : null}
             <button onClick={reset}
               className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
-              <RotateCcw className="h-4 w-4" /> リセット
+              <RotateCcw className="h-4 w-4" /> {t('viewer', 'clear') || 'Reset'}
             </button>
           </div>
         </div>
