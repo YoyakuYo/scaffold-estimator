@@ -69,6 +69,15 @@ function midPt(a: Vertex, b: Vertex): Vertex {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
+/** Replace {{key}} placeholders in i18n template strings */
+function fillI18nTemplate(template: string, vars: Record<string, string | number>): string {
+  let out = template;
+  for (const [key, val] of Object.entries(vars)) {
+    out = out.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(val));
+  }
+  return out;
+}
+
 function edgeNorm(a: Vertex, b: Vertex, off: number): Vertex {
   const len = d(a, b);
   if (len < 1e-6) return { x: 0, y: -off };
@@ -131,7 +140,7 @@ export function DrawingUpload({
   onBuildingHeightChange,
 }: DrawingUploadProps) {
   const { t } = useI18n();
-  const mmUnit = t('result', 'mm') || 'mm';
+  const mmUnit = t('common', 'mm');
   const [phase, setPhase] = useState<Phase>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<FileKind>('image');
@@ -292,7 +301,7 @@ export function DrawingUpload({
       if (poly && poly.points.length >= 3) {
         const pts = poly.points.map(p => ({ x: p.x, y: -p.y }));
         setShape({ verts: pts, wallMm: recalcLengths(pts), coordsAreMm: true });
-        setStatus(`${pts.length}${t('viewer', 'edgesLabel') || 'edges'} ${t('scaffoldExtra', 'shapeDetected') || 'building shape detected'}`);
+        setStatus(fillI18nTemplate(t('scaffoldExtra', 'shapeDetectedTpl'), { count: pts.length }));
       } else {
         setShape({ verts: [], wallMm: [], coordsAreMm: true });
         setStatus(t('scaffoldExtra', 'shapeAutoDetectFailedClickVertices') || 'Could not auto-detect building shape. Click to place vertices.');
@@ -341,7 +350,7 @@ export function DrawingUpload({
               : pts.length === 8
                 ? (t('scaffoldExtra', 'shapeZUTType') || 'Z/U/T shape')
                 : `${pts.length}${t('scaffoldExtra', 'shapePolygonSuffix') || '-gon'}`;
-          setStatus(`${shapeType} (${pts.length}${t('viewer', 'edgesLabel') || 'edges'}) ${t('scaffoldExtra', 'shapeDetectedEditable') || 'building shape detected. Click to edit.'}`);
+          setStatus(fillI18nTemplate(t('scaffoldExtra', 'shapeDetectedEditableTpl'), { shape: shapeType, count: pts.length }));
           setPhase('editor');
           return;
         }
@@ -364,7 +373,7 @@ export function DrawingUpload({
           const pts = ws.map((s: CadWallSegment) => ({ x: s.start.x, y: -s.start.y }));
           setShape({ verts: pts, wallMm: ws.map((s: CadWallSegment) => Math.round(s.length)), coordsAreMm: true });
           if (res.cadData.buildingHeight) onBuildingHeightChange(res.cadData.buildingHeight);
-          setStatus(`${ws.length}${t('viewer', 'edgesLabel') || 'edges'} ${t('scaffoldExtra', 'shapeDetectedCad') || 'building shape detected (CAD)'}`);
+          setStatus(fillI18nTemplate(t('scaffoldExtra', 'shapeDetectedCadTpl'), { count: ws.length }));
           setPhase('editor');
           return;
         }
@@ -500,7 +509,7 @@ export function DrawingUpload({
     if (shape.coordsAreMm) {
       setShape(prev => ({ ...prev, wallMm: recalcLengths(prev.verts) }));
     }
-    setStatus(`${shape.verts.length}${t('viewer', 'edgesLabel') || 'edges'} ${t('scaffoldExtra', 'shapeConfirmed') || 'building shape confirmed'}`);
+    setStatus(fillI18nTemplate(t('scaffoldExtra', 'shapeConfirmedTpl'), { count: shape.verts.length }));
   }, [shape.verts.length, shape.coordsAreMm, t]);
 
   // ── Wall edit ──
