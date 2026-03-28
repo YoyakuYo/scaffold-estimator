@@ -256,16 +256,16 @@ export const CALC_RULES = {
 // ─── Corner alignment constants (足場コーナー詳細図) ─────────────
 /** Last two posts extend this far past the building corner (mm). */
 export const CORNER_OVERRUN_MM = 300;
-/** Final bay (mm) before the turn: meets the next wall’s inner posts; end stopper on outer run. */
+/** Legacy corner span (mm) when falling back to [600, …, 600] on very short walls. */
 export const CORNER_SPAN_MM = 600;
 /**
- * Bay before the final 600mm (mm): standard 900mm module so the run past the building corner is
- * 300mm overrun + 600mm working bay (900 + 600 = 1500mm terminal pair into the turn).
+ * Last span along the wall into the turn (mm): use **900** instead of 600 so the same terminal bay
+ * carries the **300mm** scaffold overrun past the building corner — i.e. 600 + 300 in one standard module.
  */
-export const CORNER_APPROACH_SPAN_MM = 900;
+export const CORNER_TERMINAL_SPAN_MM = 900;
 /**
  * First span along each wall after the corner (mm) — standard 1.8m bay; shares posts with the
- * previous wall’s terminal 600mm bay for continuous deck (足場コーナー詳細図).
+ * previous wall’s terminal bay for continuous deck (足場コーナー詳細図).
  */
 export const CORNER_START_SPAN_MM = 1800;
 
@@ -295,21 +295,21 @@ export function fitSpansToWallLength(
  * Span fitting for walls that meet at corners (closed polygon).
  * Per 足場コーナー詳細図 (continuous walk path):
  * - Total scaffold run along the wall = wallLength + CORNER_OVERRUN_MM (300mm).
- * - First span along the wall (after turning from the previous side) = CORNER_START_SPAN_MM (1800mm).
- * - Terminal pair into the turn: CORNER_APPROACH_SPAN_MM (900mm) + CORNER_SPAN_MM (600mm) — covers
- *   300mm past the corner plus 600mm bay; next wall’s first 1800mm reuses those posts.
- * Middle = wallLength + 300 - 1800 - 900 - 600 = wallLength - 3000 (filled with standard spans).
+ * - First span along the wall = CORNER_START_SPAN_MM (1800mm).
+ * - **Last span = CORNER_TERMINAL_SPAN_MM (900mm)**: same role as a 600mm bay into the turn, but +300mm
+ *   so the last two posts sit **300mm past the corner** (not a second 600mm span after 900).
+ * Middle = wallLength + 300 - 1800 - 900 = wallLength - 2400 (filled with standard spans).
  * If the wall is too short for that layout, falls back to the legacy [600, …middle…, 600] pattern.
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
 ): number[] {
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
-    return [CORNER_START_SPAN_MM, CORNER_APPROACH_SPAN_MM, CORNER_SPAN_MM];
+    return [CORNER_START_SPAN_MM, CORNER_TERMINAL_SPAN_MM];
   }
   const totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
-  const terminalPairMm = CORNER_APPROACH_SPAN_MM + CORNER_SPAN_MM;
-  const middleMmNew = totalRunMm - CORNER_START_SPAN_MM - terminalPairMm; // wallLength - 3000
+  const middleMmNew =
+    totalRunMm - CORNER_START_SPAN_MM - CORNER_TERMINAL_SPAN_MM; // wallLength - 2400
 
   if (middleMmNew < 0) {
     const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * CORNER_SPAN_MM;
@@ -318,15 +318,10 @@ export function fitSpansToWallLengthWithCorner(
     return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
   }
   if (middleMmNew === 0) {
-    return [CORNER_START_SPAN_MM, CORNER_APPROACH_SPAN_MM, CORNER_SPAN_MM];
+    return [CORNER_START_SPAN_MM, CORNER_TERMINAL_SPAN_MM];
   }
   const middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, SPAN_SIZES, 0);
-  return [
-    CORNER_START_SPAN_MM,
-    ...middleSpans,
-    CORNER_APPROACH_SPAN_MM,
-    CORNER_SPAN_MM,
-  ];
+  return [CORNER_START_SPAN_MM, ...middleSpans, CORNER_TERMINAL_SPAN_MM];
 }
 
 function fitSpansToWallLengthWithOverrun(
