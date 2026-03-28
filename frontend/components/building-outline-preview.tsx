@@ -36,9 +36,13 @@ const WALL_LABELS: Record<string, { en: string; jp: string; short: string }> = {
 function getLabel(side: string) {
   if (WALL_LABELS[side]) return WALL_LABELS[side];
   if (side.startsWith('edge-')) {
-    const n = parseInt(side.replace('edge-', ''), 10) + 1;
-    return { en: `Edge ${n}`, jp: `辺${n}`, short: `E${n}` };
+    const idx = parseInt(side.replace('edge-', ''), 10);
+    const axis = idx % 2 === 0 ? 'X' : 'Y';
+    const gridNum = Math.floor(idx / 2) + 1;
+    const label = `${axis}${gridNum}`;
+    return { en: label, jp: label, short: label };
   }
+  if (/^[XY]\d+/.test(side)) return { en: side, jp: side, short: side };
   return { en: side, jp: side, short: side };
 }
 
@@ -57,7 +61,7 @@ export function BuildingOutlinePreview({
   scaffoldWidthMm,
   onWallUpdate,
 }: BuildingOutlinePreviewProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [editingCell, setEditingCell] = useState<string | null>(null);
 
   const enabledWalls = walls.filter((w) => w.enabled);
@@ -97,9 +101,9 @@ export function BuildingOutlinePreview({
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                <th className="text-left py-2 pl-1 font-medium w-[72px]">Wall</th>
-                <th className="text-right py-2 pr-1 font-medium">Length (m)</th>
-                <th className="text-right py-2 pr-1 font-medium">Height (m)</th>
+                <th className="text-left py-2 pl-1 font-medium w-[72px]">{t('viewer', 'wallLabel')}</th>
+                <th className="text-right py-2 pr-1 font-medium">{t('viewer', 'lengthM')}</th>
+                <th className="text-right py-2 pr-1 font-medium">{t('viewer', 'heightM')}</th>
               </tr>
             </thead>
             <tbody>
@@ -132,7 +136,7 @@ export function BuildingOutlinePreview({
                           {label.short}
                         </span>
                         <span className="text-xs text-slate-600 font-medium truncate">
-                          {label.jp}
+                          {locale === 'ja' ? label.jp : label.en}
                         </span>
                       </div>
                     </td>
@@ -167,7 +171,7 @@ export function BuildingOutlinePreview({
                               ? 'text-slate-800 font-medium hover:bg-blue-50 border border-transparent hover:border-blue-200'
                               : 'text-slate-300 hover:bg-slate-50 border border-dashed border-slate-200 hover:border-slate-300'
                           }`}
-                          title="Click to edit"
+                          title={t('viewer', 'clickToEdit')}
                         >
                           {lenM > 0 ? lenM.toFixed(1) : '—'}
                         </button>
@@ -204,7 +208,7 @@ export function BuildingOutlinePreview({
                               ? 'text-slate-800 font-medium hover:bg-blue-50 border border-transparent hover:border-blue-200'
                               : 'text-slate-300 hover:bg-slate-50 border border-dashed border-slate-200 hover:border-slate-300'
                           }`}
-                          title="Click to edit"
+                          title={t('viewer', 'clickToEdit')}
                         >
                           {hgtM > 0 ? hgtM.toFixed(1) : '—'}
                         </button>
@@ -223,23 +227,23 @@ export function BuildingOutlinePreview({
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
               {totalPerimeter > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">周長合計</span>
+                  <span className="text-slate-500">{t('viewer', 'perimeterTotal')}</span>
                   <span className="text-slate-800 font-semibold">{fmtMm(totalPerimeter)}</span>
                 </div>
               )}
               {maxHeight > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">建物高さ</span>
+                  <span className="text-slate-500">{t('result', 'buildingHeight')}</span>
                   <span className="text-slate-800 font-semibold">{fmtMm(maxHeight)}</span>
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-slate-500">足場幅</span>
+                  <span className="text-slate-500">{t('result', 'scaffoldWidth')}</span>
                 <span className="text-slate-800 font-semibold">{scaffoldWidthMm}mm</span>
               </div>
               {enabledWalls.length > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">有効壁数</span>
+                  <span className="text-slate-500">{t('viewer', 'effectiveWalls')}</span>
                   <span className="text-slate-800 font-semibold">
                     {enabledWalls.length} / {walls.length}
                   </span>

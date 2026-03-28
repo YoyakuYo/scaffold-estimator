@@ -57,8 +57,8 @@ export function MaterialBreakdownTable({
   }, [buildingHeightMm, levelHeightMm, totalLevels]);
 
   const floorLabels = useMemo(
-    () => Array.from({ length: floorCount }, (_, i) => `F${i + 1}`),
-    [floorCount],
+    () => Array.from({ length: floorCount }, (_, i) => `${t('result', 'floorPrefix')}${i + 1}`),
+    [floorCount, t],
   );
 
   const translateMaterialName = (comp: CalculatedComponent) => {
@@ -235,10 +235,10 @@ export function MaterialBreakdownTable({
                 {t('result', 'colTotal')}
               </th>
               <th className="text-right py-3 px-3 font-semibold text-gray-700 min-w-[100px]">
-                {t('quotationDetail', 'colUnitPrice')} (¥)
+                {t('result', 'unitPriceYen')}
               </th>
               <th className="text-right py-3 px-3 font-semibold text-gray-700 min-w-[110px]">
-                {t('quotationDetail', 'colLineTotal')} (¥)
+                {t('result', 'lineTotalYen')}
               </th>
             </tr>
           </thead>

@@ -63,6 +63,27 @@ function getLevelSummary(
   return { totalLevels, visibleLevels, summary };
 }
 
+function formatWallSide(side: string, sideJp?: string, locale?: string): string {
+  if (['north', 'south', 'east', 'west'].includes(side)) {
+    const cardinalMap: Record<string, Record<string, string>> = {
+      north: { ja: '北面', en: 'North', fr: 'Nord' },
+      south: { ja: '南面', en: 'South', fr: 'Sud' },
+      east:  { ja: '東面', en: 'East',  fr: 'Est' },
+      west:  { ja: '西面', en: 'West',  fr: 'Ouest' },
+    };
+    return cardinalMap[side]?.[locale ?? 'en'] ?? side;
+  }
+  if (side.startsWith('edge-')) {
+    const idx = parseInt(side.replace('edge-', ''), 10);
+    const axis = idx % 2 === 0 ? 'X' : 'Y';
+    const gridNum = Math.floor(idx / 2) + 1;
+    return `${axis}${gridNum}`;
+  }
+  if (/^[XY]\d+/.test(side)) return side;
+  if (sideJp && locale === 'ja') return sideJp;
+  return side;
+}
+
 export default function ScaffoldResultPageWrapper() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
@@ -76,7 +97,7 @@ function ScaffoldResultPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const configId = params.configId as string;
   const isAiBimFromUrl = searchParams.get('aiBim') === '1';
   const [showScanModal, setShowScanModal] = useState(false);
@@ -779,7 +800,7 @@ function QuotationTable({ result }: { result: any }) {
             return (
               <div key={`wall-${idx}-${wall.side}`} className="bg-white rounded-lg p-2 border border-gray-100">
                 <div className="font-semibold text-gray-700">
-                  {locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1))}
+                  {formatWallSide(wall.side, wall.sideJp, locale)}
                 </div>
                 {(wall as any).baseHeightMm > 0 && (
                   <div className="text-xs text-violet-600">
@@ -787,7 +808,7 @@ function QuotationTable({ result }: { result: any }) {
                   </div>
                 )}
                 <div className="text-gray-500">
-                  {t('result', 'wallLengthLabel')} {wall.wallLengthMm.toLocaleString()}mm | 高さ {scaffoldH.toLocaleString()}mm
+                  {t('result', 'wallLengthLabel')} {wall.wallLengthMm.toLocaleString()}mm | {t('result', 'wallHeight')} {scaffoldH.toLocaleString()}mm
                 </div>
                 <div className="text-gray-500">
                   {wall.totalSpans}{t('result', 'spansLabel')} | {wall.levelCalc.fullLevels}{t('result', 'levelsUnit')}
@@ -842,7 +863,7 @@ function QuotationTable({ result }: { result: any }) {
                 const tierLabel = baseH > 0 ? ` GL+${(baseH / 1000).toFixed(0)}m` : '';
                 return (
                   <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
-                    <div>{locale === 'ja' ? wall.sideJp : (wall.side.charAt(0).toUpperCase() + wall.side.slice(1))}</div>
+                    <div>{formatWallSide(wall.side, wall.sideJp, locale)}</div>
                     {tierLabel && <div className="text-[10px] font-normal opacity-80">{tierLabel}</div>}
                   </th>
                 );
@@ -852,7 +873,7 @@ function QuotationTable({ result }: { result: any }) {
                 info.wallIndices.length > 1 ? (
                   <th key={`grp-${grp}`} className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-500">
                     <div>{info.label}</div>
-                    <div className="text-[10px] font-normal opacity-80">小計</div>
+                    <div className="text-[10px] font-normal opacity-80">{t('result', 'subtotal')}</div>
                   </th>
                 ) : null
               ))}
@@ -935,9 +956,7 @@ function PerSideBreakdown({ result }: { result: any }) {
   return (
     <div className="space-y-6">
       {walls.map((wall, idx) => {
-        const wallLabel = (wall.side && ['north', 'south', 'east', 'west'].includes(String(wall.side).toLowerCase()))
-          ? t('sides', String(wall.side).toLowerCase() as 'north' | 'south' | 'east' | 'west')
-          : (wall.sideJp || wall.side);
+        const wallLabel = formatWallSide(wall.side, wall.sideJp, locale);
         const componentsByCategory: Record<string, CalculatedComponent[]> = {};
         for (const comp of wall.components) {
           const cat = locale === 'ja' ? (comp.category || '他') : (comp.categoryEn || comp.category || 'Other');
