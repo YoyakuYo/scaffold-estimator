@@ -252,7 +252,7 @@ export class ScaffoldCalculatorService {
     complexityMultiplier: number = 1.0,
     wallIndex: number = 0,
   ): WallCalculationResult {
-    // Step 1: Fit spans. Closed polygon: first 1800mm, last 900mm (600 bay + 300mm past corner); see fitSpansToWallLengthWithCorner.
+    // Step 1: Fit spans. Closed polygon: 1800 + middle + 600; total run wall+300mm (last posts past corner); see fitSpansToWallLengthWithCorner.
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
       ? fitSpansToWallLengthWithCorner(wall.wallLengthMm)

@@ -256,13 +256,11 @@ export const CALC_RULES = {
 // ─── Corner alignment constants (足場コーナー詳細図) ─────────────
 /** Last two posts extend this far past the building corner (mm). */
 export const CORNER_OVERRUN_MM = 300;
-/** Legacy corner span (mm) when falling back to [600, …, 600] on very short walls. */
-export const CORNER_SPAN_MM = 600;
 /**
- * Last span along the wall into the turn (mm): use **900** instead of 600 so the same terminal bay
- * carries the **300mm** scaffold overrun past the building corner — i.e. 600 + 300 in one standard module.
+ * Terminal span into the turn (mm) — standard 600 bay. With total run = wallLength + 300mm, the
+ * **last two posts** sit **300mm past the building corner**; the bay may start before the corner.
  */
-export const CORNER_TERMINAL_SPAN_MM = 900;
+export const CORNER_SPAN_MM = 600;
 /**
  * First span along each wall after the corner (mm) — standard 1.8m bay; shares posts with the
  * previous wall’s terminal bay for continuous deck (足場コーナー詳細図).
@@ -295,21 +293,21 @@ export function fitSpansToWallLength(
  * Span fitting for walls that meet at corners (closed polygon).
  * Per 足場コーナー詳細図 (continuous walk path):
  * - Total scaffold run along the wall = wallLength + CORNER_OVERRUN_MM (300mm).
- * - First span along the wall = CORNER_START_SPAN_MM (1800mm).
- * - **Last span = CORNER_TERMINAL_SPAN_MM (900mm)**: same role as a 600mm bay into the turn, but +300mm
- *   so the last two posts sit **300mm past the corner** (not a second 600mm span after 900).
- * Middle = wallLength + 300 - 1800 - 900 = wallLength - 2400 (filled with standard spans).
- * If the wall is too short for that layout, falls back to the legacy [600, …middle…, 600] pattern.
+ * - First span = CORNER_START_SPAN_MM (1800mm).
+ * - Last span = CORNER_SPAN_MM (600mm) — normal module; the +300mm is only in **total run**, so the
+ *   last two posts end **300mm past the building corner** (that bay may start before the corner).
+ * Middle = wallLength + 300 - 1800 - 600 = wallLength - 2100 (filled with standard spans).
+ * If the wall is too short for that layout, falls back to [600, …middle…, 600].
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
 ): number[] {
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
-    return [CORNER_START_SPAN_MM, CORNER_TERMINAL_SPAN_MM];
+    return [CORNER_START_SPAN_MM, CORNER_SPAN_MM];
   }
   const totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
   const middleMmNew =
-    totalRunMm - CORNER_START_SPAN_MM - CORNER_TERMINAL_SPAN_MM; // wallLength - 2400
+    totalRunMm - CORNER_START_SPAN_MM - CORNER_SPAN_MM; // wallLength - 2100
 
   if (middleMmNew < 0) {
     const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * CORNER_SPAN_MM;
@@ -318,10 +316,10 @@ export function fitSpansToWallLengthWithCorner(
     return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
   }
   if (middleMmNew === 0) {
-    return [CORNER_START_SPAN_MM, CORNER_TERMINAL_SPAN_MM];
+    return [CORNER_START_SPAN_MM, CORNER_SPAN_MM];
   }
   const middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, SPAN_SIZES, 0);
-  return [CORNER_START_SPAN_MM, ...middleSpans, CORNER_TERMINAL_SPAN_MM];
+  return [CORNER_START_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
 }
 
 function fitSpansToWallLengthWithOverrun(

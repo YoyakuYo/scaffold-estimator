@@ -15,10 +15,8 @@ export const AI_BIM_RULES = {
   MIDDLE_RAIL_HEIGHT_MM: 450,
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
-  /** Legacy / short-wall corner span (kusabi). */
+  /** Terminal span into the turn (kusabi); total run wall+300mm places last posts past the corner. */
   CORNER_SPAN_MM: 600,
-  /** Last span into the turn (kusabi): 600 + 300mm past corner in one 900mm bay. */
-  CORNER_TERMINAL_SPAN_MM: 900,
   /** First span along each wall after the turn (kusabi). */
   CORNER_START_SPAN_MM: 1800,
   MIN_WALL_LENGTH_MM: 600,
@@ -441,12 +439,12 @@ export function countCornerTypes(
  * Used to teach AI extraction about corner handling:
  *
  * 1. At every polygon corner where two walls meet:
- *    - Last span into the turn: **900mm** (kusabi) / **914mm** (wakugumi) — same as 600/610 working bay plus **300mm** past the corner in that one module (not 900 + 600).
- *    - First span on the next wall: 1800mm / 1829mm; reuses posts at the end of that terminal bay.
- *    - Span layout: [1800, …middle…, 900] / [1829, …middle…, 914]; short walls → [600…600] / [610…610].
+ *    - Total run = wallLength + 300mm so the **last two posts** sit **300mm past** the building corner.
+ *    - Last span is a **normal** 600mm (kusabi) / 610mm (wakugumi) bay — not lengthened to 900; the +300mm is only in total length.
+ *    - First span on the next wall: 1800mm / 1829mm; reuses posts at the terminal bay.
+ *    - Layout: [1800, …middle…, 600] / [1829, …middle…, 610]; short walls → [600…600] / [610…610].
  *
- * 2. Total scaffold run per wall = wallLength + CORNER_OVERRUN_MM (300mm)
- *    middle (kusabi) = wallLength - 1800 - 900 + 300 = wallLength - 2400mm
+ * 2. Middle (kusabi) = wallLength - 1800 - 600 + 300 = wallLength - 2100mm
  *
  * 3. Corner walkable area:
  *    - L-shaped (~90°) corners: yokoji pipes + L-shaped deck + habaki
@@ -460,10 +458,8 @@ export function countCornerTypes(
 export const CORNER_RULES = {
   overrunMm: AI_BIM_RULES.CORNER_OVERRUN_MM,
   kusabiCornerStartSpanMm: AI_BIM_RULES.CORNER_START_SPAN_MM,
-  kusabiTerminalIntoTurnMm: AI_BIM_RULES.CORNER_TERMINAL_SPAN_MM,
   kusabiCornerSpanMm: AI_BIM_RULES.CORNER_SPAN_MM,
   wakugumiCornerStartSpanMm: 1829,
-  wakugumiTerminalIntoTurnMm: 914,
   wakugumiCornerSpanMm: 610,
   sharedPostAtVertex: true,
   lShapedThresholdDeg: 70,

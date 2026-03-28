@@ -764,7 +764,7 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Closed-polygon spans: [1800/1829, …middle…, 600/610]; first bay is not a duplicate of the prior wall's terminal 600.
+        // Closed polygon: [1800/1829, …middle…, 600/610]; sum = wallLength+300mm so last posts sit past the corner (last bay is normal 600/610).
         const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
