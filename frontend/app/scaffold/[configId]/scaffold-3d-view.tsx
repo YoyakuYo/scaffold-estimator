@@ -778,9 +778,12 @@ export default function Scaffold3DView({
         if (hasCornerStart) {
           for (let j = 0; j < postX.length; j++) postX[j] -= CORNER_OVERRUN_M;
         }
-        // Skip rendering posts at postX[0] — the corner group renders the shared corner post.
+        // Corner start: older builds skipped postX[0] and relied on cornerGroup only; that left
+        // the outer (or inner) standard missing when row-agnostic dedup matched the wrong row.
+        // We render postX[0] on both faces so the first bay after a turn has full steel; cornerGroup
+        // row-aware dedup avoids duplicate cylinders when the previous wall already placed steel.
         const reuseStartFromPrevCorner = hasCornerStart;
-        const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
+        const startPostIdx = 0;
         const startSpanIdx = 0;
         const totalLen = postX.length > 1
           ? (postX[postX.length - 1] - postX[0])
@@ -2205,8 +2208,10 @@ export default function Scaffold3DView({
         return { x: p.x, z: p.z };
       };
 
-      // All wall posts in world XZ — skip duplicate corner-group posts that sit on the same steel.
-      const wallPostWorldXZ: Array<{ x: number; z: number }> = [];
+      // Rendered wall posts in world XZ, tagged by row (outer z=0 vs inner z=width).
+      // Corner dedup must NOT treat an outer as matching an inner 45mm away — that wrongly
+      // skipped corner standards and left terminal 600 bays without an outer post.
+      const wallPostWorldXZ: Array<{ x: number; z: number; isOuter: boolean }> = [];
       for (let wi = 0; wi < walls.length; wi++) {
         const info = wallRenderInfos[wi];
         if (!info?.root || !Array.isArray(info.postX)) continue;
@@ -2214,12 +2219,13 @@ export default function Scaffold3DView({
         for (let pi = si; pi < info.postX.length; pi++) {
           for (const pz of [0, info.widthM]) {
             const w = toWorldXZ(info.root, info.postX[pi], pz);
-            wallPostWorldXZ.push({ x: w.x, z: w.z });
+            wallPostWorldXZ.push({ x: w.x, z: w.z, isOuter: pz === 0 });
           }
         }
       }
-      const nearExistingWallPost = (x: number, z: number, r = 0.045): boolean => {
+      const nearExistingWallPost = (x: number, z: number, isOuter: boolean, r = 0.04): boolean => {
         for (const p of wallPostWorldXZ) {
+          if (p.isOuter !== isOuter) continue;
           if (Math.hypot(p.x - x, p.z - z) < r) return true;
         }
         return false;
@@ -2342,11 +2348,16 @@ export default function Scaffold3DView({
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
-            const cornerPostPts = [...allCornerPts];
+            const cornerPostsMeta = [
+              { pt: aOuterEnd, isOuter: true },
+              { pt: aInnerEnd, isOuter: false },
+              { pt: bOuterStart, isOuter: true },
+              { pt: bInnerStart, isOuter: false },
+            ];
             const rendered = new Set<string>();
-            for (const pt of cornerPostPts) {
-              if (nearExistingWallPost(pt.x, pt.z)) continue;
-              const key = `${Math.round(pt.x * 1000)},${Math.round(pt.z * 1000)}`;
+            for (const { pt, isOuter } of cornerPostsMeta) {
+              if (nearExistingWallPost(pt.x, pt.z, isOuter)) continue;
+              const key = `${isOuter ? 'o' : 'i'}:${Math.round(pt.x * 1000)},${Math.round(pt.z * 1000)}`;
               if (rendered.has(key)) continue;
               rendered.add(key);
               addBasePlate(THREE, cornerGroup, pt.x, GROUND_Y, pt.z, basePlateMat);
