@@ -898,10 +898,9 @@ export default function Scaffold3DView({
             const spanM = spans[i] / 1000;
             const cornerStartTouch = reuseStartFromPrevCorner && i === 0;
             const cornerEndTouch = !!flushDeckAtCornerEnd && i === spans.length - 1;
-            // Standard gap along span; at polygon corners inset planks so wall decks do not
-            // Z-fight with the separate corner closure mesh (L-shaped deck / pattanko).
-            const cornerDeckInsetM = 0.12;
-            const baseGap = 0.04;
+            // Corner-adjacent spans: nearly flush planks so the L-deck reads continuous (minimal gap).
+            const cornerDeckInsetM = 0.006;
+            const baseGap = 0.03;
             let spanDeckLen: number;
             let deckMidX: number;
             if (cornerStartTouch && cornerEndTouch) {
@@ -2206,6 +2205,26 @@ export default function Scaffold3DView({
         return { x: p.x, z: p.z };
       };
 
+      // All wall posts in world XZ — skip duplicate corner-group posts that sit on the same steel.
+      const wallPostWorldXZ: Array<{ x: number; z: number }> = [];
+      for (let wi = 0; wi < walls.length; wi++) {
+        const info = wallRenderInfos[wi];
+        if (!info?.root || !Array.isArray(info.postX)) continue;
+        const si = info.startPostIdx ?? 0;
+        for (let pi = si; pi < info.postX.length; pi++) {
+          for (const pz of [0, info.widthM]) {
+            const w = toWorldXZ(info.root, info.postX[pi], pz);
+            wallPostWorldXZ.push({ x: w.x, z: w.z });
+          }
+        }
+      }
+      const nearExistingWallPost = (x: number, z: number, r = 0.045): boolean => {
+        for (const p of wallPostWorldXZ) {
+          if (Math.hypot(p.x - x, p.z - z) < r) return true;
+        }
+        return false;
+      };
+
       for (let tgi = 0; tgi < tierGroups.length; tgi++) {
         const tg = tierGroups[tgi];
         const tpd = tierPolyData[tgi];
@@ -2288,8 +2307,6 @@ export default function Scaffold3DView({
 
           // All 4 corner endpoints define the walkable corner area
           const allCornerPts = [aOuterEnd, aInnerEnd, bOuterStart, bInnerStart];
-          const cornerCentroidX = allCornerPts.reduce((s, p) => s + p.x, 0) / 4;
-          const cornerCentroidZ = allCornerPts.reduce((s, p) => s + p.z, 0) / 4;
 
           for (let lv = 1; lv <= maxLvThisCorner; lv++) {
             const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
@@ -2321,17 +2338,15 @@ export default function Scaffold3DView({
             addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
           }
 
-          // Corner vertical posts at all 4 endpoints + centroid, with jack bases
+          // Corner vertical posts only where the wall meshes did not already place steel (no centroid post).
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
-            const cornerPostPts = [
-              { x: cornerCentroidX, z: cornerCentroidZ },
-              ...allCornerPts,
-            ];
+            const cornerPostPts = [...allCornerPts];
             const rendered = new Set<string>();
             for (const pt of cornerPostPts) {
-              const key = `${Math.round(pt.x * 100)},${Math.round(pt.z * 100)}`;
+              if (nearExistingWallPost(pt.x, pt.z)) continue;
+              const key = `${Math.round(pt.x * 1000)},${Math.round(pt.z * 1000)}`;
               if (rendered.has(key)) continue;
               rendered.add(key);
               addBasePlate(THREE, cornerGroup, pt.x, GROUND_Y, pt.z, basePlateMat);

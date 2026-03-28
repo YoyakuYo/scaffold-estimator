@@ -162,9 +162,11 @@ export const WAKUGUMI_CALC_RULES = {
 // ─── Corner alignment (足場コーナー詳細図) ─────────────────────
 /** Last two posts extend this far past the building corner (mm). */
 export const WAKUGUMI_CORNER_OVERRUN_MM = 300;
-/** Terminal span at the turn (mm) — 2尺 corner bay before the next wall. */
+/** Terminal bay (mm) before the turn — 2尺. */
 export const WAKUGUMI_CORNER_SPAN_MM = 610;
-/** First span along each wall after the corner (mm) — 6尺 standard, mirrors kusabi 1800mm rule. */
+/** Bay before terminal 610mm (mm) — 3尺 ≈ 900mm region into the turn, mirrors kusabi 900+600. */
+export const WAKUGUMI_CORNER_APPROACH_SPAN_MM = 914;
+/** First span along each wall after the corner (mm) — 6尺 standard. */
 export const WAKUGUMI_CORNER_START_SPAN_MM = 1829;
 
 // ─── Span Fitting Algorithm ─────────────────────────────────
@@ -189,19 +191,24 @@ export function fitSpansToWallLengthWakugumi(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * Same sequencing as kusabi: first span along wall = WAKUGUMI_CORNER_START_SPAN_MM (1829mm),
- * last span = WAKUGUMI_CORNER_SPAN_MM (610mm), run = wallLength + 300mm; middle filled with standard spans.
+ * Same sequencing as kusabi: 1829 → middle → 914 → 610 (run = wallLength + 300mm).
  * Short walls fall back to [610, …middle…, 610].
  */
 export function fitSpansToWallLengthWithCornerWakugumi(
   wallLengthMm: number,
 ): number[] {
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
-    return [WAKUGUMI_CORNER_START_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+    return [
+      WAKUGUMI_CORNER_START_SPAN_MM,
+      WAKUGUMI_CORNER_APPROACH_SPAN_MM,
+      WAKUGUMI_CORNER_SPAN_MM,
+    ];
   }
   const totalRunMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM;
+  const terminalPairMm =
+    WAKUGUMI_CORNER_APPROACH_SPAN_MM + WAKUGUMI_CORNER_SPAN_MM;
   const middleMmNew =
-    totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - WAKUGUMI_CORNER_SPAN_MM;
+    totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - terminalPairMm;
 
   if (middleMmNew < 0) {
     const middleLegacy =
@@ -217,14 +224,23 @@ export function fitSpansToWallLengthWithCornerWakugumi(
     return [WAKUGUMI_CORNER_SPAN_MM, ...middleSpans, WAKUGUMI_CORNER_SPAN_MM];
   }
   if (middleMmNew === 0) {
-    return [WAKUGUMI_CORNER_START_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+    return [
+      WAKUGUMI_CORNER_START_SPAN_MM,
+      WAKUGUMI_CORNER_APPROACH_SPAN_MM,
+      WAKUGUMI_CORNER_SPAN_MM,
+    ];
   }
   const middleSpans = fitSpansToWallLengthWithOverrun(
     middleMmNew,
     WAKUGUMI_SPAN_SIZES,
     0,
   );
-  return [WAKUGUMI_CORNER_START_SPAN_MM, ...middleSpans, WAKUGUMI_CORNER_SPAN_MM];
+  return [
+    WAKUGUMI_CORNER_START_SPAN_MM,
+    ...middleSpans,
+    WAKUGUMI_CORNER_APPROACH_SPAN_MM,
+    WAKUGUMI_CORNER_SPAN_MM,
+  ];
 }
 
 function fitSpansToWallLengthWithOverrun(

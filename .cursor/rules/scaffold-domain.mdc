@@ -126,9 +126,9 @@ Adjacent spans share the post/frame at the boundary:
 ### Corner Rule (足場コーナー詳細図) — BOTH Kusabi AND Wakugumi
 At every polygon corner where two walls meet:
 1. **300mm overrun**: Scaffold run along each wall = **wallLength + 300mm**
-2. **Span layout (closed polygon)**: `[first_span_along_wall, ...middle_spans, terminal_corner_span]`
-   - Kusabi: first = **1800mm**, terminal into corner = **600mm**; middle = wallLength − 2100mm (standard spans)
-   - Wakugumi: first = **1829mm** (6尺), terminal = **610mm**; middle = wallLength − 2139mm
+2. **Span layout (closed polygon)**: `[first_span_along_wall, ...middle_spans, 900, 600]` (kusabi) or `[1829, …, 914, 610]` (wakugumi)
+   - Kusabi: first = **1800mm**, terminal pair **900 + 600mm** (300mm past corner + 600mm bay); middle = wallLength − 3000mm
+   - Wakugumi: first = **1829mm**, terminal **914 + 610mm**; middle = wallLength − 3053mm
    - Very short walls fall back to legacy `[600,…,600]` / `[610,…,610]`
 3. **Post sharing**: Inner posts of the terminal 600/610 bay are reused by the next wall’s first span (continuous deck)
 4. **Backend**: `fitSpansToWallLengthWithCorner()` / `fitSpansToWallLengthWithCornerWakugumi()`
