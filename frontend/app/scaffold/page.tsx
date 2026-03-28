@@ -42,9 +42,27 @@ import {
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
 
+function ScaffoldCadCanvasLoading() {
+  const { t } = useI18n();
+  return (
+    <div className="h-96 flex items-center justify-center text-gray-400 bg-gray-900 rounded-xl">
+      {t('scaffold', 'cadCanvasLoading')}
+    </div>
+  );
+}
+
+function ScaffoldDrawingUploadLoading() {
+  const { t } = useI18n();
+  return (
+    <div className="h-96 flex items-center justify-center text-gray-400 bg-white rounded-xl border border-gray-200">
+      {t('scaffold', 'drawingUploadLoading')}
+    </div>
+  );
+}
+
 const CadDrawingCanvas = dynamic(
   () => import('@/components/cad-drawing-canvas').then(m => ({ default: m.CadDrawingCanvas })),
-  { ssr: false, loading: () => <div className="h-96 flex items-center justify-center text-gray-400 bg-gray-900 rounded-xl">CADキャンバスを読み込み中…</div> },
+  { ssr: false, loading: () => <ScaffoldCadCanvasLoading /> },
 );
 
 // Dynamic import for DrawingUpload (uses browser APIs)
@@ -55,11 +73,7 @@ const DrawingUpload = dynamic(
     })),
   {
     ssr: false,
-    loading: () => (
-      <div className="h-96 flex items-center justify-center text-gray-400 bg-white rounded-xl border border-gray-200">
-        図面アップロードを読み込み中…
-      </div>
-    ),
+    loading: () => <ScaffoldDrawingUploadLoading />,
   },
 );
 
@@ -786,9 +800,12 @@ function ScaffoldPageContent() {
       return t('scaffold', side as 'north' | 'south' | 'east' | 'west');
     }
     if (side.startsWith('edge-')) {
-      const edgeNum = parseInt(side.replace('edge-', ''), 10) + 1;
-      return t('result', 'edgeLabelPrefix') + edgeNum;
+      const edgeNum = parseInt(side.replace('edge-', ''), 10);
+      const axis = edgeNum % 2 === 0 ? 'X' : 'Y';
+      const gridIdx = Math.floor(edgeNum / 2) + 1;
+      return `${axis}${gridIdx}`;
     }
+    if (/^[XY]\d+/.test(side)) return side;
     return side;
   };
 
@@ -1033,11 +1050,11 @@ function ScaffoldPageContent() {
   // ─── Calculate handler ──────────────────────────────────
   const handleCalculate = () => {
     if (!perimeterModel.isClosed && !prefilled) {
-      alert('Please close the polygon first.\nポリゴンを閉じてください。');
+      alert(t('scaffold', 'closePolygonFirst'));
       return;
     }
     if (!buildingHeightMm || buildingHeightMm <= 0) {
-      alert('Please enter building height.\n建物の高さを入力してください。');
+      alert(t('scaffold', 'enterBuildingHeightAlert'));
       return;
     }
 
@@ -1057,7 +1074,7 @@ function ScaffoldPageContent() {
     }));
 
     if (enabledWalls.length === 0) {
-      alert('No enabled wall segments.\n有効な壁セグメントがありません。');
+      alert(t('scaffold', 'noEnabledWallSegments'));
       return;
     }
 
@@ -1065,7 +1082,7 @@ function ScaffoldPageContent() {
     const tooShort = enabledWalls.filter(w => w.wallLengthMm < 600);
     if (tooShort.length > 0) {
       alert(
-        `Some walls are too short (min 600mm):\n${tooShort.map(w => `${w.side}: ${w.wallLengthMm}mm`).join('\n')}\n\nPlease enter real wall dimensions in mm.\n壁の長さは最低600mm必要です。`,
+        `${t('scaffold', 'wallsTooShortIntro')}\n${tooShort.map(w => `${w.side}: ${w.wallLengthMm}mm`).join('\n')}\n\n${t('scaffold', 'wallsTooShortHint')}`,
       );
       return;
     }
@@ -1074,7 +1091,7 @@ function ScaffoldPageContent() {
     const tooLow = enabledWalls.filter(w => w.wallHeightMm < 1000);
     if (tooLow.length > 0) {
       alert(
-        `Some walls have invalid height (min 1000mm):\n${tooLow.map(w => `${w.side}: ${w.wallHeightMm}mm`).join('\n')}\n\n壁の高さは最低1000mm必要です。`,
+        `${t('scaffold', 'wallsTooLowIntro')}\n${tooLow.map(w => `${w.side}: ${w.wallHeightMm}mm`).join('\n')}\n\n${t('scaffold', 'wallsTooLowHint')}`,
       );
       return;
     }
@@ -1149,9 +1166,7 @@ function ScaffoldPageContent() {
   };
 
   const isAiBimIfcMode = inputMode === 'ai_bim_ifc';
-  const aiUploadAccept = isAiBimIfcMode
-    ? '.ifc,.bim,.png,.jpg,.jpeg,.gif,.webp,.bmp,model/ifc,image/png,image/jpeg,image/gif,image/webp,image/bmp'
-    : '.dxf,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp';
+  const aiUploadAccept = '.dxf,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp';
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
@@ -1755,7 +1770,7 @@ function ScaffoldPageContent() {
                         {/* Post / frame size */}
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">
-                            {aiBimPreview.scaffoldType === 'wakugumi' ? '建枠サイズ' : '支柱サイズ'}
+                            {aiBimPreview.scaffoldType === 'wakugumi' ? t('scaffold', 'frameSize') : t('scaffold', 'postSize')}
                           </label>
                           {aiBimPreview.scaffoldType === 'wakugumi' ? (
                             <select
@@ -2135,9 +2150,9 @@ function ScaffoldPageContent() {
                     className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
                   >
                     {(rules?.wakugumi?.frameSizeOptions || [
-                      { value: 1700, label: '1700mm (標準)' },
-                      { value: 1800, label: '1800mm' },
-                      { value: 1900, label: '1900mm' },
+                      { value: 1700, label: t('scaffold', 'frameSize1700') },
+                      { value: 1800, label: t('scaffold', 'frameSize1800') },
+                      { value: 1900, label: t('scaffold', 'frameSize1900') },
                     ]).map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
@@ -2158,8 +2173,8 @@ function ScaffoldPageContent() {
                     className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
                   >
                     {(rules?.wakugumi?.habakiCountOptions || [
-                      { value: 1, label: '1枚 (片面)' },
-                      { value: 2, label: '2枚 (両面)' },
+                      { value: 1, label: t('scaffold', 'habakiSingle') },
+                      { value: 2, label: t('scaffold', 'habakiDouble') },
                     ]).map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
@@ -2179,8 +2194,8 @@ function ScaffoldPageContent() {
                     className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
                   >
                     {(rules?.wakugumi?.endStopperTypeOptions || [
-                      { value: 'nuno', label: '布材タイプ (端部布材)' },
-                      { value: 'frame', label: '枠タイプ (妻側枠)' },
+                      { value: 'nuno', label: t('scaffold', 'endStopperNuno') },
+                      { value: 'frame', label: t('scaffold', 'endStopperFrame') },
                     ]).map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
@@ -2243,7 +2258,7 @@ function ScaffoldPageContent() {
 
           <div className="space-y-3">
             <p className="text-sm font-medium text-gray-700">
-              {t('scaffold', 'perSideSection') || '各辺：足場幅・階段'}
+              {t('scaffold', 'wallSettingsLabel')}
             </p>
             {walls.map((wall, i) => (
               <div
@@ -2353,7 +2368,7 @@ function ScaffoldPageContent() {
                   </div>
 
                   <span className="text-xs text-gray-400 self-center">
-                    {wall.scaffoldWidthMm ? '' : `幅=${scaffoldWidthMm}mm`}
+                    {wall.scaffoldWidthMm ? '' : `${t('scaffold', 'defaultScaffoldWidthTag')}${scaffoldWidthMm}mm`}
                   </span>
                 </div>
 
