@@ -780,19 +780,25 @@ export default function Scaffold3DView({
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
-        // When wall starts at a corner: first span overruns 300mm so 1800 plank can fill gap to last 600 span.
+        // When wall starts at a corner: shift all posts back by 300mm for shared corner post.
         const hasStartOverrun = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
         if (hasStartOverrun) {
           for (let j = 0; j < postX.length; j++) postX[j] -= CORNER_OVERRUN_M;
         }
-        // When reusing corner posts from previous wall, do not create a duplicate start post pair.
-        // Still draw the first span (e.g. 1800) plank from the wall so the plank is never removed.
+        // When wall ends at a corner: ensure last post reaches at least the wall end
+        // to close the gap with the next wall's corner zone.
+        const hasEndOverrun = !!flushDeckAtCornerEnd && !isBracket && postX.length > 1;
+        if (hasEndOverrun) {
+          const wallEndM = wall.wallLengthMm / 1000;
+          const lastPost = postX[postX.length - 1];
+          if (lastPost < wallEndM) {
+            const deficit = wallEndM - lastPost;
+            for (let j = 0; j < postX.length; j++) postX[j] += deficit;
+          }
+        }
         const reuseStartFromPrevCorner = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
         const startSpanIdx = 0;
-        // IMPORTANT (corner alignment):
-        // Do NOT force the last post to exactly wallLengthMm.
-        // A small overrun (≈200–300mm) is allowed/preferred to keep corners tight for pattanko.
         const totalLen = postX.length > 1
           ? (postX[postX.length - 1] - postX[0])
           : Math.max(wall.wallLengthMm, 600) / 1000;
@@ -1929,7 +1935,10 @@ export default function Scaffold3DView({
           z: v1.z + edgeUz * t + nz * standoffM,
         });
         const clampT = (t: number) => Math.max(0, Math.min(edgeLen, t));
-        const edgeProjectionTolerance = Math.max(standoffM * 0.35, 0.04);
+        const isClosedPolygon = walls.length >= 2 && !tierIsOpen && (tierV?.length ?? 0) >= 3;
+        const edgeProjectionTolerance = isClosedPolygon
+          ? Math.max(standoffM * 2.0, 0.6)
+          : Math.max(standoffM * 0.35, 0.04);
 
         let startT = 0;
         let endT = edgeLen;
@@ -2253,9 +2262,9 @@ export default function Scaffold3DView({
           const aOuterPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], 0);
           const aInnerPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], infoA.widthM);
 
-          // Wall B: first posts (outer and inner row start)
-          const bIdx = Math.min(Math.max(infoB.startPostIdx, 0), infoB.postX.length - 1);
-          const bNextIdx = Math.min(bIdx + 1, infoB.postX.length - 1);
+          // Wall B: use postX[0] (shared corner post), not postX[startPostIdx]
+          const bIdx = 0;
+          const bNextIdx = Math.min(1, infoB.postX.length - 1);
           const bOuterStart = toWorldXZ(infoB.root, infoB.postX[bIdx], 0);
           const bInnerStart = toWorldXZ(infoB.root, infoB.postX[bIdx], infoB.widthM);
           const bOuterNext = toWorldXZ(infoB.root, infoB.postX[bNextIdx], 0);
@@ -2346,11 +2355,18 @@ export default function Scaffold3DView({
             }
           }
 
-          // Corner vertical posts at level 0 (ground)
+          // Corner vertical posts: render at all 4 corner endpoints + centroid
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
             addRealisticPost(THREE, cornerGroup, cornerPostX, postBaseY, cornerPostZ, postH, postMat);
+            // Additional corner posts at Wall A end and Wall B start (both rows)
+            for (const pt of [aOuterEnd, aInnerEnd, bOuterStart, bInnerStart]) {
+              const dist = Math.hypot(pt.x - cornerPostX, pt.z - cornerPostZ);
+              if (dist > 0.08) {
+                addRealisticPost(THREE, cornerGroup, pt.x, postBaseY, pt.z, postH, postMat);
+              }
+            }
           }
         }
       }

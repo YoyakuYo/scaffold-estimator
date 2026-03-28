@@ -294,12 +294,11 @@ export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
 ): number[] {
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [CORNER_SPAN_MM, CORNER_SPAN_MM];
-  const middleMm = wallLengthMm - (2 * CORNER_SPAN_MM + CORNER_OVERRUN_MM); // wallLength - 900
+  const middleMm = wallLengthMm + CORNER_OVERRUN_MM - 2 * CORNER_SPAN_MM; // wallLength - 900
   if (middleMm <= 0) {
-    // Short wall: still use first and last 600mm corner spans
     return [CORNER_SPAN_MM, CORNER_SPAN_MM];
   }
-  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, SPAN_SIZES, 0); // no overrun in middle
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, SPAN_SIZES, 0);
   return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
 }
 

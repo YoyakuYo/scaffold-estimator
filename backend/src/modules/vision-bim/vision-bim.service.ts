@@ -374,6 +374,14 @@ JAPANESE SCAFFOLD PLANS (blue lines):
 - BLUE PERIMETER LINE (inner boundary of the blue zone, adjacent to building) = building wall face. TRACE THIS LINE.
 - Dimension strings on the plan should match the edges you are tracing.
 
+SCAFFOLD CORNER RULES (足場コーナー詳細図):
+At every polygon corner where two walls meet, scaffold extends 300mm past the building corner.
+- Each wall uses corner spans (600mm kusabi / 610mm wakugumi) at both ends
+- The corner post is shared between adjacent walls
+- Total scaffold run per wall = wallLength + 300mm overrun
+- X-Y grid notation: for orthogonal buildings, walls are labeled X1, Y1, X2, Y2 matching architectural grid lines
+- X = shorter building axis (depth), Y = longer axis (frontage)
+
 Self-check before outputting (fix silently):
 - edges count == vertices count
 - no duplicate consecutive vertices

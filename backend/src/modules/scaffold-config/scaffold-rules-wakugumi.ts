@@ -196,7 +196,7 @@ export function fitSpansToWallLengthWithCornerWakugumi(
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
     return [WAKUGUMI_CORNER_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
   }
-  const middleMm = wallLengthMm - (2 * WAKUGUMI_CORNER_SPAN_MM + WAKUGUMI_CORNER_OVERRUN_MM);
+  const middleMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM - 2 * WAKUGUMI_CORNER_SPAN_MM;
   if (middleMm <= 0) {
     return [WAKUGUMI_CORNER_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
   }

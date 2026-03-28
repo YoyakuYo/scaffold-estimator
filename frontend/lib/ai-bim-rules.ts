@@ -430,3 +430,35 @@ export function countCornerTypes(
 
   return { lShapedCorners: lShaped, pattankoCorners: pattanko, straightEdges: straight, total: n };
 }
+
+/**
+ * Corner rules for scaffold span generation (足場コーナー詳細図).
+ * Used to teach AI extraction about corner handling:
+ *
+ * 1. At every polygon corner where two walls meet:
+ *    - Last two posts of each wall extend CORNER_OVERRUN_MM (300mm) past the building corner
+ *    - First and last span of each wall are always the smallest standard span:
+ *      Kusabi: 600mm, Wakugumi: 610mm
+ *    - The corner post is shared between adjacent walls (no double posts)
+ *    - Span layout: [corner_span, ...middle_spans, corner_span]
+ *
+ * 2. Total scaffold run per wall = wallLength + CORNER_OVERRUN_MM (300mm)
+ *    middle = wallLength + CORNER_OVERRUN_MM - 2 × CORNER_SPAN_MM = wallLength - 900mm (kusabi)
+ *
+ * 3. Corner walkable area:
+ *    - L-shaped (~90°) corners: yokoji pipes + L-shaped deck + habaki
+ *    - Non-90° corners: pattanko filler planks
+ *    - Both: vertical corner post at the shared polygon vertex
+ *
+ * 4. X-Y grid notation (for orthogonal buildings):
+ *    - X = shorter axis (depth), Y = longer axis (frontage)
+ *    - Walls are labeled X1, Y1, X2, Y2, etc. matching architectural grid lines
+ */
+export const CORNER_RULES = {
+  overrunMm: AI_BIM_RULES.CORNER_OVERRUN_MM,
+  kusabiCornerSpanMm: AI_BIM_RULES.CORNER_SPAN_MM,
+  wakugumiCornerSpanMm: 610,
+  sharedPostAtVertex: true,
+  lShapedThresholdDeg: 70,
+  pattankoForNonRightAngle: true,
+} as const;
