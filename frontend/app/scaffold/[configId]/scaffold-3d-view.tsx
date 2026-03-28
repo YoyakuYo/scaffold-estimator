@@ -764,8 +764,7 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Leading corner span (600/610mm) is shared with the previous wall's end + corner group.
-        // Do not render or dimension it again on this wall — one corner bay per vertex only.
+        // Closed-polygon spans: [1800/1829, …middle…, 600/610]; first bay is not a duplicate of the prior wall's terminal 600.
         const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
@@ -782,7 +781,7 @@ export default function Scaffold3DView({
         // Skip rendering posts at postX[0] — the corner group renders the shared corner post.
         const reuseStartFromPrevCorner = hasCornerStart;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
-        const startSpanIdx = hasCornerStart ? 1 : 0;
+        const startSpanIdx = 0;
         const totalLen = postX.length > 1
           ? (postX[postX.length - 1] - postX[0])
           : Math.max(wall.wallLengthMm, 600) / 1000;
@@ -2119,11 +2118,11 @@ export default function Scaffold3DView({
         const endZ = startZ + edgeDirZ * runLenForDims;
         const dimY = GROUND_Y - 0.15;
 
-        // Span dimension lines along wall length (skip leading corner span — already counted on adjacent wall)
+        // Span dimension lines along wall length
         const spans = spansMm ?? wall.spans ?? [];
         const totalSpanMm = spans.reduce((s: number, v: number) => s + v, 0) || 1;
-        let accumMm = startPostIdx > 0 && spans.length > 0 ? spans[0] : 0;
-        for (let si = startPostIdx > 0 ? 1 : 0; si < spans.length; si++) {
+        let accumMm = 0;
+        for (let si = 0; si < spans.length; si++) {
           const t1 = accumMm / totalSpanMm;
           accumMm += spans[si];
           const t2 = accumMm / totalSpanMm;

@@ -15,7 +15,10 @@ export const AI_BIM_RULES = {
   MIDDLE_RAIL_HEIGHT_MM: 450,
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
+  /** Terminal span into the corner (kusabi). */
   CORNER_SPAN_MM: 600,
+  /** First span along each wall after the turn (kusabi). */
+  CORNER_START_SPAN_MM: 1800,
   MIN_WALL_LENGTH_MM: 600,
   JACK_BASE_MAX_MM: 300,
 } as const;
@@ -436,14 +439,13 @@ export function countCornerTypes(
  * Used to teach AI extraction about corner handling:
  *
  * 1. At every polygon corner where two walls meet:
- *    - Last two posts of each wall extend CORNER_OVERRUN_MM (300mm) past the building corner
- *    - First and last span of each wall are always the smallest standard span:
- *      Kusabi: 600mm, Wakugumi: 610mm
- *    - The corner post is shared between adjacent walls (no double posts)
- *    - Span layout: [corner_span, ...middle_spans, corner_span]
+ *    - 300mm overrun past the building corner; terminal bay into the turn is 600mm (kusabi) / 610mm (wakugumi)
+ *    - First span along each new wall after the turn: 1800mm (kusabi) / 1829mm (wakugumi 6尺); reuses inner posts of the terminal bay
+ *    - Span layout (closed polygon): [start_span, ...middle_spans, terminal_corner_span]
+ *    - Short walls fall back to legacy [600…600] / [610…610]
  *
  * 2. Total scaffold run per wall = wallLength + CORNER_OVERRUN_MM (300mm)
- *    middle = wallLength + CORNER_OVERRUN_MM - 2 × CORNER_SPAN_MM = wallLength - 900mm (kusabi)
+ *    middle (kusabi) = wallLength - CORNER_START_SPAN_MM - CORNER_SPAN_MM + CORNER_OVERRUN_MM = wallLength - 2100mm
  *
  * 3. Corner walkable area:
  *    - L-shaped (~90°) corners: yokoji pipes + L-shaped deck + habaki
@@ -456,7 +458,9 @@ export function countCornerTypes(
  */
 export const CORNER_RULES = {
   overrunMm: AI_BIM_RULES.CORNER_OVERRUN_MM,
+  kusabiCornerStartSpanMm: AI_BIM_RULES.CORNER_START_SPAN_MM,
   kusabiCornerSpanMm: AI_BIM_RULES.CORNER_SPAN_MM,
+  wakugumiCornerStartSpanMm: 1829,
   wakugumiCornerSpanMm: 610,
   sharedPostAtVertex: true,
   lShapedThresholdDeg: 70,

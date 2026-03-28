@@ -252,7 +252,7 @@ export class ScaffoldCalculatorService {
     complexityMultiplier: number = 1.0,
     wallIndex: number = 0,
   ): WallCalculationResult {
-    // Step 1: Fit spans. Use corner logic (300mm overrun, 600mm corner span) when multiple walls (closed polygon).
+    // Step 1: Fit spans. Closed polygon: 300mm overrun, first span 1800mm, terminal corner 600mm (see fitSpansToWallLengthWithCorner).
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
       ? fitSpansToWallLengthWithCorner(wall.wallLengthMm)

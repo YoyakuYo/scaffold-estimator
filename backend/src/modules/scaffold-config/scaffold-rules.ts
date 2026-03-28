@@ -256,8 +256,13 @@ export const CALC_RULES = {
 // ─── Corner alignment constants (足場コーナー詳細図) ─────────────
 /** Last two posts extend this far past the building corner (mm). */
 export const CORNER_OVERRUN_MM = 300;
-/** One full span at corner from (corner + overrun) to shared post (mm). */
+/** Terminal span at the turn end (mm): 600mm bay + end stopper before the next wall. */
 export const CORNER_SPAN_MM = 600;
+/**
+ * First span along each wall after the corner (mm) — standard 1.8m bay; shares inner posts
+ * with the previous wall's 600mm corner run for continuous deck (足場コーナー詳細図).
+ */
+export const CORNER_START_SPAN_MM = 1800;
 
 // ─── Span Fitting Algorithm ──────────────────────────────────
 /**
@@ -283,23 +288,34 @@ export function fitSpansToWallLength(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * Per 足場コーナー詳細図: last two posts extend CORNER_OVERRUN_MM (300mm) past
- * the building corner; then one span of CORNER_SPAN_MM (600mm) to the shared post;
- * the next wall reuses that post as the start of its first span.
- * So: first span = CORNER_SPAN_MM, last span = CORNER_SPAN_MM, run = wallLength + CORNER_OVERRUN_MM.
- * Returns [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM] with middle filling (wallLength - 2*CORNER_SPAN_MM - CORNER_OVERRUN_MM)?
- * Run = wallLength + 300 => sum = wallLength + 300. First 600 + last 600 = 1200, so middle = wallLength + 300 - 1200 = wallLength - 900.
+ * Per 足場コーナー詳細図 (continuous walk path):
+ * - Total scaffold run along the wall = wallLength + CORNER_OVERRUN_MM (300mm).
+ * - First span along the wall (after turning from the previous side) = CORNER_START_SPAN_MM (1800mm).
+ * - Last span into the corner = CORNER_SPAN_MM (600mm) with end stopper; 300mm overrun past the building corner;
+ *   the next wall reuses the inner posts of that 600mm bay and continues with its own 1800mm first span.
+ * Middle = wallLength + 300 - 1800 - 600 = wallLength - 2100 (filled with standard spans).
+ * If the wall is too short for that layout, falls back to the legacy [600, …middle…, 600] pattern.
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
 ): number[] {
-  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [CORNER_SPAN_MM, CORNER_SPAN_MM];
-  const middleMm = wallLengthMm + CORNER_OVERRUN_MM - 2 * CORNER_SPAN_MM; // wallLength - 900
-  if (middleMm <= 0) {
-    return [CORNER_SPAN_MM, CORNER_SPAN_MM];
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
+    return [CORNER_START_SPAN_MM, CORNER_SPAN_MM];
   }
-  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, SPAN_SIZES, 0);
-  return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
+  const totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
+  const middleMmNew = totalRunMm - CORNER_START_SPAN_MM - CORNER_SPAN_MM; // wallLength - 2100
+
+  if (middleMmNew < 0) {
+    const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * CORNER_SPAN_MM;
+    if (middleLegacy <= 0) return [CORNER_SPAN_MM, CORNER_SPAN_MM];
+    const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
+    return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
+  }
+  if (middleMmNew === 0) {
+    return [CORNER_START_SPAN_MM, CORNER_SPAN_MM];
+  }
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, SPAN_SIZES, 0);
+  return [CORNER_START_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
 }
 
 function fitSpansToWallLengthWithOverrun(
