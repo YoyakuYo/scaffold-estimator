@@ -52,7 +52,8 @@ interface Props {
 }
 
 export default function Scaffold2DView({ result }: Props) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const numberLocale = locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US';
   const params = useParams();
   const configId = params.configId as string;
   const walls: WallCalculationResult[] = result?.walls ?? [];
@@ -125,21 +126,39 @@ export default function Scaffold2DView({ result }: Props) {
     return walls.map(w => computeWallData(w));
   }, [walls, showAllWalls, topGuardMm, result]);
 
-  // ─── Direction label for wall side ────────────────────────
-  const DIRECTION_MAP: Record<string, { jp: string; en: string; arrow: string }> = {
-    north: { jp: '北面', en: 'North', arrow: '↑ N' },
-    south: { jp: '南面', en: 'South', arrow: '↓ S' },
-    east:  { jp: '東面', en: 'East',  arrow: '→ E' },
-    west:  { jp: '西面', en: 'West',  arrow: '← W' },
-  };
-  const getDirectionLabel = (side: string) => {
-    const base = side.replace(/-T\d+$/, '').toLowerCase();
-    const dir = DIRECTION_MAP[base];
+  // ─── Direction / edge label for wall side (cardinal → i18n sides.*; edge-n → X/Y) ───
+  const formatWallSideLabel = (side: string, includeArrow = true) => {
     const tierMatch = side.match(/-T(\d+)$/);
+    const withoutTier = tierMatch ? side.slice(0, -tierMatch[0].length) : side;
+    const base = withoutTier.toLowerCase();
     const tierSuffix = tierMatch ? ` (T${tierMatch[1]})` : '';
-    if (dir) return `${dir.arrow} ${dir.jp}${tierSuffix}`;
-    return side;
+    const cardinalKeys = ['north', 'south', 'east', 'west'] as const;
+    type Cardinal = (typeof cardinalKeys)[number];
+    const arrows: Record<Cardinal, string> = {
+      north: '↑',
+      south: '↓',
+      east: '→',
+      west: '←',
+    };
+    if (cardinalKeys.includes(base as Cardinal)) {
+      const key = base as Cardinal;
+      const name = t('sides', key);
+      return includeArrow ? `${arrows[key]} ${name}${tierSuffix}` : `${name}${tierSuffix}`;
+    }
+    if (base.startsWith('edge-')) {
+      const edgeNum = parseInt(base.replace('edge-', ''), 10);
+      if (!Number.isNaN(edgeNum)) {
+        const axis = edgeNum % 2 === 0 ? 'X' : 'Y';
+        const gridIdx = Math.floor(edgeNum / 2) + 1;
+        return `${axis}${gridIdx}${tierSuffix}`;
+      }
+    }
+    if (/^[xy]\d+$/.test(base)) {
+      return `${withoutTier}${tierSuffix}`;
+    }
+    return `${side}`;
   };
+  const getDirectionLabel = (side: string) => formatWallSideLabel(side, true);
 
   // ─── SVG dimensions ─────────────────────────────────────
   const PAD_LEFT = 100;
@@ -536,7 +555,7 @@ export default function Scaffold2DView({ result }: Props) {
         <line x1={x(0)} y1={dy - 5} x2={x(0)} y2={dy + 5} stroke={COL.dim} strokeWidth={1} />
         <line x1={x(totalLengthMm)} y1={dy - 5} x2={x(totalLengthMm)} y2={dy + 5} stroke={COL.dim} strokeWidth={1} />
         <text x={(x(0) + x(totalLengthMm)) / 2} y={dy - 6} textAnchor="middle" fontSize={11} fontWeight="bold" fill={COL.dimText}>
-          {totalLengthMm.toLocaleString()}mm
+            {totalLengthMm.toLocaleString(numberLocale)}mm
         </text>
       </g>
     );
@@ -551,7 +570,7 @@ export default function Scaffold2DView({ result }: Props) {
         <text x={hDx - 6} y={(y(0) + y(wd.totalHeightMm)) / 2}
           textAnchor="middle" fontSize={10} fontWeight="bold" fill={COL.dimText}
           transform={`rotate(-90, ${hDx - 6}, ${(y(0) + y(wd.totalHeightMm)) / 2})`}>
-          {wd.totalHeightMm.toLocaleString()}mm
+          {wd.totalHeightMm.toLocaleString(numberLocale)}mm
         </text>
       </g>
     );
@@ -565,9 +584,10 @@ export default function Scaffold2DView({ result }: Props) {
     const svgData = new XMLSerializer().serializeToString(svgRef.current);
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
+    const docTitle = t('result', 'view2dLabel');
     const title = showAllWalls
-      ? `全壁面 (${walls.length}面) — 2D組立図`
-      : `${wall.sideJp} — 2D組立図`;
+      ? t('result', 'view2dPrintAllTpl').replace('{{n}}', String(walls.length)).replace('{{doc}}', docTitle)
+      : `${formatWallSideLabel(wall.side, false)} — ${docTitle}`;
     const win = window.open('', '_blank');
     if (win) {
       win.document.write(`
@@ -687,7 +707,7 @@ export default function Scaffold2DView({ result }: Props) {
           }`}
         >
           <Layers className="h-3.5 w-3.5 inline mr-1" />
-          全壁面
+          {t('result', 'view2dAllWallsTab')}
         </button>
         <span className="text-gray-300 mx-1">|</span>
         <button
@@ -719,7 +739,9 @@ export default function Scaffold2DView({ result }: Props) {
           <ChevronRight className="h-4 w-4" />
         </button>
         <span className="ml-auto text-xs text-gray-400 flex-shrink-0">
-          {showAllWalls ? `全 ${walls.length} 面` : `${activeWallIdx + 1} / ${walls.length}`}
+          {showAllWalls
+            ? t('result', 'view2dAllWallsCountTpl').replace('{{n}}', String(walls.length))
+            : `${activeWallIdx + 1} / ${walls.length}`}
         </span>
       </div>
 
@@ -728,21 +750,23 @@ export default function Scaffold2DView({ result }: Props) {
         <div className="flex items-center gap-3">
           <div className="text-sm font-medium text-gray-600">
             {t('result', 'view2dLabel')} — {showAllWalls
-              ? <span className="text-indigo-600 font-bold">全壁面 ({walls.length}面)</span>
+              ? <span className="text-indigo-600 font-bold">
+                {t('result', 'view2dAllWallsToolbarTpl').replace('{{n}}', String(walls.length))}
+              </span>
               : <span style={{ color: accentColor, fontWeight: 700 }}>{getDirectionLabel(wall.side)}</span>
             }
           </div>
           {!showAllWalls && (
             <span className="text-xs text-gray-400">
-              {wall.wallLengthMm.toLocaleString()}mm × {wallData.levels}{t('result', 'levelsUnit')} · {wallData.spans.length} spans
+              {wall.wallLengthMm.toLocaleString(numberLocale)}mm × {wallData.levels}{t('result', 'levelsUnit')} · {wallData.spans.length} {t('result', 'spansLabel')}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setScale(s => Math.min(s * 1.25, 0.2))} className="p-1.5 rounded hover:bg-gray-200" title="Zoom In">
+          <button onClick={() => setScale(s => Math.min(s * 1.25, 0.2))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomIn')}>
             <ZoomIn className="h-4 w-4 text-gray-600" />
           </button>
-          <button onClick={() => setScale(s => Math.max(s / 1.25, 0.02))} className="p-1.5 rounded hover:bg-gray-200" title="Zoom Out">
+          <button onClick={() => setScale(s => Math.max(s / 1.25, 0.02))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomOut')}>
             <ZoomOut className="h-4 w-4 text-gray-600" />
           </button>
           <button onClick={handlePrint}
@@ -755,12 +779,12 @@ export default function Scaffold2DView({ result }: Props) {
           </button>
           <button onClick={handleExportCad} disabled={!!exporting || showAllWalls}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
-            title={showAllWalls ? 'DXF export per single wall only' : undefined}>
+            title={showAllWalls ? t('result', 'view2dDxfSingleWallTitle') : undefined}>
             <FileCode className="h-4 w-4" /> {exporting === 'cad' ? '...' : 'DXF'}
           </button>
           <button onClick={handleScreenshot} disabled={!!exporting}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-800 text-white transition-colors disabled:opacity-50"
-            title="Screenshot — High-res PNG image">
+            title={t('result', 'view2dScreenshotTitle')}>
             <Camera className="h-4 w-4" /> {exporting === 'png' ? '...' : 'PNG'}
           </button>
         </div>
@@ -773,7 +797,9 @@ export default function Scaffold2DView({ result }: Props) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>
-            大規模足場のため、2D表示を簡略化しています（先頭{MAX_2D_SPANS}スパンのみ表示 / 全{wall.spans.length}スパン）。数量計算は全スパン分正確です。
+            {t('result', 'view2dSimplifiedNoteTpl')
+              .replace('{{max}}', String(MAX_2D_SPANS))
+              .replace('{{total}}', String(wall.spans.length))}
           </span>
         </div>
       )}
@@ -813,11 +839,19 @@ export default function Scaffold2DView({ result }: Props) {
                       </text>
                       <text x={20 + dirLabel.length * 12 + 20} y={ALL_WALLS_HEADER / 2 + 5}
                         fontSize={12} fill="#6b7280">
-                        {wd.wall.wallLengthMm.toLocaleString()}mm × {wd.levels}段 · {wd.spans.length} spans
+                        {t('result', 'view2dBannerMetaTpl')
+                          .replace('{{len}}', wd.wall.wallLengthMm.toLocaleString(numberLocale))
+                          .replace('{{lvls}}', String(wd.levels))
+                          .replace('{{lvlUnit}}', t('result', 'levelsUnit'))
+                          .replace('{{n}}', String(wd.spans.length))
+                          .replace('{{spansLabel}}', t('result', 'spansLabel'))}
                       </text>
                       <text x={svgW - 20} y={ALL_WALLS_HEADER / 2 + 5}
                         textAnchor="end" fontSize={11} fill="#9ca3af">
-                        {isWakugumi ? '枠組足場' : 'くさび式足場'} — Wall {wi + 1}/{walls.length}
+                        {t('result', 'view2dSvgSubtitleTpl')
+                          .replace('{{type}}', isWakugumi ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort'))
+                          .replace('{{i}}', String(wi + 1))
+                          .replace('{{n}}', String(walls.length))}
                       </text>
                     </g>
                   );
@@ -852,23 +886,23 @@ export default function Scaffold2DView({ result }: Props) {
               {/* Legend at the bottom */}
               <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
                 {(isWakugumi ? [
-                  { color: COL.post, label: '建枠' },
-                  { color: COL.brace, label: 'ブレス' },
-                  { color: COL.shitasan, label: '下桟' },
-                  { color: COL.plank, label: '踏板' },
-                  { color: COL.habaki, label: '巾木' },
-                  { color: COL.endStopper, label: '端部' },
-                  { color: COL.yokoji, label: '根がらみ' },
-                  { color: COL.topGuard, label: '上部手摺' },
-                  { color: COL.jackBase, label: 'ジャッキ' },
-                  { color: COL.stair, label: '階段' },
+                  { color: COL.post, label: t('result', 'legendFrame') },
+                  { color: COL.brace, label: t('result', 'legendBrace') },
+                  { color: COL.shitasan, label: t('result', 'legendShitasan') },
+                  { color: COL.plank, label: t('result', 'legendPlank') },
+                  { color: COL.habaki, label: t('result', 'legendHabaki') },
+                  { color: COL.endStopper, label: t('result', 'legendStopper') },
+                  { color: COL.yokoji, label: t('result', 'legendYokoji') },
+                  { color: COL.topGuard, label: t('result', 'legendTopGuard') },
+                  { color: COL.jackBase, label: t('result', 'legendJackBase') },
+                  { color: COL.stair, label: t('result', 'legendStair') },
                 ] : [
                   { color: COL.post, label: t('result', 'legendPost') || '支柱' },
                   { color: COL.brace, label: t('result', 'legendBrace') || 'ブレス' },
                   { color: COL.tesuri, label: t('result', 'legendTesuri') || '手摺' },
                   { color: COL.plank, label: t('result', 'legendPlank') || '踏板' },
                   { color: COL.habaki, label: t('result', 'legendHabaki') || '巾木' },
-                  { color: COL.endStopper, label: '端部手摺' },
+                  { color: COL.endStopper, label: t('result', 'legendKusabiEndHandrail') },
                   { color: COL.yokoji, label: t('result', 'legendYokoji') || '幅材 / 根がらみ' },
                   { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
                   { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },
@@ -885,7 +919,7 @@ export default function Scaffold2DView({ result }: Props) {
             <>
               {/* Title */}
               <text x={svgW / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
-                {isWakugumi ? '【枠組】' : '【くさび】'} {getDirectionLabel(wall.side)} — {wall.wallLengthMm.toLocaleString()}mm × {wallData.levels}段
+                {`【${isWakugumi ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort')}】 ${getDirectionLabel(wall.side)} — ${wall.wallLengthMm.toLocaleString(numberLocale)}mm × ${wallData.levels}${t('result', 'levelsUnit')}`}
               </text>
 
               {renderWallContent(wallData, x, y)}
@@ -893,23 +927,23 @@ export default function Scaffold2DView({ result }: Props) {
               {/* Legend */}
               <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
                 {(isWakugumi ? [
-                  { color: COL.post, label: '建枠' },
-                  { color: COL.brace, label: 'ブレス' },
-                  { color: COL.shitasan, label: '下桟' },
-                  { color: COL.plank, label: '踏板' },
-                  { color: COL.habaki, label: '巾木' },
-                  { color: COL.endStopper, label: '端部' },
-                  { color: COL.yokoji, label: '根がらみ' },
-                  { color: COL.topGuard, label: '上部手摺' },
-                  { color: COL.jackBase, label: 'ジャッキ' },
-                  { color: COL.stair, label: '階段' },
+                  { color: COL.post, label: t('result', 'legendFrame') },
+                  { color: COL.brace, label: t('result', 'legendBrace') },
+                  { color: COL.shitasan, label: t('result', 'legendShitasan') },
+                  { color: COL.plank, label: t('result', 'legendPlank') },
+                  { color: COL.habaki, label: t('result', 'legendHabaki') },
+                  { color: COL.endStopper, label: t('result', 'legendStopper') },
+                  { color: COL.yokoji, label: t('result', 'legendYokoji') },
+                  { color: COL.topGuard, label: t('result', 'legendTopGuard') },
+                  { color: COL.jackBase, label: t('result', 'legendJackBase') },
+                  { color: COL.stair, label: t('result', 'legendStair') },
                 ] : [
                   { color: COL.post, label: t('result', 'legendPost') || '支柱' },
                   { color: COL.brace, label: t('result', 'legendBrace') || 'ブレス' },
                   { color: COL.tesuri, label: t('result', 'legendTesuri') || '手摺' },
                   { color: COL.plank, label: t('result', 'legendPlank') || '踏板' },
                   { color: COL.habaki, label: t('result', 'legendHabaki') || '巾木' },
-                  { color: COL.endStopper, label: '端部手摺' },
+                  { color: COL.endStopper, label: t('result', 'legendKusabiEndHandrail') },
                   { color: COL.yokoji, label: t('result', 'legendYokoji') || '幅材 / 根がらみ' },
                   { color: COL.topGuard, label: t('result', 'legendTopGuard') || '上部手摺' },
                   { color: COL.jackBase, label: t('result', 'legendJackBase') || 'ジャッキ' },
