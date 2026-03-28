@@ -1115,6 +1115,48 @@ export const translations = {
     clickToEdit: { ja: 'クリックして編集', en: 'Click to edit', fr: 'Cliquer pour modifier' },
     perimeterTotal: { ja: '周長合計', en: 'Total Perimeter', fr: 'Périmètre total' },
     effectiveWalls: { ja: '有効壁数', en: 'Effective Walls', fr: 'Murs effectifs' },
+    // CAD drawing canvas (manual CAD)
+    cadToolSelect: { ja: '選択', en: 'Select', fr: 'Sélection' },
+    cadToolPolyline: { ja: 'ポリライン', en: 'Polyline', fr: 'Polyligne' },
+    cadToolRectangle: { ja: '矩形', en: 'Rectangle', fr: 'Rectangle' },
+    cadToolPan: { ja: 'パン', en: 'Pan', fr: 'Déplacer' },
+    cadReset: { ja: 'リセット', en: 'Reset', fr: 'Réinitialiser' },
+    cadGrid: { ja: 'グリッド', en: 'Grid', fr: 'Grille' },
+    cadSnap: { ja: 'スナップ', en: 'Snap', fr: 'Accrochage' },
+    cadReferenceDim: { ja: '基準寸法', en: 'Reference dimension', fr: 'Cote de référence' },
+    cadConfirmDrawing: { ja: '図面確定', en: 'Confirm drawing', fr: 'Valider le plan' },
+    cadCalibLineHint: {
+      ja: '基準線の始点と終点をクリックしてください',
+      en: 'Click the start and end of the reference line',
+      fr: 'Cliquez le début et la fin de la ligne de référence',
+    },
+    cadRealDimension: { ja: '実寸法:', en: 'Real length:', fr: 'Cote réelle :' },
+    cadHintPolylineFirst: {
+      ja: 'クリックして最初の頂点を配置',
+      en: 'Click to place the first vertex',
+      fr: 'Cliquez pour placer le premier sommet',
+    },
+    cadHintPolylineClose: {
+      ja: '最初の頂点をクリックして閉じる',
+      en: 'Click the first vertex to close',
+      fr: 'Cliquez sur le premier sommet pour fermer',
+    },
+    cadHintPolylineNext: { ja: '次の頂点をクリック', en: 'Click the next vertex', fr: 'Cliquez sur le sommet suivant' },
+    cadHintRectCorner: { ja: '矩形の角をクリック', en: 'Click a corner of the rectangle', fr: 'Cliquez un coin du rectangle' },
+    cadHintRectDiagonal: { ja: '対角をクリック', en: 'Click the opposite corner', fr: 'Cliquez le coin opposé' },
+    cadHintClosedConfirm: {
+      ja: '「図面確定」をクリックして確定',
+      en: 'Click "Confirm drawing" to finish',
+      fr: 'Cliquez sur « Valider le plan » pour terminer',
+    },
+    cadCanvasScaleHint: {
+      ja: 'ズーム: {z}% | 1px = {v}mm',
+      en: 'Zoom: {z}% | 1px = {v}mm',
+      fr: 'Zoom : {z}% | 1px = {v}mm',
+    },
+    cadDimensionList: { ja: '寸法一覧', en: 'Dimensions', fr: 'Cotes' },
+    cadPerimeterShort: { ja: '周長', en: 'Perimeter', fr: 'Périmètre' },
+    cadVertexCount: { ja: '頂点数', en: 'Vertices', fr: 'Sommets' },
   },
 
   // ─── Address Form ───────────────────────────────────────────

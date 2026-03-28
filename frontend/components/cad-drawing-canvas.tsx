@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useI18n } from '@/lib/i18n';
 import {
   MousePointer2,
   PenTool,
@@ -60,6 +61,7 @@ export function CadDrawingCanvas({
   initialVertices,
   className = '',
 }: Props) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<Tool>('polyline');
@@ -568,36 +570,36 @@ export function CadDrawingCanvas({
       <div className="flex flex-wrap items-center gap-2 bg-gray-800 rounded-lg p-2">
         <div className="flex gap-1 border-r border-gray-600 pr-2">
           {([
-            { id: 'select' as Tool, icon: MousePointer2, label: '選択' },
-            { id: 'polyline' as Tool, icon: PenTool, label: 'ポリライン' },
-            { id: 'rectangle' as Tool, icon: Square, label: '矩形' },
-            { id: 'pan' as Tool, icon: Move, label: 'パン' },
-          ]).map((t) => (
+            { id: 'select' as Tool, icon: MousePointer2, labelKey: 'cadToolSelect' as const },
+            { id: 'polyline' as Tool, icon: PenTool, labelKey: 'cadToolPolyline' as const },
+            { id: 'rectangle' as Tool, icon: Square, labelKey: 'cadToolRectangle' as const },
+            { id: 'pan' as Tool, icon: Move, labelKey: 'cadToolPan' as const },
+          ]).map((tb) => (
             <button
-              key={t.id}
-              onClick={() => setTool(t.id)}
-              className={`p-2 rounded ${tool === t.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-              title={t.label}
+              key={tb.id}
+              onClick={() => setTool(tb.id)}
+              className={`p-2 rounded ${tool === tb.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+              title={t('viewer', tb.labelKey)}
             >
-              <t.icon className="h-4 w-4" />
+              <tb.icon className="h-4 w-4" />
             </button>
           ))}
         </div>
 
         <div className="flex gap-1 border-r border-gray-600 pr-2">
-          <button onClick={handleUndo} className="p-2 rounded text-gray-300 hover:bg-gray-700" title="元に戻す">
+          <button onClick={handleUndo} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'undo')}>
             <Undo2 className="h-4 w-4" />
           </button>
-          <button onClick={handleClear} className="p-2 rounded text-gray-300 hover:bg-gray-700" title="クリア">
+          <button onClick={handleClear} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'clear')}>
             <Trash2 className="h-4 w-4" />
           </button>
-          <button onClick={() => setZoom((z) => Math.min(5, z * 1.2))} className="p-2 rounded text-gray-300 hover:bg-gray-700" title="ズームイン">
+          <button onClick={() => setZoom((z) => Math.min(5, z * 1.2))} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'zoomIn')}>
             <ZoomIn className="h-4 w-4" />
           </button>
-          <button onClick={() => setZoom((z) => Math.max(0.2, z * 0.8))} className="p-2 rounded text-gray-300 hover:bg-gray-700" title="ズームアウト">
+          <button onClick={() => setZoom((z) => Math.max(0.2, z * 0.8))} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'zoomOut')}>
             <ZoomOut className="h-4 w-4" />
           </button>
-          <button onClick={() => { setZoom(1); setPan({ x: 100, y: 100 }); }} className="p-2 rounded text-gray-300 hover:bg-gray-700" title="リセット">
+          <button onClick={() => { setZoom(1); setPan({ x: 100, y: 100 }); }} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'cadReset')}>
             <RotateCcw className="h-4 w-4" />
           </button>
         </div>
@@ -606,14 +608,14 @@ export function CadDrawingCanvas({
           <button
             onClick={() => setShowGrid(!showGrid)}
             className={`p-2 rounded ${showGrid ? 'bg-gray-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-            title="グリッド"
+            title={t('viewer', 'cadGrid')}
           >
             <Grid3X3 className="h-4 w-4" />
           </button>
           <button
             onClick={() => setSnapToGrid(!snapToGrid)}
             className={`px-2 py-1 rounded text-xs font-mono ${snapToGrid ? 'bg-green-700 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-            title="スナップ"
+            title={t('viewer', 'cadSnap')}
           >
             SNAP
           </button>
@@ -626,7 +628,7 @@ export function CadDrawingCanvas({
           }`}
         >
           <Ruler className="h-3.5 w-3.5" />
-          基準寸法
+          {t('viewer', 'cadReferenceDim')}
         </button>
 
         {isClosed && (
@@ -635,7 +637,7 @@ export function CadDrawingCanvas({
             className="ml-auto flex items-center gap-1 px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
           >
             <Check className="h-4 w-4" />
-            図面確定
+            {t('viewer', 'cadConfirmDrawing')}
           </button>
         )}
       </div>
@@ -646,32 +648,32 @@ export function CadDrawingCanvas({
           <Ruler className="h-5 w-5 text-amber-600 flex-shrink-0" />
           {calibrationPoints.length < 2 ? (
             <span className="text-sm text-amber-800">
-              基準線の始点と終点をクリックしてください（{calibrationPoints.length}/2）
+              {t('viewer', 'cadCalibLineHint')}（{calibrationPoints.length}/2）
             </span>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-amber-800">実寸法:</span>
+              <span className="text-sm text-amber-800">{t('viewer', 'cadRealDimension')}</span>
               <input
                 type="number"
                 value={calibrationMm ?? ''}
                 onChange={(e) => setCalibrationMm(Number(e.target.value) || null)}
-                placeholder="mm"
+                placeholder={t('common', 'mm')}
                 className="w-28 px-2 py-1 rounded border border-amber-300 text-sm"
                 autoFocus
               />
-              <span className="text-xs text-amber-600">mm</span>
+              <span className="text-xs text-amber-600">{t('common', 'mm')}</span>
               <button
                 onClick={applyCalibration}
                 disabled={!calibrationMm || calibrationMm <= 0}
                 className="px-3 py-1 rounded bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
               >
-                適用
+                {t('viewer', 'apply')}
               </button>
               <button
                 onClick={() => { setCalibrationMode(false); setCalibrationPoints([]); }}
                 className="px-2 py-1 rounded border border-amber-300 text-amber-700 text-sm hover:bg-amber-100"
               >
-                キャンセル
+                {t('viewer', 'cancel')}
               </button>
             </div>
           )}
@@ -698,27 +700,31 @@ export function CadDrawingCanvas({
             <span>
               {tool === 'polyline' && !isClosed
                 ? points.length === 0
-                  ? 'クリックして最初の頂点を配置'
+                  ? t('viewer', 'cadHintPolylineFirst')
                   : points.length >= 3
-                    ? '最初の頂点をクリックして閉じる'
-                    : '次の頂点をクリック'
+                    ? t('viewer', 'cadHintPolylineClose')
+                    : t('viewer', 'cadHintPolylineNext')
                 : tool === 'rectangle' && !isClosed
                   ? points.length === 0
-                    ? '矩形の角をクリック'
-                    : '対角をクリック'
+                    ? t('viewer', 'cadHintRectCorner')
+                    : t('viewer', 'cadHintRectDiagonal')
                   : isClosed
-                    ? '「図面確定」をクリックして確定'
+                    ? t('viewer', 'cadHintClosedConfirm')
                     : ''}
             </span>
-            <span>ズーム: {Math.round(zoom * 100)}% | 1px = {mmPerPixel.toFixed(1)}mm</span>
+            <span>
+              {t('viewer', 'cadCanvasScaleHint')
+                .replace('{z}', String(Math.round(zoom * 100)))
+                .replace('{v}', mmPerPixel.toFixed(1))}
+            </span>
           </div>
         </div>
 
         {/* Edge dimension list */}
         <div className="w-52 bg-gray-800 rounded-lg p-3 text-white overflow-y-auto max-h-[660px]">
-          <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase">寸法一覧</h4>
+          <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase">{t('viewer', 'cadDimensionList')}</h4>
           <div className="mb-3">
-            <label className="text-xs text-gray-400 block mb-1">建物の高さ</label>
+            <label className="text-xs text-gray-400 block mb-1">{t('viewer', 'buildingHeight')}</label>
             <div className="flex items-center gap-1">
               <input
                 type="number"
@@ -728,7 +734,7 @@ export function CadDrawingCanvas({
                 min={1000}
                 step={100}
               />
-              <span className="text-xs text-gray-500">mm</span>
+              <span className="text-xs text-gray-500">{t('common', 'mm')}</span>
             </div>
           </div>
           {edgeList.length > 0 && (
@@ -769,13 +775,13 @@ export function CadDrawingCanvas({
           {edgeList.length > 0 && (
             <div className="mt-2 pt-2 border-t border-gray-600">
               <div className="flex justify-between text-xs">
-                <span className="text-gray-400">周長</span>
+                <span className="text-gray-400">{t('viewer', 'cadPerimeterShort')}</span>
                 <span className="font-mono text-gray-200">
                   {(edgeList.reduce((s, e) => s + e.lengthMm, 0) / 1000).toFixed(3)}m
                 </span>
               </div>
               <div className="flex justify-between text-xs mt-1">
-                <span className="text-gray-400">頂点数</span>
+                <span className="text-gray-400">{t('viewer', 'cadVertexCount')}</span>
                 <span className="font-mono text-gray-200">{points.length}</span>
               </div>
             </div>
