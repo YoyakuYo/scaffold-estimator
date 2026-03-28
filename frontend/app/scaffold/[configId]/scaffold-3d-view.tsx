@@ -764,8 +764,9 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Drop leading corner span (600mm kusabi / 610mm wakugumi) when reusing previous wall's corner post
-        const isCornerSpan = (s: number) => s <= 620 && s >= 590;
+        // Drop leading corner span (600mm kusabi / 610mm wakugumi) when reusing previous wall's corner post.
+        // Wide tolerance so rounding / wakugumi 610 always matches backend fitSpansToWallLengthWithCorner*.
+        const isCornerSpan = (s: number) => Number.isFinite(s) && s >= 575 && s <= 630;
         const trimmedSpans = (
           dropLeadingCorner600 &&
           baseSpans.length > 1 &&
@@ -908,11 +909,26 @@ export default function Scaffold3DView({
             const spanM = spans[i] / 1000;
             const cornerStartTouch = reuseStartFromPrevCorner && i === 0;
             const cornerEndTouch = !!flushDeckAtCornerEnd && i === spans.length - 1;
-            // 0-gap corner rule: corner-touching spans render full length (no -40mm inset).
-            const spanDeckLen = (cornerStartTouch || cornerEndTouch)
-              ? spanM
-              : Math.max(0.05, spanM - 0.04);
-            const midX = (x1 + x2) / 2;
+            // Standard gap along span; at polygon corners inset planks so wall decks do not
+            // Z-fight with the separate corner closure mesh (L-shaped deck / pattanko).
+            const cornerDeckInsetM = 0.12;
+            const baseGap = 0.04;
+            let spanDeckLen: number;
+            let deckMidX: number;
+            if (cornerStartTouch && cornerEndTouch) {
+              spanDeckLen = Math.max(0.05, spanM - 2 * cornerDeckInsetM);
+              deckMidX = (x1 + x2) / 2;
+            } else if (cornerEndTouch) {
+              spanDeckLen = Math.max(0.05, spanM - baseGap - cornerDeckInsetM);
+              deckMidX = (x1 + x2) / 2 - cornerDeckInsetM / 2;
+            } else if (cornerStartTouch) {
+              spanDeckLen = Math.max(0.05, spanM - baseGap - cornerDeckInsetM);
+              deckMidX = (x1 + x2) / 2 + cornerDeckInsetM / 2;
+            } else {
+              spanDeckLen = Math.max(0.05, spanM - baseGap);
+              deckMidX = (x1 + x2) / 2;
+            }
+            const midX = deckMidX;
             const isStairSpan = uniqueStairPos.includes(i);
             const isDoorSpan = doorSpanIndices.has(i) && lv === 1;
 
@@ -1956,15 +1972,25 @@ export default function Scaffold3DView({
           }
         }
 
-        // Tier-specific corner flags
+        const lenAlongMiter = alignedLen;
+
+        // Tier-specific corner flags — align with backend: corner spans when walls.length >= 2.
         const tHCS = tpd?.hasCornerAtStart ?? hasCornerAtStart;
         const tHCE = tpd?.hasCornerAtEnd ?? hasCornerAtEnd;
-        const tILS = tpd?.isLShapedAtStart ?? isLShapedAtStart;
-        const tILE = tpd?.isLShapedAtEnd ?? isLShapedAtEnd;
-        const isStartCorner = (!tierIsOpen || localIdx > 0) && (tHCS[localIdx] ?? false);
-        const isEndCorner = (!tierIsOpen || localIdx < tierGroups[tgi].walls.length - 1) && (tHCE[localIdx] ?? false);
-        const isStartLShaped = isStartCorner && (tILS[localIdx] ?? false);
-        const isEndLShaped = isEndCorner && (tILE[localIdx] ?? false);
+        const nWLoop = tierGroups[tgi].walls.length;
+        const useCornerSpanLayout = walls.length >= 2;
+        const closedLoopCorners =
+          useCornerSpanLayout && !tierIsOpen && (tierV?.length ?? 0) >= 3;
+        const isStartCorner = closedLoopCorners
+          ? true
+          : useCornerSpanLayout
+            ? localIdx > 0 && (tHCS[localIdx] ?? false)
+            : (tHCS[localIdx] ?? false);
+        const isEndCorner = closedLoopCorners
+          ? true
+          : useCornerSpanLayout
+            ? localIdx < nWLoop - 1 && (tHCE[localIdx] ?? false)
+            : (tHCE[localIdx] ?? false);
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
@@ -1984,12 +2010,31 @@ export default function Scaffold3DView({
           applyCornerAtEnd,
         );
 
+        const isCornerConnected = applyCornerAtStart || applyCornerAtEnd;
+        const baseLen = Math.max(runLenM, 1e-6);
+        const bux = edgeLen >= 1e-9 ? (v2.x - v1.x) / edgeLen : 1;
+        const buz = edgeLen >= 1e-9 ? (v2.z - v1.z) / edgeLen : 0;
+
+        let edgeDirX: number;
+        let edgeDirZ: number;
+        if (isCornerConnected) {
+          nearEnd = {
+            x: nearStart.x + bux * runLenM,
+            z: nearStart.z + buz * runLenM,
+          };
+          nearDx = nearEnd.x - nearStart.x;
+          nearDz = nearEnd.z - nearStart.z;
+          edgeDirX = bux;
+          edgeDirZ = buz;
+        } else {
+          edgeDirX = nearDx / lenAlongMiter;
+          edgeDirZ = nearDz / lenAlongMiter;
+        }
+
         // Keep corner geometry rule-true in 3D: do not compress/expand runs at corners.
         // For non-corner walls we still allow tiny correction near 1.0 to absorb small numeric drift.
-        const baseLen = Math.max(runLenM, 1e-6);
-        const desiredLen = alignedLen;
+        const desiredLen = isCornerConnected ? runLenM : lenAlongMiter;
         const rawScale = desiredLen / baseLen;
-        const isCornerConnected = applyCornerAtStart || applyCornerAtEnd;
         const fitScale = (!isCornerConnected && Number.isFinite(rawScale) && rawScale > 0 && Math.abs(rawScale - 1) <= 0.1)
           ? rawScale
           : 1;
@@ -2005,9 +2050,6 @@ export default function Scaffold3DView({
         //   local Z → outward normal direction
         //   local Y → world Y (up)
         //   origin → v1 (centered) + standoff from building so near posts are 250–500mm from wall
-
-        const edgeDirX = nearDx / alignedLen;
-        const edgeDirZ = nearDz / alignedLen;
 
         // Translation: place scaffold start on the mitered near-row path.
         const tx = nearStart.x - cx;
@@ -2261,36 +2303,40 @@ export default function Scaffold3DView({
             const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
 
             if (isLShaped || hasCorner) {
-              // L-shaped or any corner: full yokoji + deck closure
-              // Yokoji pipes connecting wall A end to wall B start
+              // Yokoji + cross bars at every corner (ties A end to B start).
               addPipe(cornerGroup, r2.x, y, r2.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
               addPipe(cornerGroup, aInnerEnd.x, y, aInnerEnd.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.9);
-              // Cross bar at wall A end
               addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
-              // Cross bar at wall B start
               addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
 
-              // Corner deck (quad) filling the gap between wall ends
-              const firstSpanDeck = new THREE.Shape();
-              firstSpanDeck.moveTo(aOuterEnd.x, -aOuterEnd.z);
-              firstSpanDeck.lineTo(bOuterStart.x, -bOuterStart.z);
-              firstSpanDeck.lineTo(bInnerStart.x, -bInnerStart.z);
-              firstSpanDeck.lineTo(aInnerEnd.x, -aInnerEnd.z);
-              firstSpanDeck.closePath();
-              const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
-              const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
-              deckMesh.rotation.x = -Math.PI / 2;
-              deckMesh.position.y = y + 0.028;
-              deckMesh.castShadow = true;
-              deckMesh.receiveShadow = true;
-              cornerGroup.add(deckMesh);
+              if (isLShaped) {
+                // ~90° only: extruded deck matches 足場コーナー詳細図; oblique angles use inset wall planks + pattanko.
+                const firstSpanDeck = new THREE.Shape();
+                firstSpanDeck.moveTo(aOuterEnd.x, -aOuterEnd.z);
+                firstSpanDeck.lineTo(bOuterStart.x, -bOuterStart.z);
+                firstSpanDeck.lineTo(bInnerStart.x, -bInnerStart.z);
+                firstSpanDeck.lineTo(aInnerEnd.x, -aInnerEnd.z);
+                firstSpanDeck.closePath();
+                const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
+                const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
+                deckMesh.rotation.x = -Math.PI / 2;
+                deckMesh.position.y = y + 0.028;
+                deckMesh.castShadow = true;
+                deckMesh.receiveShadow = true;
+                cornerGroup.add(deckMesh);
 
-              // Habaki (toe board) at inner and outer edges of corner
-              const hY = y + 0.06;
-              addPipe(cornerGroup, aOuterEnd.x, hY, aOuterEnd.z, bOuterStart.x, hY, bOuterStart.z, habakiMatEff, PIPE_R * 0.5);
-              addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
+                const hY = y + 0.06;
+                addPipe(cornerGroup, aOuterEnd.x, hY, aOuterEnd.z, bOuterStart.x, hY, bOuterStart.z, habakiMatEff, PIPE_R * 0.5);
+                addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
+              } else {
+                const midX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
+                const midZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
+                const pattankoW = 0.25;
+                const pattankoD = 0.5;
+                addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
+                addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
+              }
             } else {
-              // Non-L-shaped: pattanko filler at corner
               const midX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
               const midZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
               const pattankoW = 0.25;
