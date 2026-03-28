@@ -764,39 +764,24 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Drop leading corner span (600mm kusabi / 610mm wakugumi) when reusing previous wall's corner post.
-        // Wide tolerance so rounding / wakugumi 610 always matches backend fitSpansToWallLengthWithCorner*.
-        const isCornerSpan = (s: number) => Number.isFinite(s) && s >= 575 && s <= 630;
-        const trimmedSpans = (
-          dropLeadingCorner600 &&
-          baseSpans.length > 1 &&
-          isCornerSpan(baseSpans[0])
-        ) ? baseSpans.slice(1) : baseSpans;
-        const allSpans: number[] = trimmedSpans.length > 0 ? trimmedSpans : baseSpans;
+        // Keep ALL spans (including the leading corner span) — do NOT drop.
+        // The corner span's planks render in the overlap zone; cornerStartTouch insets them.
+        // Previous wall's end and this wall's start share the corner area via the corner group.
+        const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? allSpans.slice(0, maxSpans)
           : allSpans;
-        // N+1 post positions: first span uses positions 0,1 (4 posts); each next span adds 1 position (2 new posts, reuse 2)
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
-        // When wall starts at a corner: shift all posts back by 300mm for shared corner post.
-        const hasStartOverrun = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
-        if (hasStartOverrun) {
+        // Corner start: shift all posts back by CORNER_OVERRUN so the leading corner span
+        // straddles the building vertex (300mm before + 300mm after).
+        const hasCornerStart = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
+        if (hasCornerStart) {
           for (let j = 0; j < postX.length; j++) postX[j] -= CORNER_OVERRUN_M;
         }
-        // When wall ends at a corner: ensure last post reaches at least the wall end
-        // to close the gap with the next wall's corner zone.
-        const hasEndOverrun = !!flushDeckAtCornerEnd && !isBracket && postX.length > 1;
-        if (hasEndOverrun) {
-          const wallEndM = wall.wallLengthMm / 1000;
-          const lastPost = postX[postX.length - 1];
-          if (lastPost < wallEndM) {
-            const deficit = wallEndM - lastPost;
-            for (let j = 0; j < postX.length; j++) postX[j] += deficit;
-          }
-        }
-        const reuseStartFromPrevCorner = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
+        // Skip rendering posts at postX[0] — the corner group renders the shared corner post.
+        const reuseStartFromPrevCorner = hasCornerStart;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
         const startSpanIdx = 0;
         const totalLen = postX.length > 1
@@ -2304,68 +2289,57 @@ export default function Scaffold3DView({
           const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
           const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
 
-          // Corner post at the shared polygon vertex (vertical post for visual closure)
-          const cornerPostX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
-          const cornerPostZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
+          // All 4 corner endpoints define the walkable corner area
+          const allCornerPts = [aOuterEnd, aInnerEnd, bOuterStart, bInnerStart];
+          const cornerCentroidX = allCornerPts.reduce((s, p) => s + p.x, 0) / 4;
+          const cornerCentroidZ = allCornerPts.reduce((s, p) => s + p.z, 0) / 4;
 
           for (let lv = 1; lv <= maxLvThisCorner; lv++) {
             const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
 
-            if (isLShaped || hasCorner) {
-              // Yokoji + cross bars at every corner (ties A end to B start).
-              addPipe(cornerGroup, r2.x, y, r2.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
-              addPipe(cornerGroup, aInnerEnd.x, y, aInnerEnd.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.9);
-              addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
-              addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
+            // Yokoji + cross bars at every corner (ties A end to B start).
+            addPipe(cornerGroup, r2.x, y, r2.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+            addPipe(cornerGroup, aInnerEnd.x, y, aInnerEnd.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.9);
+            addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
+            addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
 
-              if (isLShaped) {
-                // ~90° only: extruded deck matches 足場コーナー詳細図; oblique angles use inset wall planks + pattanko.
-                const firstSpanDeck = new THREE.Shape();
-                firstSpanDeck.moveTo(aOuterEnd.x, -aOuterEnd.z);
-                firstSpanDeck.lineTo(bOuterStart.x, -bOuterStart.z);
-                firstSpanDeck.lineTo(bInnerStart.x, -bInnerStart.z);
-                firstSpanDeck.lineTo(aInnerEnd.x, -aInnerEnd.z);
-                firstSpanDeck.closePath();
-                const deckGeo = new THREE.ExtrudeGeometry(firstSpanDeck, { depth: 0.025, bevelEnabled: false });
-                const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
-                deckMesh.rotation.x = -Math.PI / 2;
-                deckMesh.position.y = y + 0.028;
-                deckMesh.castShadow = true;
-                deckMesh.receiveShadow = true;
-                cornerGroup.add(deckMesh);
+            // L-shaped deck or pattanko for the walkable corner area
+            const deckShape = new THREE.Shape();
+            deckShape.moveTo(aOuterEnd.x, -aOuterEnd.z);
+            deckShape.lineTo(bOuterStart.x, -bOuterStart.z);
+            deckShape.lineTo(bInnerStart.x, -bInnerStart.z);
+            deckShape.lineTo(aInnerEnd.x, -aInnerEnd.z);
+            deckShape.closePath();
+            const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: 0.025, bevelEnabled: false });
+            const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
+            deckMesh.rotation.x = -Math.PI / 2;
+            deckMesh.position.y = y + 0.028;
+            deckMesh.castShadow = true;
+            deckMesh.receiveShadow = true;
+            cornerGroup.add(deckMesh);
 
-                const hY = y + 0.06;
-                addPipe(cornerGroup, aOuterEnd.x, hY, aOuterEnd.z, bOuterStart.x, hY, bOuterStart.z, habakiMatEff, PIPE_R * 0.5);
-                addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
-              } else {
-                const midX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
-                const midZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
-                const pattankoW = 0.25;
-                const pattankoD = 0.5;
-                addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
-                addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
-              }
-            } else {
-              const midX = (aOuterEnd.x + bOuterStart.x + aInnerEnd.x + bInnerStart.x) / 4;
-              const midZ = (aOuterEnd.z + bOuterStart.z + aInnerEnd.z + bInnerStart.z) / 4;
-              const pattankoW = 0.25;
-              const pattankoD = 0.5;
-              addBox(cornerGroup, midX, y + 0.028, midZ, pattankoW, 0.025, pattankoD, cornerPlankMat);
-              addBox(cornerGroup, midX, y + 0.028, midZ, pattankoD, 0.025, pattankoW, cornerPlankMat);
-            }
+            // Habaki (toe boards) along the outer edges of the corner deck
+            const hY = y + 0.06;
+            addPipe(cornerGroup, aOuterEnd.x, hY, aOuterEnd.z, bOuterStart.x, hY, bOuterStart.z, habakiMatEff, PIPE_R * 0.5);
+            addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
           }
 
-          // Corner vertical posts: render at all 4 corner endpoints + centroid
+          // Corner vertical posts at all 4 endpoints + centroid, with jack bases
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
-            addRealisticPost(THREE, cornerGroup, cornerPostX, postBaseY, cornerPostZ, postH, postMat);
-            // Additional corner posts at Wall A end and Wall B start (both rows)
-            for (const pt of [aOuterEnd, aInnerEnd, bOuterStart, bInnerStart]) {
-              const dist = Math.hypot(pt.x - cornerPostX, pt.z - cornerPostZ);
-              if (dist > 0.08) {
-                addRealisticPost(THREE, cornerGroup, pt.x, postBaseY, pt.z, postH, postMat);
-              }
+            const cornerPostPts = [
+              { x: cornerCentroidX, z: cornerCentroidZ },
+              ...allCornerPts,
+            ];
+            const rendered = new Set<string>();
+            for (const pt of cornerPostPts) {
+              const key = `${Math.round(pt.x * 100)},${Math.round(pt.z * 100)}`;
+              if (rendered.has(key)) continue;
+              rendered.add(key);
+              addBasePlate(THREE, cornerGroup, pt.x, GROUND_Y, pt.z, basePlateMat);
+              addPipe(cornerGroup, pt.x, GROUND_Y, pt.z, pt.x, GROUND_Y + JACK_H, pt.z, jackMatEff, PIPE_R * 0.95);
+              addRealisticPost(THREE, cornerGroup, pt.x, postBaseY, pt.z, postH, postMat);
             }
           }
         }
