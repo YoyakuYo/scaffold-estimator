@@ -264,7 +264,7 @@ function ScaffoldResultPage() {
     }
   };
 
-  // ─── Download BOM CSV (Japanese: 部品名, 数量, 重量) ─────────────────────────────────────
+  // ─── Download BOM CSV ─────────────────────────────────────
   const handleBomCsvDownload = useCallback(async () => {
     if (!result?.summary?.length) return;
     let weightByCode = new Map<string, number>();
@@ -276,15 +276,20 @@ function ScaffoldResultPage() {
           .map((m) => [m.code, Number(m.weightKg)]),
       );
     } catch {
-      // Weight column will show "—" if materials lookup fails.
+      // Weight column shows dash if materials lookup fails.
     }
-    const header = '部品名,数量,重量\n';
+    const col1 = t('result', 'bomCsvColPartName');
+    const col2 = t('result', 'bomCsvColQuantity');
+    const col3 = t('result', 'bomCsvColWeightKg');
+    const dash = t('result', 'bomCsvWeightDash');
+    const kg = t('result', 'bomCsvWeightKgSuffix');
+    const header = `${col1},${col2},${col3}\n`;
     const rows = result.summary.map((c: CalculatedComponent) => {
       const name = (c.nameJp || c.name || c.type).replace(/,/g, ' ');
       const qty = String(c.quantity);
       const unitW = c.materialCode ? weightByCode.get(c.materialCode) : undefined;
       const totalW = typeof unitW === 'number' ? unitW * c.quantity : undefined;
-      const weight = typeof totalW === 'number' ? `${totalW.toFixed(2)}kg` : '—';
+      const weight = typeof totalW === 'number' ? `${totalW.toFixed(2)}${kg}` : dash;
       return `${name},${qty},${weight}`;
     });
     const csv = '\uFEFF' + header + rows.join('\n');
@@ -292,10 +297,10 @@ function ScaffoldResultPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `足場BOM_${configId.slice(0, 8)}.csv`;
+    a.download = `${t('result', 'bomExportFilenamePrefix')}_${configId.slice(0, 8)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [result, configId]);
+  }, [result, configId, t]);
 
   // ─── Excel Download ─────────────────────────────────────
   const handleExcelDownload = useCallback(async () => {
@@ -304,7 +309,7 @@ function ScaffoldResultPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `足場材料見積書_${configId.slice(0, 8)}.xlsx`;
+      a.download = `${t('result', 'excelExportFilenamePrefix')}_${configId.slice(0, 8)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -424,7 +429,11 @@ function ScaffoldResultPage() {
               <SummaryCard
                 icon={<ShieldCheck className="h-5 w-5" />}
                 label={t('result', 'endStopperType')}
-                value={result.endStopperType === 'frame' ? '枠タイプ' : '布材タイプ'}
+                value={
+                  result.endStopperType === 'frame'
+                    ? t('result', 'endStopperSummaryFrame')
+                    : t('result', 'endStopperSummaryNuno')
+                }
               />
             </>
           ) : (
@@ -452,8 +461,14 @@ function ScaffoldResultPage() {
           <span>
             {t('result', 'specWidth')} {result.scaffoldWidthMm}mm
             {result.scaffoldType === 'wakugumi'
-              ? (result.frameSizeMm != null && ` · ${t('result', 'specFrame')} ${result.frameSizeMm}mm`)
-                + (result.endStopperType ? ` · ${t('result', 'endStopperType')} ${result.endStopperType === 'frame' ? '枠' : '布材'}` : '')
+              ? (result.frameSizeMm != null && ` · ${t('result', 'specFrame')} ${result.frameSizeMm}mm`) +
+                  (result.endStopperType
+                    ? ` · ${t('result', 'endStopperType')} ${
+                        result.endStopperType === 'frame'
+                          ? t('result', 'endStopperSpecShortFrame')
+                          : t('result', 'endStopperSpecShortNuno')
+                      }`
+                    : '')
               : result.preferredMainTatejiMm != null && ` · ${t('result', 'specMainPost')} ${result.preferredMainTatejiMm}mm`}
           </span>
         </div>
@@ -491,7 +506,7 @@ function ScaffoldResultPage() {
             }`}
           >
             <Ruler className="h-4 w-4" />
-            材料明細
+            {t('result', 'materialBreakdownTitle')}
           </button>
           <button
             onClick={() => setActiveTab('2d')}
@@ -732,10 +747,7 @@ function QuotationTable({ result }: { result: any }) {
       const grp = w.tierGroup ?? w.side;
       if (!groups.has(grp)) {
         const baseLabel = grp.replace(/-T\d+$/, '');
-        const jp = ['north', 'south', 'east', 'west'].includes(baseLabel)
-          ? ({ north: '北面', south: '南面', east: '東面', west: '西面' } as Record<string, string>)[baseLabel] ?? baseLabel
-          : baseLabel;
-        groups.set(grp, { label: locale === 'ja' ? jp : baseLabel, wallIndices: [] });
+        groups.set(grp, { label: formatWallSide(baseLabel, w.sideJp, locale), wallIndices: [] });
       }
       groups.get(grp)!.wallIndices.push(idx);
     });
@@ -804,7 +816,7 @@ function QuotationTable({ result }: { result: any }) {
                 </div>
                 {(wall as any).baseHeightMm > 0 && (
                   <div className="text-xs text-violet-600">
-                    GL+{((wall as any).baseHeightMm / 1000).toFixed(1)}m〜
+                    {t('result', 'tierGlPlus').replace('{{m}}', ((wall as any).baseHeightMm / 1000).toFixed(1))}
                   </div>
                 )}
                 <div className="text-gray-500">
@@ -832,7 +844,7 @@ function QuotationTable({ result }: { result: any }) {
                 const levelHeightMm = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm || 1800) : 1800;
                 const from = (f - 1) * levelHeightMm;
                 const to = f * levelHeightMm;
-                const label = locale === 'ja' ? `${f}段` : `Level ${f}`;
+                const label = t('result', 'scaffoldLevelBandLabel').replace(/\{\{n\}\}/g, String(f));
                 return (
                   <span
                     key={f}
@@ -860,7 +872,8 @@ function QuotationTable({ result }: { result: any }) {
               <th className="px-3 py-2 text-center font-medium w-14">{t('result', 'colUnit')}</th>
               {walls.map((wall, idx) => {
                 const baseH = (wall as any).baseHeightMm ?? 0;
-                const tierLabel = baseH > 0 ? ` GL+${(baseH / 1000).toFixed(0)}m` : '';
+                const tierLabel =
+                  baseH > 0 ? t('result', 'tierHeaderElevation').replace('{{m}}', (baseH / 1000).toFixed(0)) : '';
                 return (
                   <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
                     <div>{formatWallSide(wall.side, wall.sideJp, locale)}</div>
@@ -959,7 +972,7 @@ function PerSideBreakdown({ result }: { result: any }) {
         const wallLabel = formatWallSide(wall.side, wall.sideJp, locale);
         const componentsByCategory: Record<string, CalculatedComponent[]> = {};
         for (const comp of wall.components) {
-          const cat = locale === 'ja' ? (comp.category || '他') : (comp.categoryEn || comp.category || 'Other');
+          const cat = locale === 'ja' ? (comp.category || t('result', 'other')) : (comp.categoryEn || comp.category || t('result', 'other'));
           if (!componentsByCategory[cat]) componentsByCategory[cat] = [];
           componentsByCategory[cat].push(comp);
         }
