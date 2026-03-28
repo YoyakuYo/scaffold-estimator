@@ -20,6 +20,9 @@ export const translations = {
     mm: { ja: 'mm', en: 'mm', fr: 'mm' },
     sets: { ja: 'セット', en: 'sets', fr: 'jeux' },
     pieces: { ja: '本', en: 'pcs', fr: 'pièces' },
+    delete: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
+    edit: { ja: '編集', en: 'Edit', fr: 'Modifier' },
+    confirm: { ja: '確認', en: 'Confirm', fr: 'Confirmer' },
   },
 
   // ─── Navigation ────────────────────────────────────────────────
@@ -411,6 +414,22 @@ export const translations = {
     south: { ja: '南面', en: 'South', fr: 'Sud' },
     east: { ja: '東面', en: 'East', fr: 'Est' },
     west: { ja: '西面', en: 'West', fr: 'Ouest' },
+    structureTypeLabel: { ja: '構造タイプ', en: 'Structure Type', fr: 'Type de structure' },
+    structureRenovation: { ja: '改修工事', en: 'Renovation', fr: 'Rénovation' },
+    structureSteel: { ja: 'S造', en: 'Steel (S)', fr: 'Acier (S)' },
+    structureRC: { ja: 'RC造', en: 'RC', fr: 'Béton armé (RC)' },
+    frameSize1700: { ja: '1700mm (標準)', en: '1700mm (Standard)', fr: '1700mm (Standard)' },
+    frameSize1800: { ja: '1800mm', en: '1800mm', fr: '1800mm' },
+    frameSize1900: { ja: '1900mm', en: '1900mm', fr: '1900mm' },
+    habakiSingle: { ja: '1枚 (片面)', en: '1 (Single)', fr: '1 (Simple)' },
+    habakiDouble: { ja: '2枚 (両面)', en: '2 (Double)', fr: '2 (Double)' },
+    postSize1800: { ja: '1800mm 支柱', en: '1800mm Post', fr: 'Poteau 1800mm' },
+    postSize2700: { ja: '2700mm 支柱', en: '2700mm Post', fr: 'Poteau 2700mm' },
+    postSize3600: { ja: '3600mm 支柱', en: '3600mm Post', fr: 'Poteau 3600mm' },
+    topGuard900: { ja: '900mm', en: '900mm', fr: '900mm' },
+    topGuard1350: { ja: '1350mm', en: '1350mm', fr: '1350mm' },
+    topGuard1800: { ja: '1800mm', en: '1800mm', fr: '1800mm' },
+    wallSettingsLabel: { ja: '各辺：足場幅・階段', en: 'Per wall: width & stairs', fr: 'Par mur: largeur et escaliers' },
   },
 
   // ─── Scaffold Result Page ──────────────────────────────────────
@@ -503,6 +522,13 @@ export const translations = {
     doorCount: { ja: 'ドア/出入口', en: 'Door/entrance', fr: 'Porte/entrée' },
     doorBeamNote: { ja: '梁枠 設置', en: 'beam frame', fr: 'châssis de poutre' },
     obstacleNote: { ja: 'クリアランス不足時は当該区間を単管＋ブラケットで提案。ドアには梁枠（通路口）を設置します。', en: 'When clearance is insufficient, propose single pipe + bracket for that section. Install beam frame at doors.', fr: 'En cas de manque de dégagement, proposer tube + support. Installer un châssis de poutre aux portes.' },
+    subtotal: { ja: '小計', en: 'Subtotal', fr: 'Sous-total' },
+    wallHeight: { ja: '高さ', en: 'Height', fr: 'Hauteur' },
+    other: { ja: '他', en: 'Other', fr: 'Autre' },
+    csvExport: { ja: 'CSV出力', en: 'CSV Export', fr: 'Export CSV' },
+    floorPrefix: { ja: 'F', en: 'F', fr: 'F' },
+    unitPriceYen: { ja: '単価(¥)', en: 'Unit Price (¥)', fr: 'Prix unitaire (¥)' },
+    lineTotalYen: { ja: '金額(¥)', en: 'Amount (¥)', fr: 'Montant (¥)' },
   },
 
   // ─── Quotations List Page ───────────────────────────────────────
@@ -983,6 +1009,7 @@ export const translations = {
     endStopper: { ja: '端部タイプ', en: 'End Stopper', fr: 'End Stopper' },
     multiSegmentWall: { ja: '多段壁', en: 'Multi-Segment Wall', fr: 'Multi-Segment Wall' },
     addSegment: { ja: 'セグメント追加', en: 'Add Segment', fr: 'Add Segment' },
+    analyzingFile: { ja: 'ファイルを解析中...', en: 'Analyzing file...', fr: 'Analyse du fichier...' },
   },
 
   // ─── Viewers (3D, Plan, Drawing, Outline) ───────────────────
@@ -1054,6 +1081,12 @@ export const translations = {
     perimeterSuffix: { ja: '外周', en: 'perimeter', fr: 'perimeter' },
     confirm: { ja: '確定', en: 'Confirm', fr: 'Confirm' },
     editLabel: { ja: 'ラベル編集', en: 'Edit label', fr: 'Edit label' },
+    wallLabel: { ja: '壁', en: 'Wall', fr: 'Mur' },
+    lengthM: { ja: '長さ (m)', en: 'Length (m)', fr: 'Longueur (m)' },
+    heightM: { ja: '高さ (m)', en: 'Height (m)', fr: 'Hauteur (m)' },
+    clickToEdit: { ja: 'クリックして編集', en: 'Click to edit', fr: 'Cliquer pour modifier' },
+    perimeterTotal: { ja: '周長合計', en: 'Total Perimeter', fr: 'Périmètre total' },
+    effectiveWalls: { ja: '有効壁数', en: 'Effective Walls', fr: 'Murs effectifs' },
   },
 
   // ─── Address Form ───────────────────────────────────────────
