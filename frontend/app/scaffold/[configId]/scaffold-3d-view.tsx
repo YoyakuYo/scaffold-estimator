@@ -778,12 +778,11 @@ export default function Scaffold3DView({
         if (hasCornerStart) {
           for (let j = 0; j < postX.length; j++) postX[j] -= CORNER_OVERRUN_M;
         }
-        // Corner start: older builds skipped postX[0] and relied on cornerGroup only; that left
-        // the outer (or inner) standard missing when row-agnostic dedup matched the wrong row.
-        // We render postX[0] on both faces so the first bay after a turn has full steel; cornerGroup
-        // row-aware dedup avoids duplicate cylinders when the previous wall already placed steel.
+        // Skip rendering posts at postX[0] when this wall's start is a polygon corner — the
+        // previous wall's last line and cornerGroup supply that steel. Row-aware nearExistingWallPost
+        // ensures cornerGroup still adds any missing outer/inner (no false inner↔outer matches).
         const reuseStartFromPrevCorner = hasCornerStart;
-        const startPostIdx = 0;
+        const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
         const startSpanIdx = 0;
         const totalLen = postX.length > 1
           ? (postX[postX.length - 1] - postX[0])
@@ -2120,14 +2119,13 @@ export default function Scaffold3DView({
         const endZ = startZ + edgeDirZ * runLenForDims;
         const dimY = GROUND_Y - 0.15;
 
-        // Span dimension lines along wall length
+        // Span dimension lines — use buildWallScaffold postX fractions so ticks match real bays
+        // (avoids anonymous gaps when Σ spans mm ≠ geometric postX run from rounding / caps).
         const spans = spansMm ?? wall.spans ?? [];
-        const totalSpanMm = spans.reduce((s: number, v: number) => s + v, 0) || 1;
-        let accumMm = 0;
-        for (let si = 0; si < spans.length; si++) {
-          const t1 = accumMm / totalSpanMm;
-          accumMm += spans[si];
-          const t2 = accumMm / totalSpanMm;
+        const runXM = postX.length > 1 ? postX[postX.length - 1] - postX[0] : 1e-6;
+        for (let si = 0; si < spans.length && si + 1 < postX.length; si++) {
+          const t1 = (postX[si] - postX[0]) / runXM;
+          const t2 = (postX[si + 1] - postX[0]) / runXM;
           const p1 = new THREE.Vector3(
             startX + (endX - startX) * t1, dimY,
             startZ + (endZ - startZ) * t1,
@@ -2208,9 +2206,9 @@ export default function Scaffold3DView({
         return { x: p.x, z: p.z };
       };
 
-      // Rendered wall posts in world XZ, tagged by row (outer z=0 vs inner z=width).
-      // Corner dedup must NOT treat an outer as matching an inner 45mm away — that wrongly
-      // skipped corner standards and left terminal 600 bays without an outer post.
+      // Rendered wall posts in world XZ, tagged by row (local z=0 = outer, z=width = inner).
+      // Row-agnostic dedup matched outers to inners at corners and skipped real outer standards;
+      // larger outer radius (6cm) merges A/B shared nodes without duplicating posts.
       const wallPostWorldXZ: Array<{ x: number; z: number; isOuter: boolean }> = [];
       for (let wi = 0; wi < walls.length; wi++) {
         const info = wallRenderInfos[wi];
@@ -2223,7 +2221,8 @@ export default function Scaffold3DView({
           }
         }
       }
-      const nearExistingWallPost = (x: number, z: number, isOuter: boolean, r = 0.04): boolean => {
+      const nearExistingWallPost = (x: number, z: number, isOuter: boolean, rOuter = 0.06, rInner = 0.04): boolean => {
+        const r = isOuter ? rOuter : rInner;
         for (const p of wallPostWorldXZ) {
           if (p.isOuter !== isOuter) continue;
           if (Math.hypot(p.x - x, p.z - z) < r) return true;
