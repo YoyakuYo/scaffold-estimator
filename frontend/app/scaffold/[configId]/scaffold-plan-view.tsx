@@ -446,7 +446,17 @@ export default function ScaffoldPlanView({ result }: Props) {
           fill={DIM_COLOR}
           transform={`rotate(${readableAngle}, ${labelX}, ${labelY + labelGap})`}
         >
-          {(wall.wallLengthMm ?? 0).toLocaleString()}mm ({wall.totalSpans ?? spans.length}sp)
+          {(() => {
+            const facadeMm = wall.wallLengthMm ?? 0;
+            const nSp = wall.totalSpans ?? spans.length;
+            const runMm = totalLen;
+            const same =
+              facadeMm > 0 && Math.abs(runMm - facadeMm) < 0.5;
+            if (same) {
+              return `${facadeMm.toLocaleString()}mm (${nSp}sp)`;
+            }
+            return `${facadeMm.toLocaleString()}mm façade · ${runMm.toLocaleString()}mm run (${nSp}sp)`;
+          })()}
         </text>
 
         {/* Stair indicators */}
@@ -611,6 +621,18 @@ export default function ScaffoldPlanView({ result }: Props) {
             const p3x = vx + nBx * sw, p3y = vy + nBy * sw;                         // outer B
             const p4x = vx, p4y = vy;                                               // building corner
 
+            const wallA = walls[eA.wallIdx];
+            const wallB = walls[eB.wallIdx];
+            const sa = wallA?.spans;
+            const sb = wallB?.spans;
+            const endSpan = Array.isArray(sa) && sa.length > 0 ? sa[sa.length - 1] : null;
+            const startSpan = Array.isArray(sb) && sb.length > 0 ? sb[0] : null;
+            let cornerDim = '600';
+            if (endSpan != null && startSpan != null) {
+              cornerDim = endSpan === startSpan ? String(endSpan) : `${endSpan}/${startSpan}`;
+            } else if (endSpan != null) cornerDim = String(endSpan);
+            else if (startSpan != null) cornerDim = String(startSpan);
+
             return (
               <g key={`corner-${wi}`}>
                 <polygon
@@ -622,14 +644,14 @@ export default function ScaffoldPlanView({ result }: Props) {
                 <circle cx={p2x} cy={p2y} r={2.5} fill="#334155" />
                 <circle cx={p3x} cy={p3y} r={2.5} fill={colB.stroke} />
                 <circle cx={p4x} cy={p4y} r={2.5} fill="#334155" />
-                {/* Dimension label */}
+                {/* Corner turn: terminal span of wall A + leading span of wall B (shared post at building vertex) */}
                 <text
                   x={(p1x + p2x + p3x + p4x) / 4}
                   y={(p1y + p2y + p3y + p4y) / 4 + 1}
                   textAnchor="middle" dominantBaseline="central"
                   fontSize={6} fill={DIM_COLOR}
                 >
-                  600
+                  {cornerDim}
                 </text>
               </g>
             );
