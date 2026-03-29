@@ -77,6 +77,26 @@ function edgeNormal(edge: Edge, normalSign: number): Point2D {
   };
 }
 
+/** Closed SVG path for scaffold ring: outer boundary minus building hole (even-odd fill). */
+function svgScaffoldRingPath(
+  outer: Point2D[],
+  inner: Point2D[],
+  offX: number,
+  offY: number,
+): string {
+  const loop = (pts: Point2D[]) => {
+    if (pts.length < 2) return '';
+    let d = `M ${pts[0]!.x + offX} ${pts[0]!.y + offY}`;
+    for (let i = 1; i < pts.length; i++) {
+      d += ` L ${pts[i]!.x + offX} ${pts[i]!.y + offY}`;
+    }
+    d += ' Z';
+    return d;
+  };
+  if (outer.length < 3 || inner.length < 3) return '';
+  return `${loop(outer)} ${loop([...inner].reverse())}`;
+}
+
 function buildOffsetPolyline(
   vertices: Point2D[],
   edges: Edge[],
@@ -316,6 +336,10 @@ export default function ScaffoldPlanView({ result }: Props) {
   const offsetX = PAD + SCAFFOLD_PAD - minX;
   const offsetY = PAD + SCAFFOLD_PAD - minY;
 
+  /** One filled ring (no per-wall overlap) so corners read straight, not separate wedges. */
+  const useContinuousScaffoldRing =
+    isClosed && vertices.length >= 3 && outerVertices.length === vertices.length;
+
   // ─── Render scaffold strip along each edge ──────────────
   const renderEdge = (edge: Edge, idx: number) => {
     const col = WALL_ACCENT[idx % WALL_ACCENT.length];
@@ -384,18 +408,20 @@ export default function ScaffoldPlanView({ result }: Props) {
           stroke="#475569" strokeWidth={2.5}
         />
 
-        {/* Scaffold strip (filled parallelogram) */}
-        <polygon
-          points={`${ex1},${ey1} ${ex2},${ey2} ${sx2},${sy2} ${sx1},${sy1}`}
-          fill={col.fill}
-          stroke={col.stroke}
-          strokeWidth={1.5}
-          opacity={0.7}
-        />
-
-        {/* Outer edge of scaffold strip */}
-        <line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
-          stroke={col.stroke} strokeWidth={1.2} strokeDasharray="4,2" />
+        {/* Per-edge strip only when not using one continuous ring (open / degenerate). */}
+        {!useContinuousScaffoldRing && (
+          <>
+            <polygon
+              points={`${ex1},${ey1} ${ex2},${ey2} ${sx2},${sy2} ${sx1},${sy1}`}
+              fill={col.fill}
+              stroke={col.stroke}
+              strokeWidth={1.5}
+              opacity={0.7}
+            />
+            <line x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+              stroke={col.stroke} strokeWidth={1.2} strokeDasharray="4,2" />
+          </>
+        )}
 
         {/* Post ticks */}
         {postPositions.map((pos, pi) => {
@@ -588,6 +614,25 @@ export default function ScaffoldPlanView({ result }: Props) {
               stroke="#94a3b8"
               strokeWidth={2}
             />
+          )}
+
+          {/* Single scaffold band (closed loops): no stacked semi-transparent wall quads at corners. */}
+          {useContinuousScaffoldRing && (
+            <g>
+              <path
+                d={svgScaffoldRingPath(outerVertices, vertices, offsetX, offsetY)}
+                fill="#e2e8f0"
+                fillRule="evenodd"
+                opacity={0.95}
+              />
+              <polygon
+                points={outerVertices.map(v => `${v.x + offsetX},${v.y + offsetY}`).join(' ')}
+                fill="none"
+                stroke="#64748b"
+                strokeWidth={1.25}
+                strokeDasharray="4 2"
+              />
+            </g>
           )}
 
           {/* Building label */}
