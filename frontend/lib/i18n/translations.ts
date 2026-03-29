@@ -1075,16 +1075,6 @@ export const translations = {
     zoomIn: { ja: '拡大', en: 'Zoom In', fr: 'Zoom avant' },
     zoomOut: { ja: '縮小', en: 'Zoom Out', fr: 'Zoom arrière' },
     planPrintTitle: { ja: '平面図', en: 'Plan View', fr: 'Vue en plan' },
-    cornerDeckFootnote1: {
-      ja: 'コーナー600帯は歩行デッキ。90°で隣り面へ回り込む位置には端部材を置かず、作業者がそのまま曲がれる想定です。',
-      en: 'Corner 600mm bays are walkable decks. No end stopper at 90° turns into the next wall so workers can turn through the corner.',
-      fr: 'Les travées d’angle 600 mm sont des planchers de circulation. Pas d’arrêt d’extrémité au virage à 90° vers la façade suivante.',
-    },
-    cornerDeckFootnote2: {
-      ja: '3D表示でも躯体コーナー側の壁端には端部手摺／端部布材・枠を出しません（開放端のみ）。',
-      en: '3D omits end rails/stoppers at polygon corners; they appear only at true free ends of a wall run.',
-      fr: 'La vue 3D n’affiche pas d’arrêts aux coins du bâtiment — seulement aux extrémités libres d’un linéaire.',
-    },
     // PerimeterTracer
     newFile: { ja: '新規ファイル', en: 'New File', fr: 'New File' },
     calibrateScale: { ja: 'スケール設定', en: 'Calibrate Scale', fr: 'Calibrate Scale' },

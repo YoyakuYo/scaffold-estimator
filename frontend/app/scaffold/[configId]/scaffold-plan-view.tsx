@@ -396,12 +396,6 @@ export default function ScaffoldPlanView({ result }: Props) {
     [vertices, edges, outerVertices, walls, normalSign, isClosed],
   );
 
-  /** Closed footprint with corner run past façade — short note: walkable corner, no stopper at 90° turn. */
-  const showCornerWalkableFootnote =
-    isClosed &&
-    walls.length >= 2 &&
-    walls.some((w) => planExtendFactor(w, isClosed, walls.length) > 1.02);
-
   // Bounding box — handle empty/degenerate cases (include extended outer run past corners)
   const allPts = [
     ...vertices,
@@ -415,9 +409,8 @@ export default function ScaffoldPlanView({ result }: Props) {
 
   const PAD = 120;
   const SCAFFOLD_PAD = 50;
-  const planHeaderExtra = showCornerWalkableFootnote ? 36 : 0;
   const svgW = Math.max(400, (maxX - minX) + PAD * 2 + SCAFFOLD_PAD * 2);
-  const svgH = Math.max(300, (maxY - minY) + PAD * 2 + SCAFFOLD_PAD * 2 + planHeaderExtra);
+  const svgH = Math.max(300, (maxY - minY) + PAD * 2 + SCAFFOLD_PAD * 2);
 
   const offsetX = PAD + SCAFFOLD_PAD - minX;
   const offsetY = PAD + SCAFFOLD_PAD - minY;
@@ -684,19 +677,9 @@ export default function ScaffoldPlanView({ result }: Props) {
           style={{ background: '#ffffff', minWidth: Math.min(svgW, 400) }}
         >
           {/* Title */}
-          <text x={svgW / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
+          <text x={svgW / 2} y={22} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
             {t('viewer', 'planView')} — {walls.length} {t('viewer', 'walls')}
           </text>
-          {showCornerWalkableFootnote && (
-            <g>
-              <text x={svgW / 2} y={36} textAnchor="middle" fontSize={7.5} fill="#4b5563" className="select-none">
-                {t('viewer', 'cornerDeckFootnote1')}
-              </text>
-              <text x={svgW / 2} y={48} textAnchor="middle" fontSize={7.5} fill="#4b5563" className="select-none">
-                {t('viewer', 'cornerDeckFootnote2')}
-              </text>
-            </g>
-          )}
 
           {/* Building outline fill (closed polygons only) */}
           {isClosed && vertices.length >= 3 && (
