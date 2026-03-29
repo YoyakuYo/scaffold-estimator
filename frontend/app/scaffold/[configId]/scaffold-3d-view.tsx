@@ -1159,13 +1159,13 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
-        // Only at **free** ends of the run (matches BOM). No stopper at polygon corners: workers walk 600→90°→next wall.
-        // Start: skip when reusing previous wall’s corner post. End: skip when run meets next wall (flushDeckAtCornerEnd).
+        // Only at the **terminal** free end of the run (typ. 600mm bay). Walk paths stay open at the run **start**
+        // (first bays / 1800 side) so crews can tour the building; no transverse rail at that mouth.
+        // Skip when the run meets the next wall at a corner (flushDeckAtCornerEnd).
         // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺.
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const endPositions: number[] = [];
-          if (!reuseStartFromPrevCorner) endPositions.push(postX[startPostIdx]);
           if (!flushDeckAtCornerEnd) endPositions.push(postX[postX.length - 1]);
           if (isWakugumi) {
             for (const ex of endPositions) {
