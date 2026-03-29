@@ -47,6 +47,10 @@ const CORNER_TURN_SPAN_KUSABI_M = 0.6;
 const CORNER_TURN_SPAN_WAKUGUMI_M = 0.61;
 /** Offset from building wall to inner posts (always 300mm). */
 const WALL_TO_INNER_POSTS_MM = 300;
+/** Inner strip of deck left without transverse stopper so workers can turn 90° toward the building (local z → inner). */
+const END_STOPPER_INNER_TURN_CLEARANCE_M = 0.48;
+/** Saturated red for 端部 — visible against pipe grey in default and technical palettes. */
+const END_STOPPER_RED = 0xff2020;
 /** Spans (planks) can overrun toward the wall by this amount (m). */
 const SPAN_OVERRUN_TO_WALL_M = 0.3;
 
@@ -73,7 +77,7 @@ const C_TECH = {
   yokoji: 0x15803d,
   topGuard: 0x6d28d9,
   frame: 0x4f46e5,
-  endStopper: 0x7c3aed,
+  endStopper: END_STOPPER_RED,
   stair: 0x047857,
 };
 /** Buragetto (bracket) sections — always blue for visual verification */
@@ -653,12 +657,18 @@ export default function Scaffold3DView({
         color: C_BRACKET, metalness: metal, roughness: rough,
       });
       const endStopperMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.endStopper : 0x7c3aed,
-        metalness: metal, roughness: rough,
+        color: END_STOPPER_RED,
+        metalness: metal * 0.35,
+        roughness: rough,
+        emissive: 0x330000,
+        emissiveIntensity: 0.15,
       });
       const endStopperFrameMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.endStopper : 0x6d28d9,
-        metalness: metal + 0.1, roughness: rough,
+        color: END_STOPPER_RED,
+        metalness: metal * 0.35,
+        roughness: rough + 0.05,
+        emissive: 0x330000,
+        emissiveIntensity: 0.12,
       });
 
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -1159,42 +1169,52 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
-        // Only at the **terminal** free end of the run (typ. 600mm bay). Walk paths stay open at the run **start**
-        // (first bays / 1800 side) so crews can tour the building; no transverse rail at that mouth.
-        // Skip when the run meets the next wall at a corner (flushDeckAtCornerEnd).
-        // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺.
+        // Terminal bay (typ. 600mm) ends at postX[last]: transverse rails stop straight-ahead travel along the wall.
+        // Run **start** (1800 corner / open mouth): no stopper — tour entry.
+        // When this end meets the **next wall** (flushDeckAtCornerEnd), leave the **inner** strip (z → building)
+        // open so the 90° turn onto the corner deck / next façade is not blocked.
+        // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺. Always bright red (materials above).
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
-          const endPositions: number[] = [];
-          if (!flushDeckAtCornerEnd) endPositions.push(postX[postX.length - 1]);
+          const exEnd = postX[postX.length - 1];
+          const zStopperInner =
+            flushDeckAtCornerEnd
+              ? Math.min(widthM, Math.max(0.1, widthM - END_STOPPER_INNER_TURN_CLEARANCE_M))
+              : widthM;
           if (isWakugumi) {
-            for (const ex of endPositions) {
-              for (let lv = 1; lv <= levelsToBuild; lv++) {
-                const y = GROUND_Y + JACK_H + lv * LEVEL_H;
-                if (endStopperType === 'nuno') {
-                  const barY1 = y + 0.05;
-                  const barY2 = y + 0.45;
-                  addPipe(group, ex, barY1, 0, ex, barY1, widthM, endStopperMat, PIPE_R * 0.7);
-                  addPipe(group, ex, barY2, 0, ex, barY2, widthM, endStopperMat, PIPE_R * 0.7);
-                } else {
-                  const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
-                  const frameTop = y - 0.05;
-                  addPipe(group, ex, frameBottom, 0, ex, frameTop, 0, endStopperFrameMat, PIPE_R * 0.8);
-                  addPipe(group, ex, frameBottom, widthM, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.8);
-                  addPipe(group, ex, frameTop, 0, ex, frameTop, widthM, endStopperFrameMat, PIPE_R * 0.7);
-                  addPipe(group, ex, frameBottom, 0, ex, frameBottom, widthM, endStopperFrameMat, PIPE_R * 0.6);
-                }
+            for (let lv = 1; lv <= levelsToBuild; lv++) {
+              const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+              if (endStopperType === 'nuno') {
+                const barY1 = y + 0.05;
+                const barY2 = y + 0.45;
+                addPipe(group, exEnd, barY1, 0, exEnd, barY1, zStopperInner, endStopperMat, PIPE_R * 0.75);
+                addPipe(group, exEnd, barY2, 0, exEnd, barY2, zStopperInner, endStopperMat, PIPE_R * 0.72);
+              } else {
+                const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
+                const frameTop = y - 0.05;
+                addPipe(group, exEnd, frameBottom, 0, exEnd, frameTop, 0, endStopperFrameMat, PIPE_R * 0.85);
+                addPipe(
+                  group,
+                  exEnd,
+                  frameBottom,
+                  zStopperInner,
+                  exEnd,
+                  frameTop,
+                  zStopperInner,
+                  endStopperFrameMat,
+                  PIPE_R * 0.85,
+                );
+                addPipe(group, exEnd, frameTop, 0, exEnd, frameTop, zStopperInner, endStopperFrameMat, PIPE_R * 0.75);
+                addPipe(group, exEnd, frameBottom, 0, exEnd, frameBottom, zStopperInner, endStopperFrameMat, PIPE_R * 0.65);
               }
             }
           } else if (!isBracket) {
-            for (const ex of endPositions) {
-              for (let lv = 1; lv <= levelsToBuild; lv++) {
-                const y = GROUND_Y + JACK_H + lv * LEVEL_H;
-                const railTop = y + 0.9;
-                const railMid = y + 0.45;
-                addPipe(group, ex, railTop, 0, ex, railTop, widthM, endStopperMat, PIPE_R * 0.65);
-                addPipe(group, ex, railMid, 0, ex, railMid, widthM, endStopperMat, PIPE_R * 0.6);
-              }
+            for (let lv = 1; lv <= levelsToBuild; lv++) {
+              const y = GROUND_Y + JACK_H + lv * LEVEL_H;
+              const railTop = y + 0.9;
+              const railMid = y + 0.45;
+              addPipe(group, exEnd, railTop, 0, exEnd, railTop, zStopperInner, endStopperMat, PIPE_R * 0.72);
+              addPipe(group, exEnd, railMid, 0, exEnd, railMid, zStopperInner, endStopperMat, PIPE_R * 0.68);
             }
           }
         }
