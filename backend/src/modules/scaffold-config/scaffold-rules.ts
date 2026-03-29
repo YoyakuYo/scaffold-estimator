@@ -350,43 +350,126 @@ export function fitSpansToWallLength(
   return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
 }
 
+/** Role of a wall on a 4-sided rectangle for kusabi corner span templates (短辺 / 長辺). */
+export type KusabiRectangleCornerEdgeRole = 'short' | 'long';
+
+/**
+ * Sum of spans **between** the first 1800 corner bay and the terminal bay (mm).
+ * Closed polygon standard run: wall + 300 + terminal = 1800 + this + terminal → this = wall − 1500.
+ */
+export function kusabiCornerMiddleSumMm(wallLengthMm: number): number {
+  return wallLengthMm + CORNER_OVERRUN_MM - CORNER_START_SPAN_MM;
+}
+
+/**
+ * For a 4-wall rectangle (two lengths, each twice), assign short vs long edge when both templates fit.
+ * Square: all four walls same length → long if divisible, else short if that template fits, else null.
+ */
+export function classifyKusabiRectangleEdgeRoles(
+  wallLengthsMm: readonly number[],
+  scaffoldWidthMm: number,
+): (KusabiRectangleCornerEdgeRole | null)[] {
+  const none = () => wallLengthsMm.map(() => null as null);
+  if (wallLengthsMm.length !== 4) return none();
+
+  const terminal = cornerTerminalSpanMmKusabi(scaffoldWidthMm);
+  const penultimate = terminal + CORNER_OVERRUN_MM;
+  const shortTailMm = 1200 + penultimate;
+
+  const fitsLong = (L: number) => {
+    const m = kusabiCornerMiddleSumMm(L);
+    return m > 0 && m % CORNER_START_SPAN_MM === 0;
+  };
+  const fitsShort = (L: number) => {
+    const m = kusabiCornerMiddleSumMm(L);
+    return m >= shortTailMm && (m - shortTailMm) % CORNER_START_SPAN_MM === 0;
+  };
+
+  const counts = new Map<number, number>();
+  for (const L of wallLengthsMm) {
+    if (!Number.isFinite(L) || L <= 0) return none();
+    counts.set(L, (counts.get(L) ?? 0) + 1);
+  }
+
+  if (counts.size === 2) {
+    const sorted = [...counts.entries()].sort((a, b) => a[0] - b[0]);
+    if (sorted[0][1] !== 2 || sorted[1][1] !== 2) return none();
+    const Lshort = sorted[0][0];
+    const Llong = sorted[1][0];
+    if (!fitsShort(Lshort) || !fitsLong(Llong)) return none();
+    return wallLengthsMm.map((L) => (L === Lshort ? 'short' : 'long'));
+  }
+
+  if (counts.size === 1) {
+    const L = [...counts.keys()][0]!;
+    if (counts.get(L) !== 4) return none();
+    if (fitsLong(L)) return wallLengthsMm.map(() => 'long');
+    if (fitsShort(L)) return wallLengthsMm.map(() => 'short');
+    return none();
+  }
+
+  return none();
+}
+
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * Per 足場コーナー詳細図 (continuous walk path):
- * - Base run along the wall = wallLength + CORNER_OVERRUN_MM (300mm).
- * - First span = CORNER_START_SPAN_MM (1800mm). Last span = terminal (600 / 900 / 1200 per scaffold width).
- * - When there is real middle length (≥ one standard bay), add **one extra terminal** to the run budget
- *   so middle packs as 1800/900 modules (e.g. 6000mm façade @ 600 width → 1800+1800+1800+900+600, 6 posts
- *   per row). Two-span case wall+300 = 1800+terminal stays [1800, terminal] with no boost.
- * - If the wall is too short, falls back to [t, …middle…, t].
+ * - Standard run length along the wall = **wallLength + 300 + terminal** (300mm overrun + last width-module).
+ * - First bay = 1800mm; last = terminal (600/900/1200). Middle sum = **wall + 300 − 1800** (terminal cancels).
+ * - **Rectangle 4 walls**: short edges end with **1200 + (terminal+300) + terminal** (overrun sits in the
+ *   penultimate bay, e.g. 600→900 @ 600 width); long edges use **1800-only** middle then terminal (one 1800
+ *   absorbs +300 vs a 1500 nominal). Pass `rectangleEdgeRole` from `classifyKusabiRectangleEdgeRoles`.
+ * - **Too short** for [1800, …, terminal]: legacy **[terminal, …middle…, terminal]** with total = wall+300.
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
   scaffoldWidthMm: number = 600,
+  options?: { rectangleEdgeRole?: KusabiRectangleCornerEdgeRole | null },
 ): number[] {
   const terminal = cornerTerminalSpanMmKusabi(scaffoldWidthMm);
-  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
-    return [CORNER_START_SPAN_MM, terminal];
-  }
-  let totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
-  let middleMm = totalRunMm - CORNER_START_SPAN_MM - terminal;
+  const start = CORNER_START_SPAN_MM;
 
-  if (middleMm < 0) {
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
+    return [start, terminal];
+  }
+
+  if (wallLengthMm + CORNER_OVERRUN_MM < start + terminal) {
     const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * terminal;
     if (middleLegacy <= 0) return [terminal, terminal];
     const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
     return [terminal, ...middleSpans, terminal];
   }
-  if (middleMm === 0) {
-    return [CORNER_START_SPAN_MM, terminal];
+
+  const middleSum = kusabiCornerMiddleSumMm(wallLengthMm);
+
+  if (middleSum === 0) {
+    return [start, terminal];
   }
-  /** One extra width-module of run so middle uses full 1800 bays + 900 before terminal (足場コーナー). */
-  if (middleMm >= 600) {
-    totalRunMm += terminal;
-    middleMm = totalRunMm - CORNER_START_SPAN_MM - terminal;
+
+  if (middleSum < 0) {
+    const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * terminal;
+    if (middleLegacy <= 0) return [terminal, terminal];
+    const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
+    return [terminal, ...middleSpans, terminal];
   }
-  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, SPAN_SIZES, 0);
-  return [CORNER_START_SPAN_MM, ...middleSpans, terminal];
+
+  const role = options?.rectangleEdgeRole;
+
+  if (role === 'long' && middleSum % start === 0) {
+    const n = middleSum / start;
+    return [start, ...Array(n).fill(start), terminal];
+  }
+
+  if (role === 'short') {
+    const pen = terminal + CORNER_OVERRUN_MM;
+    const tail = 1200 + pen;
+    if (middleSum >= tail && (middleSum - tail) % start === 0) {
+      const k = (middleSum - tail) / start;
+      return [start, ...Array(k).fill(start), 1200, pen, terminal];
+    }
+  }
+
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleSum, SPAN_SIZES, 0);
+  return [start, ...middleSpans, terminal];
 }
 
 function fitSpansToWallLengthWithOverrun(

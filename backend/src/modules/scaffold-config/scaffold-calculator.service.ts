@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   fitSpansToWallLength,
   fitSpansToWallLengthWithCorner,
+  classifyKusabiRectangleEdgeRoles,
+  type KusabiRectangleCornerEdgeRole,
   calculateLevels,
   NUNO_SIZES,
   ANCHI_LAYOUT_BY_WIDTH,
@@ -191,6 +193,13 @@ export class ScaffoldCalculatorService {
     );
 
     const wallResults: WallCalculationResult[] = [];
+    const rectangleCornerRoles =
+      input.walls.length === 4
+        ? classifyKusabiRectangleEdgeRoles(
+            input.walls.map((w) => w.wallLengthMm),
+            input.scaffoldWidthMm,
+          )
+        : null;
 
     for (let wallIndex = 0; wallIndex < input.walls.length; wallIndex++) {
       const wall = input.walls[wallIndex];
@@ -200,7 +209,14 @@ export class ScaffoldCalculatorService {
         input.preferredMainTatejiMm,
         input.topGuardHeightMm,
       );
-      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, wallIndex);
+      const result = this.calculateWall(
+        wall,
+        input,
+        levelCalc,
+        complexityMultiplier,
+        wallIndex,
+        rectangleCornerRoles?.[wallIndex] ?? null,
+      );
       wallResults.push(result);
     }
 
@@ -251,12 +267,15 @@ export class ScaffoldCalculatorService {
     levelCalc: LevelCalcResult,
     complexityMultiplier: number = 1.0,
     wallIndex: number = 0,
+    rectangleCornerRole: KusabiRectangleCornerEdgeRole | null = null,
   ): WallCalculationResult {
     const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
-    // Step 1: Fit spans. Closed polygon: 1800 + middle + terminal(width); run budget wall+300 (+ one width-module when middle bays exist); see fitSpansToWallLengthWithCorner.
+    // Step 1: Fit spans. Closed polygon: wall+300+terminal run; 4-wall rectangle uses short/long templates; see fitSpansToWallLengthWithCorner.
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
-      ? fitSpansToWallLengthWithCorner(wall.wallLengthMm, widthMm)
+      ? fitSpansToWallLengthWithCorner(wall.wallLengthMm, widthMm, {
+          rectangleEdgeRole: rectangleCornerRole,
+        })
       : fitSpansToWallLength(wall.wallLengthMm, { northWall: wallIndex === 0 });
     // Shared post line (inner+outer) at polygon corners — not double-ordered per wall.
     const cornerPostDeduction =

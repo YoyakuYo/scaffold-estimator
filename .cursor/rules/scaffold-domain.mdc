@@ -125,16 +125,12 @@ Adjacent spans share the post/frame at the boundary:
 
 ### Corner Rule (足場コーナー詳細図) — BOTH Kusabi AND Wakugumi
 At every polygon corner where two walls meet:
-1. **300mm overrun**: Base scaffold run = **wallLength + 300mm**; when there is real middle (≥600mm between first 1800 and terminal), kusabi adds **one extra width-module** to the run budget so middle packs as **1800 / 900** bays (e.g. **6000mm** façade @ **600** width → **1800+1800+1800+900+600**; **5 spans → 6 posts** per row).
-2. **Span layout (closed polygon)**: `[1800, …middle…, terminal]` (kusabi) or `[1829, …middle…, terminal]` (wakugumi)
-   - **Terminal bay** = **足場幅**: **600 / 900 / 1200** (kusabi) or **610 / 914 / 1219** (wakugumi) — same idea as 600≈610; continuous walk into the turn.
-   - **Two-span** case only: **wall+300 = 1800+terminal** → `[1800, terminal]` with **no** extra width-module.
-   - Middle is standard-span fit only (no forced split-to-extra-bays).
-   - Very short walls fall back to `[t,…,t]` with the same terminal **t**.
-3. **Post sharing**: Terminal bay posts are reused by the next wall’s **1800 / 1829** first span (continuous deck). **BOM**: subtract **2 posts** (inner+outer) per wall start shared with the previous wall, and **2** at the last wall’s end on a **closed** loop (≥3 walls) so corner steel is not double-counted.
-4. **Backend**: `fitSpansToWallLengthWithCorner()` / `fitSpansToWallLengthWithCornerWakugumi()`
-5. **3D view**: `buildWallScaffold()` with corner start shift + shared corner post; `flushDeckAtCornerEnd` on terminal bay
-6. Example (kusabi): Wall **6,000mm** @ **600** width → **1800+1800+1800+900+600** (sum = wall + 300 + 600). Longer walls: same pattern with fitted middle (see `fitSpansToWallLengthWithCorner`).
+1. **Kusabi run length** along a closed wall: **wallLength + 300 + terminal** (300mm overrun + last width-module). Middle (between first **1800** and **terminal**) sums to **wall + 300 − 1800** (terminal cancels in that sum).
+2. **Rectangle (4 walls, two lengths ×2)** @ **600mm** width: **short** edges end **…+1200+(terminal+300)+terminal** (overrun is in the penultimate bay, e.g. **900** before **600**); **long** edges use **1800-only** middle then **terminal** (nominal **+300** absorbed in a **1800** vs **1500**). Example: **10,800** short → **1800×5+1200+900+600**; **12,300** long → **1800×7+600**. Classification: `classifyKusabiRectangleEdgeRoles()`; fit: `fitSpansToWallLengthWithCorner(..., { rectangleEdgeRole })`.
+3. **Non-rectangle or unclassified**: middle filled with `SPAN_SIZES` (e.g. **6,000mm** @ **600** → **1800+1800+1800+900+600**). **wall+300 < 1800+terminal** → legacy **`[terminal,…,terminal]`** (total **wall+300**).
+4. **Terminal bay** = **足場幅** (kusabi **600/900/1200**; wakugumi **610/914/1219**). **Wakugumi** still uses `fitSpansToWallLengthWithCornerWakugumi()`.
+5. **Post sharing**: **BOM** deducts **2** posts (inner+outer) per wall start shared with previous wall, **+2** at last wall on closed loop (≥3 walls). **Plan view**: no separate L-shaped “corner patch” polygon — posts are only along each edge strip (inner/outer aligned).
+6. **3D**: `buildWallScaffold()` with shared corner post; spans from stored wall results.
 
 ### Jack Base
 - Range: 0~300mm adjustable

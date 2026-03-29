@@ -15,7 +15,7 @@ export const AI_BIM_RULES = {
   MIDDLE_RAIL_HEIGHT_MM: 450,
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
-  /** Terminal span into the turn (kusabi). Run budget: wall+300mm, plus one width-module when middle bays exist (see backend fitSpansToWallLengthWithCorner). */
+  /** Terminal span into the turn (kusabi). Run budget: wall+300+terminal; rectangle short/long templates see backend. */
   CORNER_SPAN_MM: 600,
   /** First span along each wall after the turn (kusabi). */
   CORNER_START_SPAN_MM: 1800,
@@ -439,12 +439,11 @@ export function countCornerTypes(
  * Used to teach AI extraction about corner handling:
  *
  * 1. At every polygon corner where two walls meet:
- *    - Base run = wallLength + 300mm; kusabi adds one **足場幅** module to the run budget when there is real middle (≥600mm) so bays pack as 1800/900 before the terminal (e.g. 6000mm @ 600 → 1800×3+900+600).
- *    - Last span matches **足場幅**: 600/900/1200 (kusabi) or 610/914/1219 (wakugumi).
- *    - First span on the next wall: 1800mm / 1829mm; reuses posts at the terminal bay.
- *    - Layout: [1800, …middle…, terminal(width)] / [1829, …middle…, terminal(width)]; two-span case wall+300=1800+terminal → [1800, terminal]; short walls → [t…t].
+ *    - Kusabi run = wallLength + 300 + terminal; middle sum = wall + 300 − 1800.
+ *    - Rectangle 4-wall (two lengths): short edges …+1200+(terminal+300)+terminal; long edges 1800×n+terminal.
+ *    - Otherwise standard-span middle fit; wall+300 < 1800+terminal → legacy [t,…,t].
  *
- * 2. Middle (kusabi) is standard-span fit only (no forced split-to-extra-bays).
+ * 2. Wakugumi: [1829, …middle…, terminal]; same post-sharing idea at vertices.
  *
  * 3. Corner walkable area:
  *    - L-shaped (~90°) corners: yokoji pipes + L-shaped deck + habaki

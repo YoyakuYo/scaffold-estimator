@@ -606,70 +606,8 @@ export default function ScaffoldPlanView({ result }: Props) {
             );
           })()}
 
-          {/* Scaffold strips for each edge */}
+          {/* Scaffold strips for each edge (corners: shared post at vertex only — no extra L-patch span) */}
           {edges.map((edge, idx) => renderEdge(edge, idx))}
-
-          {/* Corner patches — L-shaped fill where two adjacent scaffold strips meet */}
-          {isClosed && edges.length >= 2 && edges.map((_, wi) => {
-            const eA = edges[wi];
-            const eB = edges[(wi + 1) % edges.length];
-            const colA = WALL_ACCENT[wi % WALL_ACCENT.length];
-            const colB = WALL_ACCENT[((wi + 1) % edges.length) % WALL_ACCENT.length];
-
-            const lenA = Math.hypot(eA.x2 - eA.x1, eA.y2 - eA.y1);
-            const lenB = Math.hypot(eB.x2 - eB.x1, eB.y2 - eB.y1);
-            if (lenA < 1 || lenB < 1) return null;
-
-            const nAx = normalSign * (-(eA.y2 - eA.y1) / lenA);
-            const nAy = normalSign * ((eA.x2 - eA.x1) / lenA);
-            const nBx = normalSign * (-(eB.y2 - eB.y1) / lenB);
-            const nBy = normalSign * ((eB.x2 - eB.x1) / lenB);
-
-            const sw = SCAFFOLD_STRIP_W;
-            const vx = eA.x2 + offsetX;
-            const vy = eA.y2 + offsetY;
-
-            // 6-point L-shape: outerA → farOuter → outerB → innerB → innerMid → innerA
-            const p1x = vx + nAx * sw, p1y = vy + nAy * sw;                         // outer A
-            const p2x = vx + nAx * sw + nBx * sw, p2y = vy + nAy * sw + nBy * sw;   // far outer
-            const p3x = vx + nBx * sw, p3y = vy + nBy * sw;                         // outer B
-            const p4x = vx, p4y = vy;                                               // building corner
-
-            const wallA = walls[eA.wallIdx];
-            const wallB = walls[eB.wallIdx];
-            const sa = wallA?.spans;
-            const sb = wallB?.spans;
-            const endSpan = Array.isArray(sa) && sa.length > 0 ? sa[sa.length - 1] : null;
-            const startSpan = Array.isArray(sb) && sb.length > 0 ? sb[0] : null;
-            let cornerDim = '600';
-            if (endSpan != null && startSpan != null) {
-              cornerDim = endSpan === startSpan ? String(endSpan) : `${endSpan}/${startSpan}`;
-            } else if (endSpan != null) cornerDim = String(endSpan);
-            else if (startSpan != null) cornerDim = String(startSpan);
-
-            return (
-              <g key={`corner-${wi}`}>
-                <polygon
-                  points={`${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y} ${p4x},${p4y}`}
-                  fill="#e2e8f0" stroke="#94a3b8" strokeWidth={1.2} opacity={0.8}
-                />
-                {/* Post markers at L-shape corners */}
-                <circle cx={p1x} cy={p1y} r={2.5} fill={colA.stroke} />
-                <circle cx={p2x} cy={p2y} r={2.5} fill="#334155" />
-                <circle cx={p3x} cy={p3y} r={2.5} fill={colB.stroke} />
-                <circle cx={p4x} cy={p4y} r={2.5} fill="#334155" />
-                {/* Corner turn: terminal span of wall A + leading span of wall B (shared post at building vertex) */}
-                <text
-                  x={(p1x + p2x + p3x + p4x) / 4}
-                  y={(p1y + p2y + p3y + p4y) / 4 + 1}
-                  textAnchor="middle" dominantBaseline="central"
-                  fontSize={6} fill={DIM_COLOR}
-                >
-                  {cornerDim}
-                </text>
-              </g>
-            );
-          })}
 
           {/* Legend */}
           <g transform={`translate(${PAD - 20}, ${svgH - 18})`}>
