@@ -1075,6 +1075,21 @@ export const translations = {
     zoomIn: { ja: '拡大', en: 'Zoom In', fr: 'Zoom avant' },
     zoomOut: { ja: '縮小', en: 'Zoom Out', fr: 'Zoom arrière' },
     planPrintTitle: { ja: '平面図', en: 'Plan View', fr: 'Vue en plan' },
+    cornerDeckFootnote1: {
+      ja: 'コーナー600帯は歩行デッキ（作業床）。躯体コーナーから90°に回り込む周囲は開放し、周回・乗り入れできます。',
+      en: 'Corner 600mm bays are walkable working decks. The turn toward the next wall stays open so workers can circulate from all sides.',
+      fr: 'Les travées d’angle 600 mm sont des planchers de circulation. Le retour à 90° vers le mur suivant reste ouvert pour la circulation.',
+    },
+    cornerDeckFootnote2: {
+      ja: '端部材（布材／枠タイプ）は各コーナー帯の先端（張り出し外れ）のみ。紫丸＝3D・数量と同じ位置。',
+      en: 'End stoppers (nuno or frame) only at the outer tip of each corner bay. Purple dots match 3D and BOM.',
+      fr: 'Arrêts d’extrémité (nuno ou cadre) uniquement au bout libre de chaque travée d’angle. Points violets = même position qu’en 3D et nomenclature.',
+    },
+    legendCornerEndStopper: {
+      ja: '端部材（コーナー先端）',
+      en: 'End stopper (corner tip)',
+      fr: 'Arrêt d’extrémité (bout d’angle)',
+    },
     // PerimeterTracer
     newFile: { ja: '新規ファイル', en: 'New File', fr: 'New File' },
     calibrateScale: { ja: 'スケール設定', en: 'Calibrate Scale', fr: 'Calibrate Scale' },

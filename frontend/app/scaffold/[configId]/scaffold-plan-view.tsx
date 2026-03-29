@@ -396,6 +396,12 @@ export default function ScaffoldPlanView({ result }: Props) {
     [vertices, edges, outerVertices, walls, normalSign, isClosed],
   );
 
+  /** Closed footprint with corner run past façade (600mm bay etc.) — show end-stopper note + markers. */
+  const showCornerEndStopperLegend =
+    isClosed &&
+    walls.length >= 2 &&
+    walls.some((w) => planExtendFactor(w, isClosed, walls.length) > 1.02);
+
   // Bounding box — handle empty/degenerate cases (include extended outer run past corners)
   const allPts = [
     ...vertices,
@@ -409,8 +415,10 @@ export default function ScaffoldPlanView({ result }: Props) {
 
   const PAD = 120;
   const SCAFFOLD_PAD = 50;
+  const planHeaderExtra = showCornerEndStopperLegend ? 36 : 0;
+  const planLegendExtra = showCornerEndStopperLegend ? 22 : 0;
   const svgW = Math.max(400, (maxX - minX) + PAD * 2 + SCAFFOLD_PAD * 2);
-  const svgH = Math.max(300, (maxY - minY) + PAD * 2 + SCAFFOLD_PAD * 2);
+  const svgH = Math.max(300, (maxY - minY) + PAD * 2 + SCAFFOLD_PAD * 2 + planHeaderExtra + planLegendExtra);
 
   const offsetX = PAD + SCAFFOLD_PAD - minX;
   const offsetY = PAD + SCAFFOLD_PAD - minY;
@@ -421,6 +429,32 @@ export default function ScaffoldPlanView({ result }: Props) {
     vertices.length >= 3 &&
     outerVertices.length === vertices.length &&
     outerRunOutline.length >= 3;
+
+  /** Outer tip of each extended run (mid-strip): matches 3D end stopper plane; L-turn stays open. */
+  const cornerEndStopperPlanPoints = useMemo(() => {
+    if (!showCornerEndStopperLegend || vertices.length < 3 || edges.length !== vertices.length) return [];
+    const n = vertices.length;
+    const pts: Point2D[] = [];
+    for (let i = 0; i < n; i++) {
+      const edge = edges[i]!;
+      const wall = walls[edge.wallIdx];
+      if (planExtendFactor(wall, isClosed, walls.length) <= 1.02) continue;
+      const V0 = vertices[i]!;
+      const V1 = vertices[(i + 1) % n]!;
+      const geomLen = Math.hypot(V1.x - V0.x, V1.y - V0.y);
+      if (geomLen < 1e-6) continue;
+      const T = { x: (V1.x - V0.x) / geomLen, y: (V1.y - V0.y) / geomLen };
+      const en = edgeNormal(edge, normalSign);
+      const ext = planExtendFactor(wall, isClosed, walls.length);
+      const L = geomLen * ext;
+      const tipInner = { x: V0.x + T.x * L, y: V0.y + T.y * L };
+      pts.push({
+        x: tipInner.x + en.x * (SCAFFOLD_STRIP_W * 0.45),
+        y: tipInner.y + en.y * (SCAFFOLD_STRIP_W * 0.45),
+      });
+    }
+    return pts;
+  }, [showCornerEndStopperLegend, vertices, edges, walls, normalSign, isClosed]);
 
   // ─── Render scaffold strip along each edge ──────────────
   const renderEdge = (edge: Edge, idx: number) => {
@@ -677,9 +711,19 @@ export default function ScaffoldPlanView({ result }: Props) {
           style={{ background: '#ffffff', minWidth: Math.min(svgW, 400) }}
         >
           {/* Title */}
-          <text x={svgW / 2} y={22} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
+          <text x={svgW / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
             {t('viewer', 'planView')} — {walls.length} {t('viewer', 'walls')}
           </text>
+          {showCornerEndStopperLegend && (
+            <g>
+              <text x={svgW / 2} y={36} textAnchor="middle" fontSize={7.5} fill="#4b5563" className="select-none">
+                {t('viewer', 'cornerDeckFootnote1')}
+              </text>
+              <text x={svgW / 2} y={48} textAnchor="middle" fontSize={7.5} fill="#4b5563" className="select-none">
+                {t('viewer', 'cornerDeckFootnote2')}
+              </text>
+            </g>
+          )}
 
           {/* Building outline fill (closed polygons only) */}
           {isClosed && vertices.length >= 3 && (
@@ -729,8 +773,22 @@ export default function ScaffoldPlanView({ result }: Props) {
           {/* Scaffold strips for each edge (corners: shared post at vertex only — no extra L-patch span) */}
           {edges.map((edge, idx) => renderEdge(edge, idx))}
 
+          {/* End stopper at outer tip of corner bay only (3D / BOM); purple = walkable deck stays open toward next wall */}
+          {cornerEndStopperPlanPoints.map((p, i) => (
+            <circle
+              key={`corner-stopper-${i}`}
+              cx={p.x + offsetX}
+              cy={p.y + offsetY}
+              r={4}
+              fill="#7c3aed"
+              stroke="#fff"
+              strokeWidth={1}
+              opacity={0.92}
+            />
+          ))}
+
           {/* Legend */}
-          <g transform={`translate(${PAD - 20}, ${svgH - 18})`}>
+          <g transform={`translate(${PAD - 20}, ${showCornerEndStopperLegend ? svgH - 34 : svgH - 18})`}>
             {walls.map((w, i) => {
               const col = WALL_ACCENT[i % WALL_ACCENT.length];
               return (
@@ -749,6 +807,14 @@ export default function ScaffoldPlanView({ result }: Props) {
               </text>
             </g>
           </g>
+          {showCornerEndStopperLegend && (
+            <g transform={`translate(${PAD - 20}, ${svgH - 14})`}>
+              <circle cx={4} cy={-2} r={3.5} fill="#7c3aed" stroke="#fff" strokeWidth={0.8} opacity={0.92} />
+              <text x={14} y={1} fontSize={7.5} fill={DIM_TEXT}>
+                {t('viewer', 'legendCornerEndStopper')}
+              </text>
+            </g>
+          )}
 
           {/* Compass */}
           <g transform={`translate(${svgW - 35}, 45)`}>
