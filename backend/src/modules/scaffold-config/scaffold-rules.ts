@@ -353,12 +353,12 @@ export function fitSpansToWallLength(
 /**
  * Span fitting for walls that meet at corners (closed polygon).
  * Per 足場コーナー詳細図 (continuous walk path):
- * - Total scaffold run along the wall = wallLength + CORNER_OVERRUN_MM (300mm).
- * - First span = CORNER_START_SPAN_MM (1800mm).
- * - Last span = CORNER_SPAN_MM (600mm) — normal module; the +300mm is only in **total run**, so the
- *   last two posts end **300mm past the building corner** (that bay may start before the corner).
- * Middle = totalRun - 1800 - terminal(600|900|1200). Middle is expanded to ≥ ceil(middle/1800)+1 bays
- * when splittable (continuous corner walk). If the wall is too short, falls back to [t, …middle…, t].
+ * - Base run along the wall = wallLength + CORNER_OVERRUN_MM (300mm).
+ * - First span = CORNER_START_SPAN_MM (1800mm). Last span = terminal (600 / 900 / 1200 per scaffold width).
+ * - When there is real middle length (≥ one standard bay), add **one extra terminal** to the run budget
+ *   so middle packs as 1800/900 modules (e.g. 6000mm façade @ 600 width → 1800+1800+1800+900+600, 6 posts
+ *   per row). Two-span case wall+300 = 1800+terminal stays [1800, terminal] with no boost.
+ * - If the wall is too short, falls back to [t, …middle…, t].
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
@@ -368,25 +368,24 @@ export function fitSpansToWallLengthWithCorner(
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
     return [CORNER_START_SPAN_MM, terminal];
   }
-  const totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
-  const middleMmNew = totalRunMm - CORNER_START_SPAN_MM - terminal;
+  let totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
+  let middleMm = totalRunMm - CORNER_START_SPAN_MM - terminal;
 
-  if (middleMmNew < 0) {
+  if (middleMm < 0) {
     const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * terminal;
     if (middleLegacy <= 0) return [terminal, terminal];
     const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
     return [terminal, ...middleSpans, terminal];
   }
-  if (middleMmNew === 0) {
+  if (middleMm === 0) {
     return [CORNER_START_SPAN_MM, terminal];
   }
-  let middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, SPAN_SIZES, 0);
-  middleSpans = expandMiddleSpansToTargetCount(
-    middleSpans,
-    middleMmNew,
-    SPAN_SIZES,
-    CORNER_START_SPAN_MM,
-  );
+  /** One extra width-module of run so middle uses full 1800 bays + 900 before terminal (足場コーナー). */
+  if (middleMm >= 600) {
+    totalRunMm += terminal;
+    middleMm = totalRunMm - CORNER_START_SPAN_MM - terminal;
+  }
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleMm, SPAN_SIZES, 0);
   return [CORNER_START_SPAN_MM, ...middleSpans, terminal];
 }
 

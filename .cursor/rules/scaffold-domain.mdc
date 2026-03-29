@@ -125,16 +125,16 @@ Adjacent spans share the post/frame at the boundary:
 
 ### Corner Rule (足場コーナー詳細図) — BOTH Kusabi AND Wakugumi
 At every polygon corner where two walls meet:
-1. **300mm overrun**: Scaffold run along each wall = **wallLength + 300mm**
+1. **300mm overrun**: Base scaffold run = **wallLength + 300mm**; when there is real middle (≥600mm between first 1800 and terminal), kusabi adds **one extra width-module** to the run budget so middle packs as **1800 / 900** bays (e.g. **6000mm** façade @ **600** width → **1800+1800+1800+900+600**; **5 spans → 6 posts** per row).
 2. **Span layout (closed polygon)**: `[1800, …middle…, terminal]` (kusabi) or `[1829, …middle…, terminal]` (wakugumi)
    - **Terminal bay** = **足場幅**: **600 / 900 / 1200** (kusabi) or **610 / 914 / 1219** (wakugumi) — same idea as 600≈610; continuous walk into the turn.
-   - **Total run = wallLength + 300mm** — the **last two posts** end **300mm past** the building corner; the terminal bay may start before the corner along the wall.
-   - Middle is filled with standard spans, then **expanded** to at least **ceil(middle/1800)+1** bays when splittable (more bays along the run before the terminal module).
+   - **Two-span** case only: **wall+300 = 1800+terminal** → `[1800, terminal]` with **no** extra width-module.
+   - Middle is standard-span fit only (no forced split-to-extra-bays).
    - Very short walls fall back to `[t,…,t]` with the same terminal **t**.
 3. **Post sharing**: Terminal bay posts are reused by the next wall’s **1800 / 1829** first span (continuous deck). **BOM**: subtract **2 posts** (inner+outer) per wall start shared with the previous wall, and **2** at the last wall’s end on a **closed** loop (≥3 walls) so corner steel is not double-counted.
 4. **Backend**: `fitSpansToWallLengthWithCorner()` / `fitSpansToWallLengthWithCornerWakugumi()`
 5. **3D view**: `buildWallScaffold()` with corner start shift + shared corner post; `flushDeckAtCornerEnd` on terminal bay
-6. Example (kusabi): Wall 10,200mm → sum of spans = 10,500 (= wall + 300); **last span is always 600**; middle is fitted (see `fitSpansToWallLengthWithCorner`)
+6. Example (kusabi): Wall **6,000mm** @ **600** width → **1800+1800+1800+900+600** (sum = wall + 300 + 600). Longer walls: same pattern with fitted middle (see `fitSpansToWallLengthWithCorner`).
 
 ### Jack Base
 - Range: 0~300mm adjustable

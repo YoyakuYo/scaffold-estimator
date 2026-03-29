@@ -14,37 +14,38 @@ import {
 } from './scaffold-rules-wakugumi';
 
 describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
-  it('uses 1800 first, terminal = scaffold width (600 default); +300mm is total run', () => {
+  it('uses 1800 first, terminal = scaffold width; run includes +300mm plus one width-module when middle ≥ 600', () => {
     const wallMm = 10_200;
     const spans = fitSpansToWallLengthWithCorner(wallMm, 600);
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
     expect(spans[spans.length - 1]).toBe(cornerTerminalSpanMmKusabi(600));
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(wallMm + CORNER_OVERRUN_MM);
+    expect(sum).toBe(wallMm + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
   });
 
-  it('terminal span matches 900mm scaffold width', () => {
+  it('terminal span matches 900mm scaffold width (6000mm wall)', () => {
     const spans = fitSpansToWallLengthWithCorner(6000, 900);
     expect(spans[spans.length - 1]).toBe(900);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(6000 + CORNER_OVERRUN_MM);
+    expect(sum).toBe(6000 + CORNER_OVERRUN_MM + 900);
+    expect(spans).toEqual([1800, 1800, 1800, 900, 900]);
   });
 
-  it('6000mm wall @ 600 width: expanded middle → 6 spans total (足場コーナー連続)', () => {
+  it('6000mm wall @ 600 width: 1800×3 + 900 + 600 (6 posts per row inner/outer)', () => {
     const spans = fitSpansToWallLengthWithCorner(6000, 600);
-    expect(spans.length).toBe(6);
-    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
-    expect(spans[5]).toBe(600);
+    expect(spans).toEqual([1800, 1800, 1800, 900, 600]);
+    expect(spans.reduce((a, b) => a + b, 0)).toBe(6000 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
   });
 
-  it('allows small overrun when wall length is not representable as exact middle span sum', () => {
+  it('allows bounded overrun when middle is not an exact sum of standard spans', () => {
     const wallMm = 10_000;
     const spans = fitSpansToWallLengthWithCorner(wallMm, 600);
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
     expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBeGreaterThanOrEqual(wallMm + CORNER_OVERRUN_MM);
-    expect(sum).toBeLessThanOrEqual(wallMm + CORNER_OVERRUN_MM + 600);
+    const expectedBase = wallMm + CORNER_OVERRUN_MM + CORNER_SPAN_MM;
+    expect(sum).toBeGreaterThanOrEqual(expectedBase);
+    expect(sum).toBeLessThanOrEqual(expectedBase + 600);
   });
 
   it('exact two-span layout when wallLength = 2100mm (no middle)', () => {

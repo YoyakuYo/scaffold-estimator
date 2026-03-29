@@ -253,7 +253,7 @@ export class ScaffoldCalculatorService {
     wallIndex: number = 0,
   ): WallCalculationResult {
     const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
-    // Step 1: Fit spans. Closed polygon: 1800 + middle + terminal(width); total run wall+300mm; see fitSpansToWallLengthWithCorner.
+    // Step 1: Fit spans. Closed polygon: 1800 + middle + terminal(width); run budget wall+300 (+ one width-module when middle bays exist); see fitSpansToWallLengthWithCorner.
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
       ? fitSpansToWallLengthWithCorner(wall.wallLengthMm, widthMm)
