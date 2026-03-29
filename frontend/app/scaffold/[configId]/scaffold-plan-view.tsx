@@ -97,6 +97,67 @@ function svgScaffoldRingPath(
   return `${loop(outer)} ${loop([...inner].reverse())}`;
 }
 
+/** Same run stretch as post ticks / span labels (façade → full scaffold run). */
+function planExtendFactor(
+  wall: WallCalculationResult | undefined,
+  isClosed: boolean,
+  wallsCount: number,
+): number {
+  if (!wall) return 1;
+  const spans = wall.spans ?? [];
+  let accum = 0;
+  for (const s of spans) accum += s;
+  const totalLen = accum || (wall.wallLengthMm ?? 1);
+  const facadeMm = wall.wallLengthMm ?? 0;
+  if (
+    PLAN_RUN_EXTEND_OVERFACADE &&
+    isClosed &&
+    wallsCount >= 2 &&
+    facadeMm > 0 &&
+    totalLen > facadeMm + 0.5
+  ) {
+    return totalLen / facadeMm;
+  }
+  return 1;
+}
+
+/**
+ * Outer outline that follows extended scaffold runs past corners (miters C_i → far B_i → next miter).
+ * Without this, the ring stops at building miters while spans draw past corners → visible corner gap.
+ */
+function buildOuterScaffoldRunOutline(
+  vertices: Point2D[],
+  edges: Edge[],
+  outerVertices: Point2D[],
+  walls: WallCalculationResult[],
+  normalSign: number,
+  strip: number,
+  isClosed: boolean,
+): Point2D[] {
+  const n = vertices.length;
+  if (!isClosed || n < 3 || outerVertices.length !== n) return [...outerVertices];
+
+  const pts: Point2D[] = [];
+  for (let i = 0; i < n; i++) {
+    const C_i = outerVertices[i]!;
+    const V0 = vertices[i]!;
+    const V1 = vertices[(i + 1) % n]!;
+    const edge = edges[i]!;
+    const geomLen = Math.hypot(V1.x - V0.x, V1.y - V0.y);
+    if (geomLen < 1e-6) continue;
+    const T = { x: (V1.x - V0.x) / geomLen, y: (V1.y - V0.y) / geomLen };
+    const en = edgeNormal(edge, normalSign);
+    const ext = planExtendFactor(walls[edge.wallIdx], isClosed, walls.length);
+    const L = geomLen * ext;
+    const B_i = {
+      x: V0.x + T.x * L + en.x * strip,
+      y: V0.y + T.y * L + en.y * strip,
+    };
+    pts.push(C_i, B_i);
+  }
+  return pts.length >= 3 ? pts : [...outerVertices];
+}
+
 function buildOffsetPolyline(
   vertices: Point2D[],
   edges: Edge[],
@@ -321,8 +382,26 @@ export default function ScaffoldPlanView({ result }: Props) {
     [vertices, edges, normalSign, isClosed],
   );
 
-  // Bounding box — handle empty/degenerate cases
-  const allPts = [...vertices, ...edges.map(e => ({ x: e.x2, y: e.y2 }))];
+  const outerRunOutline = useMemo(
+    () =>
+      buildOuterScaffoldRunOutline(
+        vertices,
+        edges,
+        outerVertices,
+        walls,
+        normalSign,
+        SCAFFOLD_STRIP_W,
+        isClosed,
+      ),
+    [vertices, edges, outerVertices, walls, normalSign, isClosed],
+  );
+
+  // Bounding box — handle empty/degenerate cases (include extended outer run past corners)
+  const allPts = [
+    ...vertices,
+    ...edges.map(e => ({ x: e.x2, y: e.y2 })),
+    ...outerRunOutline,
+  ];
   const minX = allPts.length > 0 ? Math.min(...allPts.map(p => p.x)) : 0;
   const minY = allPts.length > 0 ? Math.min(...allPts.map(p => p.y)) : 0;
   const maxX = allPts.length > 0 ? Math.max(...allPts.map(p => p.x)) : 400;
@@ -338,7 +417,10 @@ export default function ScaffoldPlanView({ result }: Props) {
 
   /** One filled ring (no per-wall overlap) so corners read straight, not separate wedges. */
   const useContinuousScaffoldRing =
-    isClosed && vertices.length >= 3 && outerVertices.length === vertices.length;
+    isClosed &&
+    vertices.length >= 3 &&
+    outerVertices.length === vertices.length &&
+    outerRunOutline.length >= 3;
 
   // ─── Render scaffold strip along each edge ──────────────
   const renderEdge = (edge: Edge, idx: number) => {
@@ -375,14 +457,7 @@ export default function ScaffoldPlanView({ result }: Props) {
     for (const s of spans) { accum += s; postPositions.push(accum); }
     const totalLen = accum || (wall.wallLengthMm ?? 1);
     const facadeMm = wall.wallLengthMm ?? 0;
-    const extendFactor =
-      PLAN_RUN_EXTEND_OVERFACADE &&
-      isClosed &&
-      walls.length >= 2 &&
-      facadeMm > 0 &&
-      totalLen > facadeMm + 0.5
-        ? totalLen / facadeMm
-        : 1;
+    const extendFactor = planExtendFactor(wall, isClosed, walls.length);
 
     // Edge midpoint for labels (stay on the side for all edges)
     const midX = (ex1 + ex2) / 2;
@@ -620,13 +695,13 @@ export default function ScaffoldPlanView({ result }: Props) {
           {useContinuousScaffoldRing && (
             <g>
               <path
-                d={svgScaffoldRingPath(outerVertices, vertices, offsetX, offsetY)}
+                d={svgScaffoldRingPath(outerRunOutline, vertices, offsetX, offsetY)}
                 fill="#e2e8f0"
                 fillRule="evenodd"
                 opacity={0.95}
               />
               <polygon
-                points={outerVertices.map(v => `${v.x + offsetX},${v.y + offsetY}`).join(' ')}
+                points={outerRunOutline.map(v => `${v.x + offsetX},${v.y + offsetY}`).join(' ')}
                 fill="none"
                 stroke="#64748b"
                 strokeWidth={1.25}
