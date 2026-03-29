@@ -1667,7 +1667,11 @@ export default function Scaffold3DView({
         for (let wi = 0; wi < tWalls.length; wi++) { hCS.push(false); hCE.push(false); iLS.push(false); iLE.push(false); }
         if (tWalls.length >= 2 && tv.length >= 3) {
           const nV = tv.length, nW = tWalls.length;
-          const vIdxs = !tOpen ? Array.from({ length: nV }, (_, j) => j) : [1];
+          // Closed: every vertex is a wall meeting. Open polyline: only interior vertices (exclude
+          // open endpoints); using [1] alone missed later corners on U-shapes (wrong end-stopper side).
+          const vIdxs = !tOpen
+            ? Array.from({ length: nV }, (_, j) => j)
+            : Array.from({ length: Math.max(0, nV - 2) }, (_, k) => k + 1);
           for (const j of vIdxs) {
             const prev = (j - 1 + nV) % nV, next = (j + 1) % nV;
             const dxP = tv[j].x - tv[prev].x, dzP = tv[j].z - tv[prev].z;
