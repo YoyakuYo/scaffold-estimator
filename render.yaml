@@ -1,0 +1,17 @@
+# Render Blueprint — backend API (monorepo)
+# https://render.com/docs/blueprint-spec
+#
+# Without rootDir: backend, Render runs from repo root and has no backend start script →
+# the process exits immediately and you see "no open ports detected".
+#
+# With NODE_ENV=production, npm ci omits devDependencies by default → @nestjs/cli is missing
+# and the TypeScript build never runs. Use --include=dev for the install+build step only.
+
+services:
+  - type: web
+    name: scaffolding-estimation-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start
+    healthCheckPath: /

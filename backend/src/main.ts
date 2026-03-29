@@ -88,7 +88,8 @@ async function bootstrap() {
   expressApp.get('/', (_req, res) => res.json({ status: 'ok' }));
   expressApp.head('/', (_req, res) => res.sendStatus(200));
 
-  const port = Number(process.env.PORT) || 3000;
+  const parsed = parseInt(process.env.PORT ?? '', 10);
+  const port = Number.isFinite(parsed) && parsed > 0 ? parsed : 3000;
   const host = process.env.HOST || '0.0.0.0';
   await app.listen(port, host);
   logger.log(`Application is running on: http://${host}:${port}`);
