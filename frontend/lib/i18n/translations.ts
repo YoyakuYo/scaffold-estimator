@@ -1076,19 +1076,14 @@ export const translations = {
     zoomOut: { ja: '縮小', en: 'Zoom Out', fr: 'Zoom arrière' },
     planPrintTitle: { ja: '平面図', en: 'Plan View', fr: 'Vue en plan' },
     cornerDeckFootnote1: {
-      ja: 'コーナー600帯は歩行デッキ（作業床）。躯体コーナーから90°に回り込む周囲は開放し、周回・乗り入れできます。',
-      en: 'Corner 600mm bays are walkable working decks. The turn toward the next wall stays open so workers can circulate from all sides.',
-      fr: 'Les travées d’angle 600 mm sont des planchers de circulation. Le retour à 90° vers le mur suivant reste ouvert pour la circulation.',
+      ja: 'コーナー600帯は歩行デッキ。90°で隣り面へ回り込む位置には端部材を置かず、作業者がそのまま曲がれる想定です。',
+      en: 'Corner 600mm bays are walkable decks. No end stopper at 90° turns into the next wall so workers can turn through the corner.',
+      fr: 'Les travées d’angle 600 mm sont des planchers de circulation. Pas d’arrêt d’extrémité au virage à 90° vers la façade suivante.',
     },
     cornerDeckFootnote2: {
-      ja: '端部材（布材／枠タイプ）は各コーナー帯の先端（張り出し外れ）のみ。紫丸＝3D・数量と同じ位置。',
-      en: 'End stoppers (nuno or frame) only at the outer tip of each corner bay. Purple dots match 3D and BOM.',
-      fr: 'Arrêts d’extrémité (nuno ou cadre) uniquement au bout libre de chaque travée d’angle. Points violets = même position qu’en 3D et nomenclature.',
-    },
-    legendCornerEndStopper: {
-      ja: '端部材（コーナー先端）',
-      en: 'End stopper (corner tip)',
-      fr: 'Arrêt d’extrémité (bout d’angle)',
+      ja: '3D表示でも躯体コーナー側の壁端には端部手摺／端部布材・枠を出しません（開放端のみ）。',
+      en: '3D omits end rails/stoppers at polygon corners; they appear only at true free ends of a wall run.',
+      fr: 'La vue 3D n’affiche pas d’arrêts aux coins du bâtiment — seulement aux extrémités libres d’un linéaire.',
     },
     // PerimeterTracer
     newFile: { ja: '新規ファイル', en: 'New File', fr: 'New File' },

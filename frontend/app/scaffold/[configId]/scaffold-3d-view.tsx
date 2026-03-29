@@ -1159,15 +1159,15 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
+        // Polygon corners: no stopper on the shared turn — workers must pass 90° without a rail
+        // blocking the corner (same as skipping the last post when flushDeckAtCornerEnd).
         // Start: skip when this wall reuses the previous wall’s corner post (no duplicate rail).
-        // End: always cap the outer tip of the run — including past the 600mm corner bay. That stopper
-        // closes the free end only; the L-turn toward the next wall stays open (walkable deck).
-        // Wakugumi: 端部布材 / 妻側枠 (user-selectable). Kusabi: 端部手摺 (2 heights × 2 ends, matches BOM at free ends).
+        // Wakugumi: 端部布材 / 妻側枠 (user-selectable). Kusabi: 端部手摺 (2 heights × 2 ends, free ends only).
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const endPositions: number[] = [];
           if (!reuseStartFromPrevCorner) endPositions.push(postX[startPostIdx]);
-          endPositions.push(postX[postX.length - 1]);
+          if (!flushDeckAtCornerEnd) endPositions.push(postX[postX.length - 1]);
           if (isWakugumi) {
             for (const ex of endPositions) {
               for (let lv = 1; lv <= levelsToBuild; lv++) {
