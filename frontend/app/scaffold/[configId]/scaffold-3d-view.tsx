@@ -241,6 +241,25 @@ function buildOffsetPathXZ(
   });
 }
 
+/**
+ * When capping span count for 3D perf, keep the **first** and **last** span entries.
+ * A plain `slice(0, max)` dropped the terminal 600/610 corner bay while leaving the leading 1800/1829,
+ * which broke post lines at the building corner and produced bogus “600 + 600 + placeholder” visuals.
+ */
+function capSpansFor3dPreview(allSpans: number[], maxSpans: number): number[] {
+  if (allSpans.length <= maxSpans) return [...allSpans];
+  if (maxSpans < 1) return allSpans.slice(0, 1);
+  if (allSpans.length === 1) return [...allSpans];
+  const first = allSpans[0]!;
+  const last = allSpans[allSpans.length - 1]!;
+  if (maxSpans === 1) return [first];
+  if (maxSpans === 2) return [first, last];
+  const middle = allSpans.slice(1, -1);
+  const midBudget = maxSpans - 2;
+  const middleCapped = middle.length <= midBudget ? middle : middle.slice(0, midBudget);
+  return [first, ...middleCapped, last];
+}
+
 /** Return the max spans we can afford per wall so the total stays under budget. */
 function computeSpanCaps(walls: WallCalculationResult[], levelH: number) {
   let totalSpanLevels = 0;
@@ -767,7 +786,7 @@ export default function Scaffold3DView({
         // Closed polygon: [1800/1829, …middle…, 600/610]; sum = wallLength+300mm so last posts sit past the corner (last bay is normal 600/610).
         const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
-          ? allSpans.slice(0, maxSpans)
+          ? capSpansFor3dPreview(allSpans, maxSpans)
           : allSpans;
         const postX: number[] = [0];
         let acc = 0;
@@ -2322,12 +2341,27 @@ export default function Scaffold3DView({
             addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
             addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
 
-            // L-shaped deck or pattanko for the walkable corner area
+            // L-shaped deck — order corners CCW in XZ (shape uses x, -z) so the quad cannot bow-tie
+            // (bow-ties read as a diagonal “placeholder” plank).
+            const cornerFootprint = [
+              { x: aOuterEnd.x, z: aOuterEnd.z },
+              { x: bOuterStart.x, z: bOuterStart.z },
+              { x: bInnerStart.x, z: bInnerStart.z },
+              { x: aInnerEnd.x, z: aInnerEnd.z },
+            ];
+            const cxF =
+              cornerFootprint.reduce((s, p) => s + p.x, 0) / cornerFootprint.length;
+            const czF =
+              cornerFootprint.reduce((s, p) => s + p.z, 0) / cornerFootprint.length;
+            const sortedFoot = [...cornerFootprint].sort(
+              (a, b) =>
+                Math.atan2(a.z - czF, a.x - cxF) - Math.atan2(b.z - czF, b.x - cxF),
+            );
             const deckShape = new THREE.Shape();
-            deckShape.moveTo(aOuterEnd.x, -aOuterEnd.z);
-            deckShape.lineTo(bOuterStart.x, -bOuterStart.z);
-            deckShape.lineTo(bInnerStart.x, -bInnerStart.z);
-            deckShape.lineTo(aInnerEnd.x, -aInnerEnd.z);
+            deckShape.moveTo(sortedFoot[0]!.x, -sortedFoot[0]!.z);
+            for (let fi = 1; fi < sortedFoot.length; fi++) {
+              deckShape.lineTo(sortedFoot[fi]!.x, -sortedFoot[fi]!.z);
+            }
             deckShape.closePath();
             const deckGeo = new THREE.ExtrudeGeometry(deckShape, { depth: 0.025, bevelEnabled: false });
             const deckMesh = new THREE.Mesh(deckGeo, cornerPlankMat);
