@@ -2233,6 +2233,14 @@ export default function Scaffold3DView({
         const info = wallRenderInfos[wi];
         if (!info?.root || !Array.isArray(info.postX)) continue;
         const si = info.startPostIdx ?? 0;
+        // Leading indices [0 .. si-1] are not meshed (shared with previous wall’s terminal bay).
+        // Still register their world XZ so corner dedup sees the same steel and does not add doubles.
+        for (let pi = 0; pi < si; pi++) {
+          for (const pz of [0, info.widthM]) {
+            const w = toWorldXZ(info.root, info.postX[pi], pz);
+            wallPostWorldXZ.push({ x: w.x, z: w.z, isOuter: pz === 0 });
+          }
+        }
         for (let pi = si; pi < info.postX.length; pi++) {
           for (const pz of [0, info.widthM]) {
             const w = toWorldXZ(info.root, info.postX[pi], pz);
@@ -2240,7 +2248,7 @@ export default function Scaffold3DView({
           }
         }
       }
-      const nearExistingWallPost = (x: number, z: number, isOuter: boolean, rOuter = 0.06, rInner = 0.04): boolean => {
+      const nearExistingWallPost = (x: number, z: number, isOuter: boolean, rOuter = 0.08, rInner = 0.06): boolean => {
         const r = isOuter ? rOuter : rInner;
         for (const p of wallPostWorldXZ) {
           if (p.isOuter !== isOuter) continue;
@@ -2378,14 +2386,20 @@ export default function Scaffold3DView({
           }
 
           // Corner vertical posts only where the wall meshes did not already place steel (no centroid post).
+          // Wall B omits meshing at postX[0] when it reuses the previous wall’s corner pair — never add a second pair at B’s start.
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
+            const bReusesCornerStart = (infoB.startPostIdx ?? 0) > 0;
             const cornerPostsMeta = [
               { pt: aOuterEnd, isOuter: true },
               { pt: aInnerEnd, isOuter: false },
-              { pt: bOuterStart, isOuter: true },
-              { pt: bInnerStart, isOuter: false },
+              ...(bReusesCornerStart
+                ? []
+                : [
+                    { pt: bOuterStart, isOuter: true },
+                    { pt: bInnerStart, isOuter: false },
+                  ]),
             ];
             const rendered = new Set<string>();
             for (const { pt, isOuter } of cornerPostsMeta) {
