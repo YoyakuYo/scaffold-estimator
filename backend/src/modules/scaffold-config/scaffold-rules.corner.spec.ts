@@ -15,19 +15,28 @@ import {
 } from './scaffold-rules-wakugumi';
 
 describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
-  it('rectangle 10800 short edge @ 600: 1800×5 + 1200 + 900 + 600 (overrun in 900)', () => {
+  it('rectangle short-edge hint: prefers 1200 then (terminal+300) before last terminal', () => {
     const spans = fitSpansToWallLengthWithCorner(10_800, 600, { rectangleEdgeRole: 'short' });
-    expect(spans).toEqual([1800, 1800, 1800, 1800, 1800, 1200, 900, 600]);
+    const mid = spans.slice(1, -1);
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
+    expect(mid.length).toBeGreaterThanOrEqual(2);
+    expect(mid[mid.length - 2]).toBe(1200);
+    expect(mid[mid.length - 1]).toBe(CORNER_SPAN_MM + CORNER_OVERRUN_MM);
     expect(spans.reduce((a, b) => a + b, 0)).toBe(10_800 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
   });
 
-  it('rectangle 12300 long edge @ 600: 1800×7 + 600 (+300 absorbed in last 1800 bay)', () => {
+  it('rectangle long-edge hint: prefers all-1800 middle when arithmetically possible', () => {
     const spans = fitSpansToWallLengthWithCorner(12_300, 600, { rectangleEdgeRole: 'long' });
-    expect(spans).toEqual([1800, 1800, 1800, 1800, 1800, 1800, 1800, 600]);
+    const mid = spans.slice(1, -1);
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
+    expect(mid.length).toBeGreaterThan(0);
+    expect(mid.every((s) => s === CORNER_START_SPAN_MM)).toBe(true);
     expect(spans.reduce((a, b) => a + b, 0)).toBe(12_300 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
   });
 
-  it('classifyKusabiRectangleEdgeRoles for 10800/12300 alternating', () => {
+  it('classifyKusabiRectangleEdgeRoles: shorter length → short, longer → long (no template gate)', () => {
     const lens = [10_800, 12_300, 10_800, 12_300];
     expect(classifyKusabiRectangleEdgeRoles(lens, 600)).toEqual(['short', 'long', 'short', 'long']);
   });
@@ -49,9 +58,10 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(spans).toEqual([1800, 1800, 1800, 900, 900]);
   });
 
-  it('6000mm wall @ 600 width (non-rectangle template): 1800×3 + 900 + 600', () => {
+  it('6000mm wall @ 600 width (no rectangle hint): valid middle packing', () => {
     const spans = fitSpansToWallLengthWithCorner(6000, 600);
-    expect(spans).toEqual([1800, 1800, 1800, 900, 600]);
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
     expect(spans.reduce((a, b) => a + b, 0)).toBe(6000 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
   });
 

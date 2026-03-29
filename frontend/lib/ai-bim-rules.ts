@@ -439,9 +439,9 @@ export function countCornerTypes(
  * Used to teach AI extraction about corner handling:
  *
  * 1. At every polygon corner where two walls meet:
- *    - Kusabi run = wallLength + 300 + terminal; middle sum = wall + 300 − 1800.
- *    - Rectangle 4-wall (two lengths): short edges …+1200+(terminal+300)+terminal; long edges 1800×n+terminal.
- *    - Otherwise standard-span middle fit; wall+300 < 1800+terminal → legacy [t,…,t].
+ *    - Kusabi run = wallLength + 300 + terminal; middle = standard spans (wall + 300 − 1800).
+ *    - Rectangle: shorter sides / longer sides are hints to prefer certain tail patterns when valid, not fixed grids.
+ *    - wall+300 < 1800+terminal → legacy [t,…,t].
  *
  * 2. Wakugumi: [1829, …middle…, terminal]; same post-sharing idea at vertices.
  *

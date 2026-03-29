@@ -270,7 +270,7 @@ export class ScaffoldCalculatorService {
     rectangleCornerRole: KusabiRectangleCornerEdgeRole | null = null,
   ): WallCalculationResult {
     const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
-    // Step 1: Fit spans. Closed polygon: wall+300+terminal run; 4-wall rectangle uses short/long templates; see fitSpansToWallLengthWithCorner.
+    // Step 1: Fit spans. Closed polygon: wall+300+terminal; 4-wall rectangle passes short/long hints (preference only); see fitSpansToWallLengthWithCorner.
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
       ? fitSpansToWallLengthWithCorner(wall.wallLengthMm, widthMm, {

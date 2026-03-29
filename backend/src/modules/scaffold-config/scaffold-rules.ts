@@ -350,8 +350,15 @@ export function fitSpansToWallLength(
   return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
 }
 
-/** Role of a wall on a 4-sided rectangle for kusabi corner span templates (短辺 / 長辺). */
+/** Hint for 4-wall rectangles: shorter sides vs longer — used only to **prefer** span patterns, not fixed layouts. */
 export type KusabiRectangleCornerEdgeRole = 'short' | 'long';
+
+/** Tie-break when fitting corner “middle” spans (standard sizes only; same total length). */
+export interface KusabiCornerMiddleFitPreference {
+  kind: 'long' | 'short';
+  terminalMm: number;
+  overrunMm: number;
+}
 
 /**
  * Sum of spans **between** the first 1800 corner bay and the terminal bay (mm).
@@ -361,63 +368,62 @@ export function kusabiCornerMiddleSumMm(wallLengthMm: number): number {
   return wallLengthMm + CORNER_OVERRUN_MM - CORNER_START_SPAN_MM;
 }
 
+function scoreKusabiCornerMiddleFit(
+  fullMiddleSpans: number[],
+  pref: KusabiCornerMiddleFitPreference,
+): number {
+  const start = CORNER_START_SPAN_MM;
+  if (pref.kind === 'long') {
+    const n1800 = fullMiddleSpans.filter((s) => s === start).length;
+    const all1800 =
+      fullMiddleSpans.length > 0 && fullMiddleSpans.every((s) => s === start);
+    return (all1800 ? 1_000_000 : 0) + n1800 * 1_000 - fullMiddleSpans.length;
+  }
+  const pen = pref.terminalMm + pref.overrunMm;
+  const tailOk =
+    fullMiddleSpans.length >= 2 &&
+    fullMiddleSpans[fullMiddleSpans.length - 2] === 1200 &&
+    fullMiddleSpans[fullMiddleSpans.length - 1] === pen;
+  return (tailOk ? 500_000 : 0) + fullMiddleSpans.filter((s) => s === start).length * 100 - fullMiddleSpans.length;
+}
+
 /**
- * For a 4-wall rectangle (two lengths, each twice), assign short vs long edge when both templates fit.
- * Square: all four walls same length → long if divisible, else short if that template fits, else null.
+ * For a 4-wall rectangle only: mark **shorter** façades `short` and **longer** `long` (same length → all `long`).
+ * Does **not** require any specific span arithmetic to “fit”; hints are optional tie-breakers in the fitter.
  */
 export function classifyKusabiRectangleEdgeRoles(
   wallLengthsMm: readonly number[],
-  scaffoldWidthMm: number,
+  _scaffoldWidthMm: number = 600,
 ): (KusabiRectangleCornerEdgeRole | null)[] {
   const none = () => wallLengthsMm.map(() => null as null);
   if (wallLengthsMm.length !== 4) return none();
-
-  const terminal = cornerTerminalSpanMmKusabi(scaffoldWidthMm);
-  const penultimate = terminal + CORNER_OVERRUN_MM;
-  const shortTailMm = 1200 + penultimate;
-
-  const fitsLong = (L: number) => {
-    const m = kusabiCornerMiddleSumMm(L);
-    return m > 0 && m % CORNER_START_SPAN_MM === 0;
-  };
-  const fitsShort = (L: number) => {
-    const m = kusabiCornerMiddleSumMm(L);
-    return m >= shortTailMm && (m - shortTailMm) % CORNER_START_SPAN_MM === 0;
-  };
-
-  const counts = new Map<number, number>();
   for (const L of wallLengthsMm) {
     if (!Number.isFinite(L) || L <= 0) return none();
-    counts.set(L, (counts.get(L) ?? 0) + 1);
   }
+  const counts = new Map<number, number>();
+  for (const L of wallLengthsMm) counts.set(L, (counts.get(L) ?? 0) + 1);
 
   if (counts.size === 2) {
     const sorted = [...counts.entries()].sort((a, b) => a[0] - b[0]);
     if (sorted[0][1] !== 2 || sorted[1][1] !== 2) return none();
     const Lshort = sorted[0][0];
-    const Llong = sorted[1][0];
-    if (!fitsShort(Lshort) || !fitsLong(Llong)) return none();
     return wallLengthsMm.map((L) => (L === Lshort ? 'short' : 'long'));
   }
-
   if (counts.size === 1) {
-    const L = [...counts.keys()][0]!;
-    if (counts.get(L) !== 4) return none();
-    if (fitsLong(L)) return wallLengthsMm.map(() => 'long');
-    if (fitsShort(L)) return wallLengthsMm.map(() => 'short');
-    return none();
+    const [, cnt] = [...counts.entries()][0]!;
+    if (cnt !== 4) return none();
+    return wallLengthsMm.map(() => 'long');
   }
-
   return none();
 }
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * - Standard run length along the wall = **wallLength + 300 + terminal** (300mm overrun + last width-module).
- * - First bay = 1800mm; last = terminal (600/900/1200). Middle sum = **wall + 300 − 1800** (terminal cancels).
- * - **Rectangle 4 walls**: short edges end with **1200 + (terminal+300) + terminal** (overrun sits in the
- *   penultimate bay, e.g. 600→900 @ 600 width); long edges use **1800-only** middle then terminal (one 1800
- *   absorbs +300 vs a 1500 nominal). Pass `rectangleEdgeRole` from `classifyKusabiRectangleEdgeRoles`.
+ * - Run along the wall = **wallLength + 300 + terminal**; first bay **1800**; last = terminal.
+ * - Middle = **wall + 300 − 1800**, filled from **SPAN_SIZES** (exact when possible).
+ * - **Rectangle hint** (`rectangleEdgeRole`): *prefer* long sides as all-1800 middle when possible; *prefer*
+ *   short sides ending middle with **1200** then **(terminal+300)** when possible (overrun in penultimate bay).
+ *   Other lengths still use valid standard combinations — hints are not literal prescriptions.
  * - **Too short** for [1800, …, terminal]: legacy **[terminal, …middle…, terminal]** with total = wall+300.
  */
 export function fitSpansToWallLengthWithCorner(
@@ -453,22 +459,12 @@ export function fitSpansToWallLengthWithCorner(
   }
 
   const role = options?.rectangleEdgeRole;
+  const middlePref: KusabiCornerMiddleFitPreference | undefined =
+    role != null
+      ? { kind: role, terminalMm: terminal, overrunMm: CORNER_OVERRUN_MM }
+      : undefined;
 
-  if (role === 'long' && middleSum % start === 0) {
-    const n = middleSum / start;
-    return [start, ...Array(n).fill(start), terminal];
-  }
-
-  if (role === 'short') {
-    const pen = terminal + CORNER_OVERRUN_MM;
-    const tail = 1200 + pen;
-    if (middleSum >= tail && (middleSum - tail) % start === 0) {
-      const k = (middleSum - tail) / start;
-      return [start, ...Array(k).fill(start), 1200, pen, terminal];
-    }
-  }
-
-  const middleSpans = fitSpansToWallLengthWithOverrun(middleSum, SPAN_SIZES, 0);
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleSum, SPAN_SIZES, 0, middlePref);
   return [start, ...middleSpans, terminal];
 }
 
@@ -476,6 +472,7 @@ function fitSpansToWallLengthWithOverrun(
   wallLengthMm: number,
   spanSizesMm: number[],
   maxOverrunMm: number,
+  cornerMiddlePref?: KusabiCornerMiddleFitPreference,
 ): number[] {
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [];
 
@@ -485,11 +482,15 @@ function fitSpansToWallLengthWithOverrun(
   const max = sizes[0];
   const min = sizes[sizes.length - 1];
 
-  // Use a long prefix of max spans, and search only the tail.
-  // This keeps the search tiny even for very long walls.
-  const tailMaxCount = 10;
+  // Use a long prefix of max spans, and search only the tail — except when corner preferences need a
+  // globally best middle decomposition (prefix would hide better 1800 / tail patterns).
+  const skipPrefix = Boolean(cornerMiddlePref);
+  const tailMaxCount = skipPrefix
+    ? Math.min(80, Math.max(10, Math.ceil(wallLengthMm / min) + 8))
+    : 10;
   const reserve = max * 4; // leave room for tail adjustments
-  const prefixCount = wallLengthMm > reserve ? Math.floor((wallLengthMm - reserve) / max) : 0;
+  const prefixCount =
+    skipPrefix || wallLengthMm <= reserve ? 0 : Math.floor((wallLengthMm - reserve) / max);
   const prefixSum = prefixCount * max;
   const target = wallLengthMm - prefixSum;
 
@@ -500,9 +501,23 @@ function fitSpansToWallLengthWithOverrun(
   type BestCandidate = { spans: number[]; sum: number; overrun: number; within: boolean };
   let best: BestCandidate | undefined;
 
+  const fullMiddle = (c: BestCandidate) => [...Array(prefixCount).fill(max), ...c.spans];
+
   const betterThan = (a: BestCandidate, b: BestCandidate) => {
     if (a.within !== b.within) return a.within; // within max overrun first
     if (a.overrun !== b.overrun) return a.overrun < b.overrun;
+    if (
+      cornerMiddlePref &&
+      a.within &&
+      b.within &&
+      a.overrun === b.overrun &&
+      a.overrun === 0 &&
+      b.overrun === 0
+    ) {
+      const sa = scoreKusabiCornerMiddleFit(fullMiddle(a), cornerMiddlePref);
+      const sb = scoreKusabiCornerMiddleFit(fullMiddle(b), cornerMiddlePref);
+      if (sa !== sb) return sa > sb;
+    }
     if (a.spans.length !== b.spans.length) return a.spans.length < b.spans.length;
     // Tie-breaker: prefer larger spans earlier (more standard looking)
     for (let i = 0; i < Math.min(a.spans.length, b.spans.length); i++) {
