@@ -392,7 +392,10 @@ function UserDashboard() {
   const queryClient = useQueryClient();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -432,10 +435,66 @@ function UserDashboard() {
     },
   });
 
+  useEffect(() => {
+    if (!configs) return;
+    const valid = new Set(configs.map((c) => c.id));
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => valid.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [configs]);
+
+  useEffect(() => {
+    const el = selectAllRef.current;
+    if (!el || !configs?.length) return;
+    el.indeterminate = selectedIds.size > 0 && selectedIds.size < configs.length;
+  }, [selectedIds, configs?.length]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!configs?.length) return;
+    setSelectedIds(new Set(configs.map((c) => c.id)));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const msg = (t('dashboard', 'confirmDeleteMany') || 'Delete {n} selected?').replace('{n}', String(ids.length));
+    if (!window.confirm(msg)) return;
+    setBulkDeleting(true);
+    setOpenMenuId(null);
+    try {
+      await Promise.all(ids.map((id) => scaffoldConfigsApi.delete(id)));
+      queryClient.invalidateQueries({ queryKey: ['scaffold-configs'] });
+      setSelectedIds(new Set());
+    } catch {
+      alert(t('dashboard', 'deleteFailed'));
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const handleDelete = async (configId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm(t('dashboard', 'confirmDelete') || 'Delete this calculation?')) {
-      try { await deleteMutation.mutateAsync(configId); } catch { /* handled */ }
+      try {
+        await deleteMutation.mutateAsync(configId);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(configId);
+          return next;
+        });
+      } catch { /* handled */ }
     }
   };
 
@@ -527,18 +586,72 @@ function UserDashboard() {
                   <p className="text-gray-400 mb-2">{t('dashboard', 'backendDown')}</p>
                 </div>
               ) : configs && configs.length > 0 ? (
-                <div className="space-y-2" ref={menuRef}>
+                <div className="space-y-3" ref={menuRef}>
+                  <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-gray-100">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        checked={configs.length > 0 && selectedIds.size === configs.length}
+                        onChange={(e) => (e.target.checked ? selectAll() : clearSelection())}
+                        disabled={bulkDeleting || deleteMutation.isPending}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>{t('dashboard', 'historySelectAll')}</span>
+                    </label>
+                    {selectedIds.size > 0 && (
+                      <>
+                        <span className="text-sm text-gray-500">
+                          {(t('dashboard', 'historySelected') || '{n} selected').replace('{n}', String(selectedIds.size))}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={clearSelection}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          {t('dashboard', 'historyClearSelection')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleBulkDelete}
+                          disabled={bulkDeleting || deleteMutation.isPending}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          {t('dashboard', 'historyDeleteSelected')}
+                        </button>
+                      </>
+                    )}
+                  </div>
                   {configs.map((cfg) => {
                     const enabledWalls = cfg.walls?.filter((w) => w.enabled) || [];
                     const wallNames = enabledWalls.map((w) => SIDE_LABELS[w.side] || w.side).join('・');
                     const hasResult = cfg.status === 'calculated' || cfg.status === 'reviewed';
                     const isMenuOpen = openMenuId === cfg.id;
+                    const isSelected = selectedIds.has(cfg.id);
                     return (
                       <div
                         key={cfg.id}
-                        className={`relative border rounded-lg transition-all ${hasResult ? 'border-gray-200 hover:border-blue-300 hover:shadow-md cursor-pointer' : 'border-gray-100 hover:bg-gray-50'}`}
+                        className={`relative border rounded-lg transition-all ${hasResult ? 'border-gray-200 hover:border-blue-300 hover:shadow-md' : 'border-gray-100 hover:bg-gray-50'} ${isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
                       >
-                        <div onClick={() => hasResult && router.push(`/scaffold/${cfg.id}`)} className="flex items-center justify-between p-4">
+                        <div className="flex items-stretch">
+                          <div
+                            className="flex items-center pl-3 pr-1 py-4"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(cfg.id)}
+                              disabled={bulkDeleting || deleteMutation.isPending}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              aria-label={t('dashboard', 'historySelectRow')}
+                            />
+                          </div>
+                          <div
+                            onClick={() => hasResult && router.push(`/scaffold/${cfg.id}`)}
+                            className={`flex flex-1 items-center justify-between p-4 pl-2 min-w-0 ${hasResult ? 'cursor-pointer' : ''}`}
+                          >
                           <div className="flex items-center gap-4 flex-1 min-w-0">
                             <div className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${cfg.status === 'calculated' ? 'bg-green-100 text-green-700' : cfg.status === 'reviewed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                               {cfg.status === 'calculated' ? t('dashboard', 'statusCalculated') : cfg.status === 'reviewed' ? t('dashboard', 'statusReviewed') : t('dashboard', 'statusConfigured')}
@@ -595,6 +708,7 @@ function UserDashboard() {
                               )}
                             </div>
                           </div>
+                        </div>
                         </div>
                       </div>
                     );
