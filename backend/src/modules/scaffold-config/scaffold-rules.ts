@@ -219,10 +219,9 @@ export const CALC_RULES = {
   habakiPerSpanPerLevel: 2,       // front + back
 
   /**
-   * Stopper at wall ends (端部布材):
-   * - 2 per end per level (at 2 heights, like tesuri)
-   * - 2 ends per wall = 4 per level
-   * - Size = scaffold width
+   * Stopper at **free** scaffold ends (端部手摺) — 2 bars per end per level (2 heights).
+   * Multiply by `freeScaffoldEndCountForWall(wallIndex, wallCount)` (not 2 blindly): interior
+   * polygon corners are excluded so counts match walkable 90° turns.
    */
   stoppersPerEndPerLevel: 2,
 
@@ -252,6 +251,25 @@ export const CALC_RULES = {
    * - Count only, no size
    */
 };
+
+/**
+ * Scaffold **dead ends** that need 端部材 / 端部手摺 (workers cannot walk past).
+ * Interior polygon corners where the run turns 90° to the next wall are **not** counted — only true open ends.
+ *
+ * - 1 wall: both ends of the run are free.
+ * - 2 walls (L): wall 0 → one free end at its start; wall 1 → one free end at its end (list order = walk direction).
+ * - 3 walls: assumed **U-shape** (gap between first and last) → free at wall 0 start and wall 2 end only.
+ * - 4+ walls: **closed** perimeter (rectangle, n-gon) → continuous band, no free ends.
+ */
+export function freeScaffoldEndCountForWall(wallIndex: number, wallCount: number): number {
+  if (wallCount <= 1) return 2;
+  if (wallCount === 2) return 1;
+  if (wallCount === 3) {
+    if (wallIndex === 0 || wallIndex === 2) return 1;
+    return 0;
+  }
+  return 0;
+}
 
 // ─── Corner alignment constants (足場コーナー詳細図) ─────────────
 /** Last two posts extend this far past the building corner (mm). */

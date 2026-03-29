@@ -1159,16 +1159,14 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
-        // Match per-wall quantity tables: each wall gets stoppers at BOTH run ends (2 bars/end × 2 ends × L for wakugumi nuno;
-        // kusabi 端部手摺 same pattern). Use first/last post along this wall’s local X (startPostIdx skips virtual corner post).
-        // Dedupe when both ends coincide (degenerate span).
-        // Wakugumi: 端部布材 / 妻側枠 (user-selectable). Kusabi: 端部手摺 (2 heights × 2 ends).
+        // Only at **free** ends of the run (matches BOM). No stopper at polygon corners: workers walk 600→90°→next wall.
+        // Start: skip when reusing previous wall’s corner post. End: skip when run meets next wall (flushDeckAtCornerEnd).
+        // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺.
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
-          const endA = postX[startPostIdx] ?? postX[0]!;
-          const endB = postX[postX.length - 1]!;
-          const endPositions =
-            Math.abs(endA - endB) < 1e-5 ? [endA] : [endA, endB];
+          const endPositions: number[] = [];
+          if (!reuseStartFromPrevCorner) endPositions.push(postX[startPostIdx]);
+          if (!flushDeckAtCornerEnd) endPositions.push(postX[postX.length - 1]);
           if (isWakugumi) {
             for (const ex of endPositions) {
               for (let lv = 1; lv <= levelsToBuild; lv++) {

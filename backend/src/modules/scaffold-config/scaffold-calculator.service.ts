@@ -10,6 +10,7 @@ import {
   CALC_RULES,
   findNearestSize,
   LevelCalcResult,
+  freeScaffoldEndCountForWall,
 } from './scaffold-rules';
 
 /**
@@ -466,12 +467,13 @@ export class ScaffoldCalculatorService {
       nunoBarsBySize[size].tesuri += Number(count) * L * CALC_RULES.tesuriPerSpanPerLevel;
     }
 
-    // 6. 端部手摺 (Stopper/End Handrail)
+    // 6. 端部手摺 (Stopper/End Handrail) — free dead ends only (not polygon 90° corners)
     const stopperSize = findNearestSize(widthMm, NUNO_SIZES);
     if (!nunoBarsBySize[stopperSize]) {
       nunoBarsBySize[stopperSize] = { tesuri: 0, stopper: 0, negarami: 0, bearer: 0 };
     }
-    nunoBarsBySize[stopperSize].stopper += CALC_RULES.stoppersPerEndPerLevel * 2 * L;
+    const freeEnds = freeScaffoldEndCountForWall(wallIndex, input.walls.length);
+    nunoBarsBySize[stopperSize].stopper += CALC_RULES.stoppersPerEndPerLevel * freeEnds * L;
 
     // 7. 根がらみ (Negarami/Base Tie) - collect by size
     const yokojiWidthSize = findNearestSize(widthMm, NUNO_SIZES);

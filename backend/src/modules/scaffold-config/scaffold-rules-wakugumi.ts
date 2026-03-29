@@ -136,12 +136,12 @@ export const WAKUGUMI_CALC_RULES = {
   tesuriPerSpanPerLevel: 0,      // not used
 
   /**
-   * End Stopper:
-   * - Nuno type: 2 per end × 2 ends = 4 per level, size = scaffold width
-   * - Frame type: 1 per end × 2 ends = 2 per level, count only
+   * End Stopper (multiply by `freeScaffoldEndCountForWall` × levels — not always 2 ends):
+   * - Nuno: 2 bars per **free** dead end per level
+   * - Frame: 1 per free dead end per level
    */
-  stoppersPerEndPerLevel_nuno: 2,   // nuno bars per end
-  stoppersPerEndPerLevel_frame: 1,  // frame stopper per end
+  stoppersPerEndPerLevel_nuno: 2,   // nuno bars per free end
+  stoppersPerEndPerLevel_frame: 1,  // frame stopper per free end
 
   /**
    * Negarami (根がらみ) — BASE LEVEL ONLY:
