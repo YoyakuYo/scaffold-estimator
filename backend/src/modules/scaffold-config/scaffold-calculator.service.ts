@@ -243,7 +243,7 @@ export class ScaffoldCalculatorService {
 
   /**
    * Calculate all component quantities for a single wall.
-   * @param wallIndex - 0 = North; North's last span may overrun to close corner with East.
+   * @param wallIndex - Wall order along polygon; corner post lines are deduped for BOM (see cornerPostDeduction).
    */
   private calculateWall(
     wall: WallCalculationInput,
@@ -252,15 +252,21 @@ export class ScaffoldCalculatorService {
     complexityMultiplier: number = 1.0,
     wallIndex: number = 0,
   ): WallCalculationResult {
-    // Step 1: Fit spans. Closed polygon: 1800 + middle + 600; total run wall+300mm (last posts past corner); see fitSpansToWallLengthWithCorner.
+    const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
+    // Step 1: Fit spans. Closed polygon: 1800 + middle + terminal(width); total run wall+300mm; see fitSpansToWallLengthWithCorner.
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
-      ? fitSpansToWallLengthWithCorner(wall.wallLengthMm)
+      ? fitSpansToWallLengthWithCorner(wall.wallLengthMm, widthMm)
       : fitSpansToWallLength(wall.wallLengthMm, { northWall: wallIndex === 0 });
+    // Shared post line (inner+outer) at polygon corners — not double-ordered per wall.
+    const cornerPostDeduction =
+      useCornerLogic && input.walls.length >= 2
+        ? (wallIndex > 0 ? 2 : 0) +
+          (input.walls.length >= 3 && wallIndex === input.walls.length - 1 ? 2 : 0)
+        : 0;
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
     const L = levelCalc.fullLevels;
-    const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
 
     // ─── Convert kaidan offsets to span indices ──────────────
     // Helper: find which 2-span window is closest to an offset
@@ -364,7 +370,7 @@ export class ScaffoldCalculatorService {
       nameJp: 'ジャッキベース',
       sizeSpec: '調整式',
       unit: '本',
-      quantity: postPositions * 2 + totalExtraPosts,
+      quantity: Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction),
       sortOrder,
       materialCode: 'KUSABI-JB',
     });
@@ -380,7 +386,12 @@ export class ScaffoldCalculatorService {
       nameJp: `支柱 ${mainCode}`,
       sizeSpec: `${input.preferredMainTatejiMm}mm`,
       unit: '本',
-      quantity: postPositions * 2 * levelCalc.mainPostsPerLine + totalExtraPosts * levelCalc.mainPostsPerLine,
+      quantity: Math.max(
+        0,
+        postPositions * 2 * levelCalc.mainPostsPerLine +
+          totalExtraPosts * levelCalc.mainPostsPerLine -
+          cornerPostDeduction * levelCalc.mainPostsPerLine,
+      ),
       sortOrder,
       materialCode: `KUSABI-${mainCode}`,
     });
@@ -396,7 +407,7 @@ export class ScaffoldCalculatorService {
       nameJp: `上部支柱 ${topCode}`,
       sizeSpec: `${input.topGuardHeightMm}mm`,
       unit: '本',
-      quantity: postPositions * 2 + totalExtraPosts,
+      quantity: Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction),
       sortOrder,
       materialCode: `KUSABI-${topCode}-TOP`,
     });

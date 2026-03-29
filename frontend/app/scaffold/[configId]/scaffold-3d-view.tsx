@@ -41,7 +41,7 @@ const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
 // Corner detail base rule (足場コーナー詳細図): 300mm overrun past building corner + corner span.
-// Kusabi: 600mm corner span. Wakugumi: 610mm corner span. Both use 300mm overrun.
+// Corner terminal span = scaffold width (kusabi 600/900/1200; wakugumi 610/914/1219). 300mm overrun on total run.
 const CORNER_OVERRUN_M = 0.3;
 const CORNER_TURN_SPAN_KUSABI_M = 0.6;
 const CORNER_TURN_SPAN_WAKUGUMI_M = 0.61;

@@ -440,11 +440,11 @@ export function countCornerTypes(
  *
  * 1. At every polygon corner where two walls meet:
  *    - Total run = wallLength + 300mm so the **last two posts** sit **300mm past** the building corner.
- *    - Last span is a **normal** 600mm (kusabi) / 610mm (wakugumi) bay — not lengthened to 900; the +300mm is only in total length.
+ *    - Last span matches **足場幅**: 600/900/1200 (kusabi) or 610/914/1219 (wakugumi); the +300mm is only in total run length.
  *    - First span on the next wall: 1800mm / 1829mm; reuses posts at the terminal bay.
- *    - Layout: [1800, …middle…, 600] / [1829, …middle…, 610]; short walls → [600…600] / [610…610].
+ *    - Layout: [1800, …middle…, terminal(width)] / [1829, …middle…, terminal(width)]; short walls → [t…t].
  *
- * 2. Middle (kusabi) = wallLength - 1800 - 600 + 300 = wallLength - 2100mm
+ * 2. Middle (kusabi) = wallLength + 300 - 1800 - terminal (e.g. 600) — often expanded to extra bays for continuous corner walk.
  *
  * 3. Corner walkable area:
  *    - L-shaped (~90°) corners: yokoji pipes + L-shaped deck + habaki

@@ -257,8 +257,8 @@ export const CALC_RULES = {
 /** Last two posts extend this far past the building corner (mm). */
 export const CORNER_OVERRUN_MM = 300;
 /**
- * Terminal span into the turn (mm) — standard 600 bay. With total run = wallLength + 300mm, the
- * **last two posts** sit **300mm past the building corner**; the bay may start before the corner.
+ * Default terminal span when scaffold width is 600mm. Wider scaffolds use the matching width
+ * (900 / 1200) as the corner bay module (足場コーナー詳細図 — continuous walk).
  */
 export const CORNER_SPAN_MM = 600;
 /**
@@ -266,6 +266,67 @@ export const CORNER_SPAN_MM = 600;
  * previous wall’s terminal bay for continuous deck (足場コーナー詳細図).
  */
 export const CORNER_START_SPAN_MM = 1800;
+
+/** Corner terminal bay length = scaffold width (600 / 900 / 1200). */
+export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
+  const w = Number(scaffoldWidthMm);
+  if (!Number.isFinite(w) || w <= 0) return CORNER_SPAN_MM;
+  if (w <= 600) return 600;
+  if (w <= 900) return 900;
+  return 1200;
+}
+
+/**
+ * Split one middle span into two valid modules (if possible) — prefer splitting the largest span.
+ */
+function splitOneMiddleSpanInPlace(spans: number[], spanSizes: readonly number[]): boolean {
+  const set = new Set(spanSizes);
+  let bestI = -1;
+  let bestA = 0;
+  let bestB = 0;
+  let bestSpan = -1;
+  for (let i = 0; i < spans.length; i++) {
+    const s = spans[i];
+    if (s <= 600) continue;
+    for (const a of spanSizes) {
+      const b = s - a;
+      if (b > 0 && set.has(b)) {
+        if (s > bestSpan) {
+          bestSpan = s;
+          bestI = i;
+          bestA = a;
+          bestB = b;
+        }
+      }
+    }
+  }
+  if (bestI < 0) return false;
+  const hi = Math.max(bestA, bestB);
+  const lo = Math.min(bestA, bestB);
+  spans.splice(bestI, 1, hi, lo);
+  return true;
+}
+
+/**
+ * Prefer one extra middle bay vs minimal packing so the corner run matches 足場コーナー詳細図
+ * (continuous deck: more bays along the run before the terminal width-module).
+ */
+export function expandMiddleSpansToTargetCount(
+  middleSpans: number[],
+  middleMm: number,
+  spanSizes: readonly number[],
+  cornerStartMm: number,
+): number[] {
+  const spans = [...middleSpans];
+  const sum = spans.reduce((a, b) => a + b, 0);
+  if (sum !== middleMm || middleMm <= 0) return spans;
+  const target = Math.ceil(middleMm / cornerStartMm) + 1;
+  let guard = 0;
+  while (spans.length < target && guard++ < 40) {
+    if (!splitOneMiddleSpanInPlace(spans, spanSizes)) break;
+  }
+  return spans;
+}
 
 // ─── Span Fitting Algorithm ──────────────────────────────────
 /**
@@ -296,30 +357,37 @@ export function fitSpansToWallLength(
  * - First span = CORNER_START_SPAN_MM (1800mm).
  * - Last span = CORNER_SPAN_MM (600mm) — normal module; the +300mm is only in **total run**, so the
  *   last two posts end **300mm past the building corner** (that bay may start before the corner).
- * Middle = wallLength + 300 - 1800 - 600 = wallLength - 2100 (filled with standard spans).
- * If the wall is too short for that layout, falls back to [600, …middle…, 600].
+ * Middle = totalRun - 1800 - terminal(600|900|1200). Middle is expanded to ≥ ceil(middle/1800)+1 bays
+ * when splittable (continuous corner walk). If the wall is too short, falls back to [t, …middle…, t].
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
+  scaffoldWidthMm: number = 600,
 ): number[] {
+  const terminal = cornerTerminalSpanMmKusabi(scaffoldWidthMm);
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
-    return [CORNER_START_SPAN_MM, CORNER_SPAN_MM];
+    return [CORNER_START_SPAN_MM, terminal];
   }
   const totalRunMm = wallLengthMm + CORNER_OVERRUN_MM;
-  const middleMmNew =
-    totalRunMm - CORNER_START_SPAN_MM - CORNER_SPAN_MM; // wallLength - 2100
+  const middleMmNew = totalRunMm - CORNER_START_SPAN_MM - terminal;
 
   if (middleMmNew < 0) {
-    const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * CORNER_SPAN_MM;
-    if (middleLegacy <= 0) return [CORNER_SPAN_MM, CORNER_SPAN_MM];
+    const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * terminal;
+    if (middleLegacy <= 0) return [terminal, terminal];
     const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
-    return [CORNER_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
+    return [terminal, ...middleSpans, terminal];
   }
   if (middleMmNew === 0) {
-    return [CORNER_START_SPAN_MM, CORNER_SPAN_MM];
+    return [CORNER_START_SPAN_MM, terminal];
   }
-  const middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, SPAN_SIZES, 0);
-  return [CORNER_START_SPAN_MM, ...middleSpans, CORNER_SPAN_MM];
+  let middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, SPAN_SIZES, 0);
+  middleSpans = expandMiddleSpansToTargetCount(
+    middleSpans,
+    middleMmNew,
+    SPAN_SIZES,
+    CORNER_START_SPAN_MM,
+  );
+  return [CORNER_START_SPAN_MM, ...middleSpans, terminal];
 }
 
 function fitSpansToWallLengthWithOverrun(

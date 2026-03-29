@@ -10,7 +10,11 @@
  * To change any business rule, edit THIS file only.
  */
 
-import { SizeOption, AnchiLayout } from './scaffold-rules';
+import {
+  SizeOption,
+  AnchiLayout,
+  expandMiddleSpansToTargetCount,
+} from './scaffold-rules';
 
 // ─── Frame Size Options (建枠サイズ) ──────────────────────────
 // The frame size = level height (variable, unlike kusabi's fixed 1800mm)
@@ -191,44 +195,55 @@ export function fitSpansToWallLengthWakugumi(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * 1829 → middle → 610; run = wall + 300mm. Short walls fall back to [610, …middle…, 610].
+ * 1829 → middle → terminal(610|914|1219 by scaffold width); run = wall + 300mm.
+ * Short walls fall back to [t, …middle…, t].
  */
+export function cornerTerminalSpanMmWakugumi(scaffoldWidthMm: number): number {
+  const w = Number(scaffoldWidthMm);
+  if (!Number.isFinite(w) || w <= 0) return WAKUGUMI_CORNER_SPAN_MM;
+  if (w <= 600) return 610;
+  if (w <= 900) return 914;
+  return 1219;
+}
+
 export function fitSpansToWallLengthWithCornerWakugumi(
   wallLengthMm: number,
+  scaffoldWidthMm: number = 600,
 ): number[] {
+  const terminal = cornerTerminalSpanMmWakugumi(scaffoldWidthMm);
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
-    return [WAKUGUMI_CORNER_START_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+    return [WAKUGUMI_CORNER_START_SPAN_MM, terminal];
   }
   const totalRunMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM;
-  const middleMmNew =
-    totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - WAKUGUMI_CORNER_SPAN_MM;
+  const middleMmNew = totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - terminal;
 
   if (middleMmNew < 0) {
-    const middleLegacy =
-      wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM - 2 * WAKUGUMI_CORNER_SPAN_MM;
+    const middleLegacy = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM - 2 * terminal;
     if (middleLegacy <= 0) {
-      return [WAKUGUMI_CORNER_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+      return [terminal, terminal];
     }
     const middleSpans = fitSpansToWallLengthWithOverrun(
       middleLegacy,
       WAKUGUMI_SPAN_SIZES,
       0,
     );
-    return [WAKUGUMI_CORNER_SPAN_MM, ...middleSpans, WAKUGUMI_CORNER_SPAN_MM];
+    return [terminal, ...middleSpans, terminal];
   }
   if (middleMmNew === 0) {
-    return [WAKUGUMI_CORNER_START_SPAN_MM, WAKUGUMI_CORNER_SPAN_MM];
+    return [WAKUGUMI_CORNER_START_SPAN_MM, terminal];
   }
-  const middleSpans = fitSpansToWallLengthWithOverrun(
+  let middleSpans = fitSpansToWallLengthWithOverrun(
     middleMmNew,
     WAKUGUMI_SPAN_SIZES,
     0,
   );
-  return [
+  middleSpans = expandMiddleSpansToTargetCount(
+    middleSpans,
+    middleMmNew,
+    WAKUGUMI_SPAN_SIZES,
     WAKUGUMI_CORNER_START_SPAN_MM,
-    ...middleSpans,
-    WAKUGUMI_CORNER_SPAN_MM,
-  ];
+  );
+  return [WAKUGUMI_CORNER_START_SPAN_MM, ...middleSpans, terminal];
 }
 
 function fitSpansToWallLengthWithOverrun(

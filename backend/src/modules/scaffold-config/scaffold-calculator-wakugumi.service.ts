@@ -144,14 +144,19 @@ export class ScaffoldCalculatorWakugumiService {
     topGuardHeight: number,
     wallIndex: number = 0,
   ): WallCalculationResult {
+    const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
-      ? fitSpansToWallLengthWithCornerWakugumi(wall.wallLengthMm)
+      ? fitSpansToWallLengthWithCornerWakugumi(wall.wallLengthMm, widthMm)
       : fitSpansToWallLengthWakugumi(wall.wallLengthMm, { northWall: wallIndex === 0 });
+    const cornerPostDeduction =
+      useCornerLogic && input.walls.length >= 2
+        ? (wallIndex > 0 ? 2 : 0) +
+          (input.walls.length >= 3 && wallIndex === input.walls.length - 1 ? 2 : 0)
+        : 0;
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;
-    const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
 
     // ─── Kaidan offset → span index mapping ──────────────
     const findKaidanSpanIndex = (offsetMm: number): number => {
@@ -227,7 +232,7 @@ export class ScaffoldCalculatorWakugumiService {
       nameJp: 'ジャッキベース',
       sizeSpec: '調整式',
       unit: '本',
-      quantity: postPositions * 2,
+      quantity: Math.max(0, postPositions * 2 - cornerPostDeduction),
       sortOrder,
       materialCode: 'SHARED-JB-400',
     });
@@ -243,7 +248,7 @@ export class ScaffoldCalculatorWakugumiService {
       nameJp: `建枠`,
       sizeSpec: `${input.frameSizeMm}`,
       unit: '枠',
-      quantity: postPositions * 2 * L,
+      quantity: Math.max(0, postPositions * 2 * L - cornerPostDeduction * L),
       sortOrder,
       materialCode: `WAKU-FRAME-${input.frameSizeMm}`,
     });
@@ -260,7 +265,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: `上部手摺枠`,
         sizeSpec: `${topGuardHeight}`,
         unit: '枠',
-        quantity: postPositions * 2,
+        quantity: Math.max(0, postPositions * 2 - cornerPostDeduction),
         sortOrder,
         materialCode: undefined,
       });

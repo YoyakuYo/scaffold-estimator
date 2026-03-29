@@ -21,6 +21,8 @@ const WALL_ACCENT = [
 ];
 
 const SCAFFOLD_STRIP_W = 14;
+/** Map scaffold run (façade + overrun) past the building vertex on plan (足場コーナー詳細図). */
+const PLAN_RUN_EXTEND_OVERFACADE = true;
 const DIM_COLOR = '#6b7280';
 const DIM_TEXT = '#374151';
 
@@ -348,6 +350,15 @@ export default function ScaffoldPlanView({ result }: Props) {
     let accum = 0;
     for (const s of spans) { accum += s; postPositions.push(accum); }
     const totalLen = accum || (wall.wallLengthMm ?? 1);
+    const facadeMm = wall.wallLengthMm ?? 0;
+    const extendFactor =
+      PLAN_RUN_EXTEND_OVERFACADE &&
+      isClosed &&
+      walls.length >= 2 &&
+      facadeMm > 0 &&
+      totalLen > facadeMm + 0.5
+        ? totalLen / facadeMm
+        : 1;
 
     // Edge midpoint for labels (stay on the side for all edges)
     const midX = (ex1 + ex2) / 2;
@@ -389,8 +400,8 @@ export default function ScaffoldPlanView({ result }: Props) {
         {/* Post ticks */}
         {postPositions.map((pos, pi) => {
           const t = totalLen > 0 ? pos / totalLen : 0;
-          const px = ex1 + (ex2 - ex1) * t;
-          const py = ey1 + (ey2 - ey1) * t;
+          const px = ex1 + (ex2 - ex1) * extendFactor * t;
+          const py = ey1 + (ey2 - ey1) * extendFactor * t;
           const px2 = px + nx * stripOffset;
           const py2 = py + ny * stripOffset;
           return (
@@ -406,11 +417,14 @@ export default function ScaffoldPlanView({ result }: Props) {
           if (si >= postPositions.length - 1) return null;
           const t1 = totalLen > 0 ? postPositions[si] / totalLen : 0;
           const t2 = totalLen > 0 ? postPositions[si + 1] / totalLen : 0;
-          const smx = ex1 + (ex2 - ex1) * ((t1 + t2) / 2);
-          const smy = ey1 + (ey2 - ey1) * ((t1 + t2) / 2);
+          const smx = ex1 + (ex2 - ex1) * extendFactor * ((t1 + t2) / 2);
+          const smy = ey1 + (ey2 - ey1) * extendFactor * ((t1 + t2) / 2);
           const sLabelX = smx + nx * (stripOffset / 2);
           const sLabelY = smy + ny * (stripOffset / 2);
-          const segPx = Math.hypot((ex2 - ex1) * (t2 - t1), (ey2 - ey1) * (t2 - t1));
+          const segPx = Math.hypot(
+            (ex2 - ex1) * extendFactor * (t2 - t1),
+            (ey2 - ey1) * extendFactor * (t2 - t1),
+          );
           if (segPx < 20) return null;
           return (
             <text key={`span-${idx}-${si}`}
@@ -464,8 +478,8 @@ export default function ScaffoldPlanView({ result }: Props) {
           if (spanIdx >= spans.length || spanIdx >= postPositions.length - 1) return null;
           const t1 = totalLen > 0 ? postPositions[spanIdx] / totalLen : 0;
           const t2 = totalLen > 0 ? postPositions[spanIdx + 1] / totalLen : 0;
-          const stX = ex1 + (ex2 - ex1) * ((t1 + t2) / 2);
-          const stY = ey1 + (ey2 - ey1) * ((t1 + t2) / 2);
+          const stX = ex1 + (ex2 - ex1) * extendFactor * ((t1 + t2) / 2);
+          const stY = ey1 + (ey2 - ey1) * extendFactor * ((t1 + t2) / 2);
           const stOffX = stX + nx * (stripOffset / 2);
           const stOffY = stY + ny * (stripOffset / 2);
           return (
