@@ -158,6 +158,9 @@ export class ScaffoldCalculatorWakugumiService {
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;
+    /** 上部ガードON = 実装は最上に **もう一段建枠**（BOM・段数は L+1 相当） */
+    const extraTopFrameLevel = topGuardHeight > 0 ? 1 : 0;
+    const Ltot = L + extraTopFrameLevel;
 
     // ─── Kaidan offset → span index mapping ──────────────
     const findKaidanSpanIndex = (offsetMm: number): number => {
@@ -239,7 +242,7 @@ export class ScaffoldCalculatorWakugumiService {
     });
 
     // ─── 2. 建枠 (Waku / Frame) ─────────────────────────
-    // (N+1) × 2 rows × L levels
+    // (N+1) × 2 rows × Ltot — 上部入力時は **もう一段の建枠**（別品目 上部手摺枠 は出さない）
     sortOrder++;
     components.push({
       type: 'waku_frame',
@@ -249,30 +252,12 @@ export class ScaffoldCalculatorWakugumiService {
       nameJp: `建枠`,
       sizeSpec: `${input.frameSizeMm}`,
       unit: '枠',
-      quantity: Math.max(0, postPositions * 2 * L - cornerPostDeduction * L),
+      quantity: Math.max(0, postPositions * 2 * Ltot - cornerPostDeduction * Ltot),
       sortOrder,
       materialCode: `WAKU-FRAME-${input.frameSizeMm}`,
     });
 
-    // ─── 3. Top Guard (上部) ─────────────────────────────
-    // Top guard frames above the top level
-    if (topGuardHeight > 0) {
-      sortOrder++;
-      components.push({
-        type: 'top_guard',
-        category: CAT.frame.jp,
-        categoryEn: CAT.frame.en,
-        name: `Top Guard ${topGuardHeight}mm`,
-        nameJp: `上部手摺枠`,
-        sizeSpec: `${topGuardHeight}`,
-        unit: '枠',
-        quantity: Math.max(0, postPositions * 2 - cornerPostDeduction),
-        sortOrder,
-        materialCode: undefined,
-      });
-    }
-
-    // ─── 4. ブレス (Brace) — BOTH faces ──────────────────
+    // ─── 3. ブレス (Brace) — BOTH faces ──────────────────
     // N × 2 (front + back) × L levels
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
@@ -284,7 +269,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: `ブレス`,
         sizeSpec: `${spanSizeMm}`,
         unit: '本',
-        quantity: Number(count) * WAKUGUMI_CALC_RULES.bracePerSpanPerLevel * L,
+        quantity: Number(count) * WAKUGUMI_CALC_RULES.bracePerSpanPerLevel * Ltot,
         sortOrder,
         materialCode: `WAKU-BRACE-${spanSizeMm}`,
       });
@@ -302,7 +287,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: `下桟`,
         sizeSpec: `${spanSizeMm}`,
         unit: '本',
-        quantity: Number(count) * WAKUGUMI_CALC_RULES.shitasanPerSpanPerLevel * L,
+        quantity: Number(count) * WAKUGUMI_CALC_RULES.shitasanPerSpanPerLevel * Ltot,
         sortOrder,
         materialCode: `WAKU-SHITASAN-${spanSizeMm}`,
       });
@@ -356,7 +341,7 @@ export class ScaffoldCalculatorWakugumiService {
           nameJp: `端部布材`,
           sizeSpec: `${stopperSize}`,
           unit: '本',
-          quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel_nuno * freeEnds * L,
+          quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel_nuno * freeEnds * Ltot,
           sortOrder,
           materialCode: `WAKU-STOPPER-${widthMm}`,
         });
@@ -370,7 +355,7 @@ export class ScaffoldCalculatorWakugumiService {
           nameJp: `妻側枠`,
           sizeSpec: '枠タイプ',
           unit: '枠',
-          quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel_frame * freeEnds * L,
+          quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel_frame * freeEnds * Ltot,
           sortOrder,
           materialCode: 'WAKU-END-FRAME',
         });
@@ -379,12 +364,12 @@ export class ScaffoldCalculatorWakugumiService {
 
     // ─── 8. 踏板 / アンチ ────────────────────────────────
     const anchiLayout = WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[widthMm] || WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[600];
-    const totalAnchiSlots = totalSpans * L;
+    const totalAnchiSlots = totalSpans * Ltot;
 
     // Stair replacement logic (same as kusabi)
     let stairReplacements = 0;
     if (!needsExtendedBay && kaidanSpanIndices.length > 0) {
-      stairReplacements = kaidanSpanIndices.length * L;
+      stairReplacements = kaidanSpanIndices.length * Ltot;
     }
 
     const spanEntries = Object.entries(spanGroups).sort(
@@ -394,7 +379,7 @@ export class ScaffoldCalculatorWakugumiService {
 
     const anchiDeductions: Record<string, number> = {};
     for (const [spanSizeMm, count] of spanEntries) {
-      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * L;
+      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * Ltot;
       const deduction = Math.min(remainingStairDeductions, perSpanAnchi);
       anchiDeductions[spanSizeMm] = deduction;
       remainingStairDeductions -= deduction;
@@ -402,7 +387,7 @@ export class ScaffoldCalculatorWakugumiService {
 
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
-      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * L;
+      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * Ltot;
       const stairDeduction = anchiDeductions[spanSizeMm] || 0;
       components.push({
         type: 'anchi',
@@ -430,7 +415,7 @@ export class ScaffoldCalculatorWakugumiService {
           nameJp: `踏板 (半幅)`,
           sizeSpec: `${anchiLayout.halfAnchiWidth}×${spanSizeMm}`,
           unit: '枚',
-          quantity: anchiLayout.halfAnchiPerSpan * Number(count) * L,
+          quantity: anchiLayout.halfAnchiPerSpan * Number(count) * Ltot,
           sortOrder,
           materialCode: `WAKU-ANCHI-${anchiLayout.halfAnchiWidth}x${spanSizeMm}`,
         });
@@ -449,7 +434,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: `巾木`,
         sizeSpec: `${spanSizeMm}`,
         unit: '枚',
-        quantity: Number(count) * L * input.habakiCountPerSpan,
+        quantity: Number(count) * Ltot * input.habakiCountPerSpan,
         sortOrder,
         materialCode: `WAKU-HABAKI-${spanSizeMm}`,
       });

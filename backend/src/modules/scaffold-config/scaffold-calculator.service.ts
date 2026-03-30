@@ -459,12 +459,16 @@ export class ScaffoldCalculatorService {
     }> = {};
 
     // 5. 手摺 (Tesuri/Handrail) - collect by size
+    // 900/1350mm 上部: 手摺は内外両面。1800mm: 内面のみ（外列はブレス）
+    const tesuriFaceMul =
+      input.topGuardHeightMm === 900 || input.topGuardHeightMm === 1350 ? 2 : 1;
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       const size = Number(spanSizeMm);
       if (!nunoBarsBySize[size]) {
         nunoBarsBySize[size] = { tesuri: 0, stopper: 0, negarami: 0, bearer: 0 };
       }
-      nunoBarsBySize[size].tesuri += Number(count) * L * CALC_RULES.tesuriPerSpanPerLevel;
+      nunoBarsBySize[size].tesuri +=
+        Number(count) * L * CALC_RULES.tesuriPerSpanPerLevel * tesuriFaceMul;
     }
 
     // 6. 端部手摺 (Stopper/End Handrail) — free dead ends only (not polygon 90° corners)

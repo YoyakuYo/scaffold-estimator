@@ -81,8 +81,12 @@ export default function Scaffold2DView({ result }: Props) {
     const rawSpans = w.spans;
     const spans = rawSpans.length > MAX_2D_SPANS ? rawSpans.slice(0, MAX_2D_SPANS) : rawSpans;
     const levels = w.levelCalc.fullLevels;
+    const wakExtraFrame = isWakugumi && (result.topGuardHeightMm ?? 0) > 0;
+    const levelsDraw = levels + (wakExtraFrame ? 1 : 0);
     const totalLengthMm = spans.reduce((a: number, b: number) => a + b, 0);
-    const totalHeightMm = levels * LEVEL_H + topGuardMm + JACK_BASE_H;
+    const totalHeightMm = isWakugumi
+      ? levelsDraw * LEVEL_H + JACK_BASE_H
+      : levels * LEVEL_H + topGuardMm + JACK_BASE_H;
 
     const postXPositions: number[] = [0];
     let accum = 0;
@@ -116,7 +120,17 @@ export default function Scaffold2DView({ result }: Props) {
     const widthMm = w.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
     const needsExtendedBay = w.needsExtendedBay ?? (widthMm <= 600 && (stairPositions.length > 0));
 
-    return { wall: w, spans, levels, totalLengthMm, totalHeightMm, postXPositions, stairPositions, needsExtendedBay };
+    return {
+      wall: w,
+      spans,
+      levels,
+      levelsDraw,
+      totalLengthMm,
+      totalHeightMm,
+      postXPositions,
+      stairPositions,
+      needsExtendedBay,
+    };
   };
 
   const wallData = useMemo(() => computeWallData(wall), [wall, topGuardMm, result]);
@@ -191,7 +205,7 @@ export default function Scaffold2DView({ result }: Props) {
     yFn: (mm: number) => number,
     keyPrefix = '',
   ) => {
-    const { spans, levels, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wd;
+    const { spans, levels, levelsDraw, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wd;
     const x = xFn;
     const y = yFn;
     const elements: JSX.Element[] = [];
@@ -240,8 +254,8 @@ export default function Scaffold2DView({ result }: Props) {
       );
     });
 
-    // Per-Level Content
-    Array.from({ length: levels }).forEach((_, lvl) => {
+    // Per-Level Content (枠組+上部: もう一段の建枠を levelsDraw で表現)
+    Array.from({ length: levelsDraw }).forEach((_, lvl) => {
       const baseY = JACK_BASE_H + lvl * LEVEL_H;
       const topY = baseY + LEVEL_H;
 
@@ -476,32 +490,33 @@ export default function Scaffold2DView({ result }: Props) {
       });
     });
 
-    // Top Guard Posts
-    postXPositions.forEach((px, pi) => {
-      const guardBase = JACK_BASE_H + levels * LEVEL_H;
-      const guardTop = guardBase + topGuardMm;
-      elements.push(
-        <line key={`tg-${pi}`}
-          x1={x(px)} y1={y(guardBase)} x2={x(px)} y2={y(guardTop)}
-          stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />
-      );
-    });
+    // Top Guard Posts / band（くさびのみ。枠組は上で +1 段の建枠として描画済み）
+    if (!isWakugumi) {
+      postXPositions.forEach((px, pi) => {
+        const guardBase = JACK_BASE_H + levels * LEVEL_H;
+        const guardTop = guardBase + topGuardMm;
+        elements.push(
+          <line key={`${keyPrefix}tg-${pi}`}
+            x1={x(px)} y1={y(guardBase)} x2={x(px)} y2={y(guardTop)}
+            stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />
+        );
+      });
 
-    // Top guard horizontal rail
-    spans.forEach((span, si) => {
-      const guardTop = JACK_BASE_H + levels * LEVEL_H + topGuardMm;
-      const sx = postXPositions[si];
-      const ex = postXPositions[si + 1];
-      elements.push(
-        <line key={`tgr-${si}`}
-          x1={x(sx)} y1={y(guardTop)} x2={x(ex)} y2={y(guardTop)}
-          stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />
-      );
-    });
+      spans.forEach((span, si) => {
+        const guardTop = JACK_BASE_H + levels * LEVEL_H + topGuardMm;
+        const sx = postXPositions[si];
+        const ex = postXPositions[si + 1];
+        elements.push(
+          <line key={`${keyPrefix}tgr-${si}`}
+            x1={x(sx)} y1={y(guardTop)} x2={x(ex)} y2={y(guardTop)}
+            stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />
+        );
+      });
+    }
 
     // End stopper — wakugumi: vertical marker at ends; kusabi: 端部手摺 (2 rails) at each end
     if (isWakugumi) {
-      Array.from({ length: levels }).forEach((_, lvl) => {
+      Array.from({ length: levelsDraw }).forEach((_, lvl) => {
         const baseY = JACK_BASE_H + lvl * LEVEL_H;
         const topY = baseY + LEVEL_H;
         [0, totalLengthMm].forEach((px, ei) => {

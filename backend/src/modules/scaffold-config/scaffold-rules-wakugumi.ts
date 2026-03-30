@@ -359,12 +359,15 @@ export function calculateLevelsWakugumi(
 
   const actualTopPlank = topPlank + jackBase;
 
+  // 上部は「手摺枠900/1350」入力でも実体は **もう一段の建枠**（枠高 = frameSizeMm）
+  const topExtensionMm = topGuardHeight > 0 ? frameSizeMm : 0;
+
   return {
     fullLevels,
     jackBaseAdjustmentMm: jackBase,
     topPlankHeightMm: actualTopPlank,
     topGuardHeightMm: topGuardHeight,
-    totalScaffoldHeightMm: actualTopPlank + topGuardHeight,
+    totalScaffoldHeightMm: actualTopPlank + topExtensionMm,
     frameSizeMm,
   };
 }

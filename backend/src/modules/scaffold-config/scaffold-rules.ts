@@ -209,13 +209,13 @@ export const CALC_RULES = {
 
   /** 
    * Per span per level component rules:
-   * - Brace: 1 per span (OUTER face only)
-   * - Tesuri (nuno bar): 2 per span (INNER face, at 2 heights)
+   * - Brace: 1 per span (outer face z=0 / 外列)
+   * - Tesuri (nuno bar): 2 per span per face; inner-only when 上部=1800mm, **both faces** when 上部=900/1350mm
    * - Habaki: 2 per span (front + back)
    * - Anchi: 1 per span (sits on width yokoji)
    */
-  bracePerSpanPerLevel: 1,        // outer face only
-  tesuriPerSpanPerLevel: 2,       // inner face, 2 heights
+  bracePerSpanPerLevel: 1,        // outer face (建側から見て外列)
+  tesuriPerSpanPerLevel: 2,       // base count = 2 rails × one face; multiplier applied from top guard option
   habakiPerSpanPerLevel: 2,       // front + back
 
   /**
