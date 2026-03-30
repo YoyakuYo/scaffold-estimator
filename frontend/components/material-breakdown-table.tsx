@@ -151,8 +151,6 @@ export function MaterialBreakdownTable({
     const rows: Array<{
       key: string;
       wallIndex: number;
-      line: string;
-      run: string;
       material: string;
       spec: string;
       unit: string;
@@ -164,16 +162,11 @@ export function MaterialBreakdownTable({
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
       const wallLevels = wall.levelCalc?.fullLevels || 1;
-      const xy = xyByWall[wi];
-      const line = xy.crossLabel ?? '—';
-      const run = xy.alongRange ?? '—';
       for (const comp of wall.components) {
         const levelQty = distributeByScaffoldLevel(comp, wallLevels);
         rows.push({
           key: `${wi}::${wall.side}::${comp.type}::${comp.sizeSpec}`,
           wallIndex: wi,
-          line,
-          run,
           material: translateMaterialName(comp),
           spec: comp.sizeSpec || '-',
           unit: comp.unit || '-',
@@ -295,49 +288,40 @@ export function MaterialBreakdownTable({
                     {sec.lengthMm.toLocaleString()} mm
                   </td>
                 </tr>
-                {(sec.xy.crossLabel || sec.xy.alongRange || sec.xy.alongStations.length > 0) && (
-                  <tr className="bg-slate-100/95 border-b border-slate-200">
-                    <td colSpan={tableColSpan} className="py-2 px-4 align-top">
-                      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2 text-xs text-slate-800">
-                        {sec.xy.crossLabel && (
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="text-slate-500 font-medium">{t('result', 'hashiraCross')}</span>
-                            <kbd className="px-1.5 py-0.5 rounded border border-slate-300 bg-white font-mono text-[11px] font-semibold">
-                              {sec.xy.crossLabel}
-                            </kbd>
-                          </span>
-                        )}
-                        {(sec.xy.alongRange || sec.xy.alongStations.length > 0) && (
-                          <span className="inline-flex flex-wrap items-center gap-1.5 min-w-0">
-                            <span className="text-slate-500 font-medium shrink-0">{t('result', 'hashiraAlong')}</span>
-                            {sec.xy.alongStations.length > 0 ? (
-                              <span className="inline-flex flex-wrap gap-1">
-                                {sec.xy.alongStations.map((s) => (
-                                  <kbd
-                                    key={`${sec.key}-${s}`}
-                                    className="px-1.5 py-0.5 rounded border border-slate-300 bg-white font-mono text-[11px] font-semibold text-slate-900"
-                                  >
-                                    {s}
-                                  </kbd>
-                                ))}
-                              </span>
-                            ) : (
-                              <kbd className="px-1.5 py-0.5 rounded border border-slate-300 bg-white font-mono text-[11px] font-semibold">
-                                {sec.xy.alongRange}
-                              </kbd>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
+                {(() => {
+                  const alongOneLiner =
+                    sec.xy.alongRange ||
+                    (sec.xy.alongStations.length > 0
+                      ? `${sec.xy.alongStations[0]}–${sec.xy.alongStations[sec.xy.alongStations.length - 1]}`
+                      : '');
+                  const showHashiraRow = !!(sec.xy.crossLabel || alongOneLiner);
+                  if (!showHashiraRow) return null;
+                  return (
+                    <tr className="bg-slate-100/95 border-b border-slate-200">
+                      <td className="py-2 px-4 align-middle border-r border-slate-200/80">
+                        <span className="text-[10px] text-slate-500 font-medium block mb-0.5">
+                          {t('result', 'hashiraCross')}
+                        </span>
+                        <span className="font-mono text-sm font-semibold text-slate-900">
+                          {sec.xy.crossLabel ?? '—'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-4 align-middle border-r border-slate-200/80">
+                        <span className="text-[10px] text-slate-500 font-medium block mb-0.5">
+                          {t('result', 'hashiraAlong')}
+                        </span>
+                        <span className="font-mono text-sm font-semibold text-slate-900">{alongOneLiner || '—'}</span>
+                      </td>
+                      <td colSpan={tableColSpan - 2} className="py-1 bg-slate-50/50" aria-hidden />
+                    </tr>
+                  );
+                })()}
                 {sec.rows.map((row) => {
                   const price = prices[row.code] || 0;
                   return (
                     <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-2.5 px-4 text-gray-700 font-mono">{row.line}</td>
-                      <td className="py-2.5 px-4 font-mono text-gray-700">{row.run}</td>
+                      <td className="py-2.5 px-4 bg-white" />
+                      <td className="py-2.5 px-4 bg-white" />
                       <td className="py-2.5 px-4 font-medium text-gray-800">{row.material}</td>
                       <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
                       <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
