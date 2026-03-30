@@ -450,6 +450,14 @@ export const translations = {
     topGuard1350: { ja: '1350mm', en: '1350mm', fr: '1350mm' },
     topGuard1800: { ja: '1800mm', en: '1800mm', fr: '1800mm' },
     wallSettingsLabel: { ja: '各辺：足場幅・階段', en: 'Per wall: width & stairs', fr: 'Par mur: largeur et escaliers' },
+    edgeHashiraTitle: { ja: '辺名・支柱番号（X/Y）', en: 'Edge ids & post numbering (X/Y)', fr: 'Arêtes et repères X/Y' },
+    edgeHashiraBlurb: {
+      ja: '閉じた外形では辺を AB, BC… と表示します。軸と本数を入れると例「AB (X1–X4) = 13,000 mm」が下に並びます。空欄の本数は計算後の平面図で支柱本数に合わせます。',
+      en: 'Closed footprints label edges AB, BC, …. Pick X or Y and optional counts; summaries like “AB (X1–X4) = 13,000 mm” appear below. Blank count → match post count on plan after calculation.',
+      fr: 'Arêtes AB, BC, …. Choisissez X/Y et un nombre optionnel ; résumés du type « AB (X1–X4) = 13 000 mm ». Vide = nombre de poteaux sur le plan.',
+    },
+    edgeHashiraAxisNone: { ja: '—', en: '—', fr: '—' },
+    edgeHashiraCountHint: { ja: '空欄＝自動', en: 'Blank = auto', fr: 'Vide = auto' },
   },
 
   // ─── Scaffold Result Page ──────────────────────────────────────

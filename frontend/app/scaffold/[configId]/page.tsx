@@ -36,6 +36,7 @@ import Scaffold2DView from './scaffold-2d-view';
 import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
+import { edgeChordName } from '@/lib/edge-hashira-labels';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -63,13 +64,29 @@ function getLevelSummary(
   return { totalLevels, visibleLevels, summary };
 }
 
-function formatWallSide(side: string, sideJp?: string, locale?: string): string {
+function formatWallSide(
+  side: string,
+  sideJp?: string,
+  locale?: string,
+  opts?: { wallIndex?: number; wallCount?: number; closedLoop?: boolean },
+): string {
+  if (
+    opts?.wallIndex != null &&
+    opts.wallCount != null &&
+    opts.wallCount > 0 &&
+    opts.wallIndex >= 0 &&
+    opts.wallIndex < opts.wallCount
+  ) {
+    const closed = opts.closedLoop ?? opts.wallCount >= 3;
+    return edgeChordName(opts.wallIndex, opts.wallCount, closed);
+  }
+  if (/^[A-Z]{1,2}[A-Z]{1,2}$/.test(side)) return side;
   if (['north', 'south', 'east', 'west'].includes(side)) {
     const cardinalMap: Record<string, Record<string, string>> = {
       north: { ja: '北面', en: 'North', fr: 'Nord' },
       south: { ja: '南面', en: 'South', fr: 'Sud' },
-      east:  { ja: '東面', en: 'East',  fr: 'Est' },
-      west:  { ja: '西面', en: 'West',  fr: 'Ouest' },
+      east: { ja: '東面', en: 'East', fr: 'Est' },
+      west: { ja: '西面', en: 'West', fr: 'Ouest' },
     };
     return cardinalMap[side]?.[locale ?? 'en'] ?? side;
   }
@@ -745,6 +762,15 @@ function QuotationTable({ result }: { result: any }) {
   const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
   const summary: CalculatedComponent[] = result.summary;
+  const wallCount = walls.length;
+  const poly = result.polygonVertices;
+  const chordOpts =
+    wallCount > 0
+      ? {
+          wallCount,
+          closedLoop: Array.isArray(poly) && poly.length >= 3,
+        }
+      : undefined;
 
   // Detect tier-walls and build tier group info for BOM display
   const hasTierWalls = walls.some((w: any) => w.tierGroup != null || (w.baseHeightMm ?? 0) > 0);
@@ -755,12 +781,20 @@ function QuotationTable({ result }: { result: any }) {
       const grp = w.tierGroup ?? w.side;
       if (!groups.has(grp)) {
         const baseLabel = grp.replace(/-T\d+$/, '');
-        groups.set(grp, { label: formatWallSide(baseLabel, w.sideJp, locale), wallIndices: [] });
+        groups.set(grp, {
+          label: formatWallSide(
+            baseLabel,
+            w.sideJp,
+            locale,
+            chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
+          ),
+          wallIndices: [],
+        });
       }
       groups.get(grp)!.wallIndices.push(idx);
     });
     return groups;
-  }, [walls, hasTierWalls, locale]);
+  }, [walls, hasTierWalls, locale, chordOpts]);
 
   // Build per-wall quantity maps
   // IMPORTANT: Use the same key generation logic as backend aggregation
@@ -820,7 +854,12 @@ function QuotationTable({ result }: { result: any }) {
             return (
               <div key={`wall-${idx}-${wall.side}`} className="bg-white rounded-lg p-2 border border-gray-100">
                 <div className="font-semibold text-gray-700">
-                  {formatWallSide(wall.side, wall.sideJp, locale)}
+                  {formatWallSide(
+                    wall.side,
+                    wall.sideJp,
+                    locale,
+                    chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
+                  )}
                 </div>
                 {(wall as any).baseHeightMm > 0 && (
                   <div className="text-xs text-violet-600">
@@ -884,7 +923,14 @@ function QuotationTable({ result }: { result: any }) {
                   baseH > 0 ? t('result', 'tierHeaderElevation').replace('{{m}}', (baseH / 1000).toFixed(0)) : '';
                 return (
                   <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
-                    <div>{formatWallSide(wall.side, wall.sideJp, locale)}</div>
+                    <div>
+                      {formatWallSide(
+                        wall.side,
+                        wall.sideJp,
+                        locale,
+                        chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
+                      )}
+                    </div>
                     {tierLabel && <div className="text-[10px] font-normal opacity-80">{tierLabel}</div>}
                   </th>
                 );
@@ -973,11 +1019,25 @@ function QuotationTable({ result }: { result: any }) {
 function PerSideBreakdown({ result }: { result: any }) {
   const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
+  const wallCount = walls.length;
+  const poly = result.polygonVertices;
+  const chordOpts =
+    wallCount > 0
+      ? {
+          wallCount,
+          closedLoop: Array.isArray(poly) && poly.length >= 3,
+        }
+      : undefined;
 
   return (
     <div className="space-y-6">
       {walls.map((wall, idx) => {
-        const wallLabel = formatWallSide(wall.side, wall.sideJp, locale);
+        const wallLabel = formatWallSide(
+          wall.side,
+          wall.sideJp,
+          locale,
+          chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
+        );
         const componentsByCategory: Record<string, CalculatedComponent[]> = {};
         for (const comp of wall.components) {
           const cat = locale === 'ja' ? (comp.category || t('result', 'other')) : (comp.categoryEn || comp.category || t('result', 'other'));

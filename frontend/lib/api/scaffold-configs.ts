@@ -104,6 +104,8 @@ export interface CreateScaffoldConfigDto {
       west: { lengthMm: number } | null;
     };
   };
+  /** Optional: X/Y hashira labels per wall edge (saved with first calculate). */
+  edgeHashiraLabeling?: EdgeHashiraLabeling;
 }
 
 export interface ScaffoldConfiguration {

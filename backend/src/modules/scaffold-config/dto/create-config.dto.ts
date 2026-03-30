@@ -11,6 +11,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { EdgeHashiraLabelingDto } from './patch-result-labels.dto';
 
 /** Per-upload façade colors sampled from BIM/render image (stored in calculationResult for 3D view). */
 export class BimFacadeColorsDto {
@@ -253,4 +254,10 @@ export class CreateScaffoldConfigDto {
   @ValidateNested()
   @Type(() => BimFacadeColorsDto)
   bimFacadeColors?: BimFacadeColorsDto;
+
+  /** Optional: plan X/Y hashira numbering from estimator (persisted on calculationResult). */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EdgeHashiraLabelingDto)
+  edgeHashiraLabeling?: EdgeHashiraLabelingDto;
 }

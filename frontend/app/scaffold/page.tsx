@@ -6,6 +6,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   scaffoldConfigsApi,
   CreateScaffoldConfigDto,
+  type EdgeHashiraLabeling,
   ScaffoldRules,
   WallInput,
   WallSegment,
@@ -41,6 +42,14 @@ import {
 } from '@/lib/bim-facade-colors';
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
+import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
+import {
+  edgeChordName,
+  formRowsFromWallCount,
+  formRowsFromStoredLabeling,
+  labelingForEnabledWallIndices,
+  type EdgeHashiraFormRow,
+} from '@/lib/edge-hashira-labels';
 
 function ScaffoldCadCanvasLoading() {
   const { t } = useI18n();
@@ -793,21 +802,7 @@ export default function ScaffoldPage() {
 function ScaffoldPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { locale, t } = useI18n();
-
-  const wallLabel = (side: string) => {
-    if (side === 'north' || side === 'south' || side === 'east' || side === 'west') {
-      return t('scaffold', side as 'north' | 'south' | 'east' | 'west');
-    }
-    if (side.startsWith('edge-')) {
-      const edgeNum = parseInt(side.replace('edge-', ''), 10);
-      const axis = edgeNum % 2 === 0 ? 'X' : 'Y';
-      const gridIdx = Math.floor(edgeNum / 2) + 1;
-      return `${axis}${gridIdx}`;
-    }
-    if (/^[XY]\d+/.test(side)) return side;
-    return side;
-  };
+  const { t } = useI18n();
 
   // ─── Input Mode ────────────────────────────────────────
   const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'ai_bim_ifc' | 'cad_draw'>('drawing');
@@ -909,6 +904,8 @@ function ScaffoldPageContent() {
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(null);
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
   const [prefilled, setPrefilled] = useState(false);
+  const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
+  const [aiBimHashiraRows, setAiBimHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -951,6 +948,8 @@ function ScaffoldPageContent() {
       });
       setWalls(mapped);
       setPrefilled(true);
+      const eh = editConfig.calculationResult?.edgeHashiraLabeling as EdgeHashiraLabeling | undefined;
+      setHashiraRows(formRowsFromStoredLabeling(eh, wallList.length));
     }
     const poly = editConfig.calculationResult?.polygonVertices;
     if (Array.isArray(poly) && poly.length >= 3) {
@@ -962,6 +961,24 @@ function ScaffoldPageContent() {
       );
     }
   }, [editConfigId, editConfig]);
+
+  useEffect(() => {
+    setHashiraRows((prev) => formRowsFromWallCount(prev, walls.length));
+  }, [walls.length]);
+
+  useEffect(() => {
+    if (!aiBimPreview) {
+      setAiBimHashiraRows([]);
+      return;
+    }
+    const n = aiBimPreview.walls.length;
+    setAiBimHashiraRows((prev) => formRowsFromWallCount(prev, n));
+  }, [aiBimPreview, aiBimPreview?.walls.length]);
+
+  const closedFootprintChords =
+    walls.length >= 3 && (perimeterModel.isClosed || polygonVertices.length >= 3);
+  const wallChordAt = (index: number) =>
+    edgeChordName(index, walls.length, closedFootprintChords);
 
   // ─── Fetch rules from backend ───────────────────────────
   const { data: rules, isError: rulesError, error: rulesErrorDetail } = useQuery<ScaffoldRules>({
@@ -1056,11 +1073,17 @@ function ScaffoldPageContent() {
       return;
     }
 
-    const enabledWalls: WallInput[] = walls
-      .filter((w) => w.enabled && w.lengthMm > 0)
-      .map((w) => ({
+    const enabledWalls: WallInput[] = [];
+    const enabledOriginalIndices: number[] = [];
+    for (let wi = 0; wi < walls.length; wi++) {
+      const w = walls[wi];
+      if (!w.enabled) continue;
+      const lenMm = w.isMultiSegment ? calcTotalFromSegments(w.segments) : w.lengthMm;
+      if (lenMm <= 0) continue;
+      enabledOriginalIndices.push(wi);
+      enabledWalls.push({
         side: w.side,
-        wallLengthMm: w.isMultiSegment ? calcTotalFromSegments(w.segments) : w.lengthMm,
+        wallLengthMm: lenMm,
         wallHeightMm: w.heightMm || buildingHeightMm,
         stairAccessCount: w.stairAccessCount,
         kaidanCount: w.kaidanCount,
@@ -1069,30 +1092,42 @@ function ScaffoldPageContent() {
           ? { isMultiSegment: true, segments: w.segments }
           : {}),
         ...(w.scaffoldWidthMm != null && { scaffoldWidthMm: w.scaffoldWidthMm }),
-    }));
+      });
+    }
 
     if (enabledWalls.length === 0) {
       alert(t('scaffold', 'noEnabledWallSegments'));
       return;
     }
 
+    const chordForOriginalIndex = (origIdx: number) =>
+      edgeChordName(origIdx, walls.length, closedFootprintChords);
+
     // Validate minimum wall lengths (backend requires >= 600mm)
-    const tooShort = enabledWalls.filter(w => w.wallLengthMm < 600);
-    if (tooShort.length > 0) {
+    const tooShortIdx = enabledOriginalIndices.filter((_, j) => enabledWalls[j]!.wallLengthMm < 600);
+    if (tooShortIdx.length > 0) {
       alert(
-        `${t('scaffold', 'wallsTooShortIntro')}\n${tooShort.map(w => `${w.side}: ${w.wallLengthMm}mm`).join('\n')}\n\n${t('scaffold', 'wallsTooShortHint')}`,
+        `${t('scaffold', 'wallsTooShortIntro')}\n${tooShortIdx.map((origIdx) => {
+          const j = enabledOriginalIndices.indexOf(origIdx);
+          return `${chordForOriginalIndex(origIdx)}: ${enabledWalls[j]!.wallLengthMm}mm`;
+        }).join('\n')}\n\n${t('scaffold', 'wallsTooShortHint')}`,
       );
       return;
     }
 
     // Validate minimum wall heights (backend requires >= 1000mm)
-    const tooLow = enabledWalls.filter(w => w.wallHeightMm < 1000);
-    if (tooLow.length > 0) {
+    const tooLowIdx = enabledOriginalIndices.filter((_, j) => enabledWalls[j]!.wallHeightMm < 1000);
+    if (tooLowIdx.length > 0) {
       alert(
-        `${t('scaffold', 'wallsTooLowIntro')}\n${tooLow.map(w => `${w.side}: ${w.wallHeightMm}mm`).join('\n')}\n\n${t('scaffold', 'wallsTooLowHint')}`,
+        `${t('scaffold', 'wallsTooLowIntro')}\n${tooLowIdx.map((origIdx) => {
+          const j = enabledOriginalIndices.indexOf(origIdx);
+          return `${chordForOriginalIndex(origIdx)}: ${enabledWalls[j]!.wallHeightMm}mm`;
+        }).join('\n')}\n\n${t('scaffold', 'wallsTooLowHint')}`,
       );
       return;
     }
+
+    const edgeHashiraLabeling = labelingForEnabledWallIndices(enabledOriginalIndices, hashiraRows);
 
     const dto: CreateScaffoldConfigDto = {
       projectId: editConfig?.projectId ?? 'default-project',
@@ -1101,6 +1136,7 @@ function ScaffoldPageContent() {
       structureType,
       walls: enabledWalls,
       scaffoldWidthMm,
+      ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
       ...(scaffoldType === 'kusabi' && {
         preferredMainTatejiMm,
       }),
@@ -1157,6 +1193,7 @@ function ScaffoldPageContent() {
         habakiCountPerSpan: qConfig.habakiCountPerSpan,
         endStopperType: qConfig.endStopperType,
       }),
+      ...(qConfig.edgeHashiraLabeling ? { edgeHashiraLabeling: qConfig.edgeHashiraLabeling } : {}),
     };
     calculateMutation.mutate({ dto, configId: null });
   };
@@ -1544,7 +1581,9 @@ function ScaffoldPageContent() {
                         <tbody>
                           {aiBimPreview.walls.map((w, i) => (
                             <tr key={w.side} className={`border-b border-gray-100 last:border-0 ${aiBimPreview.isStepped && w.wallHeightMm !== aiBimPreview.buildingHeightMm ? 'bg-violet-50/50' : ''}`}>
-                              <td className="py-2 px-3 text-gray-800">{t('scaffold', 'aiBimWallLabel').replace('{index}', String(i + 1))}</td>
+                              <td className="py-2 px-3 text-gray-800 font-mono font-medium">
+                                {edgeChordName(i, aiBimPreview.walls.length, aiBimPreview.walls.length >= 3)}
+                              </td>
                               <td className="py-2 px-3 text-right">
                                 <input
                                   type="number"
@@ -1661,6 +1700,19 @@ function ScaffoldPageContent() {
                         </tfoot>
                       </table>
                     </div>
+                    <EdgeHashiraPlanningPanel
+                      wallCount={aiBimPreview.walls.length}
+                      lengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                      rows={aiBimHashiraRows}
+                      onRowChange={(wi, patch) => {
+                        setAiBimHashiraRows((prev) => {
+                          const next = [...prev];
+                          const cur = next[wi] ?? { axis: '' as const, countStr: '' };
+                          next[wi] = { ...cur, ...patch };
+                          return next;
+                        });
+                      }}
+                    />
                   </div>
                   {aiBimPreview.obstacles && aiBimPreview.obstacles.length > 0 && (
                     <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
@@ -1869,10 +1921,18 @@ function ScaffoldPageContent() {
                         if (!wallsWereDecomposed) {
                           delete (dtoBase as any).massingTiers;
                         }
+                        const sameWallCountAsPreview = sanitizedWalls.length === aiBimPreview.walls.length;
+                        const aiEdgeLbl = sameWallCountAsPreview
+                          ? labelingForEnabledWallIndices(
+                              aiBimPreview.walls.map((_, idx) => idx),
+                              aiBimHashiraRows,
+                            )
+                          : undefined;
                         const dto = {
                           ...dtoBase,
                           walls: sanitizedWalls,
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
+                          ...(aiEdgeLbl ? { edgeHashiraLabeling: aiEdgeLbl } : {}),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
@@ -2251,7 +2311,7 @@ function ScaffoldPageContent() {
                       onChange={(e) => updateWall(i, { enabled: e.target.checked })}
                       className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                     />
-                    <span className="font-semibold text-gray-800">{wallLabel(wall.side)}</span>
+                    <span className="font-semibold text-gray-800">{wallChordAt(i)}</span>
                   </label>
 
                   {/* Per side: scaffold width & stairs (足場幅・階段) */}
@@ -2634,6 +2694,26 @@ function ScaffoldPageContent() {
               </div>
             ))}
           </div>
+
+          {walls.length > 0 && (
+            <EdgeHashiraPlanningPanel
+              wallCount={walls.length}
+              lengthsMm={walls.map((w) =>
+                w.isMultiSegment && w.segments.length > 0
+                  ? calcTotalFromSegments(w.segments)
+                  : w.lengthMm,
+              )}
+              rows={hashiraRows}
+              onRowChange={(wi, patch) => {
+                setHashiraRows((prev) => {
+                  const next = [...prev];
+                  const cur = next[wi] ?? { axis: '' as const, countStr: '' };
+                  next[wi] = { ...cur, ...patch };
+                  return next;
+                });
+              }}
+            />
+          )}
         </div>
 
         {/* Error message */}

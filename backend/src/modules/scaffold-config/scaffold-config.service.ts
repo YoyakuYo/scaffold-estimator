@@ -211,6 +211,7 @@ export class ScaffoldConfigService {
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
       ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
+      ...(dto.edgeHashiraLabeling && { edgeHashiraLabeling: dto.edgeHashiraLabeling }),
     };
     await client
       .from('scaffold_configurations')
@@ -412,6 +413,7 @@ export class ScaffoldConfigService {
       result.walls as any,
     );
     const prevEdgeLabels = (config.calculationResult as Record<string, unknown> | null)?.edgeHashiraLabeling;
+    const dtoEdgeLabels = (dto as { edgeHashiraLabeling?: unknown }).edgeHashiraLabeling;
     const keepEdgeHashiraLabeling =
       prevEdgeLabels !== null &&
       prevEdgeLabels !== undefined &&
@@ -431,7 +433,11 @@ export class ScaffoldConfigService {
       ...(parametricTransitions && parametricTransitions.length > 0 ? { parametricTransitions } : {}),
       ...(dto.ifcFileUrl ? { ifcFileUrl: dto.ifcFileUrl } : {}),
       ...(dto.bimFacadeColors ? { bimFacadeColors: dto.bimFacadeColors } : {}),
-      ...(keepEdgeHashiraLabeling ? { edgeHashiraLabeling: prevEdgeLabels } : {}),
+      ...(dtoEdgeLabels != null && typeof dtoEdgeLabels === 'object' && !Array.isArray(dtoEdgeLabels)
+        ? { edgeHashiraLabeling: dtoEdgeLabels }
+        : keepEdgeHashiraLabeling
+          ? { edgeHashiraLabeling: prevEdgeLabels }
+          : {}),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);

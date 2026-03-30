@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Square,
   CornerDownRight,
@@ -15,6 +15,13 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
+import {
+  formRowsFromWallCount,
+  labelingForEnabledWallIndices,
+  type EdgeHashiraFormRow,
+} from '@/lib/edge-hashira-labels';
+import type { EdgeHashiraLabeling } from '@/lib/api/scaffold-configs';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -45,6 +52,7 @@ export interface QuickShapeConfig {
   endStopperType: 'nuno' | 'frame';
   structureType: '改修工事' | 'S造' | 'RC造';
   kaidanPerSide: Record<string, KaidanConfig>;
+  edgeHashiraLabeling?: EdgeHashiraLabeling;
 }
 
 interface Props {
@@ -99,19 +107,27 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
   const [kaidanPerSide, setKaidanPerSide] = useState<Record<string, KaidanConfig>>({});
   // Per-side scaffold width (undefined = use global scaffoldWidthMm)
   const [scaffoldWidthPerSide, setScaffoldWidthPerSide] = useState<Record<string, number | undefined>>({});
+  const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
 
   const getSides = useCallback((): SideDefinition[] => {
     if (shapeType === 'rectangle') {
       return [
-        { label: '北面', lengthMm: rectNorth },
-        { label: '東面', lengthMm: rectEast },
-        { label: '南面', lengthMm: rectSouth },
-        { label: '西面', lengthMm: rectWest },
+        { label: 'AB', lengthMm: rectNorth },
+        { label: 'BC', lengthMm: rectEast },
+        { label: 'CD', lengthMm: rectSouth },
+        { label: 'DA', lengthMm: rectWest },
       ];
     }
     if (shapeType === 'l-shape') return lSegments;
     return customSegments;
   }, [shapeType, rectNorth, rectEast, rectSouth, rectWest, lSegments, customSegments]);
+
+  const sideCount =
+    shapeType === 'rectangle' ? 4 : shapeType === 'l-shape' ? lSegments.length : customSegments.length;
+
+  useEffect(() => {
+    setHashiraRows((prev) => formRowsFromWallCount(prev, sideCount));
+  }, [sideCount]);
 
   // Kusabi: 1800mm per level (fixed). Wakugumi: level = frame size (set in Step 3); use 1800 for preview.
   const levelHeightPreviewMm = 1800;
@@ -146,6 +162,10 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
 
   const handleSubmit = () => {
     const sides = getSides();
+    const edgeHashiraLabeling = labelingForEnabledWallIndices(
+      sides.map((_, idx) => idx),
+      hashiraRows,
+    );
     onSubmit({
       shapeType,
       sides,
@@ -159,6 +179,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
       endStopperType,
       structureType,
       kaidanPerSide,
+      ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
     });
   };
 
@@ -239,10 +260,10 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
             {shapeType === 'rectangle' && (
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: t('quickBuilder', 'north'), value: rectNorth, setter: setRectNorth },
-                  { label: t('quickBuilder', 'east'), value: rectEast, setter: setRectEast },
-                  { label: t('quickBuilder', 'south'), value: rectSouth, setter: setRectSouth },
-                  { label: t('quickBuilder', 'west'), value: rectWest, setter: setRectWest },
+                  { label: 'AB', value: rectNorth, setter: setRectNorth },
+                  { label: 'BC', value: rectEast, setter: setRectEast },
+                  { label: 'CD', value: rectSouth, setter: setRectSouth },
+                  { label: 'DA', value: rectWest, setter: setRectWest },
                 ].map((input) => (
                   <div key={input.label}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{input.label}</label>
@@ -576,6 +597,20 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 ))}
               </div>
             </div>
+
+            <EdgeHashiraPlanningPanel
+              wallCount={sideCount}
+              lengthsMm={getSides().map((s) => s.lengthMm)}
+              rows={hashiraRows}
+              onRowChange={(wi, patch) => {
+                setHashiraRows((prev) => {
+                  const next = [...prev];
+                  const cur = next[wi] ?? { axis: '' as const, countStr: '' };
+                  next[wi] = { ...cur, ...patch };
+                  return next;
+                });
+              }}
+            />
 
             {/* Summary */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">

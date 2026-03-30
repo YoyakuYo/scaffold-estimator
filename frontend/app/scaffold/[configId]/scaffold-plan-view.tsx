@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { WallCalculationResult, scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
+import { edgeChordName } from '@/lib/edge-hashira-labels';
 import { ZoomIn, ZoomOut, Printer, FlipHorizontal, FlipVertical, Loader2 } from 'lucide-react';
 
 // ─── Colors ─────────────────────────────────────────────────────
@@ -557,8 +558,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
     // On vertical edges, separate kanji from measurement (like N/S) so they don't overlap
     const labelGap = isVerticalEdge ? 22 : 8;
 
-    const sideKey = (wall.side?.toLowerCase?.() || wall.side) as 'north' | 'south' | 'east' | 'west';
-    const sideLabel = sideKey && ['north', 'south', 'east', 'west'].includes(sideKey) ? t('sides', sideKey) : (wall.sideJp || wall.side);
+    const sideLabel = edgeChordName(idx, walls.length, isClosed);
 
     return (
       <g key={`edge-${idx}`}>
@@ -760,7 +760,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
       <div className="bg-gray-50 border-b border-gray-200">
         <div className="p-3 flex items-center justify-between flex-wrap gap-2">
           <div className="text-sm font-medium text-gray-600">
-            {t('viewer', 'planView')} — {walls.map(w => (w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase()) ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west') : w.sideJp)).join(' · ')} ({walls.length} {t('viewer', 'walls')})
+            {t('viewer', 'planView')} — {walls.map((_, wi) => edgeChordName(wi, walls.length, isClosed)).join(' · ')} ({walls.length} {t('viewer', 'walls')})
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setScale(s => Math.min(s * 1.25, 3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomIn')}>
@@ -800,19 +800,14 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
           <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
             {walls.map((w, wi) => {
               const row = hashiraRows[wi] ?? { axis: '' as const, countStr: '' };
-              const edgeLetter = String.fromCharCode(65 + wi);
-              const sideShort =
-                w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase())
-                  ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west')
-                  : (w.sideJp || w.side || `${wi}`);
+              const chord = edgeChordName(wi, walls.length, isClosed);
               const postN = (w.spans?.length ?? 0) + 1;
               return (
                 <div
                   key={`hashira-row-${wi}`}
                   className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 shadow-sm"
                 >
-                  <span className="font-mono font-semibold text-gray-500 w-6">{edgeLetter}</span>
-                  <span className="text-gray-400 max-w-[4.5rem] truncate" title={sideShort}>{sideShort}</span>
+                  <span className="font-mono font-semibold text-gray-600 min-w-[2.25rem]" title={w.sideJp || w.side}>{chord}</span>
                   <select
                     className="border border-gray-300 rounded px-1 py-0.5 bg-gray-50 text-gray-800 min-w-[3.25rem]"
                     value={row.axis}
@@ -948,7 +943,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
                 <g key={w.side} transform={`translate(${i * 80}, 0)`}>
                   <rect x={0} y={-6} width={12} height={8} fill={col.fill} stroke={col.stroke} strokeWidth={1} rx={1} />
                   <text x={16} y={1} fontSize={8} fill={DIM_TEXT}>
-                    {w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase()) ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west') : w.sideJp}
+                    {edgeChordName(i, walls.length, isClosed)}
                   </text>
                 </g>
               );
