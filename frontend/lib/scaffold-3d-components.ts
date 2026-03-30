@@ -130,8 +130,8 @@ export function addSimpleNunoBar(
   const geo = new THREE.CylinderGeometry(pipeR, pipeR, len, PIPE_SEG);
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(midX, y, midZ);
-  mesh.rotation.x = Math.PI / 2;
-  mesh.rotation.z = -Math.atan2(dz, dx);
+  const dir = new THREE.Vector3(dx, 0, dz).normalize();
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
   mesh.castShadow = true;
   parent.add(mesh);
 }
