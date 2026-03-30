@@ -105,4 +105,15 @@ body {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  /* Scaffold result: let long 2D / tables / plan paginate instead of clipping in a fixed viewport. */
+  .scaffold-result-print,
+  .scaffold-result-print * {
+    overflow: visible !important;
+  }
+  .scaffold-result-print table {
+    break-inside: auto;
+  }
+  .scaffold-result-print thead {
+    display: table-header-group;
+  }
 }

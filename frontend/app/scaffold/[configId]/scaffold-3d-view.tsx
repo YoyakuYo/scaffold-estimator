@@ -3677,7 +3677,7 @@ export default function Scaffold3DView({
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden print:overflow-visible">
       <div className="p-3 bg-gray-50 border-b border-gray-200 print:hidden">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
@@ -3891,8 +3891,7 @@ export default function Scaffold3DView({
       )}
       <div
         ref={wrapperRef}
-        className="print:!h-auto print:min-h-[560px]"
-        style={{ height: '650px', position: 'relative' }}
+        className="relative h-[650px] print:!h-[720px] print:!min-h-[720px]"
       >
         {selectedComponent && (
           <div className="absolute top-2 left-2 z-20 max-w-xs bg-white/95 border border-gray-200 rounded-lg shadow-lg p-3 print:hidden">

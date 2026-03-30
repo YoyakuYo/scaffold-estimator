@@ -475,7 +475,11 @@ export const translations = {
     topGuard: { ja: '上部ガード', en: 'Top Guard', fr: 'Garde-corps supérieur' },
     levelsUnit: { ja: '段', en: 'lvl', fr: 'niv.' },
     tabTable: { ja: '見積表', en: 'Quotation', fr: 'Devis' },
-    tab3d: { ja: '3D表示', en: '3D View', fr: 'Vue 3D' },
+    tab3d: {
+      ja: '3D表示（紙面イメージ）',
+      en: '3D View (on paper)',
+      fr: 'Vue 3D (impression)',
+    },
     noResult: { ja: '計算結果が見つかりません', en: 'No calculation results found', fr: 'Aucun résultat de calcul' },
     spanConfig: { ja: 'スパン構成', en: 'Span Configuration', fr: 'Configuration des travées' },
     scaffoldLevelsHeader: { ja: '足場レベル', en: 'Levels', fr: 'Niveaux' },
@@ -495,9 +499,17 @@ export const translations = {
     exportFailed: { ja: 'エクスポートに失敗しました', en: 'Export failed', fr: "Échec de l'export" },
     view3dLabel: { ja: '3D表示', en: '3D View', fr: 'Vue 3D' },
     view2dLabel: { ja: '2D組立図', en: '2D Assembly', fr: 'Assemblage 2D' },
-    tab2d: { ja: '2D組立図', en: '2D Drawing', fr: 'Dessin 2D' },
-    tabPlan: { ja: '平面図（全壁）', en: 'Plan (All Walls)', fr: 'Plan (tous les murs)' },
-    materialBreakdownTitle: { ja: '材料明細', en: 'Material Breakdown', fr: 'Détail des matériaux' },
+    tab2d: {
+      ja: '2D組立図（全壁・色付き）',
+      en: '2D Drawing (all walls, color)',
+      fr: 'Dessin 2D (tous les murs, couleur)',
+    },
+    tabPlan: { ja: '平面図（全域・全壁）', en: 'Plan (All Walls)', fr: 'Plan (tous les murs)' },
+    materialBreakdownTitle: {
+      ja: '材料明細（Excel）',
+      en: 'Material Breakdown (Excel)',
+      fr: 'Détail des matériaux (Excel)',
+    },
     floors: { ja: '階(目安)', en: 'Floors (est.)', fr: 'Étages (est.)' },
     colLine: { ja: 'ライン', en: 'Line', fr: 'Ligne' },
     colRun: { ja: 'ラン', en: 'Run', fr: 'Tronçon' },
@@ -1009,7 +1021,11 @@ export const translations = {
   // ─── Result Page Extras ─────────────────────────────────────
   resultExtra: {
     tabOverall: { ja: '全体数量', en: 'Overall Totals', fr: 'Totaux généraux' },
-    tabPerSide: { ja: '面別数量', en: 'Per-Side Breakdown', fr: 'Détail par face' },
+    tabPerSide: {
+      ja: '面別数量（Excel）',
+      en: 'Per-Side Breakdown (Excel)',
+      fr: 'Détail par face (Excel)',
+    },
     wallLength: { ja: '壁長', en: 'Wall Length', fr: 'Longueur mur' },
     spans: { ja: 'スパン', en: 'Spans', fr: 'Travées' },
     stairs: { ja: '階段', en: 'Stairs', fr: 'Escaliers' },
@@ -1019,15 +1035,10 @@ export const translations = {
     colSpec: { ja: '規格', en: 'Spec', fr: 'Spéc.' },
     colUnit: { ja: '単位', en: 'Unit', fr: 'Unité' },
     colQty: { ja: '数量', en: 'Qty', fr: 'Qté' },
-    printAllViews: {
-      ja: '全タブを印刷（色付き）',
-      en: 'Print all views (color)',
-      fr: 'Imprimer toutes les vues (couleur)',
-    },
-    printAllViewsTitle: {
-      ja: '足場計算結果 — 一式',
-      en: 'Scaffold calculation — full package',
-      fr: 'Calcul échafaudage — dossier complet',
+    printThisView: {
+      ja: 'このタブを印刷',
+      en: 'Print this tab',
+      fr: 'Imprimer cet onglet',
     },
     printBackgroundGraphicsHint: {
       ja: 'ブラウザの印刷設定で「背景のグラフィック」を有効にすると色がそのまま出ます。',

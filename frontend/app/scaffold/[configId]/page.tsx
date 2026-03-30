@@ -366,8 +366,8 @@ function ScaffoldResultPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 print:bg-white">
-      <div className="max-w-7xl mx-auto px-4 py-6 print:max-w-none print:px-2">
+    <div className="scaffold-result-print min-h-screen bg-gray-50 print:bg-white">
+      <div className="max-w-7xl mx-auto px-4 py-6 print:max-w-none print:px-2 print:overflow-visible">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -401,10 +401,10 @@ function ScaffoldResultPage() {
               type="button"
               onClick={() => window.print()}
               title={t('resultExtra', 'printBackgroundGraphicsHint')}
-              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg transition-colors shadow border border-slate-900"
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-colors shadow border border-slate-800"
             >
               <Printer className="h-4 w-4" />
-              {t('resultExtra', 'printAllViews')}
+              {t('resultExtra', 'printThisView')}
             </button>
             <button
               onClick={() => setShowScanModal(true)}
@@ -517,11 +517,6 @@ function ScaffoldResultPage() {
           </span>
         </div>
 
-        <div className="hidden print:block mb-4 pb-3 border-b-2 border-gray-800">
-          <p className="text-lg font-bold text-gray-900">{t('result', 'title')}</p>
-          <p className="text-sm text-gray-600">{t('resultExtra', 'printAllViewsTitle')}</p>
-        </div>
-
         {/* Tab Switcher */}
         <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit print:hidden">
           <button
@@ -592,19 +587,15 @@ function ScaffoldResultPage() {
           </button>
         </div>
 
-        {/* Tab content: one view on screen; all views when printing (Ctrl+P / Print all). */}
-        <div
-          className={`${activeTab === 'table' ? 'block' : 'hidden'} print:block print:break-after-page`}
-        >
+        {/* Tab content: only the active tab is printed (browser print / “Print this tab”). */}
+        <div className={activeTab === 'table' ? 'block' : 'hidden'}>
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('resultExtra', 'tabOverall')}
           </h2>
           <QuotationTable result={result} />
         </div>
 
-        <div
-          className={`${activeTab === 'perside' ? 'block' : 'hidden'} print:block print:break-after-page`}
-        >
+        <div className={activeTab === 'perside' ? 'block' : 'hidden'}>
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('resultExtra', 'tabPerSide')}
           </h2>
@@ -612,9 +603,7 @@ function ScaffoldResultPage() {
         </div>
 
         {result.walls && (
-          <div
-            className={`${activeTab === 'breakdown' ? 'block' : 'hidden'} print:block print:break-after-page`}
-          >
+          <div className={activeTab === 'breakdown' ? 'block' : 'hidden'}>
             <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
               {t('result', 'materialBreakdownTitle')}
             </h2>
@@ -633,18 +622,14 @@ function ScaffoldResultPage() {
           </div>
         )}
 
-        <div
-          className={`${activeTab === '2d' ? 'block' : 'hidden'} print:block print:break-after-page print:overflow-visible`}
-        >
+        <div className={`${activeTab === '2d' ? 'block' : 'hidden'} print:overflow-visible`}>
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('result', 'tab2d')}
           </h2>
           <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />
         </div>
 
-        <div
-          className={`${activeTab === 'plan' ? 'block' : 'hidden'} print:block print:break-after-page print:overflow-visible`}
-        >
+        <div className={`${activeTab === 'plan' ? 'block' : 'hidden'} print:overflow-visible`}>
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('result', 'tabPlan')}
           </h2>
@@ -654,7 +639,7 @@ function ScaffoldResultPage() {
           />
         </div>
 
-        <div className={`${activeTab === '3d' ? 'block' : 'hidden'} print:block print:overflow-visible`}>
+        <div className={`${activeTab === '3d' ? 'block' : 'hidden'} print:overflow-visible`}>
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('result', 'tab3d')}
           </h2>

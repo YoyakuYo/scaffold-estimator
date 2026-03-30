@@ -65,7 +65,7 @@ export default function Scaffold2DView({ result }: Props) {
   const walls: WallCalculationResult[] = result?.walls ?? [];
   const [scale, setScale] = useState(SCALE_DEFAULT);
   const [activeWallIdx, setActiveWallIdx] = useState(0);
-  const [showAllWalls, setShowAllWalls] = useState(false);
+  const [showAllWalls, setShowAllWalls] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -802,7 +802,7 @@ export default function Scaffold2DView({ result }: Props) {
   const activeHashiraCaption = buildHashiraCaption(activeWallIdx);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden print:overflow-visible">
       {/* Wall selector tabs */}
       <div className="flex items-center gap-1 px-3 py-2 bg-gray-100 border-b border-gray-200 overflow-x-auto print:hidden">
         <button
@@ -923,7 +923,7 @@ export default function Scaffold2DView({ result }: Props) {
 
       {/* SVG Canvas */}
       <div
-        className={`overflow-auto print:!max-h-none print:overflow-visible ${showAllWalls ? 'max-h-[900px]' : 'max-h-[700px]'}`}
+        className={`print:!max-h-none print:overflow-visible ${showAllWalls ? 'max-h-none overflow-visible' : 'max-h-[700px] overflow-auto'}`}
       >
         <svg
           ref={svgRef}

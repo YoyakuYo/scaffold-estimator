@@ -755,7 +755,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden print:overflow-visible">
       {/* Toolbar */}
       <div className="bg-gray-50 border-b border-gray-200">
         <div className="p-3 flex items-center justify-between flex-wrap gap-2 print:hidden">
@@ -872,7 +872,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
       </div>
 
       {/* SVG Canvas */}
-      <div className="overflow-auto max-h-[700px] print:!max-h-none print:overflow-visible">
+      <div className="overflow-x-auto max-h-none overflow-y-visible print:overflow-visible">
         <svg
           ref={svgRef}
           width={svgW}
