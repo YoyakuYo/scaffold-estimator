@@ -51,6 +51,10 @@ const WALL_TO_INNER_POSTS_MM = 300;
 const END_STOPPER_INNER_TURN_CLEARANCE_M = 0.48;
 /** Saturated red for 端部 — visible against pipe grey in default and technical palettes. */
 const END_STOPPER_RED = 0xff2020;
+/** Stopper handrail / frame members — much thicker than normal pipe so closure reads in 3D. */
+const STOPPER_PIPE_R = PIPE_R * 1.75;
+/** Thin solid panel (YZ) at dead end to visually close the deck opening, not just edge-on tubes. */
+const END_STOPPER_PANEL_THICKNESS_M = 0.045;
 /** Spans (planks) can overrun toward the wall by this amount (m). */
 const SPAN_OVERRUN_TO_WALL_M = 0.3;
 
@@ -670,6 +674,19 @@ export default function Scaffold3DView({
         emissive: 0x330000,
         emissiveIntensity: 0.12,
       });
+      const endStopperPanelMat = new THREE.MeshStandardMaterial({
+        color: END_STOPPER_RED,
+        metalness: 0.12,
+        roughness: 0.72,
+        emissive: 0x3d0808,
+        emissiveIntensity: 0.18,
+        transparent: true,
+        opacity: 0.94,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -0.5,
+        polygonOffsetUnits: -0.5,
+      });
 
       const topGuardM = result.topGuardHeightMm / 1000;
       const scaffoldType: 'kusabi' | 'wakugumi' =
@@ -711,6 +728,27 @@ export default function Scaffold3DView({
         mesh.position.set(px, py, pz);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        parent.add(mesh);
+      }
+
+      /** Fills the dead-end opening (YZ slab at x = wall end) so 端部 reads as a barrier, not hairline pipes. */
+      function addEndStopperClosurePanel(
+        parent: THREE.Object3D,
+        xFace: number,
+        yBottom: number,
+        yTop: number,
+        zExtent: number,
+      ) {
+        if (zExtent < 0.06) return;
+        const h = Math.max(0.08, yTop - yBottom);
+        const thick = END_STOPPER_PANEL_THICKNESS_M;
+        const dz = zExtent;
+        const geo = new THREE.BoxGeometry(thick, h, dz);
+        const mesh = new THREE.Mesh(geo, endStopperPanelMat);
+        mesh.position.set(xFace - thick * 0.5, yBottom + h * 0.5, dz * 0.5);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 2;
         parent.add(mesh);
       }
 
@@ -1187,12 +1225,15 @@ export default function Scaffold3DView({
               if (endStopperType === 'nuno') {
                 const barY1 = y + 0.05;
                 const barY2 = y + 0.45;
-                addPipe(group, exEnd, barY1, 0, exEnd, barY1, zStopperInner, endStopperMat, PIPE_R * 0.75);
-                addPipe(group, exEnd, barY2, 0, exEnd, barY2, zStopperInner, endStopperMat, PIPE_R * 0.72);
+                addPipe(group, exEnd, barY1, 0, exEnd, barY1, zStopperInner, endStopperMat, STOPPER_PIPE_R);
+                addPipe(group, exEnd, barY2, 0, exEnd, barY2, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.95);
+                addPipe(group, exEnd, barY1, 0, exEnd, barY2, 0, endStopperMat, STOPPER_PIPE_R * 0.88);
+                addPipe(group, exEnd, barY1, zStopperInner, exEnd, barY2, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.88);
+                addEndStopperClosurePanel(group, exEnd, y - 0.02, y + 0.56, zStopperInner);
               } else {
                 const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
                 const frameTop = y - 0.05;
-                addPipe(group, exEnd, frameBottom, 0, exEnd, frameTop, 0, endStopperFrameMat, PIPE_R * 0.85);
+                addPipe(group, exEnd, frameBottom, 0, exEnd, frameTop, 0, endStopperFrameMat, STOPPER_PIPE_R);
                 addPipe(
                   group,
                   exEnd,
@@ -1202,10 +1243,11 @@ export default function Scaffold3DView({
                   frameTop,
                   zStopperInner,
                   endStopperFrameMat,
-                  PIPE_R * 0.85,
+                  STOPPER_PIPE_R,
                 );
-                addPipe(group, exEnd, frameTop, 0, exEnd, frameTop, zStopperInner, endStopperFrameMat, PIPE_R * 0.75);
-                addPipe(group, exEnd, frameBottom, 0, exEnd, frameBottom, zStopperInner, endStopperFrameMat, PIPE_R * 0.65);
+                addPipe(group, exEnd, frameTop, 0, exEnd, frameTop, zStopperInner, endStopperFrameMat, STOPPER_PIPE_R * 0.92);
+                addPipe(group, exEnd, frameBottom, 0, exEnd, frameBottom, zStopperInner, endStopperFrameMat, STOPPER_PIPE_R * 0.88);
+                addEndStopperClosurePanel(group, exEnd, frameBottom - 0.02, frameTop + 0.02, zStopperInner);
               }
             }
           } else if (!isBracket) {
@@ -1213,8 +1255,11 @@ export default function Scaffold3DView({
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
               const railTop = y + 0.9;
               const railMid = y + 0.45;
-              addPipe(group, exEnd, railTop, 0, exEnd, railTop, zStopperInner, endStopperMat, PIPE_R * 0.72);
-              addPipe(group, exEnd, railMid, 0, exEnd, railMid, zStopperInner, endStopperMat, PIPE_R * 0.68);
+              addPipe(group, exEnd, railTop, 0, exEnd, railTop, zStopperInner, endStopperMat, STOPPER_PIPE_R);
+              addPipe(group, exEnd, railMid, 0, exEnd, railMid, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.95);
+              addPipe(group, exEnd, railMid, 0, exEnd, railTop, 0, endStopperMat, STOPPER_PIPE_R * 0.9);
+              addPipe(group, exEnd, railMid, zStopperInner, exEnd, railTop, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.9);
+              addEndStopperClosurePanel(group, exEnd, y - 0.02, railTop + 0.06, zStopperInner);
             }
           }
         }
