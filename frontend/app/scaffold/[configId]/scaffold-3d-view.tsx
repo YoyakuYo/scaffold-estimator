@@ -1052,12 +1052,10 @@ export default function Scaffold3DView({
             }
           }
 
-          // くさび最上: 上部支柱 + 帯域（外ブレス+内手摺）
+          // くさび最上: 上段床に上部支柱→帯内は外にブレス×2（足下・頭上）、内に手摺×3（下2本＋天端1本）
           if (lv === levelsToBuild && topGuardM > 0 && !isWakugumi) {
             const yDeck = y;
             const yCap = yDeck + topGuardM;
-            const guardRailLo = yDeck + topGuardM * 0.36;
-            const guardRailHi = yDeck + Math.min(topGuardM - 0.08, topGuardM * 0.86);
 
             for (const pz of isBracket ? [0] : [tzOuter, tzInner]) {
               for (let pi = 0; pi < postX.length; pi++) {
@@ -1077,17 +1075,26 @@ export default function Scaffold3DView({
               }
             }
 
-            if (!isBracket) {
-              for (let i = startSpanIdx; i < spans.length; i++) {
-                const x1 = postX[i];
-                const x2 = postX[i + 1];
-                const b0 = yDeck + 0.16;
-                const b1 = yCap - 0.12;
-                addPipe(group, x1, b0, tzOuter, x2, b1, tzOuter, braceMat, PIPE_R * 0.72);
-                addPipe(group, x1, b1, tzOuter, x2, b0, tzOuter, braceMat, PIPE_R * 0.72);
-                addPipe(group, x1, guardRailLo, tzInner, x2, guardRailLo, tzInner, tesuriMat, PIPE_R * 0.62);
-                addPipe(group, x1, guardRailHi, tzInner, x2, guardRailHi, tzInner, tesuriMat, PIPE_R * 0.58);
-              }
+            const outerZ = isBracket ? 0 : tzOuter;
+            const innerZ = isBracket ? 0 : tzInner;
+            const footLow = yDeck + 0.14;
+            const footHi = yDeck + 0.52;
+            const headLow = yCap - 0.52;
+            const headHi = yCap - 0.12;
+            const tesuriLow = yDeck + 0.45;
+            const tesuriMid = yDeck + 0.9;
+            const tesuriTop = yCap - 0.06;
+
+            for (let i = startSpanIdx; i < spans.length; i++) {
+              const x1 = postX[i];
+              const x2 = postX[i + 1];
+              addPipe(group, x1, footLow, outerZ, x2, footHi, outerZ, braceMat, PIPE_R * 0.72);
+              addPipe(group, x1, footHi, outerZ, x2, footLow, outerZ, braceMat, PIPE_R * 0.72);
+              addPipe(group, x1, headLow, outerZ, x2, headHi, outerZ, braceMat, PIPE_R * 0.72);
+              addPipe(group, x1, headHi, outerZ, x2, headLow, outerZ, braceMat, PIPE_R * 0.72);
+              addPipe(group, x1, tesuriLow, innerZ, x2, tesuriLow, innerZ, tesuriMat, PIPE_R * 0.6);
+              addPipe(group, x1, tesuriMid, innerZ, x2, tesuriMid, innerZ, tesuriMat, PIPE_R * 0.62);
+              addPipe(group, x1, tesuriTop, innerZ, x2, tesuriTop, innerZ, tesuriMat, PIPE_R * 0.58);
             }
           }
         }
