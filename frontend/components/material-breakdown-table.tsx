@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Package } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { EdgeHashiraLabeling } from '@/lib/api/scaffold-configs';
 import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
+import { edgeChordName } from '@/lib/edge-hashira-labels';
 
 interface CalculatedComponent {
   type: string;
@@ -158,8 +159,10 @@ export function MaterialBreakdownTable({
   };
 
   const matrixRows = useMemo(() => {
+    const closedFootprint = polygonVertexCount >= 3;
     const rows: Array<{
       key: string;
+      wallIndex: number;
       line: string;
       run: string;
       material: string;
@@ -170,14 +173,17 @@ export function MaterialBreakdownTable({
       code: string;
     }> = [];
 
-    for (const wall of walls) {
+    for (let wi = 0; wi < walls.length; wi++) {
+      const wall = walls[wi];
       const wallLevels = wall.levelCalc?.fullLevels || 1;
-      const { line, run } = inferLineRun(wall);
+      const chord = edgeChordName(wi, walls.length, closedFootprint);
+      const { run } = inferLineRun(wall);
       for (const comp of wall.components) {
         const levelQty = distributeByScaffoldLevel(comp, wallLevels);
         rows.push({
-          key: `${wall.side}::${comp.type}::${comp.sizeSpec}`,
-          line,
+          key: `${wi}::${wall.side}::${comp.type}::${comp.sizeSpec}`,
+          wallIndex: wi,
+          line: chord,
           run,
           material: translateMaterialName(comp),
           spec: comp.sizeSpec || '-',
@@ -189,7 +195,19 @@ export function MaterialBreakdownTable({
       }
     }
     return rows;
-  }, [walls, scaffoldLevelCount, locale]);
+  }, [walls, scaffoldLevelCount, locale, polygonVertexCount]);
+
+  const tableColSpan = 5 + scaffoldLevelLabels.length + 3;
+
+  const breakdownSections = useMemo(() => {
+    const closedFootprint = polygonVertexCount >= 3;
+    return walls.map((wall, wi) => ({
+      key: `sec-${wi}-${edgeChordName(wi, walls.length, closedFootprint)}`,
+      chord: edgeChordName(wi, walls.length, closedFootprint),
+      lengthMm: wall.wallLengthMm,
+      rows: matrixRows.filter((r) => r.wallIndex === wi),
+    }));
+  }, [walls, matrixRows, polygonVertexCount]);
 
   const handlePriceSubmit = (code: string) => {
     const val = parseFloat(priceValue);
@@ -272,52 +290,69 @@ export function MaterialBreakdownTable({
             </tr>
           </thead>
           <tbody>
-            {matrixRows.map((row) => {
-              const price = prices[row.code] || 0;
-              return (
-                <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-2.5 px-4 text-gray-700">{row.line}</td>
-                  <td className="py-2.5 px-4 font-mono text-gray-700">{row.run}</td>
-                  <td className="py-2.5 px-4 font-medium text-gray-800">{row.material}</td>
-                  <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
-                  <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
-                  {row.levelQty.map((qty, idx) => (
-                    <td key={`${row.key}-lv${idx}`} className="py-2.5 px-3 text-right font-mono text-gray-700">
-                      {qty.toLocaleString()}
-                    </td>
-                  ))}
-                  <td className="py-2.5 px-3 text-right font-mono font-semibold text-gray-900">
-                    {row.total.toLocaleString()}
-                  </td>
-                  <td className="py-2.5 px-3 text-right">
-                    {editingPrice === row.code ? (
-                      <input
-                        type="number"
-                        value={priceValue}
-                        onChange={(e) => setPriceValue(e.target.value)}
-                        onBlur={() => handlePriceSubmit(row.code)}
-                        onKeyDown={(e) => e.key === 'Enter' && handlePriceSubmit(row.code)}
-                        className="w-20 border border-blue-300 rounded px-1 py-0.5 text-xs text-right font-mono"
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="font-mono text-gray-600 cursor-pointer hover:text-blue-600"
-                        onClick={() => {
-                          setEditingPrice(row.code);
-                          setPriceValue(String(price || ''));
-                        }}
-                      >
-                        {price > 0 ? `¥${price.toLocaleString()}` : '—'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-mono text-gray-700">
-                    {price > 0 ? `¥${(row.total * price).toLocaleString()}` : '—'}
+            {breakdownSections.map((sec) => (
+              <Fragment key={sec.key}>
+                <tr className="bg-slate-200/95 border-t border-slate-300">
+                  <td
+                    colSpan={tableColSpan}
+                    className="py-2 px-4 text-sm font-bold text-slate-900 tracking-wide"
+                  >
+                    {locale === 'ja' && '辺 '}
+                    {locale === 'fr' && 'Arête '}
+                    {locale === 'en' && 'Edge '}
+                    <span className="font-mono">{sec.chord}</span>
+                    {' — '}
+                    {sec.lengthMm.toLocaleString()} mm
                   </td>
                 </tr>
-              );
-            })}
+                {sec.rows.map((row) => {
+                  const price = prices[row.code] || 0;
+                  return (
+                    <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2.5 px-4 text-gray-700 font-mono">{row.line}</td>
+                      <td className="py-2.5 px-4 font-mono text-gray-700">{row.run}</td>
+                      <td className="py-2.5 px-4 font-medium text-gray-800">{row.material}</td>
+                      <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
+                      {row.levelQty.map((qty, idx) => (
+                        <td key={`${row.key}-lv${idx}`} className="py-2.5 px-3 text-right font-mono text-gray-700">
+                          {qty.toLocaleString()}
+                        </td>
+                      ))}
+                      <td className="py-2.5 px-3 text-right font-mono font-semibold text-gray-900">
+                        {row.total.toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        {editingPrice === row.code ? (
+                          <input
+                            type="number"
+                            value={priceValue}
+                            onChange={(e) => setPriceValue(e.target.value)}
+                            onBlur={() => handlePriceSubmit(row.code)}
+                            onKeyDown={(e) => e.key === 'Enter' && handlePriceSubmit(row.code)}
+                            className="w-20 border border-blue-300 rounded px-1 py-0.5 text-xs text-right font-mono"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className="font-mono text-gray-600 cursor-pointer hover:text-blue-600"
+                            onClick={() => {
+                              setEditingPrice(row.code);
+                              setPriceValue(String(price || ''));
+                            }}
+                          >
+                            {price > 0 ? `¥${price.toLocaleString()}` : '—'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-gray-700">
+                        {price > 0 ? `¥${(row.total * price).toLocaleString()}` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
           </tbody>
           <tfoot>
             <tr className="bg-gray-100 border-t-2 border-gray-300">
