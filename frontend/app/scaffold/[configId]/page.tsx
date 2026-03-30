@@ -179,7 +179,10 @@ function ScaffoldResultPage() {
         : base;
     }
     const levelH = base.scaffoldType === 'wakugumi' ? (base.frameSizeMm ?? 1800) : 1800;
-    const topGuardMm = base.topGuardHeightMm ?? 900;
+    const topGuardMm =
+      base.scaffoldType === 'wakugumi'
+        ? (base.frameSizeMm ?? 1700)
+        : (base.topGuardHeightMm ?? 1800);
     const scaffoldWidthMm = config.scaffoldWidthMm ?? base.scaffoldWidthMm ?? 900;
     const minimalWalls: WallCalculationResult[] = config.walls
       .filter((w) => w.enabled !== false)

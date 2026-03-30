@@ -70,7 +70,9 @@ export default function Scaffold2DView({ result }: Props) {
     'kusabi') as 'kusabi' | 'wakugumi';
   const isWakugumi = scaffoldType === 'wakugumi';
   const LEVEL_H = isWakugumi ? (result.frameSizeMm || 1700) : LEVEL_H_KUSABI;
-  const topGuardMm = result.topGuardHeightMm ?? 900;
+  const topGuardMm = isWakugumi
+    ? (result.frameSizeMm ?? 1700)
+    : (result.topGuardHeightMm ?? 1800);
   const wall = walls[activeWallIdx] || walls[0];
 
   const MAX_2D_SPANS = 200;
@@ -81,7 +83,7 @@ export default function Scaffold2DView({ result }: Props) {
     const rawSpans = w.spans;
     const spans = rawSpans.length > MAX_2D_SPANS ? rawSpans.slice(0, MAX_2D_SPANS) : rawSpans;
     const levels = w.levelCalc.fullLevels;
-    const wakExtraFrame = isWakugumi && (result.topGuardHeightMm ?? 0) > 0;
+    const wakExtraFrame = isWakugumi;
     const levelsDraw = levels + (wakExtraFrame ? 1 : 0);
     const totalLengthMm = spans.reduce((a: number, b: number) => a + b, 0);
     const totalHeightMm = isWakugumi

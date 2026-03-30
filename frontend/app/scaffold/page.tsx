@@ -901,7 +901,6 @@ function ScaffoldPageContent() {
   const [scaffoldWidthMm, setScaffoldWidthMm] = useState(600);
   // Kusabi-specific
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
-  const [topGuardHeightMm, setTopGuardHeightMm] = useState(900);
   // Wakugumi-specific
   const [frameSizeMm, setFrameSizeMm] = useState(1700);
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
@@ -926,7 +925,6 @@ function ScaffoldPageContent() {
     setStructureType(editConfig.structureType || '改修工事');
     setScaffoldWidthMm(editConfig.scaffoldWidthMm ?? 600);
     setPreferredMainTatejiMm(editConfig.preferredMainTatejiMm ?? 1800);
-    setTopGuardHeightMm(editConfig.topGuardHeightMm ?? 900);
     setFrameSizeMm(editConfig.frameSizeMm ?? 1700);
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
     setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
@@ -1105,7 +1103,6 @@ function ScaffoldPageContent() {
       scaffoldWidthMm,
       ...(scaffoldType === 'kusabi' && {
         preferredMainTatejiMm,
-        topGuardHeightMm,
       }),
       ...(scaffoldType === 'wakugumi' && {
         frameSizeMm,
@@ -1154,7 +1151,6 @@ function ScaffoldPageContent() {
       pattankoCornerCount: countPattankoCorners(vertices),
       ...(qConfig.scaffoldType === 'kusabi' && {
         preferredMainTatejiMm: qConfig.preferredMainTatejiMm,
-        topGuardHeightMm: qConfig.topGuardHeightMm,
       }),
       ...(qConfig.scaffoldType === 'wakugumi' && {
         frameSizeMm: qConfig.frameSizeMm,
@@ -1389,7 +1385,6 @@ function ScaffoldPageContent() {
                       walls,
                       scaffoldWidthMm: defaults.scaffoldWidthMm,
                       preferredMainTatejiMm: defaults.preferredMainTatejiMm,
-                      topGuardHeightMm: defaults.topGuardHeightMm,
                       ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
                       buildingOutline,
                       ...(effectiveMassingTiers && effectiveMassingTiers.length > 0 && { massingTiers: effectiveMassingTiers }),
@@ -2104,28 +2099,6 @@ function ScaffoldPageContent() {
                       { value: 1800, label: '1800mm' },
                       { value: 2700, label: '2700mm' },
                       { value: 3600, label: '3600mm' },
-                    ]).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Top Guard */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('scaffold', 'topGuard')}
-                  </label>
-                  <select
-                    value={topGuardHeightMm}
-                    onChange={(e) => setTopGuardHeightMm(Number(e.target.value))}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {(rules?.topGuardOptions || [
-                      { value: 900, label: '900mm' },
-                      { value: 1350, label: '1350mm' },
-                      { value: 1800, label: '1800mm' },
                     ]).map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}

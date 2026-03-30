@@ -239,7 +239,9 @@ export interface ScaffoldRules {
   wallSides: DropdownOption[];
   scaffoldWidths: SizeOption[];
   mainTatejiOptions: SizeOption[];
-  topGuardOptions: SizeOption[];
+  /** Fixed kusabi top guard (mm); replaces selectable topGuardOptions. */
+  kusabiTopGuardHeightMm?: number;
+  topGuardOptions?: SizeOption[];
   spanSizes: number[];
   spanOptions: SizeOption[];
   nunoSizes: number[];

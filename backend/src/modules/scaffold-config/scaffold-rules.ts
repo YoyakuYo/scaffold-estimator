@@ -80,14 +80,9 @@ export const MAIN_TATEJI_OPTIONS: SizeOption[] = [
   { value: 3600, label: '3600mm (MA-36)' },
 ];
 
-// ─── Top Guard Tateji (user selects) ─────────────────────────
-// The post above the top plank level for safety
-
-export const TOP_GUARD_OPTIONS: SizeOption[] = [
-  { value: 900,  label: '900mm (MA-9)' },
-  { value: 1350, label: '1350mm (MA-13)' },
-  { value: 1800, label: '1800mm (MA-18)' },
-];
+// ─── Top Guard Tateji (上部支柱) ─────────────────────────────
+/** Always MA-18 (1800mm) above the top working level; no user selection. */
+export const KUSABI_TOP_GUARD_HEIGHT_MM = 1800;
 
 // ─── Span Sizes (available standard sizes) ───────────────────
 
@@ -210,12 +205,12 @@ export const CALC_RULES = {
   /** 
    * Per span per level component rules:
    * - Brace: 1 per span (outer face z=0 / 外列)
-   * - Tesuri (nuno bar): 2 per span per face; outer brace + inner tesuri when 支柱 or 上部 = 1800mm; **both faces** when 上部 = 900/1350 only
+   * - Tesuri (nuno bar): 2 per span × inner face; outer face uses brace (上部固定1800mm)
    * - Habaki: 2 per span (front + back)
    * - Anchi: 1 per span (sits on width yokoji)
    */
   bracePerSpanPerLevel: 1,        // outer face (建側から見て外列)
-  tesuriPerSpanPerLevel: 2,       // base count = 2 rails × one face; multiplier applied from top guard option
+  tesuriPerSpanPerLevel: 2,       // 2 rails × inner face (outer: brace)
   habakiPerSpanPerLevel: 2,       // front + back
 
   /**
@@ -607,8 +602,8 @@ export interface LevelCalcResult {
 export function calculateLevels(
   buildingHeightMm: number,
   preferredMainTateji: number,   // 1800, 2700, or 3600
-  topGuardHeight: number,        // 900, 1350, or 1800
 ): LevelCalcResult {
+  const topGuardHeight = KUSABI_TOP_GUARD_HEIGHT_MM;
   // Working level height is always 1800mm
   const levelH = LEVEL_HEIGHT_MM;
 
@@ -707,7 +702,7 @@ export const ALL_RULES = {
   postCatalog: POST_CATALOG,
   postHeights: POST_HEIGHTS,
   mainTatejiOptions: MAIN_TATEJI_OPTIONS,
-  topGuardOptions: TOP_GUARD_OPTIONS,
+  kusabiTopGuardHeightMm: KUSABI_TOP_GUARD_HEIGHT_MM,
   spanSizes: SPAN_SIZES,
   spanOptions: SPAN_OPTIONS,
   nunoSizes: NUNO_SIZES,

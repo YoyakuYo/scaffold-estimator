@@ -324,6 +324,7 @@ export interface WakugumiLevelCalcResult {
   fullLevels: number;
   jackBaseAdjustmentMm: number;
   topPlankHeightMm: number;
+  /** Extra vertical extent above top plank: one frame height (same as frameSizeMm). */
   topGuardHeightMm: number;
   totalScaffoldHeightMm: number;
   frameSizeMm: number;         // = level height
@@ -332,7 +333,6 @@ export interface WakugumiLevelCalcResult {
 export function calculateLevelsWakugumi(
   buildingHeightMm: number,
   frameSizeMm: number,        // 1700, 1800, or 1900
-  topGuardHeight: number = 900,
 ): WakugumiLevelCalcResult {
   const levelH = frameSizeMm;
 
@@ -359,14 +359,14 @@ export function calculateLevelsWakugumi(
 
   const actualTopPlank = topPlank + jackBase;
 
-  // 上部は「手摺枠900/1350」入力でも実体は **もう一段の建枠**（枠高 = frameSizeMm）
-  const topExtensionMm = topGuardHeight > 0 ? frameSizeMm : 0;
+  /** 最上は常にもう一段の建枠（ガード相当、枠高 = frameSizeMm） */
+  const topExtensionMm = frameSizeMm;
 
   return {
     fullLevels,
     jackBaseAdjustmentMm: jackBase,
     topPlankHeightMm: actualTopPlank,
-    topGuardHeightMm: topGuardHeight,
+    topGuardHeightMm: topExtensionMm,
     totalScaffoldHeightMm: actualTopPlank + topExtensionMm,
     frameSizeMm,
   };

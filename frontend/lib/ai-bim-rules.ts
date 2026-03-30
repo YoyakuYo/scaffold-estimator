@@ -26,7 +26,7 @@ export const AI_BIM_RULES = {
 export function getAiBimDefaults() {
   return {
     preferredMainTatejiMm: AI_BIM_RULES.VERTICAL_STANDARD_SPACING_MM,
-    topGuardHeightMm: AI_BIM_RULES.HANDRAIL_HEIGHT_MIN_MM,
+    topGuardHeightMm: AI_BIM_RULES.VERTICAL_STANDARD_SPACING_MM,
     scaffoldWidthMm: 900 as 600 | 900 | 1200,
     levelHeightMm: AI_BIM_RULES.LEVEL_HEIGHT_MM,
     handrailHeightMm: AI_BIM_RULES.HANDRAIL_HEIGHT_MIN_MM,

@@ -40,7 +40,6 @@ export interface QuickShapeConfig {
   /** Per-side scaffold width (mm). Overrides scaffoldWidthMm when set. */
   scaffoldWidthPerSide?: Record<string, number | undefined>;
   preferredMainTatejiMm: number;
-  topGuardHeightMm: number;
   frameSizeMm: number;
   habakiCountPerSpan: number;
   endStopperType: 'nuno' | 'frame';
@@ -91,7 +90,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
   const [scaffoldWidthMm, setScaffoldWidthMm] = useState(600);
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
-  const [topGuardHeightMm, setTopGuardHeightMm] = useState(900);
   const [frameSizeMm, setFrameSizeMm] = useState(1700);
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
@@ -156,7 +154,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
       scaffoldWidthMm,
       scaffoldWidthPerSide: Object.keys(scaffoldWidthPerSide).length > 0 ? scaffoldWidthPerSide : undefined,
       preferredMainTatejiMm,
-      topGuardHeightMm,
       frameSizeMm,
       habakiCountPerSpan,
       endStopperType,
@@ -480,18 +477,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                       <option value={1800}>1800mm</option>
                       <option value={2700}>2700mm</option>
                       <option value={3600}>3600mm</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'topGuard')}</label>
-                    <select
-                      value={topGuardHeightMm}
-                      onChange={(e) => setTopGuardHeightMm(Number(e.target.value))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value={900}>900mm</option>
-                      <option value={1350}>1350mm</option>
-                      <option value={1800}>1800mm</option>
                     </select>
                   </div>
                 </>

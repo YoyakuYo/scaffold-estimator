@@ -5,7 +5,7 @@ import { ScaffoldMaterial } from './scaffold-material.entity';
 import { ScaffoldCalculatorService, ScaffoldCalculationResult, WallCalculationInput } from './scaffold-calculator.service';
 import { ScaffoldCalculatorWakugumiService } from './scaffold-calculator-wakugumi.service';
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
-import { ALL_RULES } from './scaffold-rules';
+import { ALL_RULES, KUSABI_TOP_GUARD_HEIGHT_MM } from './scaffold-rules';
 import { ALL_WAKUGUMI_RULES } from './scaffold-rules-wakugumi';
 import { PolygonToWallsService } from './polygon-to-walls.service';
 import { runParametricPipeline } from './parametric-scaffold.service';
@@ -151,7 +151,8 @@ export class ScaffoldConfigService {
       scaffoldWidthMm: dto.scaffoldWidthMm,
       // wallStandoffMm omitted from insert until migration 113 is applied; see calculationResult for value
       preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
-      topGuardHeightMm: dto.topGuardHeightMm || 900,
+      topGuardHeightMm:
+        scaffoldType === 'wakugumi' ? dto.frameSizeMm || 1700 : KUSABI_TOP_GUARD_HEIGHT_MM,
       frameSizeMm: dto.frameSizeMm || 1700,
       habakiCountPerSpan: dto.habakiCountPerSpan || 2,
       endStopperType: dto.endStopperType || 'nuno',
@@ -179,7 +180,6 @@ export class ScaffoldConfigService {
         frameSizeMm: dto.frameSizeMm || 1700,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         endStopperType: dto.endStopperType || 'nuno',
-        topGuardHeightMm: dto.topGuardHeightMm || 900,
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     } else {
@@ -188,7 +188,6 @@ export class ScaffoldConfigService {
         structureType: dto.structureType || '改修工事',
         scaffoldWidthMm: dto.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
-        topGuardHeightMm: dto.topGuardHeightMm || 900,
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     }
@@ -375,7 +374,8 @@ export class ScaffoldConfigService {
       scaffoldWidthMm: dto.scaffoldWidthMm,
       // wallStandoffMm omitted from update until migration 113 is applied
       preferredMainTatejiMm: dto.preferredMainTatejiMm ?? 1800,
-      topGuardHeightMm: dto.topGuardHeightMm ?? 900,
+      topGuardHeightMm:
+        scaffoldType === 'wakugumi' ? dto.frameSizeMm ?? 1700 : KUSABI_TOP_GUARD_HEIGHT_MM,
       frameSizeMm: dto.frameSizeMm ?? 1700,
       habakiCountPerSpan: dto.habakiCountPerSpan ?? 2,
       endStopperType: dto.endStopperType ?? 'nuno',
@@ -394,7 +394,6 @@ export class ScaffoldConfigService {
         frameSizeMm: dto.frameSizeMm || 1700,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         endStopperType: dto.endStopperType || 'nuno',
-        topGuardHeightMm: dto.topGuardHeightMm || 900,
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     } else {
@@ -403,7 +402,6 @@ export class ScaffoldConfigService {
         structureType: dto.structureType || '改修工事',
         scaffoldWidthMm: dto.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
-        topGuardHeightMm: dto.topGuardHeightMm || 900,
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     }

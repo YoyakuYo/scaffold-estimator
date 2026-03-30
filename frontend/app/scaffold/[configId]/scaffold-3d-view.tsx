@@ -414,7 +414,10 @@ export default function Scaffold3DView({
           ...w.levelCalc,
           fullLevels: newLevels,
           topPlankHeightMm: newLevels * levelH,
-          totalScaffoldHeightMm: newLevels * levelH + (w.levelCalc?.topGuardHeightMm ?? 900),
+          totalScaffoldHeightMm:
+            newLevels * levelH +
+            (w.levelCalc?.topGuardHeightMm ??
+              (scaffoldType === 'wakugumi' ? (result?.frameSizeMm || 1700) : 1800)),
         },
       };
     });
@@ -679,23 +682,17 @@ export default function Scaffold3DView({
         emissiveIntensity: 0.06,
       });
 
-      const topGuardMmRaw = result.topGuardHeightMm ?? 0;
-      const topGuardNum = Number(topGuardMmRaw);
-      const mainTatejiMm = Number(result.preferredMainTatejiMm ?? 1800);
       const scaffoldType: 'kusabi' | 'wakugumi' =
         (result.scaffoldType ?? (result as any).scaffold_type ?? 'kusabi') as 'kusabi' | 'wakugumi';
       const isWakugumi = scaffoldType === 'wakugumi';
       const LEVEL_H = isWakugumi ? ((result.frameSizeMm || 1700) / 1000) : LEVEL_H_KUSABI;
-      // くさび: 支柱 or 上部 が 1800mm なら外ブレス+内手摺（最上帯も同様）。900/1350 上部のみ内外両面手摺。
+      const topGuardNum = Number(
+        result.topGuardHeightMm ?? (isWakugumi ? (result.frameSizeMm ?? 1700) : 1800),
+      );
+      /** くさび上部支柱は常に1800mm。枠組は最上に常にもう一段建枠。 */
       const topGuardM = !isWakugumi && topGuardNum > 0 ? topGuardNum / 1000 : 0;
-      const kusabiBraceOuterInnerTesuri =
-        !isWakugumi && (mainTatejiMm === 1800 || topGuardNum === 1800);
-      const kusabiBothFaceTesuri =
-        !isWakugumi &&
-        !kusabiBraceOuterInnerTesuri &&
-        (topGuardNum === 900 || topGuardNum === 1350);
       /** Scene bbox / 枠組最上段＝もう一階分の枠高 */
-      const sceneTopExtensionM = isWakugumi && topGuardNum > 0 ? LEVEL_H : topGuardM;
+      const sceneTopExtensionM = isWakugumi ? LEVEL_H : topGuardM;
 
       // ── Helper functions ───────────────────────────────
       function addPipe(
@@ -840,7 +837,7 @@ export default function Scaffold3DView({
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = Math.min(levels, MAX_3D_RENDER_LEVELS);
         if (levels > MAX_3D_RENDER_LEVELS) threeDLevelsCapped = true;
-        const wakugumiExtraTopLevel = isWakugumi && topGuardNum > 0;
+        const wakugumiExtraTopLevel = isWakugumi;
         const levelLoopMax = wakugumiExtraTopLevel ? levelsToBuild + 1 : levelsToBuild;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
         const postCapAbovePlank = 0;
@@ -996,7 +993,7 @@ export default function Scaffold3DView({
             }
 
             // Horizontal bars — type-dependent:
-            // Kusabi: 手摺 — 900/1350上部時は内外両面、1800時は内列のみ (z=widthM)
+            // Kusabi: 手摺 — 内列のみ (外面はブレス)
             // Wakugumi: 下桟 — BOTH faces
             if (isWakugumi) {
               const shitasanY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
@@ -1010,15 +1007,8 @@ export default function Scaffold3DView({
             } else if (!isBracket) {
               const railTop = y + 0.9;
               const railMid = y + 0.45;
-              if (kusabiBothFaceTesuri) {
-                for (const tz of [tzOuter, tzInner]) {
-                  addPipe(group, x1, railTop, tz, x2, railTop, tz, tesuriMat, PIPE_R * 0.65);
-                  addPipe(group, x1, railMid, tz, x2, railMid, tz, tesuriMat, PIPE_R * 0.6);
-                }
-              } else {
-                addPipe(group, x1, railTop, tzInner, x2, railTop, tzInner, tesuriMat, PIPE_R * 0.65);
-                addPipe(group, x1, railMid, tzInner, x2, railMid, tzInner, tesuriMat, PIPE_R * 0.6);
-              }
+              addPipe(group, x1, railTop, tzInner, x2, railTop, tzInner, tesuriMat, PIPE_R * 0.65);
+              addPipe(group, x1, railMid, tzInner, x2, railMid, tzInner, tesuriMat, PIPE_R * 0.6);
             } else {
               const railTop = y + 0.9;
               const railMid = y + 0.45;
@@ -1062,7 +1052,7 @@ export default function Scaffold3DView({
             }
           }
 
-          // くさび最上: 上部支柱 + 帯域の手摺/ブレス（900・1350=手摺両面 / 1800=外ブレス+内手摺）
+          // くさび最上: 上部支柱 + 帯域（外ブレス+内手摺）
           if (lv === levelsToBuild && topGuardM > 0 && !isWakugumi) {
             const yDeck = y;
             const yCap = yDeck + topGuardM;
@@ -1091,19 +1081,12 @@ export default function Scaffold3DView({
               for (let i = startSpanIdx; i < spans.length; i++) {
                 const x1 = postX[i];
                 const x2 = postX[i + 1];
-                if (kusabiBothFaceTesuri) {
-                  for (const pz of [tzOuter, tzInner]) {
-                    addPipe(group, x1, guardRailLo, pz, x2, guardRailLo, pz, tesuriMat, PIPE_R * 0.62);
-                    addPipe(group, x1, guardRailHi, pz, x2, guardRailHi, pz, tesuriMat, PIPE_R * 0.58);
-                  }
-                } else {
-                  const b0 = yDeck + 0.16;
-                  const b1 = yCap - 0.12;
-                  addPipe(group, x1, b0, tzOuter, x2, b1, tzOuter, braceMat, PIPE_R * 0.72);
-                  addPipe(group, x1, b1, tzOuter, x2, b0, tzOuter, braceMat, PIPE_R * 0.72);
-                  addPipe(group, x1, guardRailLo, tzInner, x2, guardRailLo, tzInner, tesuriMat, PIPE_R * 0.62);
-                  addPipe(group, x1, guardRailHi, tzInner, x2, guardRailHi, tzInner, tesuriMat, PIPE_R * 0.58);
-                }
+                const b0 = yDeck + 0.16;
+                const b1 = yCap - 0.12;
+                addPipe(group, x1, b0, tzOuter, x2, b1, tzOuter, braceMat, PIPE_R * 0.72);
+                addPipe(group, x1, b1, tzOuter, x2, b0, tzOuter, braceMat, PIPE_R * 0.72);
+                addPipe(group, x1, guardRailLo, tzInner, x2, guardRailLo, tzInner, tesuriMat, PIPE_R * 0.62);
+                addPipe(group, x1, guardRailHi, tzInner, x2, guardRailHi, tzInner, tesuriMat, PIPE_R * 0.58);
               }
             }
           }

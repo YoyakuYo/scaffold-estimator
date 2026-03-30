@@ -5,6 +5,7 @@ import {
   classifyKusabiRectangleEdgeRoles,
   type KusabiRectangleCornerEdgeRole,
   calculateLevels,
+  KUSABI_TOP_GUARD_HEIGHT_MM,
   NUNO_SIZES,
   ANCHI_LAYOUT_BY_WIDTH,
   CALC_RULES,
@@ -63,7 +64,8 @@ export interface ScaffoldCalculationInput {
   structureType?: '改修工事' | 'S造' | 'RC造';  // Construction pattern
   scaffoldWidthMm: number;         // 600, 900, 1200
   preferredMainTatejiMm: number;   // 1800, 2700, 3600
-  topGuardHeightMm: number;        // 900, 1350, 1800
+  /** @deprecated Ignored; fixed at KUSABI_TOP_GUARD_HEIGHT_MM in rules. */
+  topGuardHeightMm?: number;
   anchiWidthMm?: number;           // override anchi width (auto from scaffoldWidth if omitted)
   /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
   pattankoCornerCount?: number;
@@ -205,11 +207,7 @@ export class ScaffoldCalculatorService {
     for (let wallIndex = 0; wallIndex < input.walls.length; wallIndex++) {
       const wall = input.walls[wallIndex];
       // Calculate levels for this specific wall's height
-      const levelCalc = calculateLevels(
-        wall.wallHeightMm,
-        input.preferredMainTatejiMm,
-        input.topGuardHeightMm,
-      );
+      const levelCalc = calculateLevels(wall.wallHeightMm, input.preferredMainTatejiMm);
       const result = this.calculateWall(
         wall,
         input,
@@ -253,7 +251,7 @@ export class ScaffoldCalculatorService {
       summary,
       scaffoldWidthMm: input.scaffoldWidthMm,
       preferredMainTatejiMm: input.preferredMainTatejiMm,
-      topGuardHeightMm: input.topGuardHeightMm,
+      topGuardHeightMm: KUSABI_TOP_GUARD_HEIGHT_MM,
       totalLevels: maxLevels,
     };
   }
@@ -418,14 +416,14 @@ export class ScaffoldCalculatorService {
 
     // ─── 3. 上部支柱 (トップガード) ─────────────────────
     sortOrder++;
-    const topCode = maCode(input.topGuardHeightMm);
+    const topCode = maCode(KUSABI_TOP_GUARD_HEIGHT_MM);
     components.push({
       type: 'post_top',
       category: CAT.post.jp,
       categoryEn: CAT.post.en,
       name: `Top Guard Post ${topCode}`,
       nameJp: `上部支柱 ${topCode}`,
-      sizeSpec: `${input.topGuardHeightMm}mm`,
+      sizeSpec: `${KUSABI_TOP_GUARD_HEIGHT_MM}mm`,
       unit: '本',
       quantity: Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction),
       sortOrder,
@@ -458,20 +456,13 @@ export class ScaffoldCalculatorService {
       bearer: number;
     }> = {};
 
-    // 5. 手摺 (Tesuri/Handrail) - collect by size
-    // 支柱 or 上部が 1800 → 外ブレス+内手摺（手摺は内面のみ）。900/1350 上部のみ → 手摺内外両面
-    const mainMm = Number(input.preferredMainTatejiMm ?? 1800);
-    const topMm = Number(input.topGuardHeightMm ?? 900);
-    const kusabiBraceOuterInnerTesuri = mainMm === 1800 || topMm === 1800;
-    const tesuriFaceMul =
-      !kusabiBraceOuterInnerTesuri && (topMm === 900 || topMm === 1350) ? 2 : 1;
+    // 5. 手摺 (Tesuri/Handrail) — 内面のみ（外面はブレス）。上部支柱は常に1800mm。
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       const size = Number(spanSizeMm);
       if (!nunoBarsBySize[size]) {
         nunoBarsBySize[size] = { tesuri: 0, stopper: 0, negarami: 0, bearer: 0 };
       }
-      nunoBarsBySize[size].tesuri +=
-        Number(count) * L * CALC_RULES.tesuriPerSpanPerLevel * tesuriFaceMul;
+      nunoBarsBySize[size].tesuri += Number(count) * L * CALC_RULES.tesuriPerSpanPerLevel;
     }
 
     // 6. 端部手摺 (Stopper/End Handrail) — free dead ends only (not polygon 90° corners)

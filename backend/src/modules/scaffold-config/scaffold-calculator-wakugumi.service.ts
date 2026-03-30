@@ -43,7 +43,8 @@ export interface WakugumiCalculationInput {
   frameSizeMm: number;             // 1700, 1800, 1900
   habakiCountPerSpan: number;      // 1 or 2
   endStopperType: 'nuno' | 'frame';
-  topGuardHeightMm?: number;       // optional, default 900
+  /** @deprecated Ignored; one extra frame level is always applied. */
+  topGuardHeightMm?: number;
   /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
   pattankoCornerCount?: number;
 }
@@ -80,8 +81,6 @@ export class ScaffoldCalculatorWakugumiService {
   calculate(input: WakugumiCalculationInput): ScaffoldCalculationResult {
     const structureType = input.structureType || '改修工事';
     const complexityMultiplier = this.PATTERN_MULTIPLIERS[structureType];
-    const topGuardHeight = input.topGuardHeightMm || 900;
-
     this.logger.log(
       `Calculating wakugumi scaffold for ${input.walls.length} wall(s), ` +
       `frame: ${input.frameSizeMm}mm, pattern: ${structureType} (${complexityMultiplier}x)`
@@ -91,12 +90,8 @@ export class ScaffoldCalculatorWakugumiService {
 
     for (let wallIndex = 0; wallIndex < input.walls.length; wallIndex++) {
       const wall = input.walls[wallIndex];
-      const levelCalc = calculateLevelsWakugumi(
-        wall.wallHeightMm,
-        input.frameSizeMm,
-        topGuardHeight,
-      );
-      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, topGuardHeight, wallIndex);
+      const levelCalc = calculateLevelsWakugumi(wall.wallHeightMm, input.frameSizeMm);
+      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, wallIndex);
       wallResults.push(result);
     }
 
@@ -129,7 +124,7 @@ export class ScaffoldCalculatorWakugumiService {
       summary,
       scaffoldWidthMm: input.scaffoldWidthMm,
       preferredMainTatejiMm: input.frameSizeMm, // Use frame size for backward compat
-      topGuardHeightMm: topGuardHeight,
+      topGuardHeightMm: input.frameSizeMm,
       frameSizeMm: input.frameSizeMm,
       habakiCountPerSpan: input.habakiCountPerSpan,
       endStopperType: input.endStopperType,
@@ -142,7 +137,6 @@ export class ScaffoldCalculatorWakugumiService {
     input: WakugumiCalculationInput,
     levelCalc: WakugumiLevelCalcResult,
     complexityMultiplier: number,
-    topGuardHeight: number,
     wallIndex: number = 0,
   ): WallCalculationResult {
     const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
@@ -158,9 +152,8 @@ export class ScaffoldCalculatorWakugumiService {
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;
-    /** 上部ガードON = 実装は最上に **もう一段建枠**（BOM・段数は L+1 相当） */
-    const extraTopFrameLevel = topGuardHeight > 0 ? 1 : 0;
-    const Ltot = L + extraTopFrameLevel;
+    /** 最上は常にもう一段建枠（L+1） */
+    const Ltot = L + 1;
 
     // ─── Kaidan offset → span index mapping ──────────────
     const findKaidanSpanIndex = (offsetMm: number): number => {
@@ -521,7 +514,7 @@ export class ScaffoldCalculatorWakugumiService {
       totalScaffoldHeightMm: levelCalc.totalScaffoldHeightMm,
       mainPostsPerLine: L,  // For wakugumi, 1 frame per level
       mainPostHeightMm: input.frameSizeMm,
-      topGuardPostHeightMm: topGuardHeight,
+      topGuardPostHeightMm: input.frameSizeMm,
     };
 
     return {
