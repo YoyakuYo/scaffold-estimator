@@ -424,7 +424,9 @@ export class ScaffoldConfigService {
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
       ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
-      ...(prevLabels && typeof prevLabels === 'object' && { edgeHashiraLabeling: prevLabels }),
+      ...(typeof prevLabels === 'object' && prevLabels !== null
+        ? { edgeHashiraLabeling: prevLabels }
+        : {}),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);
