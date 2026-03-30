@@ -501,6 +501,8 @@ export const translations = {
     floors: { ja: '階(目安)', en: 'Floors (est.)', fr: 'Étages (est.)' },
     colLine: { ja: 'ライン', en: 'Line', fr: 'Ligne' },
     colRun: { ja: 'ラン', en: 'Run', fr: 'Tronçon' },
+    hashiraCross: { ja: '直交', en: 'Cross', fr: 'Perpend.' },
+    hashiraAlong: { ja: '通り（軸）', en: 'Along', fr: 'Repères' },
     jackBaseGroundOnlyNote: {
       ja: '注: ジャッキベースは足場最下段(1段目)のみに計上されます。列は建物の階ではなく足場の段です。',
       en: 'Note: Jack base is counted on the lowest scaffold lift only. Columns are scaffold levels, not building floors.',

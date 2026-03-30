@@ -5,7 +5,7 @@ import { Package } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { EdgeHashiraLabeling } from '@/lib/api/scaffold-configs';
 import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
-import { edgeChordName } from '@/lib/edge-hashira-labels';
+import { edgeChordName, resolveEdgeHashiraXY } from '@/lib/edge-hashira-labels';
 
 interface CalculatedComponent {
   type: string;
@@ -107,25 +107,6 @@ export function MaterialBreakdownTable({
     return comp.name || comp.nameJp;
   };
 
-  const inferLineRun = (wall: WallResult) => {
-    const raw = (wall.sideJp || wall.side || '').trim();
-    const slashMatch = raw.match(/(Y\d+)\s*\/\s*(X\d+\s*-\s*X\d+)/i);
-    if (slashMatch) {
-      return {
-        line: slashMatch[1].toUpperCase(),
-        run: slashMatch[2].toUpperCase().replace(/\s+/g, ''),
-      };
-    }
-    const match = raw.match(/(Y\d+).*(X\d+\s*-\s*X\d+)|(X\d+\s*-\s*X\d+).*(Y\d+)/i);
-    if (match) {
-      return {
-        line: (match[1] || match[4] || raw).toUpperCase(),
-        run: (match[2] || match[3] || '-').toUpperCase().replace(/\s+/g, ''),
-      };
-    }
-    return { line: raw || '-', run: '-' };
-  };
-
   const distributeByScaffoldLevel = (comp: CalculatedComponent, wallLevels: number): number[] => {
     const rows = Array.from({ length: scaffoldLevelCount }, () => 0);
     const levels = Math.max(1, wallLevels);
@@ -158,8 +139,15 @@ export function MaterialBreakdownTable({
     return rows;
   };
 
+  const xyByWall = useMemo(
+    () =>
+      walls.map((w, wi) =>
+        resolveEdgeHashiraXY(edgeHashiraLabeling, wi, walls.length, w.sideJp, w.side),
+      ),
+    [walls, edgeHashiraLabeling],
+  );
+
   const matrixRows = useMemo(() => {
-    const closedFootprint = polygonVertexCount >= 3;
     const rows: Array<{
       key: string;
       wallIndex: number;
@@ -176,14 +164,15 @@ export function MaterialBreakdownTable({
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
       const wallLevels = wall.levelCalc?.fullLevels || 1;
-      const chord = edgeChordName(wi, walls.length, closedFootprint);
-      const { run } = inferLineRun(wall);
+      const xy = xyByWall[wi];
+      const line = xy.crossLabel ?? '—';
+      const run = xy.alongRange ?? '—';
       for (const comp of wall.components) {
         const levelQty = distributeByScaffoldLevel(comp, wallLevels);
         rows.push({
           key: `${wi}::${wall.side}::${comp.type}::${comp.sizeSpec}`,
           wallIndex: wi,
-          line: chord,
+          line,
           run,
           material: translateMaterialName(comp),
           spec: comp.sizeSpec || '-',
@@ -195,7 +184,7 @@ export function MaterialBreakdownTable({
       }
     }
     return rows;
-  }, [walls, scaffoldLevelCount, locale, polygonVertexCount]);
+  }, [walls, scaffoldLevelCount, locale, xyByWall]);
 
   const tableColSpan = 5 + scaffoldLevelLabels.length + 3;
 
@@ -205,9 +194,10 @@ export function MaterialBreakdownTable({
       key: `sec-${wi}-${edgeChordName(wi, walls.length, closedFootprint)}`,
       chord: edgeChordName(wi, walls.length, closedFootprint),
       lengthMm: wall.wallLengthMm,
+      xy: xyByWall[wi],
       rows: matrixRows.filter((r) => r.wallIndex === wi),
     }));
-  }, [walls, matrixRows, polygonVertexCount]);
+  }, [walls, matrixRows, polygonVertexCount, xyByWall]);
 
   const handlePriceSubmit = (code: string) => {
     const val = parseFloat(priceValue);
@@ -305,6 +295,43 @@ export function MaterialBreakdownTable({
                     {sec.lengthMm.toLocaleString()} mm
                   </td>
                 </tr>
+                {(sec.xy.crossLabel || sec.xy.alongRange || sec.xy.alongStations.length > 0) && (
+                  <tr className="bg-slate-100/95 border-b border-slate-200">
+                    <td colSpan={tableColSpan} className="py-2 px-4 align-top">
+                      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2 text-xs text-slate-800">
+                        {sec.xy.crossLabel && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-slate-500 font-medium">{t('result', 'hashiraCross')}</span>
+                            <kbd className="px-1.5 py-0.5 rounded border border-slate-300 bg-white font-mono text-[11px] font-semibold">
+                              {sec.xy.crossLabel}
+                            </kbd>
+                          </span>
+                        )}
+                        {(sec.xy.alongRange || sec.xy.alongStations.length > 0) && (
+                          <span className="inline-flex flex-wrap items-center gap-1.5 min-w-0">
+                            <span className="text-slate-500 font-medium shrink-0">{t('result', 'hashiraAlong')}</span>
+                            {sec.xy.alongStations.length > 0 ? (
+                              <span className="inline-flex flex-wrap gap-1">
+                                {sec.xy.alongStations.map((s) => (
+                                  <kbd
+                                    key={`${sec.key}-${s}`}
+                                    className="px-1.5 py-0.5 rounded border border-slate-300 bg-white font-mono text-[11px] font-semibold text-slate-900"
+                                  >
+                                    {s}
+                                  </kbd>
+                                ))}
+                              </span>
+                            ) : (
+                              <kbd className="px-1.5 py-0.5 rounded border border-slate-300 bg-white font-mono text-[11px] font-semibold">
+                                {sec.xy.alongRange}
+                              </kbd>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {sec.rows.map((row) => {
                   const price = prices[row.code] || 0;
                   return (
