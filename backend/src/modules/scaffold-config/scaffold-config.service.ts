@@ -411,22 +411,27 @@ export class ScaffoldConfigService {
       dto.massingTiers as any,
       result.walls as any,
     );
-    const prevLabels = (config.calculationResult as Record<string, unknown> | null)?.edgeHashiraLabeling;
+    const prevEdgeLabels = (config.calculationResult as Record<string, unknown> | null)?.edgeHashiraLabeling;
+    const keepEdgeHashiraLabeling =
+      prevEdgeLabels !== null &&
+      prevEdgeLabels !== undefined &&
+      typeof prevEdgeLabels === 'object' &&
+      !Array.isArray(prevEdgeLabels);
+
+    const massingForResult = correctedMassingTiersUpd ?? dto.massingTiers;
+    const keepMassingTiers =
+      Array.isArray(massingForResult) && massingForResult.length > 0;
+
     const calculationResult = {
       ...result,
       wallStandoffMm: wallStandoffMm,
-      ...(dto.buildingOutline && dto.buildingOutline.length >= 3 && { polygonVertices: dto.buildingOutline }),
-      ...((correctedMassingTiersUpd ?? dto.massingTiers) &&
-        (correctedMassingTiersUpd ?? dto.massingTiers)!.length > 0 && {
-          massingTiers: correctedMassingTiersUpd ?? dto.massingTiers,
-        }),
-      ...(dto.obstacles && dto.obstacles.length > 0 && { obstacles: dto.obstacles }),
-      ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
-      ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
-      ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
-      ...(typeof prevLabels === 'object' && prevLabels !== null
-        ? { edgeHashiraLabeling: prevLabels }
-        : {}),
+      ...(dto.buildingOutline && dto.buildingOutline.length >= 3 ? { polygonVertices: dto.buildingOutline } : {}),
+      ...(keepMassingTiers ? { massingTiers: massingForResult } : {}),
+      ...(dto.obstacles && dto.obstacles.length > 0 ? { obstacles: dto.obstacles } : {}),
+      ...(parametricTransitions && parametricTransitions.length > 0 ? { parametricTransitions } : {}),
+      ...(dto.ifcFileUrl ? { ifcFileUrl: dto.ifcFileUrl } : {}),
+      ...(dto.bimFacadeColors ? { bimFacadeColors: dto.bimFacadeColors } : {}),
+      ...(keepEdgeHashiraLabeling ? { edgeHashiraLabeling: prevEdgeLabels } : {}),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);
