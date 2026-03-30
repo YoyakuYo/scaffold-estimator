@@ -1179,10 +1179,9 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
-        // Last span ≈ scaffold width ⇒ terminal / corner bay (600, 900, 1200 kusabi; 610… wakugumi).
-        // There we draw an **outboard** transverse guard: opaque kick + nuno tubes + corner uprights.
-        // Other wall ends keep two light rails only. Inner strip may stay open when flushDeckAtCornerEnd.
-        // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺.
+        // Fall prevention at open deck ends = **transverse horizontal** members (端部布材 / 端部手摺), not uprights.
+        // Last span ≈ scaffold width ⇒ outboard plane + kick + thick horizontal nuno; no decorative vertical pipes.
+        // 枠タイプ keeps vertical frame legs (妻側枠). Inner strip may stay open when flushDeckAtCornerEnd.
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const exEnd = postX[postX.length - 1];
@@ -1216,10 +1215,8 @@ export default function Scaffold3DView({
                     zStopperInner,
                     endStopperKickMat,
                   );
-                  addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.88);
-                  addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.85);
-                  addPipe(group, xPlane, barY1, 0, xPlane, barY2, 0, endStopperMat, PIPE_R * 0.82);
-                  addPipe(group, xPlane, barY1, zStopperInner, xPlane, barY2, zStopperInner, endStopperMat, PIPE_R * 0.82);
+                  addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 1.05);
+                  addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 1.0);
                 } else {
                   addPipe(group, exEnd, barY1, 0, exEnd, barY1, zStopperInner, endStopperMat, PIPE_R * 0.75);
                   addPipe(group, exEnd, barY2, 0, exEnd, barY2, zStopperInner, endStopperMat, PIPE_R * 0.72);
@@ -1267,10 +1264,8 @@ export default function Scaffold3DView({
                   zStopperInner,
                   endStopperKickMat,
                 );
-                addRealisticNunoBar(THREE, group, xPlane, railMid, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.88);
-                addRealisticNunoBar(THREE, group, xPlane, railTop, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.85);
-                addPipe(group, xPlane, railMid, 0, xPlane, railTop, 0, endStopperMat, PIPE_R * 0.82);
-                addPipe(group, xPlane, railMid, zStopperInner, xPlane, railTop, zStopperInner, endStopperMat, PIPE_R * 0.82);
+                addRealisticNunoBar(THREE, group, xPlane, railMid, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 1.05);
+                addRealisticNunoBar(THREE, group, xPlane, railTop, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 1.0);
               } else {
                 addPipe(group, exEnd, railTop, 0, exEnd, railTop, zStopperInner, endStopperMat, PIPE_R * 0.72);
                 addPipe(group, exEnd, railMid, 0, exEnd, railMid, zStopperInner, endStopperMat, PIPE_R * 0.68);
