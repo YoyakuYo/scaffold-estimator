@@ -796,7 +796,8 @@ export default function Scaffold3DView({
         dropLeadingCorner600?: boolean,
         flushDeckAtCornerEnd?: boolean,
       ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
-        const widthM = (wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900) / 1000;
+        const scaffoldWidthMm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900;
+        const widthM = scaffoldWidthMm / 1000;
         const isBracket = wall.layoutMode === 'bracket';
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
@@ -835,7 +836,7 @@ export default function Scaffold3DView({
         const cornerInnerPostX = null as number | null;
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
-        const widthMm = wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
+        const widthMm = scaffoldWidthMm;
         const stairCount = wall.stairAccessCount || 0;
         const hasAnyStairs = kaidanSpanIndices.length > 0 || stairCount > 0;
         const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && hasAnyStairs);
@@ -1178,13 +1179,13 @@ export default function Scaffold3DView({
 
         // ── End Stoppers at wall ends ─────────────────────────
         // Fall prevention at open deck ends = **transverse horizontal** members (端部布材 / 端部手摺), not uprights.
-        // Span **full deck opening** local z = 0 → widthM (outer post row → inner post row), not a partial strip.
+        // Span **full opening** local z = 0 → widthM: transverse length = nominal 足場幅 (same as post spacing).
         // 枠タイプ keeps vertical frame legs (妻側枠).
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const exEnd = postX[postX.length - 1];
           const zEndStopper = widthM;
-          const swMm = wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900;
+          const swMm = scaffoldWidthMm;
           const lastSpanMm = spans[spans.length - 1] ?? 0;
           const isEndTerminalBay =
             !isBracket &&
@@ -1858,7 +1859,7 @@ export default function Scaffold3DView({
           continue;
         }
         const wall = walls[i];
-        const wallWidthM = (wall.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900) / 1000;
+        const wallWidthM = (result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900) / 1000;
 
         // Find which tier group this wall belongs to
         let tgi = 0;
