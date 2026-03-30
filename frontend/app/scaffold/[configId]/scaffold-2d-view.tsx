@@ -5,6 +5,11 @@ import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 import { WallCalculationResult, scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
 import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
+import {
+  edgeChordName,
+  normalizeEdgeHashiraForWallCount,
+  resolveEdgeHashiraXY,
+} from '@/lib/edge-hashira-labels';
 import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight, Layers, Camera } from 'lucide-react';
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -76,6 +81,47 @@ export default function Scaffold2DView({ result }: Props) {
     : (result.topGuardHeightMm ?? 1800);
   const wall = walls[activeWallIdx] || walls[0];
 
+  // ─── Direction / edge label (cardinal → i18n; edge-n → X/Y grid) — before computeWallData for primaryWallLabel ───
+  const formatWallSideLabel = (side: string, includeArrow = true) => {
+    const tierMatch = side.match(/-T(\d+)$/);
+    const withoutTier = tierMatch ? side.slice(0, -tierMatch[0].length) : side;
+    const base = withoutTier.toLowerCase();
+    const tierSuffix = tierMatch ? ` (T${tierMatch[1]})` : '';
+    const cardinalKeys = ['north', 'south', 'east', 'west'] as const;
+    type Cardinal = (typeof cardinalKeys)[number];
+    const arrows: Record<Cardinal, string> = {
+      north: '↑',
+      south: '↓',
+      east: '→',
+      west: '←',
+    };
+    if (cardinalKeys.includes(base as Cardinal)) {
+      const key = base as Cardinal;
+      const name = t('sides', key);
+      return includeArrow ? `${arrows[key]} ${name}${tierSuffix}` : `${name}${tierSuffix}`;
+    }
+    if (base.startsWith('edge-')) {
+      const edgeNum = parseInt(base.replace('edge-', ''), 10);
+      if (!Number.isNaN(edgeNum)) {
+        const axis = edgeNum % 2 === 0 ? 'X' : 'Y';
+        const gridIdx = Math.floor(edgeNum / 2) + 1;
+        return `${axis}${gridIdx}${tierSuffix}`;
+      }
+    }
+    if (/^[xy]\d+$/.test(base)) {
+      return `${withoutTier}${tierSuffix}`;
+    }
+    return `${side}`;
+  };
+  const getDirectionLabel = (side: string) => formatWallSideLabel(side, true);
+
+  const closedFootprint =
+    Array.isArray(result?.polygonVertices) && (result.polygonVertices as unknown[]).length >= 3;
+
+  /** Closed polygon plan: AB, BC, … on 2D title; otherwise direction label. */
+  const primaryWallLabel = (wi: number, side: string) =>
+    closedFootprint ? edgeChordName(wi, walls.length, true) : getDirectionLabel(side);
+
   const MAX_2D_SPANS = 200;
   const isSimplified2D = !showAllWalls && wall.spans.length > MAX_2D_SPANS;
 
@@ -136,6 +182,60 @@ export default function Scaffold2DView({ result }: Props) {
     };
   };
 
+  /** One-line X/Y caption for titles (cross · along range), with post-count fallback along the elevation. */
+  const buildHashiraCaption = (wi: number): string | null => {
+    const w = walls[wi];
+    if (!w) return null;
+    const postN = (Array.isArray(w.spans) ? w.spans.length : 0) + 1;
+    const xy = resolveEdgeHashiraXY(
+      result?.edgeHashiraLabeling,
+      wi,
+      walls.length,
+      w.sideJp ?? '',
+      w.side ?? '',
+    );
+    const norm = normalizeEdgeHashiraForWallCount(result?.edgeHashiraLabeling ?? undefined, walls.length);
+    const axis = norm.assignments[wi]?.axis === 'Y' ? 'Y' : 'X';
+    const parts: string[] = [];
+    if (xy.crossLabel) parts.push(xy.crossLabel);
+    let along = xy.alongRange;
+    if (!along && xy.alongStations.length > 0) {
+      along = `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`;
+    }
+    if (!along && postN >= 2) {
+      along = `${axis}1–${axis}${postN}`;
+    }
+    if (along) parts.push(along);
+    return parts.length ? parts.join(' · ') : null;
+  };
+
+  /** Labels under each post (X1… or Y1…) aligned with hashira axis / saved numbering. */
+  const postFootLabelsForWall = (wi: number, wd: ReturnType<typeof computeWallData>): string[] | null => {
+    const w = wd.wall;
+    const n = wd.postXPositions.length;
+    if (n < 1) return null;
+    const xy = resolveEdgeHashiraXY(
+      result?.edgeHashiraLabeling,
+      wi,
+      walls.length,
+      w.sideJp ?? '',
+      w.side ?? '',
+    );
+    const norm = normalizeEdgeHashiraForWallCount(result?.edgeHashiraLabeling ?? undefined, walls.length);
+    const axis = norm.assignments[wi]?.axis === 'Y' ? 'Y' : 'X';
+    if (xy.alongStations.length >= n) {
+      return xy.alongStations.slice(0, n);
+    }
+    if (xy.alongStations.length > 0) {
+      const m = xy.alongStations[0].match(/^([XY])/i);
+      const ax = ((m ? m[1] : axis) as string).toUpperCase();
+      return Array.from({ length: n }, (_, i) =>
+        i < xy.alongStations.length ? xy.alongStations[i] : `${ax}${i + 1}`,
+      );
+    }
+    return Array.from({ length: n }, (_, i) => `${axis}${i + 1}`);
+  };
+
   const wallData = useMemo(() => computeWallData(wall), [wall, topGuardMm, result]);
 
   const allWallsData = useMemo(() => {
@@ -143,47 +243,14 @@ export default function Scaffold2DView({ result }: Props) {
     return walls.map(w => computeWallData(w));
   }, [walls, showAllWalls, topGuardMm, result]);
 
-  // ─── Direction / edge label for wall side (cardinal → i18n sides.*; edge-n → X/Y) ───
-  const formatWallSideLabel = (side: string, includeArrow = true) => {
-    const tierMatch = side.match(/-T(\d+)$/);
-    const withoutTier = tierMatch ? side.slice(0, -tierMatch[0].length) : side;
-    const base = withoutTier.toLowerCase();
-    const tierSuffix = tierMatch ? ` (T${tierMatch[1]})` : '';
-    const cardinalKeys = ['north', 'south', 'east', 'west'] as const;
-    type Cardinal = (typeof cardinalKeys)[number];
-    const arrows: Record<Cardinal, string> = {
-      north: '↑',
-      south: '↓',
-      east: '→',
-      west: '←',
-    };
-    if (cardinalKeys.includes(base as Cardinal)) {
-      const key = base as Cardinal;
-      const name = t('sides', key);
-      return includeArrow ? `${arrows[key]} ${name}${tierSuffix}` : `${name}${tierSuffix}`;
-    }
-    if (base.startsWith('edge-')) {
-      const edgeNum = parseInt(base.replace('edge-', ''), 10);
-      if (!Number.isNaN(edgeNum)) {
-        const axis = edgeNum % 2 === 0 ? 'X' : 'Y';
-        const gridIdx = Math.floor(edgeNum / 2) + 1;
-        return `${axis}${gridIdx}${tierSuffix}`;
-      }
-    }
-    if (/^[xy]\d+$/.test(base)) {
-      return `${withoutTier}${tierSuffix}`;
-    }
-    return `${side}`;
-  };
-  const getDirectionLabel = (side: string) => formatWallSideLabel(side, true);
-
   // ─── SVG dimensions ─────────────────────────────────────
   const PAD_LEFT = 100;
   const PAD_RIGHT = 40;
   const PAD_TOP = 50;
   const PAD_BOTTOM = 80;
   const ALL_WALLS_GAP = 60;
-  const ALL_WALLS_HEADER = 50;
+  /** Banner height per wall in “all walls” mode (title + hashira line). */
+  const ALL_WALLS_HEADER = 56;
 
   const singleSvgW = wallData.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT;
   const singleSvgH = wallData.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM;
@@ -207,6 +274,7 @@ export default function Scaffold2DView({ result }: Props) {
     xFn: (mm: number) => number,
     yFn: (mm: number) => number,
     keyPrefix = '',
+    postFootLabels: string[] | null = null,
   ) => {
     const { spans, levels, levelsDraw, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wd;
     const x = xFn;
@@ -247,6 +315,26 @@ export default function Scaffold2DView({ result }: Props) {
         </g>
       );
     });
+
+    // Hashira station ids (X1… / Y1…) under posts, above span dimensions
+    if (postFootLabels && postFootLabels.length === postXPositions.length) {
+      postXPositions.forEach((px, pi) => {
+        elements.push(
+          <text
+            key={`${keyPrefix}pfl-${pi}`}
+            x={x(px)}
+            y={y(0) + 12}
+            textAnchor="middle"
+            fontSize={9}
+            fontWeight={600}
+            fill={COL.dimText}
+            style={{ fontFamily: 'ui-monospace, monospace' }}
+          >
+            {postFootLabels[pi]}
+          </text>
+        );
+      });
+    }
 
     // Base Yokoji
     spans.forEach((span, si) => {
@@ -605,7 +693,7 @@ export default function Scaffold2DView({ result }: Props) {
     const docTitle = t('result', 'view2dLabel');
     const title = showAllWalls
       ? t('result', 'view2dPrintAllTpl').replace('{{n}}', String(walls.length)).replace('{{doc}}', docTitle)
-      : `${formatWallSideLabel(wall.side, false)} — ${docTitle}`;
+      : `${primaryWallLabel(activeWallIdx, wall.side)} — ${docTitle}`;
     const win = window.open('', '_blank');
     if (win) {
       win.document.write(`
@@ -711,6 +799,7 @@ export default function Scaffold2DView({ result }: Props) {
   };
 
   const accentColor = WALL_ACCENT[activeWallIdx % WALL_ACCENT.length];
+  const activeHashiraCaption = buildHashiraCaption(activeWallIdx);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -746,7 +835,7 @@ export default function Scaffold2DView({ result }: Props) {
             }`}
             style={!showAllWalls && i === activeWallIdx ? { backgroundColor: WALL_ACCENT[i % WALL_ACCENT.length] } : undefined}
           >
-            {getDirectionLabel(w.side)} ({(w.wallLengthMm / 1000).toFixed(1)}m)
+            {primaryWallLabel(i, w.side)} ({(w.wallLengthMm / 1000).toFixed(1)}m)
           </button>
         ))}
         <button
@@ -771,12 +860,15 @@ export default function Scaffold2DView({ result }: Props) {
               ? <span className="text-indigo-600 font-bold">
                 {t('result', 'view2dAllWallsToolbarTpl').replace('{{n}}', String(walls.length))}
               </span>
-              : <span style={{ color: accentColor, fontWeight: 700 }}>{getDirectionLabel(wall.side)}</span>
+              : <span style={{ color: accentColor, fontWeight: 700 }}>{primaryWallLabel(activeWallIdx, wall.side)}</span>
             }
           </div>
           {!showAllWalls && (
             <span className="text-xs text-gray-400">
               {wall.wallLengthMm.toLocaleString(numberLocale)}mm × {wallData.levels}{t('result', 'levelsUnit')} · {wallData.spans.length} {t('result', 'spansLabel')}
+              {activeHashiraCaption ? (
+                <span className="ml-2 font-mono text-slate-600">{activeHashiraCaption}</span>
+              ) : null}
             </span>
           )}
         </div>
@@ -811,7 +903,7 @@ export default function Scaffold2DView({ result }: Props) {
       <EdgeHashiraResultPanel
         labeling={result?.edgeHashiraLabeling}
         walls={walls}
-        closedFootprint={Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3}
+        closedFootprint={closedFootprint}
         className="mx-3 mt-2 mb-1"
       />
 
@@ -846,10 +938,10 @@ export default function Scaffold2DView({ result }: Props) {
                 const elements: JSX.Element[] = [];
                 let offsetY = 0;
                 allWallsData.forEach((wd, wi) => {
-                  const wallW = wd.totalLengthMm * scale + PAD_LEFT + PAD_RIGHT;
                   const wallH = wd.totalHeightMm * scale + PAD_TOP + PAD_BOTTOM;
                   const color = WALL_ACCENT[wi % WALL_ACCENT.length];
-                  const dirLabel = getDirectionLabel(wd.wall.side);
+                  const edgeTitle = primaryWallLabel(wi, wd.wall.side);
+                  const hashiraLine = buildHashiraCaption(wi);
 
                   // Direction banner
                   elements.push(
@@ -858,11 +950,16 @@ export default function Scaffold2DView({ result }: Props) {
                         fill={color} opacity={0.12} />
                       <rect x={0} y={0} width={6} height={ALL_WALLS_HEADER}
                         fill={color} />
-                      <text x={20} y={ALL_WALLS_HEADER / 2 + 6}
+                      <text x={20} y={22}
                         fontSize={16} fontWeight="bold" fill={color}>
-                        {dirLabel}
+                        {edgeTitle}
                       </text>
-                      <text x={20 + dirLabel.length * 12 + 20} y={ALL_WALLS_HEADER / 2 + 5}
+                      {hashiraLine ? (
+                        <text x={20} y={42} fontSize={11} fill="#475569" style={{ fontFamily: 'ui-monospace, monospace' }}>
+                          {hashiraLine}
+                        </text>
+                      ) : null}
+                      <text x={300} y={22}
                         fontSize={12} fill="#6b7280">
                         {t('result', 'view2dBannerMetaTpl')
                           .replace('{{len}}', wd.wall.wallLengthMm.toLocaleString(numberLocale))
@@ -871,7 +968,7 @@ export default function Scaffold2DView({ result }: Props) {
                           .replace('{{n}}', String(wd.spans.length))
                           .replace('{{spansLabel}}', t('result', 'spansLabel'))}
                       </text>
-                      <text x={svgW - 20} y={ALL_WALLS_HEADER / 2 + 5}
+                      <text x={svgW - 20} y={22}
                         textAnchor="end" fontSize={11} fill="#9ca3af">
                         {t('result', 'view2dSvgSubtitleTpl')
                           .replace('{{type}}', isWakugumi ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort'))
@@ -888,7 +985,7 @@ export default function Scaffold2DView({ result }: Props) {
 
                   elements.push(
                     <g key={`wall-${wi}`}>
-                      {renderWallContent(wd, xFn, yFn, `w${wi}-`)}
+                      {renderWallContent(wd, xFn, yFn, `w${wi}-`, postFootLabelsForWall(wi, wd))}
                     </g>
                   );
 
@@ -943,11 +1040,24 @@ export default function Scaffold2DView({ result }: Props) {
           ) : (
             <>
               {/* Title */}
-              <text x={svgW / 2} y={20} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
-                {`【${isWakugumi ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort')}】 ${getDirectionLabel(wall.side)} — ${wall.wallLengthMm.toLocaleString(numberLocale)}mm × ${wallData.levels}${t('result', 'levelsUnit')}`}
+              <text x={svgW / 2} y={18} textAnchor="middle" fontSize={14} fontWeight="bold" fill="#111827">
+                {`【${isWakugumi ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort')}】 ${primaryWallLabel(activeWallIdx, wall.side)} — ${wall.wallLengthMm.toLocaleString(numberLocale)}mm × ${wallData.levels}${t('result', 'levelsUnit')}`}
               </text>
+              {activeHashiraCaption ? (
+                <text
+                  x={svgW / 2}
+                  y={34}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontWeight={600}
+                  fill="#475569"
+                  style={{ fontFamily: 'ui-monospace, monospace' }}
+                >
+                  {activeHashiraCaption}
+                </text>
+              ) : null}
 
-              {renderWallContent(wallData, x, y)}
+              {renderWallContent(wallData, x, y, '', postFootLabelsForWall(activeWallIdx, wallData))}
 
               {/* Legend */}
               <g transform={`translate(${PAD_LEFT}, ${svgH - 28})`}>
