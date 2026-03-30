@@ -3,6 +3,18 @@ import * as ExcelJS from 'exceljs';
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { ScaffoldCalculationResult, WallCalculationResult, CalculatedComponent } from './scaffold-calculator.service';
 
+/** One logical line in the BOM after merging same 部材名 + 分類 + 単位 (e.g. all ブレス sizes → one row). */
+interface MergedMaterialRow {
+  category: string;
+  nameJp: string;
+  unit: string;
+  sizeSpecJoined: string;
+  sortOrder: number;
+  /** Per-wall map keys (materialCode or type-sizeSpec). */
+  keys: string[];
+  hasPattankoOnly: boolean;
+}
+
 /**
  * Generates a printable Excel quotation (足場材料見積書)
  * with per-wall columns, Japanese material names, categories, and unit column.
@@ -126,23 +138,25 @@ export class ScaffoldExcelService {
       return m;
     });
 
-    // Sort summary by category, then by sortOrder to ensure proper grouping
-    const sortedSummary = [...result.summary].sort((a, b) => {
-      const catA = a.category || '';
-      const catB = b.category || '';
-      if (catA !== catB) {
-        return catA.localeCompare(catB, 'ja');
-      }
-      return a.sortOrder - b.sortOrder;
-    });
+    const mergedRows = this.mergeSummaryForExcel(result.summary);
 
     let rowNum = 1;
     let lastCategory = '';
 
-    for (const comp of sortedSummary) {
-      const key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+    for (const row of mergedRows) {
+      const perWallQty = wallMaps.map(m =>
+        row.keys.reduce((sum, k) => sum + (m.get(k) || 0), 0),
+      );
+      let total: number;
+      if (row.hasPattankoOnly) {
+        const pc = result.summary.find(c => c.materialCode === 'PATTANKO');
+        total = pc?.quantity ?? perWallQty.reduce((a, b) => a + b, 0);
+      } else {
+        total = perWallQty.reduce((a, b) => a + b, 0);
+      }
+
       // Category separator row
-      const cat = comp.category || '';
+      const cat = row.category || '';
       if (cat !== lastCategory) {
         const catRow = sheet.addRow([]);
         catRow.getCell(1).value = '';
@@ -162,15 +176,12 @@ export class ScaffoldExcelService {
         lastCategory = cat;
       }
 
-      const perWallQty = wallMaps.map(m => m.get(key) || 0);
-      const total = comp.materialCode === 'PATTANKO' ? comp.quantity : perWallQty.reduce((a, b) => a + b, 0);
-
       const dataRow = sheet.addRow([
         rowNum,
-        comp.category || '',
-        comp.nameJp,
-        comp.sizeSpec,
-        comp.unit,
+        cat,
+        row.nameJp,
+        row.sizeSpecJoined,
+        row.unit,
         ...perWallQty,
         total,
       ]);
@@ -254,10 +265,11 @@ export class ScaffoldExcelService {
         c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       });
 
-      for (const comp of sortedSummary) {
-        const key = comp.materialCode || (comp.category === '布材' ? `${comp.category}-${comp.sizeSpec}` : `${comp.type}-${comp.sizeSpec}`);
-        const perWallQty = wallMaps.map(m => m.get(key) || 0);
-        const isPattanko = comp.materialCode === 'PATTANKO';
+      for (const row of mergedRows) {
+        const perWallQty = wallMaps.map(m =>
+          row.keys.reduce((sum, k) => sum + (m.get(k) || 0), 0),
+        );
+        const isPattanko = row.hasPattankoOnly;
         const perWallPerLevel = result.walls.map((w, i) => {
           const L = w.levelCalc.fullLevels;
           if (L <= 0) return 0;
@@ -268,8 +280,8 @@ export class ScaffoldExcelService {
         const rowTotal = perWallPerLevel.reduce((a, b) => a + b, 0) + cornerPerLevel;
         if (rowTotal <= 0) continue;
         sheet2.addRow([
-          comp.nameJp,
-          comp.sizeSpec,
+          row.nameJp,
+          row.sizeSpecJoined,
           ...perWallPerLevel,
           isPattanko ? cornerPerLevel : '',
           rowTotal,
@@ -294,6 +306,76 @@ export class ScaffoldExcelService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  /**
+   * Merge repeated 部材名 rows (same category + display name + unit) into one Excel line,
+   * with 規格 = "600 / 1200 / …" and per-wall qty = sum of all matching size lines.
+   */
+  private mergeSummaryForExcel(summary: CalculatedComponent[]): MergedMaterialRow[] {
+    const sorted = [...summary].sort((a, b) => {
+      const ca = a.category || '';
+      const cb = b.category || '';
+      if (ca !== cb) return ca.localeCompare(cb, 'ja');
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return (a.sizeSpec || '').localeCompare(b.sizeSpec || '', 'ja');
+    });
+
+    type Acc = {
+      category: string;
+      nameJp: string;
+      unit: string;
+      sortOrder: number;
+      keys: Set<string>;
+      specsOrdered: string[];
+      specSeen: Set<string>;
+      pattankoKeys: number;
+    };
+
+    const groups = new Map<string, Acc>();
+    const order: string[] = [];
+
+    for (const comp of sorted) {
+      const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+      const gKey = `${comp.category || ''}\t${comp.nameJp}\t${comp.unit}`;
+      let g = groups.get(gKey);
+      if (!g) {
+        g = {
+          category: comp.category || '',
+          nameJp: comp.nameJp,
+          unit: comp.unit,
+          sortOrder: comp.sortOrder,
+          keys: new Set(),
+          specsOrdered: [],
+          specSeen: new Set(),
+          pattankoKeys: 0,
+        };
+        groups.set(gKey, g);
+        order.push(gKey);
+      }
+      g.sortOrder = Math.min(g.sortOrder, comp.sortOrder);
+      g.keys.add(mapKey);
+      const sp = (comp.sizeSpec || '').trim();
+      if (sp && !g.specSeen.has(sp)) {
+        g.specSeen.add(sp);
+        g.specsOrdered.push(sp);
+      }
+      if (comp.materialCode === 'PATTANKO') g.pattankoKeys += 1;
+    }
+
+    return order.map((k) => {
+      const g = groups.get(k)!;
+      const hasPattankoOnly = g.pattankoKeys === g.keys.size && g.pattankoKeys > 0;
+      return {
+        category: g.category,
+        nameJp: g.nameJp,
+        unit: g.unit,
+        sizeSpecJoined: g.specsOrdered.join(' / '),
+        sortOrder: g.sortOrder,
+        keys: [...g.keys],
+        hasPattankoOnly,
+      };
+    });
   }
 
   private summarizeSpans(spans: number[]): string {
