@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as PDFDocument from 'pdfkit';
-import { ScaffoldConfiguration } from './scaffold-config.entity';
-import { ScaffoldCalculationResult } from './scaffold-calculator.service';
+import sharp from 'sharp';
 
 /**
  * Generates PDF exports for 2D and 3D scaffold views.
@@ -11,80 +10,95 @@ export class ScaffoldPdfService {
   private readonly logger = new Logger(ScaffoldPdfService.name);
 
   /**
-   * Generate PDF from 2D SVG data (sent from frontend)
+   * Rasterize client SVG (full color) and embed in a landscape A4 PDF.
    */
   async generate2DPdf(svgContent: string, configId: string): Promise<Buffer> {
     this.logger.log(`Generating 2D PDF for config ${configId}`);
+    const trimmed = (svgContent || '').trim();
+    if (!trimmed) {
+      throw new Error('Empty SVG content');
+    }
+
+    const pngBuffer = await sharp(Buffer.from(trimmed, 'utf-8'), { density: 192 })
+      .resize({
+        width: 3200,
+        height: 3200,
+        fit: 'inside',
+        withoutEnlargement: false,
+      })
+      .png()
+      .toBuffer();
 
     return new Promise((resolve, reject) => {
       try {
-        // For 2D, we'll use puppeteer to render SVG to PDF
-        // But for now, create a simple PDF with the SVG embedded
-        const doc = new PDFDocument({ size: 'A4', layout: 'landscape' });
-        const buffers: Buffer[] = [];
-
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-          const pdfBuffer = Buffer.concat(buffers);
-          resolve(pdfBuffer);
+        const doc = new PDFDocument({
+          size: 'A4',
+          layout: 'landscape',
+          margins: { top: 40, bottom: 40, left: 40, right: 40 },
+          autoFirstPage: true,
         });
+        const buffers: Buffer[] = [];
+        doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
 
-        // Add title
-        doc.fontSize(18).text('足場組立図 (2D)', { align: 'center' });
-        doc.moveDown();
+        doc.fontSize(14).text('足場組立図 (2D)', { align: 'center' });
+        doc.moveDown(0.35);
 
-        // Add note that SVG should be rendered separately
-        doc.fontSize(12).text('Note: This PDF contains scaffold 2D drawing data.', { align: 'center' });
-        doc.fontSize(10).text(`Config ID: ${configId}`, { align: 'center' });
-        doc.moveDown();
+        const margin = 40;
+        const usableW = doc.page.width - margin * 2;
+        const usableH = doc.page.height - doc.y - margin;
 
-        // For full SVG rendering, we'd need puppeteer
-        // This is a placeholder - frontend will handle SVG to PDF conversion
+        doc.image(pngBuffer, {
+          fit: [usableW, Math.max(160, usableH)],
+          align: 'center',
+        });
+
+        doc.moveDown(0.5);
+        doc.fontSize(8).fillColor('#525252').text(`Config: ${configId}`, { align: 'center' });
+        doc.fillColor('#000000');
         doc.end();
-      } catch (error) {
-        reject(error);
+      } catch (err) {
+        reject(err);
       }
     });
   }
 
   /**
-   * Generate PDF from 3D screenshot (sent from frontend as base64)
+   * Embed a full-color PNG (WebGL screenshot) from the client.
    */
   async generate3DPdf(imageBase64: string, configId: string): Promise<Buffer> {
     this.logger.log(`Generating 3D PDF for config ${configId}`);
 
     return new Promise((resolve, reject) => {
       try {
-        const doc = new PDFDocument({ size: 'A4', layout: 'landscape' });
+        const imageBuffer = Buffer.from(imageBase64, 'base64');
+        const doc = new PDFDocument({
+          size: 'A4',
+          layout: 'landscape',
+          margins: { top: 40, bottom: 40, left: 40, right: 40 },
+        });
         const buffers: Buffer[] = [];
 
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-          const pdfBuffer = Buffer.concat(buffers);
-          resolve(pdfBuffer);
-        });
+        doc.on('data', (chunk: Buffer) => buffers.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
 
-        // Add title
-        doc.fontSize(18).text('足場組立図 (3D)', { align: 'center' });
-        doc.moveDown();
+        doc.fontSize(14).text('足場組立図 (3D)', { align: 'center' });
+        doc.moveDown(0.35);
 
-        // Convert base64 to buffer and add image
-        const imageBuffer = Buffer.from(imageBase64, 'base64');
-        const imgWidth = doc.page.width - 100;
-        const imgHeight = (imgWidth * 3) / 4; // Maintain aspect ratio
+        const margin = 40;
+        const usableW = doc.page.width - margin * 2;
+        const usableH = doc.page.height - doc.y - margin;
 
         doc.image(imageBuffer, {
-          fit: [imgWidth, imgHeight],
+          fit: [usableW, Math.max(160, usableH)],
           align: 'center',
-          valign: 'center',
         });
 
-        doc.moveDown();
-        doc.fontSize(10).text(`Config ID: ${configId}`, { align: 'center' });
-        doc.text(`Generated: ${new Date().toLocaleString('ja-JP')}`, { align: 'center' });
-
+        doc.moveDown(0.5);
+        doc.fontSize(8).fillColor('#525252').text(`Config: ${configId}`, { align: 'center' });
+        doc.fillColor('#000000');
         doc.end();
       } catch (error) {
         reject(error);

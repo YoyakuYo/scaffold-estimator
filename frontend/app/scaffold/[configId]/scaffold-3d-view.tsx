@@ -6,7 +6,6 @@ import { Loader2, FileText, FileCode, Box, Download, Info, Plus, Minus, Camera }
 import { useI18n } from '@/lib/i18n';
 import type { WallCalculationResult, CalculatedComponent, BuildingMassingTier } from '@/lib/api/scaffold-configs';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
-import html2canvas from 'html2canvas';
 import {
   loadScaffoldTextures,
   addRealisticPost,
@@ -522,7 +521,7 @@ export default function Scaffold3DView({
       cameraRef.current = camera;
 
       // ── Renderer ───────────────────────────────────────
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       rendererRef.current = renderer;
       renderer.setSize(w, h);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -3602,11 +3601,24 @@ export default function Scaffold3DView({
   };
 
   const handleExportPdf = async () => {
-    if (!wrapperRef.current) return;
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
     setExporting('pdf');
     try {
-      const canvas = await html2canvas(wrapperRef.current, { backgroundColor: '#f0f0f0', useCORS: true });
+      const renderer = rendererRef.current;
+      const canvas = renderer.domElement;
+      const prevW = canvas.width;
+      const prevH = canvas.height;
+      const dpr = Math.min(window.devicePixelRatio ?? 1, 2);
+      const hiResW = Math.min(Math.max(1, Math.floor(canvas.clientWidth * dpr * 1.5)), 3840);
+      const hiResH = Math.min(Math.max(1, Math.floor(canvas.clientHeight * dpr * 1.5)), 2160);
+
+      renderer.setSize(hiResW, hiResH, false);
+      renderer.render(sceneRef.current, cameraRef.current);
       const imageBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+      renderer.setSize(prevW, prevH, false);
+      renderer.render(sceneRef.current, cameraRef.current);
+
       const blob = await scaffoldConfigsApi.export3DPdf(configId, imageBase64);
       triggerDownload(blob, `scaffold_3d_${configId.slice(0, 8)}.pdf`);
     } catch (error) {
