@@ -1019,6 +1019,21 @@ export const translations = {
     colSpec: { ja: '規格', en: 'Spec', fr: 'Spéc.' },
     colUnit: { ja: '単位', en: 'Unit', fr: 'Unité' },
     colQty: { ja: '数量', en: 'Qty', fr: 'Qté' },
+    printAllViews: {
+      ja: '全タブを印刷（色付き）',
+      en: 'Print all views (color)',
+      fr: 'Imprimer toutes les vues (couleur)',
+    },
+    printAllViewsTitle: {
+      ja: '足場計算結果 — 一式',
+      en: 'Scaffold calculation — full package',
+      fr: 'Calcul échafaudage — dossier complet',
+    },
+    printBackgroundGraphicsHint: {
+      ja: 'ブラウザの印刷設定で「背景のグラフィック」を有効にすると色がそのまま出ます。',
+      en: 'In the print dialog, turn on “Background graphics” (or equivalent) so colors and fills print.',
+      fr: 'Dans la boîte d’impression, activez « Graphiques d’arrière-plan » pour conserver les couleurs.',
+    },
   },
 
   // ─── Scaffold Input Extras ──────────────────────────────────

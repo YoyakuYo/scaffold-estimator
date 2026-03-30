@@ -31,6 +31,7 @@ import {
   Download,
   Plus,
   QrCode,
+  Printer,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
@@ -268,6 +269,15 @@ function ScaffoldResultPage() {
     if (result && maxLevels >= 1) setVisibleLevels((prev) => Math.min(prev, maxLevels));
   }, [result, maxLevels]);
 
+  /** Let WebGL / SVG layouts reflow before the browser captures the page for print. */
+  useEffect(() => {
+    const bump = () => {
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
+    window.addEventListener('beforeprint', bump);
+    return () => window.removeEventListener('beforeprint', bump);
+  }, []);
+
   // Review/approve mutation
   const reviewMutation = useMutation({
     mutationFn: () => scaffoldConfigsApi.markReviewed(configId),
@@ -356,14 +366,15 @@ function ScaffoldResultPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="min-h-screen bg-gray-50 print:bg-white">
+      <div className="max-w-7xl mx-auto px-4 py-6 print:max-w-none print:px-2">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <button
+              type="button"
               onClick={() => router.push('/scaffold')}
-              className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-200 transition-colors print:hidden"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -385,7 +396,16 @@ function ScaffoldResultPage() {
               <p className="text-sm text-gray-500">{t('result', 'subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              title={t('resultExtra', 'printBackgroundGraphicsHint')}
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg transition-colors shadow border border-slate-900"
+            >
+              <Printer className="h-4 w-4" />
+              {t('resultExtra', 'printAllViews')}
+            </button>
             <button
               onClick={() => setShowScanModal(true)}
               className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors border border-gray-300"
@@ -420,7 +440,9 @@ function ScaffoldResultPage() {
         </div>
 
         {/* Summary Cards */}
-        <div className={`grid grid-cols-2 ${result.scaffoldType === 'wakugumi' ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-3 mb-4`}>
+        <div
+          className={`grid grid-cols-2 ${result.scaffoldType === 'wakugumi' ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-3 mb-4 print:break-inside-avoid`}
+        >
           <SummaryCard
             icon={<Building2 className="h-5 w-5" />}
             label={t('result', 'maxHeight') || 'Max Height'}
@@ -495,8 +517,13 @@ function ScaffoldResultPage() {
           </span>
         </div>
 
+        <div className="hidden print:block mb-4 pb-3 border-b-2 border-gray-800">
+          <p className="text-lg font-bold text-gray-900">{t('result', 'title')}</p>
+          <p className="text-sm text-gray-600">{t('resultExtra', 'printAllViewsTitle')}</p>
+        </div>
+
         {/* Tab Switcher */}
-        <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+        <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit print:hidden">
           <button
             onClick={() => setActiveTab('table')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
@@ -565,40 +592,81 @@ function ScaffoldResultPage() {
           </button>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'table' && <QuotationTable result={result} />}
-        {activeTab === 'perside' && <PerSideBreakdown result={result} />}
-        {activeTab === 'breakdown' && result.walls && (
-          <MaterialBreakdownTable
-            walls={result.walls}
-            summary={result.summary ?? []}
-            buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m: number, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
-            scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
-            totalLevels={maxLevels}
-            levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
-            prices={materialPrices}
-            onPriceChange={(code, price) => setMaterialPrices((prev) => ({ ...prev, [code]: price }))}
-            edgeHashiraLabeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
-            polygonVertexCount={Array.isArray(result.polygonVertices) ? result.polygonVertices.length : 0}
-          />
+        {/* Tab content: one view on screen; all views when printing (Ctrl+P / Print all). */}
+        <div
+          className={`${activeTab === 'table' ? 'block' : 'hidden'} print:block print:break-after-page`}
+        >
+          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+            {t('resultExtra', 'tabOverall')}
+          </h2>
+          <QuotationTable result={result} />
+        </div>
+
+        <div
+          className={`${activeTab === 'perside' ? 'block' : 'hidden'} print:block print:break-after-page`}
+        >
+          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+            {t('resultExtra', 'tabPerSide')}
+          </h2>
+          <PerSideBreakdown result={result} />
+        </div>
+
+        {result.walls && (
+          <div
+            className={`${activeTab === 'breakdown' ? 'block' : 'hidden'} print:block print:break-after-page`}
+          >
+            <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+              {t('result', 'materialBreakdownTitle')}
+            </h2>
+            <MaterialBreakdownTable
+              walls={result.walls}
+              summary={result.summary ?? []}
+              buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m: number, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
+              scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
+              totalLevels={maxLevels}
+              levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
+              prices={materialPrices}
+              onPriceChange={(code, price) => setMaterialPrices((prev) => ({ ...prev, [code]: price }))}
+              edgeHashiraLabeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
+              polygonVertexCount={Array.isArray(result.polygonVertices) ? result.polygonVertices.length : 0}
+            />
+          </div>
         )}
-        {activeTab === '2d' && <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />}
-        {activeTab === 'plan' && (
+
+        <div
+          className={`${activeTab === '2d' ? 'block' : 'hidden'} print:block print:break-after-page print:overflow-visible`}
+        >
+          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+            {t('result', 'tab2d')}
+          </h2>
+          <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />
+        </div>
+
+        <div
+          className={`${activeTab === 'plan' ? 'block' : 'hidden'} print:block print:break-after-page print:overflow-visible`}
+        >
+          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+            {t('result', 'tabPlan')}
+          </h2>
           <ScaffoldPlanView
             result={resultForViz ?? resultMergedForViz ?? result}
             configId={configId}
           />
-        )}
-        {activeTab === '3d' && (
+        </div>
+
+        <div className={`${activeTab === '3d' ? 'block' : 'hidden'} print:block print:overflow-visible`}>
+          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+            {t('result', 'tab3d')}
+          </h2>
           <Scaffold3DView
             result={resultForViz ?? resultFor3D ?? resultMergedForViz ?? result}
             totalLevels={maxLevels}
             complianceMode={isAiBim ? 'ai_bim' : 'default'}
           />
-        )}
+        </div>
 
         {/* ─── Review & Approve Section ──────────────────────── */}
-        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 p-6 print:hidden">
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0 p-3 rounded-full bg-blue-50">
               <ClipboardCheck className="h-6 w-6 text-blue-600" />

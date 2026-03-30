@@ -758,7 +758,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Toolbar */}
       <div className="bg-gray-50 border-b border-gray-200">
-        <div className="p-3 flex items-center justify-between flex-wrap gap-2">
+        <div className="p-3 flex items-center justify-between flex-wrap gap-2 print:hidden">
           <div className="text-sm font-medium text-gray-600">
             {t('viewer', 'planView')} — {walls.map((_, wi) => edgeChordName(wi, walls.length, isClosed)).join(' · ')} ({walls.length} {t('viewer', 'walls')})
           </div>
@@ -795,7 +795,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
         </div>
 
         {/* X/Y 支柱番号 — per edge */}
-        <div className="px-3 pb-3 pt-0 space-y-2 border-t border-gray-200/80">
+        <div className="px-3 pb-3 pt-0 space-y-2 border-t border-gray-200/80 print:hidden">
           <p className="text-xs text-gray-600 pt-2">{t('viewer', 'hashiraAxisHint')}</p>
           <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
             {walls.map((w, wi) => {
@@ -872,7 +872,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
       </div>
 
       {/* SVG Canvas */}
-      <div className="overflow-auto" style={{ maxHeight: '700px' }}>
+      <div className="overflow-auto max-h-[700px] print:!max-h-none print:overflow-visible">
         <svg
           ref={svgRef}
           width={svgW}

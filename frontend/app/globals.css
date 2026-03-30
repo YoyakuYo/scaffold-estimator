@@ -88,3 +88,21 @@ body {
   95%  { width: 92%; }
   100% { width: 95%; }
 }
+
+/* Preserve table / chart / legend colors when printing (browser default often strips backgrounds). */
+@media print {
+  html {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background: #fff !important;
+  }
+  canvas,
+  svg {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

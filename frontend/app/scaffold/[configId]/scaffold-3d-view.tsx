@@ -3678,7 +3678,7 @@ export default function Scaffold3DView({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="p-3 bg-gray-50 border-b border-gray-200">
+      <div className="p-3 bg-gray-50 border-b border-gray-200 print:hidden">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <div className="text-sm font-medium text-gray-600">
@@ -3876,7 +3876,7 @@ export default function Scaffold3DView({
         )}
       </div>
       {(simplified || levelVisCap) && ready && (
-        <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+        <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-center gap-2 print:hidden">
           <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -3889,9 +3889,13 @@ export default function Scaffold3DView({
           </span>
         </div>
       )}
-      <div ref={wrapperRef} style={{ height: '650px', position: 'relative' }}>
+      <div
+        ref={wrapperRef}
+        className="print:!h-auto print:min-h-[560px]"
+        style={{ height: '650px', position: 'relative' }}
+      >
         {selectedComponent && (
-          <div className="absolute top-2 left-2 z-20 max-w-xs bg-white/95 border border-gray-200 rounded-lg shadow-lg p-3">
+          <div className="absolute top-2 left-2 z-20 max-w-xs bg-white/95 border border-gray-200 rounded-lg shadow-lg p-3 print:hidden">
             <div className="flex items-center gap-2 text-indigo-700 font-medium mb-1">
               <Info className="h-4 w-4" />
               {selectedComponent.nameJp}

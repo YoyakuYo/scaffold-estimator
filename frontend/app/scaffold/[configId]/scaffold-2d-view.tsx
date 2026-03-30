@@ -804,7 +804,7 @@ export default function Scaffold2DView({ result }: Props) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Wall selector tabs */}
-      <div className="flex items-center gap-1 px-3 py-2 bg-gray-100 border-b border-gray-200 overflow-x-auto">
+      <div className="flex items-center gap-1 px-3 py-2 bg-gray-100 border-b border-gray-200 overflow-x-auto print:hidden">
         <button
           onClick={() => { setShowAllWalls(true); }}
           className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-shrink-0 whitespace-nowrap ${
@@ -853,7 +853,7 @@ export default function Scaffold2DView({ result }: Props) {
       </div>
 
       {/* Toolbar */}
-      <div className="p-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+      <div className="p-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2 print:hidden">
         <div className="flex items-center gap-3">
           <div className="text-sm font-medium text-gray-600">
             {t('result', 'view2dLabel')} — {showAllWalls
@@ -922,7 +922,9 @@ export default function Scaffold2DView({ result }: Props) {
       )}
 
       {/* SVG Canvas */}
-      <div className="overflow-auto" style={{ maxHeight: showAllWalls ? '900px' : '700px' }}>
+      <div
+        className={`overflow-auto print:!max-h-none print:overflow-visible ${showAllWalls ? 'max-h-[900px]' : 'max-h-[700px]'}`}
+      >
         <svg
           ref={svgRef}
           width={svgW}
