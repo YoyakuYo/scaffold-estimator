@@ -193,7 +193,7 @@ export class ScaffoldConfigService {
       });
     }
 
-    const standoffMm = dto.wallStandoffMm ?? 350;
+    const standoffMm = dto.wallStandoffMm ?? 300;
     const correctedMassingTiers = correctLegacyMassingTiers(
       dto.buildingOutline as any,
       dto.massingTiers as any,
@@ -355,7 +355,7 @@ export class ScaffoldConfigService {
     const client = this.supabase.getClient();
     await client.from('calculated_quantities').delete().eq('config_id', configId);
 
-    const wallStandoffMm = dto.wallStandoffMm ?? config.wallStandoffMm ?? (config.calculationResult as any)?.wallStandoffMm ?? 350;
+    const wallStandoffMm = dto.wallStandoffMm ?? config.wallStandoffMm ?? (config.calculationResult as any)?.wallStandoffMm ?? 300;
     const configUpdates = mapPayloadToSnake({
       mode: dto.mode,
       scaffoldType,

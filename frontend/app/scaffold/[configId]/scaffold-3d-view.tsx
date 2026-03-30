@@ -1742,8 +1742,8 @@ export default function Scaffold3DView({
         startPostIdx: number;
       }> = [];
 
-      // Offset from building wall to inner posts is always 300mm
-      const standoffMm = WALL_TO_INNER_POSTS_MM;
+      // Offset from building wall to inner posts (matches calculationResult.wallStandoffMm; default 300mm)
+      const standoffMm = result?.wallStandoffMm ?? WALL_TO_INNER_POSTS_MM;
       const standoffM = standoffMm / 1000;
 
       // Pre-compute per-tier polygon data (normal signs, offset paths, corner flags)
