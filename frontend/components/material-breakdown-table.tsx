@@ -33,6 +33,26 @@ interface WallResult {
 /** Typical story height (mm) for estimating building floor count from total height — not scaffold lift height. */
 const TYPICAL_BUILDING_STORY_MM = 3000;
 
+/** Map per–scaffold-lift quantities into estimated building-floor bands (~3 m). */
+function aggregateLevelQtyToFloors(
+  levelQty: number[],
+  levelHeightMm: number,
+  buildingFloorCount: number,
+): number[] {
+  const floors = Array.from({ length: buildingFloorCount }, () => 0);
+  for (let l = 0; l < levelQty.length; l++) {
+    const qty = levelQty[l] || 0;
+    if (qty === 0) continue;
+    const yMid = (l + 0.5) * levelHeightMm;
+    const f = Math.min(
+      buildingFloorCount - 1,
+      Math.max(0, Math.floor(yMid / TYPICAL_BUILDING_STORY_MM)),
+    );
+    floors[f] += qty;
+  }
+  return floors;
+}
+
 interface Props {
   walls: WallResult[];
   summary: CalculatedComponent[];
@@ -73,15 +93,16 @@ export function MaterialBreakdownTable({
     return Math.max(1, Math.ceil(buildingHeightMm / TYPICAL_BUILDING_STORY_MM));
   }, [buildingHeightMm]);
 
-  const scaffoldLevelLabels = useMemo(
+  /** Table columns: building floors (estimate), not scaffold lifts. */
+  const floorColumnLabels = useMemo(
     () =>
-      Array.from({ length: scaffoldLevelCount }, (_, i) => {
+      Array.from({ length: buildingFloorCount }, (_, i) => {
         const n = i + 1;
-        if (locale === 'ja') return `${n}段`;
-        if (locale === 'fr') return `Niv.${n}`;
-        return `Lv${n}`;
+        if (locale === 'ja') return `${n}階`;
+        if (locale === 'fr') return `Ét.${n}`;
+        return `F${n}`;
       }),
-    [scaffoldLevelCount, locale],
+    [buildingFloorCount, locale],
   );
 
   const translateMaterialName = (comp: CalculatedComponent) => {
@@ -154,7 +175,7 @@ export function MaterialBreakdownTable({
       material: string;
       spec: string;
       unit: string;
-      levelQty: number[];
+      floorQty: number[];
       total: number;
       code: string;
     }> = [];
@@ -164,22 +185,23 @@ export function MaterialBreakdownTable({
       const wallLevels = wall.levelCalc?.fullLevels || 1;
       for (const comp of wall.components) {
         const levelQty = distributeByScaffoldLevel(comp, wallLevels);
+        const floorQty = aggregateLevelQtyToFloors(levelQty, levelHeightMm, buildingFloorCount);
         rows.push({
           key: `${wi}::${wall.side}::${comp.type}::${comp.sizeSpec}`,
           wallIndex: wi,
           material: translateMaterialName(comp),
           spec: comp.sizeSpec || '-',
           unit: comp.unit || '-',
-          levelQty,
-          total: levelQty.reduce((sum, n) => sum + n, 0),
+          floorQty,
+          total: floorQty.reduce((sum, n) => sum + n, 0),
           code: comp.materialCode || comp.type,
         });
       }
     }
     return rows;
-  }, [walls, scaffoldLevelCount, locale, xyByWall]);
+  }, [walls, scaffoldLevelCount, buildingFloorCount, levelHeightMm, locale, xyByWall]);
 
-  const tableColSpan = 5 + scaffoldLevelLabels.length + 3;
+  const tableColSpan = 5 + floorColumnLabels.length + 3;
 
   const breakdownSections = useMemo(() => {
     const closedFootprint = polygonVertexCount >= 3;
@@ -256,7 +278,7 @@ export function MaterialBreakdownTable({
               <th className="text-center py-3 px-3 font-semibold text-gray-700 min-w-[70px]">
                 {t('result', 'colUnit')}
               </th>
-              {scaffoldLevelLabels.map((label) => (
+              {floorColumnLabels.map((label) => (
                 <th key={label} className="text-right py-3 px-3 font-semibold text-gray-700 min-w-[70px]">
                   {label}
                 </th>
@@ -325,8 +347,8 @@ export function MaterialBreakdownTable({
                       <td className="py-2.5 px-4 font-medium text-gray-800">{row.material}</td>
                       <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
                       <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
-                      {row.levelQty.map((qty, idx) => (
-                        <td key={`${row.key}-lv${idx}`} className="py-2.5 px-3 text-right font-mono text-gray-700">
+                      {row.floorQty.map((qty, idx) => (
+                        <td key={`${row.key}-fl${idx}`} className="py-2.5 px-3 text-right font-mono text-gray-700">
                           {qty.toLocaleString()}
                         </td>
                       ))}
@@ -370,10 +392,10 @@ export function MaterialBreakdownTable({
               <td className="py-3 px-4 font-bold text-gray-800" colSpan={5}>
                 {t('result', 'colTotal')}
               </td>
-              {scaffoldLevelLabels.map((_, idx) => {
-                const sum = matrixRows.reduce((acc, row) => acc + (row.levelQty[idx] || 0), 0);
+              {floorColumnLabels.map((_, idx) => {
+                const sum = matrixRows.reduce((acc, row) => acc + (row.floorQty[idx] || 0), 0);
                 return (
-                  <td key={`sum-lv-${idx}`} className="py-3 px-3 text-right font-mono font-semibold text-gray-800">
+                  <td key={`sum-fl-${idx}`} className="py-3 px-3 text-right font-mono font-semibold text-gray-800">
                     {sum.toLocaleString()}
                   </td>
                 );
@@ -390,8 +412,9 @@ export function MaterialBreakdownTable({
         </table>
       </div>
 
-      <div className="px-6 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50">
-        {t('result', 'jackBaseGroundOnlyNote')}
+      <div className="px-6 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50 space-y-1">
+        <p>{t('result', 'jackBaseGroundOnlyNote')}</p>
+        <p>{t('result', 'materialBreakdownFloorColsNote')}</p>
       </div>
     </div>
   );

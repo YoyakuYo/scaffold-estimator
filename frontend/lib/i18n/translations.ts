@@ -504,9 +504,14 @@ export const translations = {
     hashiraCross: { ja: '直交', en: 'Cross', fr: 'Perpend.' },
     hashiraAlong: { ja: '通り（軸）', en: 'Along', fr: 'Repères' },
     jackBaseGroundOnlyNote: {
-      ja: '注: ジャッキベースは足場最下段(1段目)のみに計上されます。列は建物の階ではなく足場の段です。',
-      en: 'Note: Jack base is counted on the lowest scaffold lift only. Columns are scaffold levels, not building floors.',
-      fr: 'Note : la base de vérin est comptée uniquement sur le premier niveau d\'échafaudage. Les colonnes sont des niveaux d\'échafaudage, pas des étages du bâtiment.',
+      ja: '注: ジャッキベースは足場最下段(1段目)のみに計上されます。',
+      en: 'Note: Jack base is counted on the lowest scaffold lift only.',
+      fr: 'Note : la base de vérin est comptée uniquement sur le premier niveau d\'échafaudage.',
+    },
+    materialBreakdownFloorColsNote: {
+      ja: '数量列は建物階（建築高÷約3mの目安）です。足場の「段」に振った数量を階ごとに合算しており、段数＝階数ではありません。',
+      en: 'Quantity columns are estimated building floors (~3 m story height from building height). Scaffold lift quantities are grouped into floors; lift count ≠ floor count.',
+      fr: 'Les colonnes sont des étages du bâtiment (estimés ~3 m). Les quantités par niveau d\'échafaudage sont regroupées ; nombre de niveaux ≠ nombre d\'étages.',
     },
     print: { ja: '印刷', en: 'Print', fr: 'Imprimer' },
     legendPost: { ja: '支柱', en: 'Post', fr: 'Poteau' },
