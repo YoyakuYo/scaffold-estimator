@@ -10,6 +10,7 @@ import {
   WallCalculationResult,
   CalculatedComponent,
   ScaffoldMaterial,
+  type EdgeHashiraLabeling,
 } from '@/lib/api/scaffold-configs';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -37,6 +38,7 @@ import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { edgeChordName } from '@/lib/edge-hashira-labels';
+import { EdgeHashiraResultPanel, EdgeHashiraResultWallLine } from '@/components/edge-hashira-result-panel';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -576,6 +578,8 @@ function ScaffoldResultPage() {
             levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
             prices={materialPrices}
             onPriceChange={(code, price) => setMaterialPrices((prev) => ({ ...prev, [code]: price }))}
+            edgeHashiraLabeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
+            polygonVertexCount={Array.isArray(result.polygonVertices) ? result.polygonVertices.length : 0}
           />
         )}
         {activeTab === '2d' && <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />}
@@ -841,6 +845,12 @@ function QuotationTable({ result }: { result: any }) {
       {/* Span Info per wall + wall dimensions + scaffold level labels */}
       <div className="p-4 bg-gray-50 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-600 mb-2">{t('result', 'spanConfig')}</h3>
+        <EdgeHashiraResultPanel
+          labeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
+          walls={walls}
+          closedFootprint={!!chordOpts?.closedLoop}
+          className="mb-3"
+        />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           {walls.map((wall, idx) => {
             const spanGroups: Record<number, number> = {};
@@ -1056,6 +1066,12 @@ function PerSideBreakdown({ result }: { result: any }) {
                   <span>{t('resultExtra', 'stairs')}: {wall.stairAccessCount}{t('resultExtra', 'stairsUnit')}</span>
                 </div>
               </div>
+              <EdgeHashiraResultWallLine
+                labeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
+                wallIndex={idx}
+                walls={walls}
+                closedFootprint={!!chordOpts?.closedLoop}
+              />
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

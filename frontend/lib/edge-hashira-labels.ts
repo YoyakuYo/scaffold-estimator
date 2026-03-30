@@ -98,6 +98,39 @@ export function formRowsFromStoredLabeling(
   }));
 }
 
+/** X/Y summary lines for Overall totals, 2D, material breakdown, etc. */
+export function edgeHashiraSummariesFromResult(
+  labeling: EdgeHashiraLabeling | undefined | null,
+  walls: Array<{ wallLengthMm?: number }>,
+  closedFootprint: boolean,
+): string[] {
+  if (!labeling || walls.length === 0) return [];
+  const norm = normalizeEdgeHashiraForWallCount(labeling, walls.length);
+  const out: string[] = [];
+  for (let wi = 0; wi < walls.length; wi++) {
+    const a = norm.assignments[wi];
+    const axis = a?.axis === 'X' || a?.axis === 'Y' ? a.axis : ('' as const);
+    const len = walls[wi]?.wallLengthMm ?? 0;
+    const line = edgeHashiraSummaryLine(wi, walls.length, closedFootprint, len, axis, a?.labelCount);
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+export function edgeHashiraLineForWallIndex(
+  labeling: EdgeHashiraLabeling | undefined | null,
+  wallIndex: number,
+  walls: Array<{ wallLengthMm?: number }>,
+  closedFootprint: boolean,
+): string | null {
+  if (!labeling || wallIndex < 0 || wallIndex >= walls.length) return null;
+  const norm = normalizeEdgeHashiraForWallCount(labeling, walls.length);
+  const a = norm.assignments[wallIndex];
+  const axis = a?.axis === 'X' || a?.axis === 'Y' ? a.axis : ('' as const);
+  const len = walls[wallIndex]?.wallLengthMm ?? 0;
+  return edgeHashiraSummaryLine(wallIndex, walls.length, closedFootprint, len, axis, a?.labelCount);
+}
+
 /** Map UI rows (keyed by wall list index) to API labeling for enabled walls only (calculation order). */
 export function labelingForEnabledWallIndices(
   enabledOriginalIndices: number[],

@@ -4,6 +4,7 @@ import { useState, useRef, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 import { WallCalculationResult, scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
+import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
 import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight, Layers, Camera } from 'lucide-react';
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -806,6 +807,13 @@ export default function Scaffold2DView({ result }: Props) {
           </button>
         </div>
       </div>
+
+      <EdgeHashiraResultPanel
+        labeling={result?.edgeHashiraLabeling}
+        walls={walls}
+        closedFootprint={Array.isArray(result?.polygonVertices) && result.polygonVertices.length >= 3}
+        className="mx-3 mt-2 mb-1"
+      />
 
       {/* Simplification warning */}
       {isSimplified2D && (

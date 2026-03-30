@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { Package } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import type { EdgeHashiraLabeling } from '@/lib/api/scaffold-configs';
+import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
 
 interface CalculatedComponent {
   type: string;
@@ -39,6 +41,9 @@ interface Props {
   levelHeightMm?: number;
   onPriceChange?: (materialCode: string, price: number) => void;
   prices?: Record<string, number>;
+  edgeHashiraLabeling?: EdgeHashiraLabeling | null;
+  /** For closed chord naming (polygon in calculation result). */
+  polygonVertexCount?: number;
 }
 
 export function MaterialBreakdownTable({
@@ -50,6 +55,8 @@ export function MaterialBreakdownTable({
   levelHeightMm = 1800,
   onPriceChange,
   prices = {},
+  edgeHashiraLabeling,
+  polygonVertexCount = 0,
 }: Props) {
   const { t, locale } = useI18n();
   const [editingPrice, setEditingPrice] = useState<string | null>(null);
@@ -221,6 +228,13 @@ export function MaterialBreakdownTable({
         <span>{t('result', 'floors')}: {buildingFloorCount}</span>
         <span>{t('result', 'walls')}: {walls.length}</span>
       </div>
+
+      <EdgeHashiraResultPanel
+        labeling={edgeHashiraLabeling}
+        walls={walls}
+        closedFootprint={polygonVertexCount >= 3}
+        className="mx-6 mt-3 mb-2"
+      />
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
