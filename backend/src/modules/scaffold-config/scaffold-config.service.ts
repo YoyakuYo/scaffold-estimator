@@ -5,6 +5,7 @@ import { ScaffoldMaterial } from './scaffold-material.entity';
 import { ScaffoldCalculatorService, ScaffoldCalculationResult, WallCalculationInput } from './scaffold-calculator.service';
 import { ScaffoldCalculatorWakugumiService } from './scaffold-calculator-wakugumi.service';
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
+import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
 import { ALL_RULES, KUSABI_TOP_GUARD_HEIGHT_MM } from './scaffold-rules';
 import { ALL_WAKUGUMI_RULES } from './scaffold-rules-wakugumi';
 import { PolygonToWallsService } from './polygon-to-walls.service';
@@ -410,6 +411,7 @@ export class ScaffoldConfigService {
       dto.massingTiers as any,
       result.walls as any,
     );
+    const prevLabels = (config.calculationResult as Record<string, unknown> | null)?.edgeHashiraLabeling;
     const calculationResult = {
       ...result,
       wallStandoffMm: wallStandoffMm,
@@ -422,6 +424,7 @@ export class ScaffoldConfigService {
       ...(parametricTransitions && parametricTransitions.length > 0 && { parametricTransitions }),
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
       ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
+      ...(prevLabels && typeof prevLabels === 'object' && { edgeHashiraLabeling: prevLabels }),
     };
     configUpdates.calculation_result = calculationResult;
     await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);
@@ -486,6 +489,30 @@ export class ScaffoldConfigService {
     const config = mapRowToCamel<ScaffoldConfiguration>(row as Record<string, unknown>);
     if (!config) throw new NotFoundException('Scaffold configuration not found');
     this.applyLegacyMassingCorrection(config);
+    return config;
+  }
+
+  /**
+   * Shallow-merge edge X/Y 支柱番号 into calculation_result (no recalculation).
+   */
+  async patchEdgeHashiraLabeling(
+    configId: string,
+    dto: PatchResultLabelsDto,
+    _userId: string,
+  ): Promise<ScaffoldConfiguration> {
+    const config = await this.getConfig(configId);
+    const prev = (config.calculationResult ?? {}) as Record<string, unknown>;
+    const nextCr = {
+      ...prev,
+      edgeHashiraLabeling: dto.edgeHashiraLabeling,
+    };
+    const { error } = await this.supabase
+      .getClient()
+      .from('scaffold_configurations')
+      .update(mapPayloadToSnake({ calculationResult: nextCr }))
+      .eq('id', configId);
+    if (error) throw new BadRequestException('Failed to save plan labels.');
+    config.calculationResult = nextCr as any;
     return config;
   }
 

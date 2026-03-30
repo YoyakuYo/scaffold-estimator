@@ -562,7 +562,12 @@ function ScaffoldResultPage() {
           />
         )}
         {activeTab === '2d' && <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />}
-        {activeTab === 'plan' && <ScaffoldPlanView result={resultForViz ?? resultMergedForViz ?? result} />}
+        {activeTab === 'plan' && (
+          <ScaffoldPlanView
+            result={resultForViz ?? resultMergedForViz ?? result}
+            configId={configId}
+          />
+        )}
         {activeTab === '3d' && (
           <Scaffold3DView
             result={resultForViz ?? resultFor3D ?? resultMergedForViz ?? result}

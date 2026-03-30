@@ -190,6 +190,19 @@ export interface WallCalculationResult {
   };
 }
 
+/** Plan-view 支柱番号: assign X or Y axis per building edge; labels X1..Xn / Y1..Yn along posts. */
+export interface EdgeHashiraAxisAssignment {
+  wallIndex: number;
+  /** '' = no labels on this edge */
+  axis: '' | 'X' | 'Y';
+  /** Override number of labels (1–500). Omit = use one label per calculated post (span+1). */
+  labelCount?: number;
+}
+
+export interface EdgeHashiraLabeling {
+  assignments: EdgeHashiraAxisAssignment[];
+}
+
 export interface CalculationResult {
   config: ScaffoldConfiguration;
   result: {
@@ -322,6 +335,18 @@ export const scaffoldConfigsApi = {
   /** Get single configuration */
   get: async (id: string): Promise<ScaffoldConfiguration> => {
     const response = await apiClient.get<ScaffoldConfiguration>(`/scaffold-configs/${id}`);
+    return response.data;
+  },
+
+  /** Merge X/Y 支柱番号 settings into stored calculation_result (no full recalc). */
+  patchEdgeHashiraLabeling: async (
+    id: string,
+    edgeHashiraLabeling: EdgeHashiraLabeling,
+  ): Promise<ScaffoldConfiguration> => {
+    const response = await apiClient.patch<ScaffoldConfiguration>(
+      `/scaffold-configs/${id}/result-labels`,
+      { edgeHashiraLabeling },
+    );
     return response.data;
   },
 

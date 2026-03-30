@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
-import { WallCalculationResult } from '@/lib/api/scaffold-configs';
+import { WallCalculationResult, scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
 import { buildFootprintPolygonXZ } from '@/lib/scaffold-footprint-polygon';
-import { ZoomIn, ZoomOut, Printer, FlipHorizontal, FlipVertical } from 'lucide-react';
+import { ZoomIn, ZoomOut, Printer, FlipHorizontal, FlipVertical, Loader2 } from 'lucide-react';
 
 // ─── Colors ─────────────────────────────────────────────────────
 const WALL_ACCENT = [
@@ -28,7 +29,42 @@ const DIM_TEXT = '#374151';
 
 interface Props {
   result: any;
+  /** When set, X/Y 支柱番号 can be persisted to calculation_result. */
+  configId?: string;
 }
+
+/** Fractions 0…extendFactor along the edge polyline for label placement (matches post ticks when count = spans+1). */
+function hashiraLabelTsAlongEdge(
+  wall: WallCalculationResult,
+  extendFactor: number,
+  labelCountOverride: number | undefined,
+): number[] {
+  const spans = wall.spans ?? [];
+  const postPositions: number[] = [0];
+  let accum = 0;
+  for (const s of spans) {
+    accum += s;
+    postPositions.push(accum);
+  }
+  const totalLen = accum || (wall.wallLengthMm ?? 1);
+  const tickCount = postPositions.length;
+  const want =
+    labelCountOverride != null && Number.isFinite(labelCountOverride) && labelCountOverride > 0
+      ? Math.min(500, Math.floor(labelCountOverride))
+      : tickCount;
+  const target = Math.max(1, want);
+
+  if (target === tickCount) {
+    return postPositions.map((p) => (totalLen > 0 ? (p / totalLen) * extendFactor : 0));
+  }
+  if (target < tickCount) {
+    return postPositions.slice(0, target).map((p) => (totalLen > 0 ? (p / totalLen) * extendFactor : 0));
+  }
+  if (target === 1) return [0];
+  return Array.from({ length: target }, (_, i) => (i / (target - 1)) * extendFactor);
+}
+
+type HashiraAxisRow = { axis: '' | 'X' | 'Y'; countStr: string };
 
 interface Edge {
   x1: number; y1: number; x2: number; y2: number;
@@ -301,19 +337,23 @@ function buildPolygonFromWalls(
   return { vertices, edges, isClosed: true };
 }
 
-export default function ScaffoldPlanView({ result }: Props) {
-  const { t, locale } = useI18n();
+export default function ScaffoldPlanView({ result, configId }: Props) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
   const svgRef = useRef<SVGSVGElement>(null);
   const allWalls: WallCalculationResult[] = result?.walls ?? [];
   const [scale, setScale] = useState(1);
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
+  const [hashiraRows, setHashiraRows] = useState<HashiraAxisRow[]>([]);
+  const [hashiraSaveMsg, setHashiraSaveMsg] = useState<'idle' | 'ok' | 'err'>('idle');
+
+  const labelingSyncKey = useMemo(
+    () => JSON.stringify(result?.edgeHashiraLabeling ?? null),
+    [result?.edgeHashiraLabeling],
+  );
 
   const scaffoldWidthMm = result?.scaffoldWidthMm ?? 600;
-
-  if (allWalls.length === 0) {
-    return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
-  }
 
   // For tier-aware buildings (stepped/setback), use only ground-tier walls for
   // the plan polygon. Upper tiers stack vertically and share the same plan footprint.
@@ -321,6 +361,51 @@ export default function ScaffoldPlanView({ result }: Props) {
   const walls = hasTiers
     ? allWalls.filter((w) => ((w as any).tierIndex ?? 0) === 0)
     : allWalls;
+
+  useEffect(() => {
+    const saved = result?.edgeHashiraLabeling?.assignments as
+      | Array<{ wallIndex: number; axis?: string; labelCount?: number }>
+      | undefined;
+    setHashiraRows(
+      walls.map((_, wi) => {
+        const s = saved?.find((a) => a.wallIndex === wi);
+        const ax = (s?.axis ?? '') as '' | 'X' | 'Y';
+        return {
+          axis: ax === 'X' || ax === 'Y' ? ax : '',
+          countStr: s?.labelCount != null ? String(s.labelCount) : '',
+        };
+      }),
+    );
+    setHashiraSaveMsg('idle');
+    // Intentionally only re-sync when wall count or server labeling blob changes (avoid resetting on every walls[] identity).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walls.length, labelingSyncKey]);
+
+  const saveHashiraMutation = useMutation({
+    mutationFn: async () => {
+      if (!configId) throw new Error('no config');
+      const assignments = walls.map((_, wi) => {
+        const row = hashiraRows[wi] ?? { axis: '' as const, countStr: '' };
+        const raw = row.countStr.trim();
+        const n = raw === '' ? undefined : parseInt(raw, 10);
+        return {
+          wallIndex: wi,
+          axis: row.axis === 'X' || row.axis === 'Y' ? row.axis : ('' as const),
+          ...(n != null && Number.isFinite(n) && n > 0 ? { labelCount: Math.min(500, Math.floor(n)) } : {}),
+        };
+      });
+      return scaffoldConfigsApi.patchEdgeHashiraLabeling(configId, { assignments });
+    },
+    onSuccess: () => {
+      setHashiraSaveMsg('ok');
+      queryClient.invalidateQueries({ queryKey: ['scaffold-config', configId] });
+    },
+    onError: () => setHashiraSaveMsg('err'),
+  });
+
+  if (allWalls.length === 0 || walls.length === 0) {
+    return <div className="text-gray-500 p-8">{t('result', 'noWallData')}</div>;
+  }
 
   // Use stored polygon vertices as shape hints. Also try ground massing tier vertices
   // when the full outline vertex count doesn't match the ground-tier wall count
@@ -591,6 +676,47 @@ export default function ScaffoldPlanView({ result }: Props) {
           );
         })}
 
+        {/* X/Y 支柱番号 along posts on this edge */}
+        {(() => {
+          const hRow = hashiraRows[edge.wallIdx] ?? { axis: '' as const, countStr: '' };
+          const hAxis = hRow.axis;
+          if (hAxis !== 'X' && hAxis !== 'Y') return null;
+          const rawC = hRow.countStr.trim();
+          const parsed = rawC === '' ? undefined : parseInt(rawC, 10);
+          const parsedCount =
+            parsed != null && Number.isFinite(parsed) && parsed > 0
+              ? Math.min(500, Math.floor(parsed))
+              : undefined;
+          const ts = hashiraLabelTsAlongEdge(wall, extendFactor, parsedCount);
+          const fs = ts.length > 24 ? 4 : ts.length > 14 ? 5 : ts.length > 10 ? 6 : 7;
+          const hOff = stripOffset + 52;
+          return (
+            <g aria-label="hashira-axis-labels">
+              {ts.map((tt, li) => {
+                const px = ex1 + (ex2 - ex1) * tt;
+                const py = ey1 + (ey2 - ey1) * tt;
+                const lx = px + nx * hOff;
+                const ly = py + ny * hOff;
+                return (
+                  <text
+                    key={`hashira-${idx}-${li}`}
+                    x={lx}
+                    y={ly}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={fs}
+                    fontWeight="600"
+                    fill="#0f172a"
+                    transform={`rotate(${readableAngle}, ${lx}, ${ly})`}
+                  >
+                    {`${hAxis}${li + 1}`}
+                  </text>
+                );
+              })}
+            </g>
+          );
+        })()}
+
         {/* Vertex markers */}
         <circle cx={ex1} cy={ey1} r={3.5} fill={col.stroke} stroke="white" strokeWidth={1} />
         <text x={ex1 - nx * 12} y={ey1 - ny * 12}
@@ -631,37 +757,122 @@ export default function ScaffoldPlanView({ result }: Props) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Toolbar */}
-      <div className="p-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
-        <div className="text-sm font-medium text-gray-600">
-          {t('viewer', 'planView')} — {walls.map(w => (w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase()) ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west') : w.sideJp)).join(' · ')} ({walls.length} {t('viewer', 'walls')})
+      <div className="bg-gray-50 border-b border-gray-200">
+        <div className="p-3 flex items-center justify-between flex-wrap gap-2">
+          <div className="text-sm font-medium text-gray-600">
+            {t('viewer', 'planView')} — {walls.map(w => (w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase()) ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west') : w.sideJp)).join(' · ')} ({walls.length} {t('viewer', 'walls')})
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setScale(s => Math.min(s * 1.25, 3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomIn')}>
+              <ZoomIn className="h-4 w-4 text-gray-600" />
+            </button>
+            <button type="button" onClick={() => setScale(s => Math.max(s / 1.25, 0.3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomOut')}>
+              <ZoomOut className="h-4 w-4 text-gray-600" />
+            </button>
+            <div className="w-px h-5 bg-gray-300" />
+            <button
+              type="button"
+              onClick={() => setFlipH(f => !f)}
+              className={`p-1.5 rounded transition-colors ${flipH ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200 text-gray-600'}`}
+              title="左右反転 (Mirror horizontal)"
+            >
+              <FlipHorizontal className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setFlipV(f => !f)}
+              className={`p-1.5 rounded transition-colors ${flipV ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200 text-gray-600'}`}
+              title="上下反転 (Mirror vertical)"
+            >
+              <FlipVertical className="h-4 w-4" />
+            </button>
+            <div className="w-px h-5 bg-gray-300" />
+            <button type="button" onClick={handlePrint}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-200 transition-colors border border-gray-300">
+              <Printer className="h-4 w-4" /> {t('result', 'print')}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setScale(s => Math.min(s * 1.25, 3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomIn')}>
-            <ZoomIn className="h-4 w-4 text-gray-600" />
-          </button>
-          <button onClick={() => setScale(s => Math.max(s / 1.25, 0.3))} className="p-1.5 rounded hover:bg-gray-200" title={t('viewer', 'zoomOut')}>
-            <ZoomOut className="h-4 w-4 text-gray-600" />
-          </button>
-          <div className="w-px h-5 bg-gray-300" />
-          <button
-            onClick={() => setFlipH(f => !f)}
-            className={`p-1.5 rounded transition-colors ${flipH ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200 text-gray-600'}`}
-            title="左右反転 (Mirror horizontal)"
-          >
-            <FlipHorizontal className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setFlipV(f => !f)}
-            className={`p-1.5 rounded transition-colors ${flipV ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-200 text-gray-600'}`}
-            title="上下反転 (Mirror vertical)"
-          >
-            <FlipVertical className="h-4 w-4" />
-          </button>
-          <div className="w-px h-5 bg-gray-300" />
-          <button onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-200 transition-colors border border-gray-300">
-            <Printer className="h-4 w-4" /> {t('result', 'print')}
-          </button>
+
+        {/* X/Y 支柱番号 — per edge */}
+        <div className="px-3 pb-3 pt-0 space-y-2 border-t border-gray-200/80">
+          <p className="text-xs text-gray-600 pt-2">{t('viewer', 'hashiraAxisHint')}</p>
+          <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
+            {walls.map((w, wi) => {
+              const row = hashiraRows[wi] ?? { axis: '' as const, countStr: '' };
+              const edgeLetter = String.fromCharCode(65 + wi);
+              const sideShort =
+                w.side && ['north', 'south', 'east', 'west'].includes(String(w.side).toLowerCase())
+                  ? t('sides', String(w.side).toLowerCase() as 'north' | 'south' | 'east' | 'west')
+                  : (w.sideJp || w.side || `${wi}`);
+              const postN = (w.spans?.length ?? 0) + 1;
+              return (
+                <div
+                  key={`hashira-row-${wi}`}
+                  className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 shadow-sm"
+                >
+                  <span className="font-mono font-semibold text-gray-500 w-6">{edgeLetter}</span>
+                  <span className="text-gray-400 max-w-[4.5rem] truncate" title={sideShort}>{sideShort}</span>
+                  <select
+                    className="border border-gray-300 rounded px-1 py-0.5 bg-gray-50 text-gray-800 min-w-[3.25rem]"
+                    value={row.axis}
+                    onChange={(e) => {
+                      const v = e.target.value as '' | 'X' | 'Y';
+                      setHashiraRows((prev) => {
+                        const next = [...prev];
+                        next[wi] = { ...next[wi], axis: v === 'X' || v === 'Y' ? v : '' };
+                        return next;
+                      });
+                    }}
+                    aria-label={t('viewer', 'hashiraAxisTitle')}
+                  >
+                    <option value="">{t('viewer', 'hashiraAxisNone')}</option>
+                    <option value="X">X</option>
+                    <option value="Y">Y</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    placeholder={`${postN}`}
+                    title={t('viewer', 'hashiraCountPlaceholder')}
+                    className="w-14 border border-gray-300 rounded px-1 py-0.5 text-gray-800"
+                    value={row.countStr}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setHashiraRows((prev) => {
+                        const next = [...prev];
+                        next[wi] = { ...next[wi], countStr: v.replace(/[^\d]/g, '').slice(0, 3) };
+                        return next;
+                      });
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap pb-1">
+            {configId ? (
+              <button
+                type="button"
+                disabled={saveHashiraMutation.isPending}
+                onClick={() => {
+                  setHashiraSaveMsg('idle');
+                  saveHashiraMutation.mutate();
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50"
+              >
+                {saveHashiraMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {t('viewer', 'saveHashiraLabels')}
+              </button>
+            ) : null}
+            {hashiraSaveMsg === 'ok' && (
+              <span className="text-xs text-emerald-600">{t('viewer', 'hashiraLabelsSaved')}</span>
+            )}
+            {hashiraSaveMsg === 'err' && (
+              <span className="text-xs text-red-600">{t('viewer', 'hashiraLabelsSaveError')}</span>
+            )}
+          </div>
         </div>
       </div>
 

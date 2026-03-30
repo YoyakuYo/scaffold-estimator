@@ -25,6 +25,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ScaffoldConfigService } from './scaffold-config.service';
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { UpdateQuantityDto } from './dto/update-quantity.dto';
+import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
 import { ScaffoldExcelService } from './scaffold-excel.service';
 import { ScaffoldPdfService } from './scaffold-pdf.service';
 import { ScaffoldCadService } from './scaffold-cad.service';
@@ -64,6 +65,19 @@ export class ScaffoldConfigController {
   ) {
     this.logger.log(`Creating scaffold config (mode: ${dto.mode})`);
     return await this.configService.createAndCalculate(dto, user.id);
+  }
+
+  /**
+   * PATCH /scaffold-configs/:id/result-labels
+   * Save plan-view X/Y 支柱番号 without full recalculation.
+   */
+  @Patch(':id/result-labels')
+  async patchResultLabels(
+    @Param('id') id: string,
+    @Body() dto: PatchResultLabelsDto,
+    @CurrentUser() user: any,
+  ) {
+    return await this.configService.patchEdgeHashiraLabeling(id, dto, user.id);
   }
 
   /**
