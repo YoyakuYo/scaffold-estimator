@@ -680,16 +680,22 @@ export default function Scaffold3DView({
       });
 
       const topGuardMmRaw = result.topGuardHeightMm ?? 0;
+      const topGuardNum = Number(topGuardMmRaw);
+      const mainTatejiMm = Number(result.preferredMainTatejiMm ?? 1800);
       const scaffoldType: 'kusabi' | 'wakugumi' =
         (result.scaffoldType ?? (result as any).scaffold_type ?? 'kusabi') as 'kusabi' | 'wakugumi';
       const isWakugumi = scaffoldType === 'wakugumi';
       const LEVEL_H = isWakugumi ? ((result.frameSizeMm || 1700) / 1000) : LEVEL_H_KUSABI;
-      // くさび: 上部 900/1350 = 手摺内外両面、1800 = 外ブレス+内手摺。枠組: 上部は別寸法ではなく +1 建枠段。
-      const topGuardM = !isWakugumi && topGuardMmRaw > 0 ? topGuardMmRaw / 1000 : 0;
+      // くさび: 支柱 or 上部 が 1800mm なら外ブレス+内手摺（最上帯も同様）。900/1350 上部のみ内外両面手摺。
+      const topGuardM = !isWakugumi && topGuardNum > 0 ? topGuardNum / 1000 : 0;
+      const kusabiBraceOuterInnerTesuri =
+        !isWakugumi && (mainTatejiMm === 1800 || topGuardNum === 1800);
       const kusabiBothFaceTesuri =
-        !isWakugumi && (topGuardMmRaw === 900 || topGuardMmRaw === 1350);
+        !isWakugumi &&
+        !kusabiBraceOuterInnerTesuri &&
+        (topGuardNum === 900 || topGuardNum === 1350);
       /** Scene bbox / 枠組最上段＝もう一階分の枠高 */
-      const sceneTopExtensionM = isWakugumi && topGuardMmRaw > 0 ? LEVEL_H : topGuardM;
+      const sceneTopExtensionM = isWakugumi && topGuardNum > 0 ? LEVEL_H : topGuardM;
 
       // ── Helper functions ───────────────────────────────
       function addPipe(
@@ -834,7 +840,7 @@ export default function Scaffold3DView({
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = Math.min(levels, MAX_3D_RENDER_LEVELS);
         if (levels > MAX_3D_RENDER_LEVELS) threeDLevelsCapped = true;
-        const wakugumiExtraTopLevel = isWakugumi && topGuardMmRaw > 0;
+        const wakugumiExtraTopLevel = isWakugumi && topGuardNum > 0;
         const levelLoopMax = wakugumiExtraTopLevel ? levelsToBuild + 1 : levelsToBuild;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
         const postCapAbovePlank = 0;

@@ -459,9 +459,12 @@ export class ScaffoldCalculatorService {
     }> = {};
 
     // 5. 手摺 (Tesuri/Handrail) - collect by size
-    // 900/1350mm 上部: 手摺は内外両面。1800mm: 内面のみ（外列はブレス）
+    // 支柱 or 上部が 1800 → 外ブレス+内手摺（手摺は内面のみ）。900/1350 上部のみ → 手摺内外両面
+    const mainMm = Number(input.preferredMainTatejiMm ?? 1800);
+    const topMm = Number(input.topGuardHeightMm ?? 900);
+    const kusabiBraceOuterInnerTesuri = mainMm === 1800 || topMm === 1800;
     const tesuriFaceMul =
-      input.topGuardHeightMm === 900 || input.topGuardHeightMm === 1350 ? 2 : 1;
+      !kusabiBraceOuterInnerTesuri && (topMm === 900 || topMm === 1350) ? 2 : 1;
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       const size = Number(spanSizeMm);
       if (!nunoBarsBySize[size]) {
