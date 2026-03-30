@@ -51,10 +51,8 @@ const WALL_TO_INNER_POSTS_MM = 300;
 const END_STOPPER_INNER_TURN_CLEARANCE_M = 0.48;
 /** Saturated red for 端部 — visible against pipe grey in default and technical palettes. */
 const END_STOPPER_RED = 0xff2020;
-/** Stopper handrail / frame members — much thicker than normal pipe so closure reads in 3D. */
-const STOPPER_PIPE_R = PIPE_R * 1.75;
-/** Thin solid panel (YZ) at dead end to visually close the deck opening, not just edge-on tubes. */
-const END_STOPPER_PANEL_THICKNESS_M = 0.045;
+/** Place transverse 端部 slightly past the last post line (m) so it reads at the free end of the terminal bay. */
+const END_STOPPER_FACADE_OUTSET_M = 0.028;
 /** Spans (planks) can overrun toward the wall by this amount (m). */
 const SPAN_OVERRUN_TO_WALL_M = 0.3;
 
@@ -674,18 +672,13 @@ export default function Scaffold3DView({
         emissive: 0x330000,
         emissiveIntensity: 0.12,
       });
-      const endStopperPanelMat = new THREE.MeshStandardMaterial({
-        color: END_STOPPER_RED,
-        metalness: 0.12,
-        roughness: 0.72,
-        emissive: 0x3d0808,
-        emissiveIntensity: 0.18,
-        transparent: true,
-        opacity: 0.94,
-        side: THREE.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: -0.5,
-        polygonOffsetUnits: -0.5,
+      /** Opaque toe/kick at terminal bay — reads as a solid barrier, not a glassy slab. */
+      const endStopperKickMat = new THREE.MeshStandardMaterial({
+        color: 0xb91c1c,
+        metalness: 0.22,
+        roughness: 0.52,
+        emissive: 0x280808,
+        emissiveIntensity: 0.06,
       });
 
       const topGuardM = result.topGuardHeightMm / 1000;
@@ -728,27 +721,6 @@ export default function Scaffold3DView({
         mesh.position.set(px, py, pz);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        parent.add(mesh);
-      }
-
-      /** Fills the dead-end opening (YZ slab at x = wall end) so 端部 reads as a barrier, not hairline pipes. */
-      function addEndStopperClosurePanel(
-        parent: THREE.Object3D,
-        xFace: number,
-        yBottom: number,
-        yTop: number,
-        zExtent: number,
-      ) {
-        if (zExtent < 0.06) return;
-        const h = Math.max(0.08, yTop - yBottom);
-        const thick = END_STOPPER_PANEL_THICKNESS_M;
-        const dz = zExtent;
-        const geo = new THREE.BoxGeometry(thick, h, dz);
-        const mesh = new THREE.Mesh(geo, endStopperPanelMat);
-        mesh.position.set(xFace - thick * 0.5, yBottom + h * 0.5, dz * 0.5);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mesh.renderOrder = 2;
         parent.add(mesh);
       }
 
@@ -1207,11 +1179,10 @@ export default function Scaffold3DView({
         }
 
         // ── End Stoppers at wall ends ─────────────────────────
-        // Terminal bay (typ. 600mm) ends at postX[last]: transverse rails stop straight-ahead travel along the wall.
-        // Run **start** (1800 corner / open mouth): no stopper — tour entry.
-        // When this end meets the **next wall** (flushDeckAtCornerEnd), leave the **inner** strip (z → building)
-        // open so the 90° turn onto the corner deck / next façade is not blocked.
-        // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺. Always bright red (materials above).
+        // Last span ≈ scaffold width ⇒ terminal / corner bay (600, 900, 1200 kusabi; 610… wakugumi).
+        // There we draw an **outboard** transverse guard: opaque kick + nuno tubes + corner uprights.
+        // Other wall ends keep two light rails only. Inner strip may stay open when flushDeckAtCornerEnd.
+        // Wakugumi: 端部布材 / 妻側枠. Kusabi: 端部手摺.
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const exEnd = postX[postX.length - 1];
@@ -1219,35 +1190,64 @@ export default function Scaffold3DView({
             flushDeckAtCornerEnd
               ? Math.min(widthM, Math.max(0.1, widthM - END_STOPPER_INNER_TURN_CLEARANCE_M))
               : widthM;
+          const swMm = wall.scaffoldWidthMm ?? result.scaffoldWidthMm ?? 900;
+          const lastSpanMm = spans[spans.length - 1] ?? 0;
+          const isEndTerminalBay =
+            !isBracket &&
+            spans.length >= 1 &&
+            Math.abs(lastSpanMm - swMm) <= 55;
+          const xPlane = isEndTerminalBay ? exEnd + END_STOPPER_FACADE_OUTSET_M : exEnd;
+
           if (isWakugumi) {
             for (let lv = 1; lv <= levelsToBuild; lv++) {
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
               if (endStopperType === 'nuno') {
                 const barY1 = y + 0.05;
                 const barY2 = y + 0.45;
-                addPipe(group, exEnd, barY1, 0, exEnd, barY1, zStopperInner, endStopperMat, STOPPER_PIPE_R);
-                addPipe(group, exEnd, barY2, 0, exEnd, barY2, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.95);
-                addPipe(group, exEnd, barY1, 0, exEnd, barY2, 0, endStopperMat, STOPPER_PIPE_R * 0.88);
-                addPipe(group, exEnd, barY1, zStopperInner, exEnd, barY2, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.88);
-                addEndStopperClosurePanel(group, exEnd, y - 0.02, y + 0.56, zStopperInner);
+                if (isEndTerminalBay && zStopperInner >= 0.08) {
+                  const kickT = 0.038;
+                  addBox(
+                    group,
+                    xPlane - kickT * 0.5,
+                    y - 0.05,
+                    zStopperInner * 0.5,
+                    kickT,
+                    0.14,
+                    zStopperInner,
+                    endStopperKickMat,
+                  );
+                  addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.88);
+                  addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.85);
+                  addPipe(group, xPlane, barY1, 0, xPlane, barY2, 0, endStopperMat, PIPE_R * 0.82);
+                  addPipe(group, xPlane, barY1, zStopperInner, xPlane, barY2, zStopperInner, endStopperMat, PIPE_R * 0.82);
+                } else {
+                  addPipe(group, exEnd, barY1, 0, exEnd, barY1, zStopperInner, endStopperMat, PIPE_R * 0.75);
+                  addPipe(group, exEnd, barY2, 0, exEnd, barY2, zStopperInner, endStopperMat, PIPE_R * 0.72);
+                }
               } else {
                 const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
                 const frameTop = y - 0.05;
-                addPipe(group, exEnd, frameBottom, 0, exEnd, frameTop, 0, endStopperFrameMat, STOPPER_PIPE_R);
+                const xs = isEndTerminalBay ? xPlane : exEnd;
+                if (isEndTerminalBay && zStopperInner >= 0.08) {
+                  const kickT = 0.038;
+                  const midY = (frameBottom + frameTop) * 0.5;
+                  const fh = Math.max(0.12, frameTop - frameBottom + 0.04);
+                  addBox(group, xs - kickT * 0.5, midY, zStopperInner * 0.5, kickT, fh, zStopperInner, endStopperKickMat);
+                }
+                addPipe(group, xs, frameBottom, 0, xs, frameTop, 0, endStopperFrameMat, PIPE_R * 0.85);
                 addPipe(
                   group,
-                  exEnd,
+                  xs,
                   frameBottom,
                   zStopperInner,
-                  exEnd,
+                  xs,
                   frameTop,
                   zStopperInner,
                   endStopperFrameMat,
-                  STOPPER_PIPE_R,
+                  PIPE_R * 0.85,
                 );
-                addPipe(group, exEnd, frameTop, 0, exEnd, frameTop, zStopperInner, endStopperFrameMat, STOPPER_PIPE_R * 0.92);
-                addPipe(group, exEnd, frameBottom, 0, exEnd, frameBottom, zStopperInner, endStopperFrameMat, STOPPER_PIPE_R * 0.88);
-                addEndStopperClosurePanel(group, exEnd, frameBottom - 0.02, frameTop + 0.02, zStopperInner);
+                addPipe(group, xs, frameTop, 0, xs, frameTop, zStopperInner, endStopperFrameMat, PIPE_R * 0.75);
+                addPipe(group, xs, frameBottom, 0, xs, frameBottom, zStopperInner, endStopperFrameMat, PIPE_R * 0.65);
               }
             }
           } else if (!isBracket) {
@@ -1255,11 +1255,26 @@ export default function Scaffold3DView({
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
               const railTop = y + 0.9;
               const railMid = y + 0.45;
-              addPipe(group, exEnd, railTop, 0, exEnd, railTop, zStopperInner, endStopperMat, STOPPER_PIPE_R);
-              addPipe(group, exEnd, railMid, 0, exEnd, railMid, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.95);
-              addPipe(group, exEnd, railMid, 0, exEnd, railTop, 0, endStopperMat, STOPPER_PIPE_R * 0.9);
-              addPipe(group, exEnd, railMid, zStopperInner, exEnd, railTop, zStopperInner, endStopperMat, STOPPER_PIPE_R * 0.9);
-              addEndStopperClosurePanel(group, exEnd, y - 0.02, railTop + 0.06, zStopperInner);
+              if (isEndTerminalBay && zStopperInner >= 0.08) {
+                const kickT = 0.038;
+                addBox(
+                  group,
+                  xPlane - kickT * 0.5,
+                  y - 0.05,
+                  zStopperInner * 0.5,
+                  kickT,
+                  0.14,
+                  zStopperInner,
+                  endStopperKickMat,
+                );
+                addRealisticNunoBar(THREE, group, xPlane, railMid, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.88);
+                addRealisticNunoBar(THREE, group, xPlane, railTop, 0, xPlane, zStopperInner, endStopperMat, PIPE_R * 0.85);
+                addPipe(group, xPlane, railMid, 0, xPlane, railTop, 0, endStopperMat, PIPE_R * 0.82);
+                addPipe(group, xPlane, railMid, zStopperInner, xPlane, railTop, zStopperInner, endStopperMat, PIPE_R * 0.82);
+              } else {
+                addPipe(group, exEnd, railTop, 0, exEnd, railTop, zStopperInner, endStopperMat, PIPE_R * 0.72);
+                addPipe(group, exEnd, railMid, 0, exEnd, railMid, zStopperInner, endStopperMat, PIPE_R * 0.68);
+              }
             }
           }
         }
