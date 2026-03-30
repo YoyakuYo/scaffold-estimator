@@ -37,7 +37,7 @@ import Scaffold2DView from './scaffold-2d-view';
 import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
-import { edgeChordName } from '@/lib/edge-hashira-labels';
+import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 import { EdgeHashiraResultPanel, EdgeHashiraResultWallLine } from '@/components/edge-hashira-result-panel';
 
 // Dynamic import — Three.js cannot run during SSR
@@ -768,6 +768,7 @@ function QuotationTable({ result }: { result: any }) {
   const summary: CalculatedComponent[] = result.summary;
   const wallCount = walls.length;
   const poly = result.polygonVertices;
+  const edgeLbl = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
   const chordOpts =
     wallCount > 0
       ? {
@@ -861,6 +862,15 @@ function QuotationTable({ result }: { result: any }) {
               .map(([sz, ct]) => `${sz}mm×${ct}`)
               .join(' + ');
             const scaffoldH = wall.levelCalc.topPlankHeightMm + wall.levelCalc.topGuardHeightMm;
+            const postAlongCard = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
+            const hashiraCard = edgeHashiraColumnRangeSegment(
+              edgeLbl,
+              idx,
+              walls.length,
+              wall.sideJp ?? '',
+              wall.side ?? '',
+              postAlongCard,
+            );
             return (
               <div key={`wall-${idx}-${wall.side}`} className="bg-white rounded-lg p-2 border border-gray-100">
                 <div className="font-semibold text-gray-700">
@@ -871,6 +881,9 @@ function QuotationTable({ result }: { result: any }) {
                     chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
                   )}
                 </div>
+                {hashiraCard ? (
+                  <div className="text-[11px] font-mono font-medium text-slate-600 mt-0.5">({hashiraCard})</div>
+                ) : null}
                 {(wall as any).baseHeightMm > 0 && (
                   <div className="text-xs text-violet-600">
                     {t('result', 'tierGlPlus').replace('{{m}}', ((wall as any).baseHeightMm / 1000).toFixed(1))}
@@ -931,6 +944,15 @@ function QuotationTable({ result }: { result: any }) {
                 const baseH = (wall as any).baseHeightMm ?? 0;
                 const tierLabel =
                   baseH > 0 ? t('result', 'tierHeaderElevation').replace('{{m}}', (baseH / 1000).toFixed(0)) : '';
+                const postAlong = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
+                const hashiraSeg = edgeHashiraColumnRangeSegment(
+                  edgeLbl,
+                  idx,
+                  walls.length,
+                  wall.sideJp ?? '',
+                  wall.side ?? '',
+                  postAlong,
+                );
                 return (
                   <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
                     <div>
@@ -941,6 +963,9 @@ function QuotationTable({ result }: { result: any }) {
                         chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
                       )}
                     </div>
+                    {hashiraSeg ? (
+                      <div className="text-[10px] font-normal opacity-95 font-mono tracking-tight">({hashiraSeg})</div>
+                    ) : null}
                     {tierLabel && <div className="text-[10px] font-normal opacity-80">{tierLabel}</div>}
                   </th>
                 );
@@ -1031,6 +1056,7 @@ function PerSideBreakdown({ result }: { result: any }) {
   const walls: WallCalculationResult[] = result.walls;
   const wallCount = walls.length;
   const poly = result.polygonVertices;
+  const edgeLbl = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
   const chordOpts =
     wallCount > 0
       ? {
@@ -1048,6 +1074,15 @@ function PerSideBreakdown({ result }: { result: any }) {
           locale,
           chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
         );
+        const postAlong = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
+        const hashiraSeg = edgeHashiraColumnRangeSegment(
+          edgeLbl,
+          idx,
+          walls.length,
+          wall.sideJp ?? '',
+          wall.side ?? '',
+          postAlong,
+        );
         const componentsByCategory: Record<string, CalculatedComponent[]> = {};
         for (const comp of wall.components) {
           const cat = locale === 'ja' ? (comp.category || t('result', 'other')) : (comp.categoryEn || comp.category || t('result', 'other'));
@@ -1059,7 +1094,12 @@ function PerSideBreakdown({ result }: { result: any }) {
           <div key={`perside-${idx}-${wall.side}`} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-blue-50 to-white border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900">{wallLabel}</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {wallLabel}
+                  {hashiraSeg ? (
+                    <span className="ml-2 text-base font-mono font-semibold text-slate-600">({hashiraSeg})</span>
+                  ) : null}
+                </h3>
                 <div className="flex items-center gap-4 text-sm text-gray-600">
                   <span>{t('resultExtra', 'wallLength')}: {wall.wallLengthMm.toLocaleString()}mm</span>
                   <span>{t('resultExtra', 'spans')}: {wall.totalSpans}</span>

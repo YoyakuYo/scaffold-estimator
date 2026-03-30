@@ -251,6 +251,31 @@ export function resolveEdgeHashiraXY(
   };
 }
 
+/**
+ * Compact range for quotation/matrix column headers, e.g. "X1–X10", "Y1–Y5".
+ * Matches 辺名・支柱番号 summaries; falls back to axis × post count along the edge.
+ */
+export function edgeHashiraColumnRangeSegment(
+  labeling: EdgeHashiraLabeling | null | undefined,
+  wallIndex: number,
+  wallCount: number,
+  sideJp: string,
+  side: string,
+  postCountAlongEdge: number,
+): string | null {
+  const xy = resolveEdgeHashiraXY(labeling, wallIndex, wallCount, sideJp, side);
+  if (xy.alongRange) return xy.alongRange;
+  if (xy.alongStations.length > 0) {
+    return `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`;
+  }
+  if (postCountAlongEdge >= 2) {
+    const norm = normalizeEdgeHashiraForWallCount(labeling ?? undefined, wallCount);
+    const axis = norm.assignments[wallIndex]?.axis === 'Y' ? 'Y' : 'X';
+    return `${axis}1–${axis}${postCountAlongEdge}`;
+  }
+  return null;
+}
+
 export function labelingForEnabledWallIndices(
   enabledOriginalIndices: number[],
   rows: EdgeHashiraFormRow[],
