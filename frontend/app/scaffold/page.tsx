@@ -805,7 +805,7 @@ function ScaffoldPageContent() {
   const { t } = useI18n();
 
   // ─── Input Mode ────────────────────────────────────────
-  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'ai_bim_ifc' | 'cad_draw'>('drawing');
+  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>('drawing');
   const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>('drawing');
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
@@ -1198,8 +1198,7 @@ function ScaffoldPageContent() {
     calculateMutation.mutate({ dto, configId: null });
   };
 
-  const isAiBimIfcMode = inputMode === 'ai_bim_ifc';
-  const aiUploadAccept = '.dxf,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp';
+  const aiUploadAccept = '.dxf,.ifc,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,model/ifc,application/octet-stream';
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
@@ -1224,17 +1223,6 @@ function ScaffoldPageContent() {
               >
                 <ScanLine className="h-4 w-4" />
                 {t('scaffoldExtra', 'aiExtractTab')}
-              </button>
-              <button
-                onClick={() => setInputMode('ai_bim_ifc')}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                  inputMode === 'ai_bim_ifc'
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <ScanLine className="h-4 w-4" />
-                {t('scaffoldExtra', 'aiBimIfcTab')}
               </button>
               <button
                 onClick={() => setInputMode('drawing')}
@@ -1273,27 +1261,21 @@ function ScaffoldPageContent() {
       {/* ═══════════════════════════════════════════════════════
           AI EXTRACTION / AI BIM/IFC MODES
          ═══════════════════════════════════════════════════════ */}
-      {(inputMode === 'ai_bim_ifc' || inputMode === 'ai_extract') && !editConfigId && (
+      {inputMode === 'ai_extract' && !editConfigId && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
               <ScanLine className="h-5 w-5 text-violet-600" />
-              {isAiBimIfcMode
-                ? t('scaffold', 'aiBimModeTitle')
-                : t('scaffold', 'aiExtractModeTitle')}
+              {t('scaffold', 'aiExtractModeTitle')}
             </h2>
             <p className="text-sm text-gray-600 mb-6">
               {aiBimPreview
                 ? t('scaffold', 'aiBimModeReady')
-                : isAiBimIfcMode
-                  ? t('scaffold', 'aiBimModeDescription')
-                  : t('scaffold', 'aiExtractModeDescription')}
+                : t('scaffold', 'aiExtractModeDescription')}
             </p>
             {!aiBimPreview && (
               <p className="text-xs text-violet-700/90 -mt-4 mb-6">
-                {isAiBimIfcMode
-                  ? t('scaffold', 'aiBimColorSamplingHint')
-                  : t('scaffold', 'aiExtractColorSamplingHint')}
+                {t('scaffold', 'aiExtractColorSamplingHint')}
               </p>
             )}
             {!aiBimPreview && (
@@ -1302,9 +1284,7 @@ function ScaffoldPageContent() {
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">{t('scaffold', 'aiBimUploadCta')}</span>
               <span className="text-xs text-gray-500">
-                {isAiBimIfcMode
-                  ? t('scaffold', 'aiBimAcceptedFormats')
-                  : t('scaffold', 'aiExtractAcceptedFormats')}
+                {t('scaffold', 'aiExtractAcceptedFormats')}
               </span>
               <input
                 type="file"
@@ -1316,7 +1296,15 @@ function ScaffoldPageContent() {
                   setAiBimError(null);
                   setAiBimUploading(true);
                   try {
-                    const raw = await visionBimApi.analyze(file);
+                    const ext = (() => {
+                      const n = (file.name || '').toLowerCase();
+                      const dot = n.lastIndexOf('.');
+                      return dot >= 0 ? n.slice(dot) : '';
+                    })();
+                    const raw =
+                      ext === '.ifc'
+                        ? await (await import('@/lib/ifc-footprint')).extractFootprintFromIfcFile(file)
+                        : await visionBimApi.analyze(file);
                     let bimFacadeColors: CreateScaffoldConfigDto['bimFacadeColors'];
                     if (isRasterImageUpload(file)) {
                       try {
@@ -1998,7 +1986,7 @@ function ScaffoldPageContent() {
       {/* ═══════════════════════════════════════════════════════
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
-      {(inputMode !== 'ai_extract' && inputMode !== 'ai_bim_ifc' && inputMode !== 'cad_draw' || editConfigId) && (<>
+      {(inputMode !== 'ai_extract' && inputMode !== 'cad_draw' || editConfigId) && (<>
       {/* Sub-tab selector */}
       {!editConfigId && (
         <div className="max-w-[1600px] mx-auto px-4 mb-4">
