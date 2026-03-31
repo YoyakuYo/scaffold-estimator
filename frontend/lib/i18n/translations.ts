@@ -838,9 +838,9 @@ export const translations = {
   // ─── Landing Page (public marketing) ─────────────────────────────
   landing: {
     appName: { ja: '仮設材積算システム', en: 'Scaffold Material Estimation System', fr: "Système d'estimation des matériaux d'échafaudage" },
-    tagline: { ja: '図面の取込・手入力で足場数量を確定的に算出。見積書と2D/3D組立図まで一括で。', en: 'Import drawings or enter dimensions manually to deterministically calculate scaffolding quantities. Quotations and 2D/3D assembly drawings included.', fr: 'Importez des plans ou saisissez les cotes pour un calcul déterministe des quantités d’échafaudage. Devis et plans d’assemblage 2D/3D inclus.' },
-    heroTitle: { ja: '図面から足場数量を積算。確定的エンジンで正確に。', en: 'A deterministic scaffold estimation engine that calculates exactly what you need.', fr: 'Un moteur d’estimation déterministe : des quantités d’échafaudage exactes selon vos besoins.' },
-    heroSubtitle: { ja: 'PDF・DXF・画像など複数形式の図面をアップロードするか、寸法を手入力。くさび式・枠組足場の材料数量を確定的に算出します。', en: 'Upload drawings in PDF, DXF, or image formats—or enter dimensions manually. Deterministically calculate material quantities for kusabi and frame scaffold.', fr: 'Téléchargez des plans (PDF, DXF, images) ou saisissez les cotes à la main. Calcul déterministe des matériaux pour échafaudage à coincement (kusabi) et à cadres.' },
+    tagline: { ja: '図面取込・手入力で、足場数量を確定的に算出。', en: 'Deterministic scaffold takeoff—no guesswork.', fr: 'Métré d’échafaudage déterministe—sans approximation.' },
+    heroTitle: { ja: '足場積算を、シンプルに。', en: 'Scaffolding estimator.', fr: 'Estimateur d’échafaudage.' },
+    heroSubtitle: { ja: 'PDF / DXF / 画像、または手入力。くさび式・枠組の数量を確定的に計算。', en: 'PDF / DXF / images—or manual input. Exact quantities for kusabi & frame scaffold.', fr: 'PDF / DXF / images—ou saisie manuelle. Quantités exactes pour kusabi et échafaudage à cadres.' },
     installTitle: { ja: 'アプリをインストール', en: 'Install the app', fr: 'Installer l’application' },
     languageTitle: { ja: '言語', en: 'Language', fr: 'Langue' },
     installSubtitle: { ja: 'PCにインストールすると、ブラウザを開かずにすぐ起動。オフラインでも基本機能が使えます。', en: 'Install on your PC to launch without opening a browser. Core features work offline.', fr: 'Installez sur votre PC pour lancer sans navigateur. Les fonctions principales fonctionnent hors ligne.' },
@@ -849,7 +849,7 @@ export const translations = {
     afterInstall: { ja: 'インストール後はログインまたは新規登録で利用開始', en: 'After installing, log in or create an account to get started', fr: 'Après l’installation, connectez-vous ou créez un compte pour commencer.' },
     logIn: { ja: 'ログイン', en: 'Log in', fr: 'Connexion' },
     register: { ja: '新規登録', en: 'Create account', fr: 'Créer un compte' },
-    forConstruction: { ja: '足場積算専用ツール', en: 'Scaffolding estimator', fr: 'Outil d’estimation d’échafaudage' },
+    forConstruction: { ja: '足場積算ツール', en: 'Scaffold takeoff', fr: 'Métré échafaudage' },
     sectionFeatures: { ja: '主な機能', en: 'Features', fr: 'Fonctionnalités' },
     sectionWhy: { ja: '選ばれる理由', en: 'Why use it', fr: 'Pourquoi nous choisir' },
     sectionInstall: { ja: 'インストールして使う', en: 'Install & use', fr: 'Installer et utiliser' },
