@@ -162,7 +162,7 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/register"
-                className="inline-flex items-center justify-center rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-900/30 transition-colors hover:bg-orange-600"
+                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition-colors hover:bg-blue-700"
               >
                 {t('landing', 'heroCtaRegister')}
               </Link>
@@ -202,7 +202,7 @@ export default function LandingPage() {
             className="pointer-events-none absolute inset-0 opacity-[0.55]"
             style={{
               backgroundImage:
-                'radial-gradient(ellipse 120% 80% at 100% 0%, rgba(249,115,22,0.14), transparent 50%), radial-gradient(ellipse 100% 60% at 0% 100%, rgba(59,130,246,0.12), transparent 45%)',
+                'radial-gradient(ellipse 120% 80% at 100% 0%, rgba(14,165,233,0.16), transparent 50%), radial-gradient(ellipse 100% 60% at 0% 100%, rgba(99,102,241,0.12), transparent 45%)',
             }}
             aria-hidden
           />
@@ -211,9 +211,9 @@ export default function LandingPage() {
               {t('landing', 'appName')} — {t('landing', 'sectionFeatures')}
             </h2>
 
-            {/* Panel 1 — Input (warm gradient, white type) */}
-            <div className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600 p-[1px] shadow-[0_24px_50px_-12px_rgba(234,88,12,0.45)]">
-              <div className="rounded-[1.7rem] bg-gradient-to-br from-amber-500 via-orange-600 to-rose-700 px-6 py-8 sm:px-10 sm:py-10 md:px-12 md:py-11">
+            {/* Panel 1 — Input (cool gradient, white type) */}
+            <div className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-cyan-600 via-blue-600 to-indigo-700 p-[1px] shadow-[0_24px_50px_-12px_rgba(37,99,235,0.4)]">
+              <div className="rounded-[1.7rem] bg-gradient-to-br from-cyan-700 via-blue-700 to-indigo-800 px-6 py-8 sm:px-10 sm:py-10 md:px-12 md:py-11">
                 <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
                   <div className="max-w-2xl">
                     <span className="inline-flex items-center rounded-full bg-white/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white ring-1 ring-white/30">
@@ -252,7 +252,7 @@ export default function LandingPage() {
             {/* Panel 2 — Features (dark slate, high-contrast cards) */}
             <div className="overflow-hidden rounded-[1.75rem] bg-slate-950 shadow-[0_25px_60px_-15px_rgba(15,23,42,0.75)] ring-1 ring-white/10">
               <div className="border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-950 px-6 py-8 sm:px-10 sm:py-9 md:px-12">
-                <span className="inline-flex items-center rounded-full bg-amber-400/15 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300 ring-1 ring-amber-400/25">
+                <span className="inline-flex items-center rounded-full bg-cyan-400/15 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-300 ring-1 ring-cyan-400/30">
                   {t('landing', 'boxFeaturesEyebrow')}
                 </span>
                 <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl md:text-4xl">
@@ -267,7 +267,7 @@ export default function LandingPage() {
                   { icon: Calculator, title: t('features', 'coreCalcTitle'), desc: t('features', 'coreCalcDesc'), accent: 'from-sky-400 to-blue-500' },
                   { icon: Receipt, title: t('features', 'coreQuotationTitle'), desc: t('features', 'coreQuotationDesc'), accent: 'from-emerald-400 to-teal-500' },
                   { icon: Box, title: t('features', 'coreVisualizationTitle'), desc: t('features', 'coreVisualizationDesc'), accent: 'from-violet-400 to-indigo-500' },
-                  { icon: Ruler, title: t('landing', 'quickShapeTitle'), desc: t('landing', 'quickShapeDesc'), accent: 'from-amber-400 to-orange-500' },
+                  { icon: Ruler, title: t('landing', 'quickShapeTitle'), desc: t('landing', 'quickShapeDesc'), accent: 'from-indigo-400 to-blue-500' },
                   { icon: Building2, title: t('landing', 'perSideTitle'), desc: t('landing', 'perSideDesc'), accent: 'from-cyan-400 to-sky-500' },
                   { icon: CheckCircle, title: t('landing', 'deterministicTitle'), desc: t('landing', 'deterministicDesc'), accent: 'from-lime-400 to-emerald-500' },
                 ].map((f, i) => (
@@ -291,8 +291,8 @@ export default function LandingPage() {
 
             {/* Panel 3 — Why (clean white, bold accents) */}
             <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_45px_-15px_rgba(15,23,42,0.12)]">
-              <div className="border-l-[6px] border-orange-500 bg-gradient-to-r from-orange-50/40 to-transparent px-6 py-8 sm:px-10 md:px-12 md:py-10">
-                <span className="inline-flex items-center rounded-full bg-orange-500/10 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700 ring-1 ring-orange-500/20">
+              <div className="border-l-[6px] border-blue-600 bg-gradient-to-r from-sky-50/70 to-transparent px-6 py-8 sm:px-10 md:px-12 md:py-10">
+                <span className="inline-flex items-center rounded-full bg-blue-600/10 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-800 ring-1 ring-blue-600/25">
                   {t('landing', 'boxWhyEyebrow')}
                 </span>
                 <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
@@ -301,7 +301,7 @@ export default function LandingPage() {
                 <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">{t('landing', 'boxWhyIntro')}</p>
                 <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
                   {[
-                    { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc'), ring: 'ring-orange-500/15', iconBg: 'bg-orange-500 text-white' },
+                    { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc'), ring: 'ring-blue-500/15', iconBg: 'bg-blue-600 text-white' },
                     { icon: Target, title: t('features', 'benefit2Title'), desc: t('features', 'benefit2Desc'), ring: 'ring-sky-500/15', iconBg: 'bg-sky-600 text-white' },
                     { icon: Users, title: t('features', 'benefit3Title'), desc: t('features', 'benefit3Desc'), ring: 'ring-violet-500/15', iconBg: 'bg-violet-600 text-white' },
                     { icon: CheckCircle, title: t('features', 'benefit4Title'), desc: t('features', 'benefit4Desc'), ring: 'ring-emerald-500/15', iconBg: 'bg-emerald-600 text-white' },
@@ -321,7 +321,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <p className="mt-8 text-center text-sm font-semibold text-slate-600">
-                  <Link href="#install" className="text-orange-600 underline decoration-orange-300 decoration-2 underline-offset-4 transition hover:text-orange-700">
+                  <Link href="#install" className="text-blue-600 underline decoration-sky-300 decoration-2 underline-offset-4 transition hover:text-blue-800">
                     {t('landing', 'boxInstallHint')}
                   </Link>
                 </p>
