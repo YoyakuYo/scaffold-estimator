@@ -564,6 +564,18 @@ export function CadDrawingCanvas({
     return edges;
   }, [points, isClosed, edgeLengthMm]);
 
+  /** World XY in mm — same convention as export (`xFrac` / `yFrac`). */
+  const vertexMmList = useMemo(
+    () =>
+      points.map((p, i) => ({
+        index: i,
+        label: String.fromCharCode(65 + (i % 26)),
+        xMm: Math.round(p.x * mmPerPixel),
+        yMm: Math.round(p.y * mmPerPixel),
+      })),
+    [points, mmPerPixel],
+  );
+
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       {/* Toolbar */}
@@ -721,7 +733,7 @@ export function CadDrawingCanvas({
         </div>
 
         {/* Edge dimension list */}
-        <div className="w-52 bg-gray-800 rounded-lg p-3 text-white overflow-y-auto max-h-[660px]">
+        <div className="w-56 bg-gray-800 rounded-lg p-3 text-white overflow-y-auto max-h-[660px]">
           <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase">{t('viewer', 'cadDimensionList')}</h4>
           <div className="mb-3">
             <label className="text-xs text-gray-400 block mb-1">{t('viewer', 'buildingHeight')}</label>
@@ -737,6 +749,31 @@ export function CadDrawingCanvas({
               <span className="text-xs text-gray-500">{t('common', 'mm')}</span>
             </div>
           </div>
+          {vertexMmList.length > 0 && (
+            <div className="mb-3 pb-2 border-b border-gray-600">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1.5">
+                {t('viewer', 'cadVertexCoordinates')}
+              </div>
+              <div className="grid grid-cols-[1.125rem_1fr_1fr] gap-x-1 text-[10px] text-gray-500 font-medium mb-1">
+                <span />
+                <span className="text-right font-mono">X</span>
+                <span className="text-right font-mono">Y</span>
+              </div>
+              <div className="space-y-0.5">
+                {vertexMmList.map((v) => (
+                  <div
+                    key={v.index}
+                    className="grid grid-cols-[1.125rem_1fr_1fr] gap-x-1 text-[11px] items-center tabular-nums"
+                  >
+                    <span className="font-semibold text-gray-400">{v.label}</span>
+                    <span className="font-mono text-gray-200 text-right">{v.xMm.toLocaleString()}</span>
+                    <span className="font-mono text-gray-200 text-right">{v.yMm.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[9px] text-gray-500 mt-1.5 leading-snug">{t('viewer', 'cadVertexXyHint')}</p>
+            </div>
+          )}
           {edgeList.length > 0 && (
             <div className="space-y-1">
               {edgeList.map((edge) => (

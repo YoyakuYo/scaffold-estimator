@@ -1215,6 +1215,16 @@ export const translations = {
     cadDimensionList: { ja: '寸法一覧', en: 'Dimensions', fr: 'Cotes' },
     cadPerimeterShort: { ja: '周長', en: 'Perimeter', fr: 'Périmètre' },
     cadVertexCount: { ja: '頂点数', en: 'Vertices', fr: 'Sommets' },
+    cadVertexCoordinates: {
+      ja: '頂点座標 X,Y (mm)',
+      en: 'Vertex X,Y (mm)',
+      fr: 'Sommets X,Y (mm)',
+    },
+    cadVertexXyHint: {
+      ja: 'キャンバス原点（十字）からの距離',
+      en: 'Mm from canvas origin (crosshair)',
+      fr: 'mm depuis l’origine (réticule)',
+    },
   },
 
   // ─── Address Form ───────────────────────────────────────────
