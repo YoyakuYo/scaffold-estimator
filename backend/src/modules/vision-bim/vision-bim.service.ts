@@ -93,10 +93,11 @@ export interface VisionFootprintResult {
   >;
 }
 
-/** Supported file extensions (lowercase). Only images, PDFs, and DXF are accepted. */
+/** Supported file extensions (lowercase). */
 const CAD_EXTENSIONS = ['.dxf'];
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 const PDF_EXTENSIONS = ['.pdf'];
+const IFC_EXTENSIONS = ['.ifc'];
 
 const VISION_SYSTEM_PROMPT = `You are a construction drawing analyst for Japanese scaffold estimation. Analyze the image (blueprint, plan, photo, or 3D BIM render) and extract the building exterior footprint, dimensions, and scaffold hints.
 
@@ -432,13 +433,9 @@ export class VisionBimService {
     const isDxf = CAD_EXTENSIONS.includes(ext) || isDxfBuffer;
     const isPdf = PDF_EXTENSIONS.includes(ext) || (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44);
     const isImage = IMAGE_EXTENSIONS.includes(ext) || this.looksLikeImage(buffer);
+    const isIfc = IFC_EXTENSIONS.includes(ext);
 
     // Reject unsupported formats with a clear error
-    if (ext === '.ifc') {
-      throw new Error(
-        'IFC files are no longer supported. Please export as DXF or upload an image/PDF of the plan.',
-      );
-    }
     if (ext === '.dwg' || ext === '.jww') {
       throw new Error(
         'DWG/JWW はサーバーで直接解析できません。CADで DXF 形式にエクスポートしてからアップロードしてください。 / ' +
@@ -446,6 +443,9 @@ export class VisionBimService {
       );
     }
 
+    if (isIfc) {
+      return this.processIfc(buffer);
+    }
     if (isDxf) {
       return this.processDxf(buffer);
     }
@@ -457,8 +457,8 @@ export class VisionBimService {
     }
 
     throw new Error(
-      'サポートされていないファイル形式です。画像（PNG/JPEG）、PDF、またはDXFをアップロードしてください。 / ' +
-      'Unsupported file format. Please upload an image (PNG/JPEG), PDF, or DXF file.',
+      'サポートされていないファイル形式です。IFC、画像（PNG/JPEG）、PDF、またはDXFをアップロードしてください。 / ' +
+      'Unsupported file format. Please upload an IFC, image (PNG/JPEG), PDF, or DXF file.',
     );
   }
 
@@ -510,7 +510,7 @@ export class VisionBimService {
     return 'image/png';
   }
 
-  // IFC support removed — only images, PDFs, and DXF accepted
+  // IFC supported (web-ifc): processIfc()
 
   /**
    * Parse DXF buffer and extract building footprint (closed polyline or bounding outline) and height.
@@ -998,28 +998,9 @@ export class VisionBimService {
       const model =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') ||
         'claude-sonnet-4-6';
-      const message = await client.messages.create({
-        model,
-        max_tokens: 4096,
-        // Reduce randomness to avoid shape changes between identical uploads
-        // (Anthropic supports temperature on messages.create).
-        temperature: 0,
-        system: VISION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType,
-                  data: base64,
-                },
-              },
-              {
-                type: 'text',
-                text: `Extract the exterior building footprint as a CLOSED polygon (top-down plan view).
+
+      const runVisionOnce = async (extraFixText?: string) => {
+        const basePrompt = `Extract the exterior building footprint as a CLOSED polygon (top-down plan view).
 
 CRITICAL — IS THIS A 3D VIEW?
 If this image shows a building in perspective, isometric, or 3D (you can see walls, a roof, and depth):
@@ -1049,79 +1030,108 @@ ANTI-BOUNDING-BOX CHECK: Before outputting, verify:
 2. Read ALL dimension annotations on ALL four sides. If any side has a DIFFERENT dimension from its opposite side, the building is NOT rectangular.
 3. If you see sub-dimensions that add up to LESS than the opposite side (e.g., right side 2.50+6.00+1.83=10.33m vs left side 15.30m), the right side is SHORTER and there must be a step/notch.
 
-Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).`,
-              },
-            ],
-          },
-        ],
-      });
+Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).`;
 
-      const textBlock = message.content.find((b: any) => b.type === 'text');
-      const text =
-        textBlock && typeof (textBlock as any).text === 'string'
-          ? (textBlock as any).text
-          : '';
+        const fullPrompt = extraFixText
+          ? `${basePrompt}\n\n---\nSELF-CORRECTION REQUIRED (you must fix these issues):\n${extraFixText}\n---\n`
+          : basePrompt;
 
-      // Robust JSON extraction: take only the first complete {...} object (ignore trailing text or second JSON).
-      const cleaned = text.replace(/```json?\s*/gi, '').replace(/```/g, '').trim();
-      const start = cleaned.indexOf('{');
-      if (start < 0) throw new Error('Vision model did not return JSON');
-      let depth = 0;
-      let end = -1;
-      let i = start;
-      while (i < cleaned.length) {
-        const c = cleaned[i];
-        // Skip quoted strings (handles both depth=0 preamble and depth>0 values)
-        if (c === '"') {
+        const message = await client.messages.create({
+          model,
+          max_tokens: 4096,
+          // Reduce randomness to avoid shape changes between identical uploads
+          // (Anthropic supports temperature on messages.create).
+          temperature: 0,
+          system: VISION_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: mediaType,
+                    data: base64,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: fullPrompt,
+                },
+              ],
+            },
+          ],
+        });
+
+        const textBlock = message.content.find((b: any) => b.type === 'text');
+        const text =
+          textBlock && typeof (textBlock as any).text === 'string'
+            ? (textBlock as any).text
+            : '';
+        return text;
+      };
+
+      let text = await runVisionOnce();
+
+      const parseVisionJson = (rawText: string): VisionFootprintResult => {
+        // Robust JSON extraction: take only the first complete {...} object (ignore trailing text or second JSON).
+        const cleaned = rawText.replace(/```json?\s*/gi, '').replace(/```/g, '').trim();
+        const start = cleaned.indexOf('{');
+        if (start < 0) throw new Error('Vision model did not return JSON');
+        let depth = 0;
+        let end = -1;
+        let i = start;
+        while (i < cleaned.length) {
+          const c = cleaned[i];
+          // Skip quoted strings (handles both depth=0 preamble and depth>0 values)
+          if (c === '"') {
+            i++;
+            while (i < cleaned.length) {
+              if (cleaned[i] === '\\') i += 2;
+              else if (cleaned[i] === '"') { i++; break; }
+              else i++;
+            }
+            continue;
+          }
+          if (c === '{') depth++;
+          else if (c === '}') {
+            depth--;
+            if (depth === 0) {
+              end = i;
+              break;
+            }
+          }
           i++;
-          while (i < cleaned.length) {
-            if (cleaned[i] === '\\') i += 2;
-            else if (cleaned[i] === '"') { i++; break; }
-            else i++;
-          }
-          continue;
         }
-        if (c === '{') depth++;
-        else if (c === '}') {
-          depth--;
-          if (depth === 0) {
-            end = i;
-            break;
-          }
+        if (end < start) throw new Error('Vision model did not return valid JSON object');
+        let jsonStr = cleaned.slice(start, end + 1);
+
+        // Repair common AI JSON errors before parsing:
+        // 1. Trailing commas before } or ]
+        jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+        // 2. Single-quoted strings → double-quoted
+        jsonStr = jsonStr.replace(/'([^'\\]*(\\.[^'\\]*)*)'/g, '"$1"');
+        // 3. Unquoted keys (word chars followed by colon not inside string)
+        jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+        try {
+          return JSON.parse(jsonStr) as VisionFootprintResult;
+        } catch (parseErr) {
+          this.logger.error(
+            `JSON parse failed. Raw AI response (first 500 chars): ${rawText.slice(0, 500)}`,
+          );
+          throw new Error(`Vision model returned invalid JSON: ${(parseErr as Error).message}`);
         }
-        i++;
-      }
-      if (end < start) throw new Error('Vision model did not return valid JSON object');
-      let jsonStr = cleaned.slice(start, end + 1);
+      };
 
-      // Repair common AI JSON errors before parsing:
-      // 1. Trailing commas before } or ]
-      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-      // 2. Single-quoted strings → double-quoted
-      jsonStr = jsonStr.replace(/'([^'\\]*(\\.[^'\\]*)*)'/g, '"$1"');
-      // 3. Unquoted keys (word chars followed by colon not inside string)
-      jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
-
-      let parsed: VisionFootprintResult;
-      try {
-        parsed = JSON.parse(jsonStr) as VisionFootprintResult;
-      } catch (parseErr) {
-        // Log the raw response for debugging and re-throw with context
-        this.logger.error(
-          `JSON parse failed. Raw AI response (first 500 chars): ${text.slice(0, 500)}`,
-        );
-        throw new Error(`Vision model returned invalid JSON: ${(parseErr as Error).message}`);
-      }
+      let parsed = parseVisionJson(text);
 
       this.logger.log(
         `Vision BIM raw response: ${parsed.vertices?.length ?? 0} vertices, ` +
         `height=${parsed.buildingHeightMm}mm, wallLengths=${JSON.stringify(parsed.wallLengthsMm ?? 'none')}, ` +
         `wallHeights=${JSON.stringify((parsed as any).wallHeightsMm ?? 'none')}`,
       );
-
-      if (!parsed.vertices || !Array.isArray(parsed.vertices) || parsed.vertices.length < 3) {
-        throw new Error('Vision returned invalid footprint vertices');
-      }
 
       // Snapshot original vertices before perspective correction so we can
       // re-normalise massingTiers coordinates if the outline is relocated.
@@ -1391,6 +1401,25 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       this.normalizeMassingTiersToOutline(parsed, originalVertices);
       // Shape validation: verify extraction quality and log warnings
       this.validateShapeExtraction(parsed);
+
+      const issues = this.collectShapeExtractionIssues(parsed);
+      if (issues.length > 0) {
+        this.logger.warn(`Vision BIM issues detected (will attempt one self-correction retry): ${issues.join(' | ')}`);
+        const retryText =
+          issues.map((s) => `- ${s}`).join('\n') +
+          `\n\nCurrent (incorrect) extraction JSON:\n${JSON.stringify(parsed).slice(0, 4000)}`;
+        // Retry exactly once with explicit constraints.
+        text = await runVisionOnce(retryText);
+        const parsed2 = parseVisionJson(text);
+        const originalVertices2 = parsed2.vertices?.map((v: any) => ({ ...v })) ?? [];
+        // Apply the same pipeline as the first pass.
+        this.detectBoundingBoxError(parsed2);
+        this.maybeCollapsePerspectiveSilhouette(parsed2);
+        this.cleanupPolygon(parsed2);
+        this.normalizeMassingTiersToOutline(parsed2, originalVertices2);
+        this.validateShapeExtraction(parsed2);
+        parsed = parsed2;
+      }
       // Save to cache after successful parse/cleanup.
       VisionBimService.imageCache.set(cacheKey, {
         savedAtMs: Date.now(),
@@ -1979,6 +2008,84 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         );
       }
     }
+  }
+
+  /**
+   * Collect invariant violations that strongly indicate an incomplete/incorrect footprint.
+   * Used to trigger a single self-correction retry for AI vision extraction.
+   */
+  private collectShapeExtractionIssues(parsed: VisionFootprintResult): string[] {
+    const issues: string[] = [];
+    const n = parsed.vertices?.length ?? 0;
+    if (n < 3) return ['Too few vertices (min 3)'];
+
+    const getCoord = (v: any): { x: number; y: number } => ({
+      x: typeof v.xFrac === 'number' ? v.xFrac : (typeof v.x === 'number' ? v.x : 0),
+      y: typeof v.yFrac === 'number' ? v.yFrac : (typeof v.y === 'number' ? v.y : 0),
+    });
+    const pts = parsed.vertices.map(getCoord);
+
+    // Orthogonality check (same threshold as validateShapeExtraction)
+    const isAllOrtho = (() => {
+      for (let i = 0; i < n; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % n];
+        const angle = Math.atan2(b.y - a.y, b.x - a.x);
+        const snapped = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+        if (Math.abs(angle - snapped) > 0.15) return false;
+      }
+      return true;
+    })();
+
+    // Rule: odd vertex count on orthogonal shapes is suspicious (doc §5)
+    if (isAllOrtho && n > 4 && n % 2 !== 0) {
+      issues.push(`Orthogonal footprint has odd vertex count (${n})`);
+    }
+
+    const lengths = parsed.wallLengthsMm;
+    if (Array.isArray(lengths) && lengths.length === n) {
+      // Rectangle invariant (doc §4.1 / §5)
+      if (n === 4) {
+        const d02 = Math.abs(lengths[0] - lengths[2]);
+        const d13 = Math.abs(lengths[1] - lengths[3]);
+        if (d02 > 500 || d13 > 500) {
+          issues.push(
+            `Rectangle invariant failed: opposite sides differ (d02=${d02}mm, d13=${d13}mm) — likely bounding-box or missing notch`,
+          );
+        }
+      }
+
+      // Orthogonal closure invariant (doc §5.3)
+      if (isAllOrtho && n >= 6 && n % 2 === 0) {
+        let sumRight = 0, sumLeft = 0, sumDown = 0, sumUp = 0;
+        for (let i = 0; i < n; i++) {
+          const dx = pts[(i + 1) % n].x - pts[i].x;
+          const dy = pts[(i + 1) % n].y - pts[i].y;
+          const len = lengths[i];
+          if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0) sumRight += len; else sumLeft += len;
+          } else {
+            if (dy > 0) sumDown += len; else sumUp += len;
+          }
+        }
+        const hGap = Math.abs(sumRight - sumLeft);
+        const vGap = Math.abs(sumDown - sumUp);
+        if (hGap > 500) issues.push(`Orthogonal closure failed: horizontal gap ${hGap}mm`);
+        if (vGap > 500) issues.push(`Orthogonal closure failed: vertical gap ${vGap}mm`);
+      }
+
+      const perimeter = lengths.reduce((s, l) => s + l, 0);
+      if (perimeter < 4000) issues.push(`Perimeter too small (${perimeter}mm)`);
+      if (perimeter > 2000000) issues.push(`Perimeter too large (${perimeter}mm)`);
+    }
+
+    // Retry is most valuable for plan views (where bounding-box mistakes are common).
+    if (parsed.drawingType === '3d') {
+      // In 3D, closure issues are often noise; keep only strong signals.
+      return issues.filter((s) => s.includes('Rectangle invariant') || s.includes('Perimeter too'));
+    }
+
+    return issues;
   }
 
   /**

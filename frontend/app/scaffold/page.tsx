@@ -1296,15 +1296,7 @@ function ScaffoldPageContent() {
                   setAiBimError(null);
                   setAiBimUploading(true);
                   try {
-                    const ext = (() => {
-                      const n = (file.name || '').toLowerCase();
-                      const dot = n.lastIndexOf('.');
-                      return dot >= 0 ? n.slice(dot) : '';
-                    })();
-                    const raw =
-                      ext === '.ifc'
-                        ? await (await import('@/lib/ifc-footprint')).extractFootprintFromIfcFile(file)
-                        : await visionBimApi.analyze(file);
+                    const raw = await visionBimApi.analyze(file);
                     let bimFacadeColors: CreateScaffoldConfigDto['bimFacadeColors'];
                     if (isRasterImageUpload(file)) {
                       try {
