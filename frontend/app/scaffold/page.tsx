@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -903,6 +903,7 @@ function ScaffoldPageContent() {
   const [walls, setWalls] = useState<WallState[]>([]);
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(null);
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
+  const [selectedWallIdx, setSelectedWallIdx] = useState<number | null>(null);
   const [prefilled, setPrefilled] = useState(false);
   const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
   const [aiBimHashiraRows, setAiBimHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
@@ -964,6 +965,11 @@ function ScaffoldPageContent() {
 
   useEffect(() => {
     setHashiraRows((prev) => formRowsFromWallCount(prev, walls.length));
+    setSelectedWallIdx((prev) => {
+      if (walls.length === 0) return null;
+      if (prev == null) return 0;
+      return Math.max(0, Math.min(prev, walls.length - 1));
+    });
   }, [walls.length]);
 
   useEffect(() => {
@@ -979,6 +985,84 @@ function ScaffoldPageContent() {
     walls.length >= 3 && (perimeterModel.isClosed || polygonVertices.length >= 3);
   const wallChordAt = (index: number) =>
     edgeChordName(index, walls.length, closedFootprintChords);
+
+  const footprintForPreview = useMemo(() => {
+    if (!Array.isArray(polygonVertices) || polygonVertices.length < 3) return null;
+    // Only show the preview when the polygon matches the wall count (1 edge per wall).
+    if (walls.length >= 3 && polygonVertices.length === walls.length) {
+      return polygonVertices;
+    }
+    return polygonVertices;
+  }, [polygonVertices, walls.length]);
+
+  const FootprintMiniPreview = useCallback((props: {
+    vertices: Array<{ x: number; y: number }>;
+    labels: string[];
+    activeIndex: number | null;
+  }) => {
+    const { vertices, labels, activeIndex } = props;
+    const n = vertices.length;
+    if (n < 3) return null;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of vertices) {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    const w = Math.max(1e-6, maxX - minX);
+    const h = Math.max(1e-6, maxY - minY);
+    const pad = Math.max(w, h) * 0.12;
+    const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
+    const points = vertices.map((p) => `${p.x},${p.y}`).join(' ');
+
+    const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+    });
+
+    return (
+      <svg viewBox={vb} className="w-full h-56 rounded-lg bg-gray-50 border border-gray-200" preserveAspectRatio="xMidYMid meet">
+        <polygon points={points} fill="#eef2ff" stroke="#6366f1" strokeWidth={2} />
+        {Array.from({ length: n }, (_, i) => {
+          const a = vertices[i];
+          const b = vertices[(i + 1) % n];
+          const m = mid(a, b);
+          const isActive = activeIndex === i;
+          return (
+            <g key={`edge-${i}`}>
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke={isActive ? '#f97316' : '#4f46e5'}
+                strokeWidth={isActive ? 5 : 2.5}
+                opacity={isActive ? 0.95 : 0.35}
+                strokeLinecap="round"
+              />
+              <circle cx={a.x} cy={a.y} r={6} fill={isActive ? '#fb923c' : '#6366f1'} opacity={0.9} />
+              <text
+                x={m.x}
+                y={m.y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={Math.max(10, Math.min(18, (w + h) / 220))}
+                fill={isActive ? '#9a3412' : '#1f2937'}
+                fontWeight={isActive ? 700 : 600}
+                paintOrder="stroke"
+                stroke="#ffffff"
+                strokeWidth={4}
+              >
+                {labels[i] ?? `E${i + 1}`}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }, []);
 
   // ─── Fetch rules from backend ───────────────────────────
   const { data: rules, isError: rulesError, error: rulesErrorDetail } = useQuery<ScaffoldRules>({
@@ -2269,19 +2353,23 @@ function ScaffoldPageContent() {
             </p>
           </div>
 
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-gray-700">
-              {t('scaffold', 'wallSettingsLabel')}
-            </p>
-            {walls.map((wall, i) => (
-              <div
-                key={wall.side}
-                className={`rounded-lg border p-4 transition-all ${
-                  wall.enabled
-                    ? 'border-blue-200 bg-blue-50/50'
-                    : 'border-gray-200 bg-gray-50 opacity-60'
-                }`}
-              >
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-700">
+                {t('scaffold', 'wallSettingsLabel')}
+              </p>
+              {walls.map((wall, i) => (
+                <div
+                  key={wall.side}
+                  onClick={() => setSelectedWallIdx(i)}
+                  className={`rounded-lg border p-4 transition-all cursor-pointer ${
+                    selectedWallIdx === i
+                      ? 'ring-2 ring-orange-300 border-orange-200 bg-orange-50/40'
+                      : wall.enabled
+                        ? 'border-blue-200 bg-blue-50/50'
+                        : 'border-gray-200 bg-gray-50 opacity-60'
+                  }`}
+                >
                 <div className="flex items-center gap-4 flex-wrap">
                   {/* Enable checkbox */}
                   <label className="flex items-center gap-2 cursor-pointer min-w-[80px]">
@@ -2290,6 +2378,7 @@ function ScaffoldPageContent() {
                       checked={wall.enabled}
                       onChange={(e) => updateWall(i, { enabled: e.target.checked })}
                       className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      onClick={(e) => e.stopPropagation()}
                     />
                     <span className="font-semibold text-gray-800">{wallChordAt(i)}</span>
                   </label>
@@ -2305,6 +2394,7 @@ function ScaffoldPageContent() {
                       }}
                       disabled={!wall.enabled}
                       className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <option value="">{scaffoldWidthMm}mm</option>
                       {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
@@ -2319,6 +2409,7 @@ function ScaffoldPageContent() {
                       onChange={(e) => updateWall(i, { stairAccessCount: Number(e.target.value) || 0 })}
                       disabled={!wall.enabled}
                       className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       {[0, 1, 2, 3, 4].map((n) => (
                         <option key={n} value={n}>{n}</option>
@@ -2348,6 +2439,7 @@ function ScaffoldPageContent() {
                         }`}
                         min={600}
                         step={100}
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <span className="text-sm text-gray-500">mm</span>
                         <span className="text-xs text-gray-400 min-w-[50px]">
@@ -2372,6 +2464,7 @@ function ScaffoldPageContent() {
                         className="w-32 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         min={1000}
                         step={100}
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <span className="text-sm text-gray-500">mm</span>
                         <span className="text-xs text-gray-400 min-w-[50px]">
@@ -2673,6 +2766,34 @@ function ScaffoldPageContent() {
                 )}
               </div>
             ))}
+            </div>
+
+            <div className="lg:sticky lg:top-4 self-start">
+              <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-gray-800">2D Plan</div>
+                  {selectedWallIdx != null && (
+                    <div className="text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
+                      {wallChordAt(selectedWallIdx)}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mb-3">
+                  Click a wall row to highlight it.
+                </div>
+                {footprintForPreview && footprintForPreview.length >= 3 ? (
+                  <FootprintMiniPreview
+                    vertices={footprintForPreview}
+                    labels={walls.map((_, i) => wallChordAt(i))}
+                    activeIndex={selectedWallIdx}
+                  />
+                ) : (
+                  <div className="text-xs text-gray-500 rounded-lg border border-dashed border-gray-300 p-4">
+                    Upload a drawing and detect the outline first.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {walls.length > 0 && (
