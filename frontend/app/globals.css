@@ -26,6 +26,33 @@ body {
   }
 }
 
+/* Landing: lightweight scaffold “builds upward” over hero photo */
+@keyframes landing-scaffold-rise {
+  from {
+    clip-path: inset(100% 0 0 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+.landing-scaffold-rise {
+  animation: landing-scaffold-rise 2.4s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-scaffold-rise {
+    animation: none !important;
+    clip-path: inset(0 0 0 0) !important;
+    opacity: 1 !important;
+  }
+}
+
 /* ── Window Controls Overlay (PWA title bar integration) ── */
 @supports (app-region: drag) {
   .app-titlebar {

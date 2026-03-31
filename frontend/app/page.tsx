@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -25,6 +26,12 @@ import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
 
 const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
+
+/** Generic construction / high-rise (Unsplash, free license). Optimized sizes via next/image. */
+const LANDING_HERO_PHOTO =
+  'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1920&auto=format&fit=crop';
+const LANDING_TEAM_PHOTO =
+  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1200&auto=format&fit=crop';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -116,21 +123,131 @@ export default function LandingPage() {
       </header>
 
       <main>
-        {/* ─── Hero ─────────────────────────────────────────────── */}
-        <section className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 text-white">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-            <p className="text-sm font-medium text-slate-300 uppercase tracking-wider mb-3">
+        {/* ─── Hero (photo + lightweight scaffold overlay) ──────── */}
+        <section className="relative min-h-[72vh] w-full overflow-hidden bg-slate-900 text-white">
+          <Image
+            src={LANDING_HERO_PHOTO}
+            alt={t('landing', 'heroImageAlt')}
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+          <div
+            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/82 via-black/48 to-black/25"
+            aria-hidden
+          />
+          <div className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" aria-hidden>
+            <div className="landing-scaffold-rise absolute bottom-0 right-0 top-[16%] w-[min(46vw,540px)] max-md:top-[22%] max-md:w-[min(72vw,380px)]">
+              <div
+                className="relative h-full w-full border-x border-white/45 opacity-[0.4]"
+                style={{
+                  backgroundImage: `repeating-linear-gradient(90deg, transparent 0, transparent 27px, rgba(255,255,255,0.22) 27px, rgba(255,255,255,0.22) 28px),
+                    repeating-linear-gradient(0deg, transparent 0, transparent 34px, rgba(255,255,255,0.16) 34px, rgba(255,255,255,0.16) 35px)`,
+                }}
+              />
+              <div className="absolute inset-0 bg-[linear-gradient(125deg,transparent_46%,rgba(255,255,255,0.11)_48.5%,rgba(255,255,255,0.11)_51.5%,transparent_54%)]" />
+            </div>
+          </div>
+
+          <div className="relative z-10 mx-auto flex min-h-[72vh] max-w-6xl flex-col justify-end px-4 pb-14 pt-28 sm:px-6 sm:pb-16 lg:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/75">
               {t('landing', 'forConstruction')}
             </p>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 leading-tight">
+            <h1 className="mt-3 max-w-3xl text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
               {t('landing', 'heroTitle')}
             </h1>
-            <p className="text-lg sm:text-xl text-slate-200 max-w-2xl">
+            <p className="mt-4 max-w-2xl text-lg text-white/90 sm:text-xl">
               {t('landing', 'heroSubtitle')}
             </p>
-            <p className="mt-2 text-slate-400 text-sm max-w-xl">
-              {t('landing', 'tagline')}
-            </p>
+            <p className="mt-2 max-w-xl text-sm text-white/65">{t('landing', 'tagline')}</p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/register"
+                className="inline-flex items-center justify-center rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-900/30 transition-colors hover:bg-orange-600"
+              >
+                {t('landing', 'heroCtaRegister')}
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center rounded-xl border border-white/35 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/15"
+              >
+                {t('landing', 'logIn')}
+              </Link>
+              <Link
+                href="#install"
+                className="inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-white/85 underline-offset-4 hover:text-white hover:underline"
+              >
+                {t('landing', 'heroCtaInstall')}
+              </Link>
+            </div>
+          </div>
+
+          <div className="absolute bottom-3 right-3 z-10 max-w-[min(100%-1.5rem,20rem)] text-right text-[11px] leading-snug text-white/55">
+            <a
+              href="https://unsplash.com/license"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-white/30 underline-offset-2 hover:text-white/80"
+            >
+              {t('landing', 'unsplashCredit')}
+            </a>
+          </div>
+        </section>
+
+        {/* ─── About + laptop mock ───────────────────────────────── */}
+        <section className="border-b border-gray-200 bg-white py-16">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <p className="text-xs font-medium tracking-[0.28em] text-gray-400">{t('landing', 'aboutEyebrow')}</p>
+            <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">{t('landing', 'aboutTitle')}</h2>
+            <div className="mt-10 grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+              <div>
+                <p className="leading-relaxed text-gray-600">{t('landing', 'aboutBody')}</p>
+                <ul className="mt-6 space-y-3 text-sm text-gray-800">
+                  <li className="flex gap-2">
+                    <span className="font-bold text-orange-600">•</span>
+                    {t('landing', 'aboutPoint1')}
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold text-orange-600">•</span>
+                    {t('landing', 'aboutPoint2')}
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold text-orange-600">•</span>
+                    {t('landing', 'aboutPoint3')}
+                  </li>
+                </ul>
+              </div>
+              <div className="relative h-[340px] overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5 sm:h-[380px]">
+                <Image
+                  src={LANDING_TEAM_PHOTO}
+                  alt={t('landing', 'teamImageAlt')}
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" aria-hidden />
+                <div className="absolute inset-x-5 bottom-5 flex justify-center sm:inset-x-8">
+                  <div className="w-full max-w-[340px] rounded-xl bg-gray-900 p-2 shadow-2xl ring-1 ring-white/15">
+                    <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3">
+                      <Image
+                        src="/icons/icon.svg"
+                        alt=""
+                        width={40}
+                        height={40}
+                        className="shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                          {t('landing', 'mockupCaption')}
+                        </p>
+                        <p className="truncate text-sm font-semibold text-gray-900">{t('landing', 'appName')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
