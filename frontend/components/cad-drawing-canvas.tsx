@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
 import {
   MousePointer2,
@@ -84,6 +84,12 @@ export function CadDrawingCanvas({
   // Dimension editing
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
+  /** Draft strings for manual vertex coords: keys `${index}-x` / `${index}-y` (mm). */
+  const [vertexCoordDrafts, setVertexCoordDrafts] = useState<Record<string, string>>({});
+  const vertexCoordDraftsRef = useRef(vertexCoordDrafts);
+  useLayoutEffect(() => {
+    vertexCoordDraftsRef.current = vertexCoordDrafts;
+  }, [vertexCoordDrafts]);
 
   const canvasWidth = 900;
   const canvasHeight = 600;
@@ -462,6 +468,7 @@ export function CadDrawingCanvas({
   }, []);
 
   const handleUndo = useCallback(() => {
+    setVertexCoordDrafts({});
     if (isClosed) {
       setIsClosed(false);
     } else {
@@ -473,6 +480,7 @@ export function CadDrawingCanvas({
     setPoints([]);
     setIsClosed(false);
     setEditingEdge(null);
+    setVertexCoordDrafts({});
   }, []);
 
   const handleCalibrate = useCallback(() => {
@@ -527,12 +535,67 @@ export function CadDrawingCanvas({
     setEditingEdge(null);
   }, [editingEdge, editValue, points, mmPerPixel]);
 
+  const commitVertexCoordMm = useCallback(
+    (index: number) => {
+      const kx = `${index}-x`;
+      const ky = `${index}-y`;
+      setVertexCoordDrafts((drafts) => {
+        const hasX = drafts[kx] !== undefined;
+        const hasY = drafts[ky] !== undefined;
+        if (!hasX && !hasY) return drafts;
+
+        setPoints((prev) => {
+          const p = prev[index];
+          if (!p) return prev;
+          const curXmm = Math.round(p.x * mmPerPixel);
+          const curYmm = Math.round(p.y * mmPerPixel);
+          const xMm = parseFloat(hasX ? drafts[kx]! : String(curXmm));
+          const yMm = parseFloat(hasY ? drafts[ky]! : String(curYmm));
+          const xFinal = Number.isNaN(xMm) ? curXmm : xMm;
+          const yFinal = Number.isNaN(yMm) ? curYmm : yMm;
+          const next = [...prev];
+          next[index] = { x: xFinal / mmPerPixel, y: yFinal / mmPerPixel };
+          return next;
+        });
+
+        const out = { ...drafts };
+        delete out[kx];
+        delete out[ky];
+        return out;
+      });
+    },
+    [mmPerPixel],
+  );
+
+  const mergePointsWithCoordDrafts = useCallback(
+    (base: CadPoint[]): CadPoint[] => {
+      const drafts = vertexCoordDraftsRef.current;
+      return base.map((p, i) => {
+        const kx = `${i}-x`;
+        const ky = `${i}-y`;
+        if (drafts[kx] === undefined && drafts[ky] === undefined) return p;
+        const curXmm = Math.round(p.x * mmPerPixel);
+        const curYmm = Math.round(p.y * mmPerPixel);
+        const xMm = parseFloat(drafts[kx] !== undefined ? drafts[kx]! : String(curXmm));
+        const yMm = parseFloat(drafts[ky] !== undefined ? drafts[ky]! : String(curYmm));
+        const xFinal = Number.isNaN(xMm) ? curXmm : xMm;
+        const yFinal = Number.isNaN(yMm) ? curYmm : yMm;
+        return { x: xFinal / mmPerPixel, y: yFinal / mmPerPixel };
+      });
+    },
+    [mmPerPixel],
+  );
+
   const handleComplete = useCallback(() => {
     if (!isClosed || points.length < 3) return;
 
-    const walls = points.map((p, i) => {
-      const j = (i + 1) % points.length;
-      const len = edgeLengthMm(p, points[j]);
+    const merged = mergePointsWithCoordDrafts(points);
+    setPoints(merged);
+    setVertexCoordDrafts({});
+
+    const walls = merged.map((p, i) => {
+      const j = (i + 1) % merged.length;
+      const len = edgeLengthMm(p, merged[j]);
       return {
         side: `edge-${i}`,
         wallLengthMm: Math.max(600, len),
@@ -541,13 +604,13 @@ export function CadDrawingCanvas({
       };
     });
 
-    const vertices = points.map((p) => ({
+    const vertices = merged.map((p) => ({
       xFrac: Math.round(p.x * mmPerPixel),
       yFrac: Math.round(p.y * mmPerPixel),
     }));
 
     onComplete({ vertices, walls, buildingHeightMm, closed: true });
-  }, [points, isClosed, buildingHeightMm, mmPerPixel, edgeLengthMm, onComplete]);
+  }, [points, isClosed, buildingHeightMm, mmPerPixel, edgeLengthMm, onComplete, mergePointsWithCoordDrafts]);
 
   const edgeList = useMemo(() => {
     if (points.length < 2) return [];
@@ -733,7 +796,7 @@ export function CadDrawingCanvas({
         </div>
 
         {/* Edge dimension list */}
-        <div className="w-56 bg-gray-800 rounded-lg p-3 text-white overflow-y-auto max-h-[660px]">
+        <div className="w-64 bg-gray-800 rounded-lg p-3 text-white overflow-y-auto max-h-[660px]">
           <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase">{t('viewer', 'cadDimensionList')}</h4>
           <div className="mb-3">
             <label className="text-xs text-gray-400 block mb-1">{t('viewer', 'buildingHeight')}</label>
@@ -754,22 +817,68 @@ export function CadDrawingCanvas({
               <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1.5">
                 {t('viewer', 'cadVertexCoordinates')}
               </div>
-              <div className="grid grid-cols-[1.125rem_1fr_1fr] gap-x-1 text-[10px] text-gray-500 font-medium mb-1">
-                <span />
-                <span className="text-right font-mono">X</span>
-                <span className="text-right font-mono">Y</span>
-              </div>
-              <div className="space-y-0.5">
-                {vertexMmList.map((v) => (
-                  <div
-                    key={v.index}
-                    className="grid grid-cols-[1.125rem_1fr_1fr] gap-x-1 text-[11px] items-center tabular-nums"
-                  >
-                    <span className="font-semibold text-gray-400">{v.label}</span>
-                    <span className="font-mono text-gray-200 text-right">{v.xMm.toLocaleString()}</span>
-                    <span className="font-mono text-gray-200 text-right">{v.yMm.toLocaleString()}</span>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {vertexMmList.map((v) => {
+                  const kx = `${v.index}-x`;
+                  const ky = `${v.index}-y`;
+                  const vx =
+                    vertexCoordDrafts[kx] !== undefined ? vertexCoordDrafts[kx] : String(v.xMm);
+                  const vy =
+                    vertexCoordDrafts[ky] !== undefined ? vertexCoordDrafts[ky] : String(v.yMm);
+                  const n = v.index + 1;
+                  return (
+                    <div
+                      key={v.index}
+                      className="rounded border border-gray-700/80 bg-gray-900/40 p-1.5 space-y-1"
+                    >
+                      <div className="text-[10px] font-semibold text-gray-400">{v.label}</div>
+                      <div className="flex items-center gap-1">
+                        <label className="text-[10px] font-mono text-amber-400/90 w-7 shrink-0">
+                          X{n}
+                        </label>
+                        <input
+                          type="number"
+                          step={1}
+                          value={vx}
+                          onChange={(e) =>
+                            setVertexCoordDrafts((d) => ({ ...d, [kx]: e.target.value }))
+                          }
+                          onBlur={() => commitVertexCoordMm(v.index)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="min-w-0 flex-1 bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-[11px] font-mono text-white"
+                        />
+                        <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <label className="text-[10px] font-mono text-sky-400/90 w-7 shrink-0">
+                          Y{n}
+                        </label>
+                        <input
+                          type="number"
+                          step={1}
+                          value={vy}
+                          onChange={(e) =>
+                            setVertexCoordDrafts((d) => ({ ...d, [ky]: e.target.value }))
+                          }
+                          onBlur={() => commitVertexCoordMm(v.index)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              (e.target as HTMLInputElement).blur();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="min-w-0 flex-1 bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-[11px] font-mono text-white"
+                        />
+                        <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <p className="text-[9px] text-gray-500 mt-1.5 leading-snug">{t('viewer', 'cadVertexXyHint')}</p>
             </div>

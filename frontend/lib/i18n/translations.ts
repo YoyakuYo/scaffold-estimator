@@ -1221,9 +1221,9 @@ export const translations = {
       fr: 'Sommets X,Y (mm)',
     },
     cadVertexXyHint: {
-      ja: 'キャンバス原点（十字）からの距離',
-      en: 'Mm from canvas origin (crosshair)',
-      fr: 'mm depuis l’origine (réticule)',
+      ja: 'キャンバス原点（十字）基準・mm。確定は Enter か欄外クリック。',
+      en: 'Mm from origin (crosshair). Press Enter or click outside to apply.',
+      fr: 'mm depuis l’origine (réticule). Entrée ou clic hors champ pour appliquer.',
     },
   },
 
