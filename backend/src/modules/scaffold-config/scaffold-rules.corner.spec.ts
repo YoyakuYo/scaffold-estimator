@@ -89,6 +89,18 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     const sum = spans.reduce((a, b) => a + b, 0);
     expect(sum).toBe(1500 + CORNER_OVERRUN_MM);
   });
+
+  it('reflex end: uses -300 inset and no forced terminal bay', () => {
+    const wallMm = 6000;
+    const spans = fitSpansToWallLengthWithCorner(wallMm, 600, {
+      startCornerKind: 'convex',
+      endCornerKind: 'reflex',
+    });
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    const sum = spans.reduce((a, b) => a + b, 0);
+    // Must NOT exceed the closed inner corner line: max run = wall - 300mm
+    expect(sum).toBeLessThanOrEqual(wallMm - CORNER_OVERRUN_MM);
+  });
 });
 
 describe('fitSpansToWallLengthWithCornerWakugumi', () => {
@@ -117,5 +129,16 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
   it('terminal span 914mm when scaffold width 900mm', () => {
     const spans = fitSpansToWallLengthWithCornerWakugumi(8000, 900);
     expect(spans[spans.length - 1]).toBe(914);
+  });
+
+  it('reflex end: uses -300 inset and no forced terminal bay', () => {
+    const wallMm = 8000;
+    const spans = fitSpansToWallLengthWithCornerWakugumi(wallMm, 600, {
+      startCornerKind: 'convex',
+      endCornerKind: 'reflex',
+    });
+    expect(spans[0]).toBe(WAKUGUMI_CORNER_START_SPAN_MM);
+    const sum = spans.reduce((a, b) => a + b, 0);
+    expect(sum).toBeLessThanOrEqual(wallMm - WAKUGUMI_CORNER_OVERRUN_MM);
   });
 });

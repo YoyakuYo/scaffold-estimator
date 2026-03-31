@@ -40,6 +40,10 @@ export interface WallCalculationInput {
   wallLengthMm: number;
   wallHeightMm: number;
   stairAccessCount: number;
+  /** Corner kind at the start vertex of this wall edge (convex outer vs reflex inner). */
+  startCornerKind?: 'convex' | 'reflex';
+  /** Corner kind at the end vertex of this wall edge (convex outer vs reflex inner). */
+  endCornerKind?: 'convex' | 'reflex';
   kaidanCount?: number; // Number of kaidan accesses
   kaidanOffsets?: number[]; // Array of positions in mm from left end
   /** Multi-segment wall definition. If provided, wallLengthMm should
@@ -274,6 +278,8 @@ export class ScaffoldCalculatorService {
     const spans = useCornerLogic
       ? fitSpansToWallLengthWithCorner(wall.wallLengthMm, widthMm, {
           rectangleEdgeRole: rectangleCornerRole,
+          startCornerKind: wall.startCornerKind,
+          endCornerKind: wall.endCornerKind,
         })
       : fitSpansToWallLength(wall.wallLengthMm, { northWall: wallIndex === 0 });
     // Shared post line (inner+outer) at polygon corners — not double-ordered per wall.

@@ -142,7 +142,10 @@ export class ScaffoldCalculatorWakugumiService {
     const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
     const useCornerLogic = input.walls.length >= 2;
     const spans = useCornerLogic
-      ? fitSpansToWallLengthWithCornerWakugumi(wall.wallLengthMm, widthMm)
+      ? fitSpansToWallLengthWithCornerWakugumi(wall.wallLengthMm, widthMm, {
+          startCornerKind: wall.startCornerKind,
+          endCornerKind: wall.endCornerKind,
+        })
       : fitSpansToWallLengthWakugumi(wall.wallLengthMm, { northWall: wallIndex === 0 });
     const cornerPostDeduction =
       useCornerLogic && input.walls.length >= 2

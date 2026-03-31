@@ -209,10 +209,34 @@ export function cornerTerminalSpanMmWakugumi(scaffoldWidthMm: number): number {
 export function fitSpansToWallLengthWithCornerWakugumi(
   wallLengthMm: number,
   scaffoldWidthMm: number = 600,
+  options?: {
+    /** Corner kind at the START of this wall (vertex i). Default: convex. */
+    startCornerKind?: 'convex' | 'reflex';
+    /** Corner kind at the END of this wall (vertex i+1). Default: convex. */
+    endCornerKind?: 'convex' | 'reflex';
+  },
 ): number[] {
   const terminal = cornerTerminalSpanMmWakugumi(scaffoldWidthMm);
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
     return [WAKUGUMI_CORNER_START_SPAN_MM, terminal];
+  }
+
+  const startKind = options?.startCornerKind ?? 'convex';
+  const endKind = options?.endCornerKind ?? 'convex';
+  const startIsConvex = startKind !== 'reflex';
+  const endIsConvex = endKind !== 'reflex';
+
+  if (!startIsConvex || !endIsConvex) {
+    const prefix = startIsConvex ? [WAKUGUMI_CORNER_START_SPAN_MM] : [];
+    const suffix = endIsConvex ? [terminal] : [];
+    const runTarget =
+      wallLengthMm +
+      (endIsConvex ? (WAKUGUMI_CORNER_OVERRUN_MM + terminal) : -WAKUGUMI_CORNER_OVERRUN_MM) +
+      (startIsConvex ? 0 : -WAKUGUMI_CORNER_OVERRUN_MM);
+    const middleTarget = runTarget - prefix.reduce((a, b) => a + b, 0) - suffix.reduce((a, b) => a + b, 0);
+    if (middleTarget <= 0) return [...prefix, ...suffix];
+    const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
+    return [...prefix, ...middleSpans, ...suffix];
   }
   const totalRunMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM;
   const middleMmNew = totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - terminal;
@@ -313,6 +337,50 @@ function fitSpansToWallLengthWithOverrun(
   const total = result.reduce((a, b) => a + b, 0);
   if (total < wallLengthMm) result.push(min);
   return result;
+}
+
+function fitSpansToWallLengthNoOverrun(
+  wallLengthMm: number,
+  spanSizesMm: number[],
+): number[] {
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [];
+  const sizes = [...spanSizesMm].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => b - a); // desc
+  if (sizes.length === 0) return [];
+  const max = sizes[0];
+  const min = sizes[sizes.length - 1];
+
+  const reserve = max * 6;
+  const prefixCount = wallLengthMm > reserve ? Math.floor((wallLengthMm - reserve) / max) : 0;
+  const prefix = Array(prefixCount).fill(max);
+  const prefixSum = prefixCount * max;
+  const remaining = wallLengthMm - prefixSum;
+  if (remaining <= 0) return prefix;
+
+  const maxCount = Math.min(10, Math.ceil(remaining / min) + 2);
+  let best: number[] = [];
+  let bestSum = 0;
+
+  const dfs = (startIdx: number, acc: number[], sum: number) => {
+    if (sum > remaining) return;
+    if (sum > bestSum) {
+      bestSum = sum;
+      best = [...acc];
+      if (bestSum === remaining) return;
+    }
+    if (acc.length >= maxCount) return;
+    for (let i = startIdx; i < sizes.length; i++) {
+      const s = sizes[i];
+      if (sum + s > remaining) continue;
+      acc.push(s);
+      dfs(i, acc, sum + s);
+      acc.pop();
+      if (bestSum === remaining) return;
+    }
+  };
+  dfs(0, [], 0);
+
+  if (best.length === 0) return prefix;
+  return [...prefix, ...best];
 }
 
 // ─── Level Calculation ──────────────────────────────────────

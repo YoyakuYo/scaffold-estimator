@@ -66,6 +66,36 @@ export class ScaffoldConfigService {
       tierIndex: w.tierIndex,
     }));
 
+    // ── Corner kind inference from buildingOutline (convex vs reflex) ──
+    // Used to apply special inner-corner rules: reflex corners use -300 inset and no forced terminal bay.
+    if (dto.buildingOutline && dto.buildingOutline.length >= 3 && wallsToCalculate.length === dto.buildingOutline.length) {
+      const pts = dto.buildingOutline.map((v) => ({
+        x: typeof (v as any).xFrac === 'number' ? (v as any).xFrac : (v as any).x ?? 0,
+        y: typeof (v as any).yFrac === 'number' ? (v as any).yFrac : (v as any).y ?? 0,
+      }));
+      const n = pts.length;
+      let area2 = 0;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area2 += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+      }
+      const isCCW = area2 > 0;
+      const isReflex: boolean[] = Array.from({ length: n }, () => false);
+      for (let i = 0; i < n; i++) {
+        const prev = pts[(i - 1 + n) % n];
+        const curr = pts[i];
+        const next = pts[(i + 1) % n];
+        const cross = (curr.x - prev.x) * (next.y - curr.y) - (curr.y - prev.y) * (next.x - curr.x);
+        const reflex = isCCW ? cross < 0 : cross > 0;
+        isReflex[i] = reflex;
+      }
+      wallsToCalculate = wallsToCalculate.map((w, i) => ({
+        ...w,
+        startCornerKind: isReflex[i] ? 'reflex' : 'convex',
+        endCornerKind: isReflex[(i + 1) % n] ? 'reflex' : 'convex',
+      }));
+    }
+
     // ── Step 2: Run parametric pipeline when we have buildingOutline + (obstacles or widthBySide) ──
     let parametricTransitions: ScaffoldCalculationResult['parametricTransitions'];
     const hasOutline = dto.buildingOutline && dto.buildingOutline.length >= 3;

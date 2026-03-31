@@ -442,13 +442,41 @@ export function classifyKusabiRectangleEdgeRoles(
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
   scaffoldWidthMm: number = 600,
-  options?: { rectangleEdgeRole?: KusabiRectangleCornerEdgeRole | null },
+  options?: {
+    rectangleEdgeRole?: KusabiRectangleCornerEdgeRole | null;
+    /** Corner kind at the START of this wall (vertex i). Default: convex. */
+    startCornerKind?: 'convex' | 'reflex';
+    /** Corner kind at the END of this wall (vertex i+1). Default: convex. */
+    endCornerKind?: 'convex' | 'reflex';
+  },
 ): number[] {
   const terminal = cornerTerminalSpanMmKusabi(scaffoldWidthMm);
   const start = CORNER_START_SPAN_MM;
 
   if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) {
     return [start, terminal];
+  }
+
+  const startKind = options?.startCornerKind ?? 'convex';
+  const endKind = options?.endCornerKind ?? 'convex';
+  const startIsConvex = startKind !== 'reflex';
+  const endIsConvex = endKind !== 'reflex';
+
+  // New rule (inner/reflex corners):
+  // - Reflex corner: inset by 300mm and DO NOT force the corner terminal bay.
+  // - Convex corner: keep the existing +300mm overrun and terminal bay behavior.
+  if (!startIsConvex || !endIsConvex) {
+    const prefix = startIsConvex ? [start] : [];
+    const suffix = endIsConvex ? [terminal] : [];
+    const runTarget =
+      wallLengthMm +
+      (endIsConvex ? (CORNER_OVERRUN_MM + terminal) : -CORNER_OVERRUN_MM) +
+      (startIsConvex ? 0 : -CORNER_OVERRUN_MM);
+    const middleTarget = runTarget - prefix.reduce((a, b) => a + b, 0) - suffix.reduce((a, b) => a + b, 0);
+    if (middleTarget <= 0) return [...prefix, ...suffix];
+    // Reflex corner rule: do not allow spans to exceed the target run (no overrun).
+    const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
+    return [...prefix, ...middleSpans, ...suffix];
   }
 
   if (wallLengthMm + CORNER_OVERRUN_MM < start + terminal) {
@@ -479,6 +507,59 @@ export function fitSpansToWallLengthWithCorner(
 
   const middleSpans = fitSpansToWallLengthWithOverrun(middleSum, SPAN_SIZES, 0, middlePref);
   return [start, ...middleSpans, terminal];
+}
+
+/**
+ * Fit spans without exceeding the target length (sum <= wallLengthMm).
+ * Used for reflex/inner corners where scaffold must not project past a closed notch corner.
+ *
+ * Greedy for the long prefix + bounded search for the tail.
+ */
+function fitSpansToWallLengthNoOverrun(
+  wallLengthMm: number,
+  spanSizesMm: number[],
+): number[] {
+  if (!Number.isFinite(wallLengthMm) || wallLengthMm <= 0) return [];
+  const sizes = [...spanSizesMm].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => b - a); // desc
+  if (sizes.length === 0) return [];
+  const max = sizes[0];
+  const min = sizes[sizes.length - 1];
+
+  // Large prefix of max spans to reduce search space
+  const reserve = max * 6;
+  const prefixCount = wallLengthMm > reserve ? Math.floor((wallLengthMm - reserve) / max) : 0;
+  const prefix = Array(prefixCount).fill(max);
+  const prefixSum = prefixCount * max;
+  let remaining = wallLengthMm - prefixSum;
+  if (remaining <= 0) return prefix;
+
+  // Tail search: best sum <= remaining using up to 10 spans
+  const maxCount = Math.min(10, Math.ceil(remaining / min) + 2);
+  let best: number[] = [];
+  let bestSum = 0;
+
+  const dfs = (startIdx: number, acc: number[], sum: number) => {
+    if (sum > remaining) return;
+    if (sum > bestSum) {
+      bestSum = sum;
+      best = [...acc];
+      if (bestSum === remaining) return;
+    }
+    if (acc.length >= maxCount) return;
+    for (let i = startIdx; i < sizes.length; i++) {
+      const s = sizes[i];
+      if (sum + s > remaining) continue;
+      acc.push(s);
+      dfs(i, acc, sum + s);
+      acc.pop();
+      if (bestSum === remaining) return;
+    }
+  };
+  dfs(0, [], 0);
+
+  // If we couldn't place any span (remaining smaller than min), just return prefix.
+  if (best.length === 0) return prefix;
+  return [...prefix, ...best];
 }
 
 function fitSpansToWallLengthWithOverrun(
