@@ -981,7 +981,8 @@ export class VisionBimService {
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
       const hash = createHash('sha256').update(buffer).digest('hex');
-      const cacheKey = `vision-bim:v7:${modelForKey}:${hash}`;
+      // Bump version when extraction logic changes to avoid serving stale simplified shapes.
+      const cacheKey = `vision-bim:v8:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
       if (cached && Date.now() - cached.savedAtMs < cacheTtlMs) {
         this.logger.log(`Vision BIM cache hit: ${hash.slice(0, 12)}`);
@@ -2042,8 +2043,22 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       issues.push(`Orthogonal footprint has odd vertex count (${n})`);
     }
 
-    const lengths = parsed.wallLengthsMm;
-    if (Array.isArray(lengths) && lengths.length === n) {
+    const geoLengths = (() => {
+      const out: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % n];
+        out.push(Math.hypot(b.x - a.x, b.y - a.y));
+      }
+      return out;
+    })();
+
+    const lengths =
+      Array.isArray(parsed.wallLengthsMm) && parsed.wallLengthsMm.length === n
+        ? parsed.wallLengthsMm
+        : geoLengths;
+
+    if (lengths.length === n) {
       // Rectangle invariant (doc §4.1 / §5)
       if (n === 4) {
         const d02 = Math.abs(lengths[0] - lengths[2]);
@@ -2083,6 +2098,14 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     if (parsed.drawingType === '3d') {
       // In 3D, closure issues are often noise; keep only strong signals.
       return issues.filter((s) => s.includes('Rectangle invariant') || s.includes('Perimeter too'));
+    }
+
+    // If we got a 4-vertex rectangle on a plan, force one retry even if wallLengthsMm is missing.
+    // This addresses the common “simplified to rectangle / missed protruding wing” failure.
+    if (parsed.drawingType === 'plan' && n === 4) {
+      issues.push(
+        'Plan view returned a rectangle (4 vertices). Confirm there are NO protruding enclosed wings/stairwells; otherwise add the missing concave/convex corners (6+ vertices).',
+      );
     }
 
     return issues;
