@@ -251,6 +251,110 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ─── Wakugumi / site photography (image + selling points) ─ */}
+        <section className="border-b border-gray-200 bg-slate-50 py-16 md:py-20">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <p className="text-xs font-medium tracking-[0.28em] text-gray-400">
+              {t('landing', 'showcaseEyebrow')}
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
+              {t('landing', 'showcaseTitle')}
+            </h2>
+            <p className="mt-3 max-w-3xl text-gray-600 leading-relaxed">
+              {t('landing', 'showcaseSubtitle')}
+            </p>
+          </div>
+
+          <div className="mx-auto mt-12 max-w-6xl space-y-16 px-4 sm:px-6 lg:px-8 md:space-y-20">
+            {/* Row 1 — image left */}
+            <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5">
+                <Image
+                  src="/landing/wakugumi-hero-construction.png"
+                  alt={t('landing', 'showcase1Alt')}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 sm:text-2xl">
+                  {t('landing', 'showcase1Title')}
+                </h3>
+                <p className="mt-3 text-gray-600 leading-relaxed">{t('landing', 'showcase1Lead')}</p>
+                <ul className="mt-5 space-y-2.5 text-sm text-gray-800">
+                  {[t('landing', 'showcase1Bullet1'), t('landing', 'showcase1Bullet2'), t('landing', 'showcase1Bullet3')].map(
+                    (line) => (
+                      <li key={line} className="flex gap-2.5">
+                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                        <span>{line}</span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            {/* Row 2 — image right */}
+            <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5 lg:order-2">
+                <Image
+                  src="/landing/wakugumi-large-scale.png"
+                  alt={t('landing', 'showcase2Alt')}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              </div>
+              <div className="lg:order-1">
+                <h3 className="text-xl font-bold text-gray-900 sm:text-2xl">
+                  {t('landing', 'showcase2Title')}
+                </h3>
+                <p className="mt-3 text-gray-600 leading-relaxed">{t('landing', 'showcase2Lead')}</p>
+                <ul className="mt-5 space-y-2.5 text-sm text-gray-800">
+                  {[t('landing', 'showcase2Bullet1'), t('landing', 'showcase2Bullet2'), t('landing', 'showcase2Bullet3')].map(
+                    (line) => (
+                      <li key={line} className="flex gap-2.5">
+                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                        <span>{line}</span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            {/* Row 3 — image left */}
+            <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5">
+                <Image
+                  src="/landing/wakugumi-facade.png"
+                  alt={t('landing', 'showcase3Alt')}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 sm:text-2xl">
+                  {t('landing', 'showcase3Title')}
+                </h3>
+                <p className="mt-3 text-gray-600 leading-relaxed">{t('landing', 'showcase3Lead')}</p>
+                <ul className="mt-5 space-y-2.5 text-sm text-gray-800">
+                  {[t('landing', 'showcase3Bullet1'), t('landing', 'showcase3Bullet2'), t('landing', 'showcase3Bullet3')].map(
+                    (line) => (
+                      <li key={line} className="flex gap-2.5">
+                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                        <span>{line}</span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ─── Stats (read-only) ─────────────────────────────────── */}
         <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
