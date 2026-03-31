@@ -193,96 +193,139 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ─── Three summary boxes: Input · Features · Why ──────── */}
-        <section className="border-b border-gray-200 bg-white py-12 md:py-16">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="grid gap-6 lg:grid-cols-3 lg:gap-8 lg:items-stretch">
-              {/* Box 1 — Drawing & manual / input summary */}
-              <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50/80 to-white p-6 shadow-sm">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
-                  {t('landing', 'boxInputEyebrow')}
-                </p>
-                <h2 className="mt-2 text-lg font-bold leading-snug text-gray-900 md:text-xl">
-                  {t('landing', 'boxInputTitle')}
-                </h2>
-                <p className="mt-3 text-sm leading-relaxed text-gray-600">{t('features', 'coreSubtitle')}</p>
-                <p className="mt-3 text-xs leading-relaxed text-gray-500">{t('landing', 'boxInputFormats')}</p>
-                <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
-                  {[
-                    { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
-                    { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
-                    { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
-                    { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
-                  ].map((chip) => (
-                    <div
-                      key={chip.label}
-                      className="rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.04)]"
-                    >
-                      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{chip.label}</div>
-                      <div className="mt-0.5 text-sm font-semibold text-gray-900">{chip.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </article>
+        {/* ─── Value props: stacked high-contrast panels (Input → Features → Why) ─ */}
+        <section
+          className="relative border-b border-slate-800/10 bg-[#e8eaef] py-14 md:py-20"
+          aria-labelledby="landing-value-props-heading"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.55]"
+            style={{
+              backgroundImage:
+                'radial-gradient(ellipse 120% 80% at 100% 0%, rgba(249,115,22,0.14), transparent 50%), radial-gradient(ellipse 100% 60% at 0% 100%, rgba(59,130,246,0.12), transparent 45%)',
+            }}
+            aria-hidden
+          />
+          <div className="relative mx-auto max-w-6xl space-y-8 px-4 sm:px-6 lg:space-y-10 lg:px-8">
+            <h2 id="landing-value-props-heading" className="sr-only">
+              {t('landing', 'appName')} — {t('landing', 'sectionFeatures')}
+            </h2>
 
-              {/* Box 2 — Features (single card, compact grid) */}
-              <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm ring-1 ring-blue-600/10">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+            {/* Panel 1 — Input (warm gradient, white type) */}
+            <div className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-amber-500 via-orange-500 to-rose-600 p-[1px] shadow-[0_24px_50px_-12px_rgba(234,88,12,0.45)]">
+              <div className="rounded-[1.7rem] bg-gradient-to-br from-amber-500 via-orange-600 to-rose-700 px-6 py-8 sm:px-10 sm:py-10 md:px-12 md:py-11">
+                <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
+                  <div className="max-w-2xl">
+                    <span className="inline-flex items-center rounded-full bg-white/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white ring-1 ring-white/30">
+                      {t('landing', 'boxInputEyebrow')}
+                    </span>
+                    <h3 className="mt-4 text-2xl font-extrabold leading-[1.15] tracking-tight text-white sm:text-3xl md:text-4xl">
+                      {t('landing', 'boxInputTitle')}
+                    </h3>
+                    <p className="mt-5 text-base font-semibold leading-relaxed text-white sm:text-lg">
+                      {t('features', 'coreSubtitle')}
+                    </p>
+                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/90 sm:text-[0.95rem]">
+                      {t('landing', 'boxInputFormats')}
+                    </p>
+                  </div>
+                  <div className="grid shrink-0 grid-cols-2 gap-3 sm:max-lg:grid-cols-4 lg:w-[min(100%,380px)] lg:grid-cols-2">
+                    {[
+                      { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
+                      { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
+                      { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
+                      { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
+                    ].map((chip) => (
+                      <div
+                        key={chip.label}
+                        className="rounded-2xl bg-white/15 px-4 py-3.5 text-left shadow-inner ring-1 ring-white/25 backdrop-blur-md transition hover:bg-white/20"
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-white/75">{chip.label}</div>
+                        <div className="mt-1.5 text-base font-bold leading-tight text-white sm:text-lg">{chip.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel 2 — Features (dark slate, high-contrast cards) */}
+            <div className="overflow-hidden rounded-[1.75rem] bg-slate-950 shadow-[0_25px_60px_-15px_rgba(15,23,42,0.75)] ring-1 ring-white/10">
+              <div className="border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-950 px-6 py-8 sm:px-10 sm:py-9 md:px-12">
+                <span className="inline-flex items-center rounded-full bg-amber-400/15 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300 ring-1 ring-amber-400/25">
                   {t('landing', 'boxFeaturesEyebrow')}
+                </span>
+                <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl md:text-4xl">
+                  {t('landing', 'sectionFeatures')}
+                </h3>
+                <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
+                   {t('landing', 'boxFeaturesIntro')}
                 </p>
-                <h2 className="mt-2 text-lg font-bold text-gray-900 md:text-xl">{t('landing', 'sectionFeatures')}</h2>
-                <p className="mt-2 text-xs text-gray-500">{t('landing', 'boxFeaturesIntro')}</p>
-                <div className="mt-5 grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-4">
-                  {[
-                    { icon: Calculator, title: t('features', 'coreCalcTitle'), desc: t('features', 'coreCalcDesc'), bg: 'bg-blue-100', iconColor: 'text-blue-600' },
-                    { icon: Receipt, title: t('features', 'coreQuotationTitle'), desc: t('features', 'coreQuotationDesc'), bg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-                    { icon: Box, title: t('features', 'coreVisualizationTitle'), desc: t('features', 'coreVisualizationDesc'), bg: 'bg-violet-100', iconColor: 'text-violet-600' },
-                    { icon: Ruler, title: t('landing', 'quickShapeTitle'), desc: t('landing', 'quickShapeDesc'), bg: 'bg-amber-100', iconColor: 'text-amber-600' },
-                    { icon: Building2, title: t('landing', 'perSideTitle'), desc: t('landing', 'perSideDesc'), bg: 'bg-sky-100', iconColor: 'text-sky-600' },
-                    { icon: CheckCircle, title: t('landing', 'deterministicTitle'), desc: t('landing', 'deterministicDesc'), bg: 'bg-teal-100', iconColor: 'text-teal-600' },
-                  ].map((f, i) => (
-                    <div key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${f.bg}`}>
-                        <f.icon className={`h-[18px] w-[18px] ${f.iconColor}`} />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-semibold leading-tight text-gray-900">{f.title}</h3>
-                        <p className="mt-1 text-xs leading-snug text-gray-600">{f.desc}</p>
-                      </div>
+              </div>
+              <div className="grid gap-4 bg-slate-950 px-6 pb-8 pt-6 sm:grid-cols-2 sm:px-10 sm:pb-10 sm:pt-8 md:grid-cols-3 md:gap-5 md:px-12 md:pb-12">
+                {[
+                  { icon: Calculator, title: t('features', 'coreCalcTitle'), desc: t('features', 'coreCalcDesc'), accent: 'from-sky-400 to-blue-500' },
+                  { icon: Receipt, title: t('features', 'coreQuotationTitle'), desc: t('features', 'coreQuotationDesc'), accent: 'from-emerald-400 to-teal-500' },
+                  { icon: Box, title: t('features', 'coreVisualizationTitle'), desc: t('features', 'coreVisualizationDesc'), accent: 'from-violet-400 to-indigo-500' },
+                  { icon: Ruler, title: t('landing', 'quickShapeTitle'), desc: t('landing', 'quickShapeDesc'), accent: 'from-amber-400 to-orange-500' },
+                  { icon: Building2, title: t('landing', 'perSideTitle'), desc: t('landing', 'perSideDesc'), accent: 'from-cyan-400 to-sky-500' },
+                  { icon: CheckCircle, title: t('landing', 'deterministicTitle'), desc: t('landing', 'deterministicDesc'), accent: 'from-lime-400 to-emerald-500' },
+                ].map((f, i) => (
+                  <div
+                    key={i}
+                    className="group flex gap-4 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-5 shadow-lg transition hover:border-slate-500 hover:bg-slate-800/90 md:flex-col md:gap-4"
+                  >
+                    <div
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${f.accent} shadow-md`}
+                    >
+                      <f.icon className="h-6 w-6 text-white drop-shadow-sm" strokeWidth={2.25} />
                     </div>
-                  ))}
-                </div>
-              </article>
+                    <div className="min-w-0">
+                      <h4 className="text-base font-bold leading-snug text-white">{f.title}</h4>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-300">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-              {/* Box 3 — Why use it */}
-              <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-gradient-to-b from-white to-slate-50/90 p-6 shadow-sm">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+            {/* Panel 3 — Why (clean white, bold accents) */}
+            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_45px_-15px_rgba(15,23,42,0.12)]">
+              <div className="border-l-[6px] border-orange-500 bg-gradient-to-r from-orange-50/40 to-transparent px-6 py-8 sm:px-10 md:px-12 md:py-10">
+                <span className="inline-flex items-center rounded-full bg-orange-500/10 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-orange-700 ring-1 ring-orange-500/20">
                   {t('landing', 'boxWhyEyebrow')}
-                </p>
-                <h2 className="mt-2 text-lg font-bold text-gray-900 md:text-xl">{t('landing', 'sectionWhy')}</h2>
-                <p className="mt-2 text-xs text-gray-500">{t('landing', 'boxWhyIntro')}</p>
-                <ul className="mt-5 flex flex-1 flex-col gap-3">
+                </span>
+                <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                  {t('landing', 'sectionWhy')}
+                </h3>
+                <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">{t('landing', 'boxWhyIntro')}</p>
+                <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
                   {[
-                    { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc') },
-                    { icon: Target, title: t('features', 'benefit2Title'), desc: t('features', 'benefit2Desc') },
-                    { icon: Users, title: t('features', 'benefit3Title'), desc: t('features', 'benefit3Desc') },
-                    { icon: CheckCircle, title: t('features', 'benefit4Title'), desc: t('features', 'benefit4Desc') },
+                    { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc'), ring: 'ring-orange-500/15', iconBg: 'bg-orange-500 text-white' },
+                    { icon: Target, title: t('features', 'benefit2Title'), desc: t('features', 'benefit2Desc'), ring: 'ring-sky-500/15', iconBg: 'bg-sky-600 text-white' },
+                    { icon: Users, title: t('features', 'benefit3Title'), desc: t('features', 'benefit3Desc'), ring: 'ring-violet-500/15', iconBg: 'bg-violet-600 text-white' },
+                    { icon: CheckCircle, title: t('features', 'benefit4Title'), desc: t('features', 'benefit4Desc'), ring: 'ring-emerald-500/15', iconBg: 'bg-emerald-600 text-white' },
                   ].map((b, i) => (
-                    <li key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-white/80 px-3 py-2.5">
-                      <b.icon className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
+                    <li
+                      key={i}
+                      className={`flex gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-5 ring-1 ${b.ring}`}
+                    >
+                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${b.iconBg} shadow-sm`}>
+                        <b.icon className="h-5 w-5" aria-hidden strokeWidth={2.25} />
+                      </span>
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-gray-900">{b.title}</div>
-                        <p className="mt-0.5 text-xs leading-snug text-gray-600">{b.desc}</p>
+                        <span className="text-base font-bold leading-snug text-slate-900">{b.title}</span>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-600">{b.desc}</p>
                       </div>
                     </li>
                   ))}
                 </ul>
-                <p className="mt-auto border-t border-gray-200 pt-4 text-center text-xs text-gray-500">
-                  <Link href="#install" className="font-medium text-blue-600 hover:underline">
+                <p className="mt-8 text-center text-sm font-semibold text-slate-600">
+                  <Link href="#install" className="text-orange-600 underline decoration-orange-300 decoration-2 underline-offset-4 transition hover:text-orange-700">
                     {t('landing', 'boxInstallHint')}
                   </Link>
                 </p>
-              </article>
+              </div>
             </div>
           </div>
         </section>
