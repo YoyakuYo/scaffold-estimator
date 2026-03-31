@@ -137,6 +137,8 @@ export interface ScaffoldCalculationResult {
   frameSizeMm?: number;
   habakiCountPerSpan?: number;
   endStopperType?: 'nuno' | 'frame';
+  /** Wakugumi frame product line (FT-617 / FT-917 / FT-1217). */
+  wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   /** Parametric: transition connections at corners where width changes (for mitered 3D). */
   parametricTransitions?: Array<{
     cornerIndex: number;

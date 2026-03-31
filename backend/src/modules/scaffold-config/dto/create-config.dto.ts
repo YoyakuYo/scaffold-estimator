@@ -174,10 +174,15 @@ export class CreateScaffoldConfigDto {
   @IsNumber()
   topGuardHeightMm?: number;
 
-  /** Frame size: 1700, 1800, 1900mm (wakugumi only) */
+  /** Frame height: 1700mm (FT-17) for wakugumi; ignored for kusabi when omitted */
   @IsOptional()
   @IsNumber()
   frameSizeMm?: number;
+
+  /** Wakugumi frame product line: FT-617 / FT-917 / FT-1217 (sets layout width 600/900/1200) */
+  @IsOptional()
+  @IsEnum(['FT617', 'FT917', 'FT1217'])
+  wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
 
   /** Habaki count per span: 1 or 2 (wakugumi only) */
   @IsOptional()

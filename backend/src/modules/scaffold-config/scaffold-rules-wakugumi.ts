@@ -19,11 +19,40 @@ import {
 // ─── Frame Size Options (建枠サイズ) ──────────────────────────
 // The frame size = level height (variable, unlike kusabi's fixed 1800mm)
 
+/** Level height for wakugumi — catalog FT-17 (1700mm) walk-through frames. */
+export const WAKUGUMI_FRAME_HEIGHT_MM = 1700;
+
 export const WAKUGUMI_FRAME_SIZE_OPTIONS: SizeOption[] = [
-  { value: 1700, label: '1700mm (標準)' },
-  { value: 1800, label: '1800mm' },
-  { value: 1900, label: '1900mm' },
+  { value: 1700, label: '1700mm (FT-17)' },
 ];
+
+/** Walk-through frame product line (width between posts). Maps to layout width 600/900/1200. */
+export type WakugumiFrameSeriesCode = 'FT617' | 'FT917' | 'FT1217';
+
+export const WAKUGUMI_FRAME_SERIES_OPTIONS: Array<{
+  value: WakugumiFrameSeriesCode;
+  label: string;
+  labelJp: string;
+  /** Nominal catalog width (mm) — brace/shitasan nearest sizes */
+  catalogWidthMm: number;
+  /** Scaffold width for plank layout (600 / 900 / 1200) */
+  scaffoldWidthMm: number;
+}> = [
+  { value: 'FT617', label: 'FT-617 (610mm wide)', labelJp: 'FT-617（幅610mm）', catalogWidthMm: 610, scaffoldWidthMm: 600 },
+  { value: 'FT917', label: 'FT-917 (914mm wide)', labelJp: 'FT-917（幅914mm）', catalogWidthMm: 914, scaffoldWidthMm: 900 },
+  { value: 'FT1217', label: 'FT-1217 (1219mm wide)', labelJp: 'FT-1217（幅1219mm）', catalogWidthMm: 1219, scaffoldWidthMm: 1200 },
+];
+
+export function scaffoldWidthFromWakugumiFrameSeries(code: WakugumiFrameSeriesCode): number {
+  const row = WAKUGUMI_FRAME_SERIES_OPTIONS.find((o) => o.value === code);
+  return row?.scaffoldWidthMm ?? 900;
+}
+
+export function wakugumiFrameSeriesFromScaffoldWidthMm(widthMm: number): WakugumiFrameSeriesCode {
+  if (widthMm <= 600) return 'FT617';
+  if (widthMm <= 900) return 'FT917';
+  return 'FT1217';
+}
 
 // ─── Span Sizes (imperial-derived) ──────────────────────────
 // Same progression as kusabi but imperial-origin values
@@ -87,6 +116,7 @@ export const WAKUGUMI_HABAKI_SIZES: number[] = [610, 914, 1219, 1524, 1829];
 
 // ─── Negarami (根がらみ) Sizes ──────────────────────────────
 
+/** @deprecated Negarami is not counted as separate material for wakugumi (ties are integral to frame system). */
 export const WAKUGUMI_NEGARAMI_SIZES: number[] = [610, 914, 1219, 1524, 1829];
 
 // ─── Stair Set ──────────────────────────────────────────────
@@ -142,12 +172,6 @@ export const WAKUGUMI_CALC_RULES = {
    */
   stoppersPerEndPerLevel_nuno: 2,   // nuno bars per free end
   stoppersPerEndPerLevel_frame: 1,  // frame stopper per free end
-
-  /**
-   * Negarami (根がらみ) — BASE LEVEL ONLY:
-   * - Span direction: N × 2 (front + back)
-   * - Width direction: (N+1) post positions
-   */
 
   /**
    * Waku (建枠) — double row:
@@ -458,6 +482,8 @@ export function findNearestSizeWakugumi(targetMm: number, available: number[]): 
 
 export const ALL_WAKUGUMI_RULES = {
   frameSizeOptions: WAKUGUMI_FRAME_SIZE_OPTIONS,
+  frameSeriesOptions: WAKUGUMI_FRAME_SERIES_OPTIONS,
+  frameHeightMm: WAKUGUMI_FRAME_HEIGHT_MM,
   spanSizes: WAKUGUMI_SPAN_SIZES,
   spanOptions: WAKUGUMI_SPAN_OPTIONS,
   scaffoldWidths: WAKUGUMI_SCAFFOLD_WIDTH_OPTIONS,
@@ -466,7 +492,6 @@ export const ALL_WAKUGUMI_RULES = {
   braceSizes: WAKUGUMI_BRACE_SIZES,
   shitasanSizes: WAKUGUMI_SHITASAN_SIZES,
   habakiSizes: WAKUGUMI_HABAKI_SIZES,
-  negaramiSizes: WAKUGUMI_NEGARAMI_SIZES,
   stairSet: WAKUGUMI_STAIR_SET,
   stairAccessOptions: WAKUGUMI_STAIR_ACCESS_OPTIONS,
   jackBase: WAKUGUMI_JACK_BASE,

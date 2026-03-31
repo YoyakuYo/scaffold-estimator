@@ -55,6 +55,8 @@ export interface CreateScaffoldConfigDto {
   topGuardHeightMm?: number;
   // Wakugumi-specific
   frameSizeMm?: number;
+  /** FT-617 / FT-917 / FT-1217 walk-through frame line (sets layout width) */
+  wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan?: number;
   endStopperType?: 'nuno' | 'frame';
   // Common optional
@@ -134,6 +136,7 @@ export interface ScaffoldConfiguration {
   preferredMainTatejiMm: number;
   topGuardHeightMm: number;
   frameSizeMm?: number;
+  wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan?: number;
   endStopperType?: 'nuno' | 'frame';
   calculationResult: any;
@@ -269,6 +272,14 @@ export interface ScaffoldRules {
   // Wakugumi rules
   wakugumi?: {
     frameSizeOptions: SizeOption[];
+    frameSeriesOptions: Array<{
+      value: 'FT617' | 'FT917' | 'FT1217';
+      label: string;
+      labelJp: string;
+      catalogWidthMm: number;
+      scaffoldWidthMm: number;
+    }>;
+    frameHeightMm: number;
     spanSizes: number[];
     spanOptions: SizeOption[];
     habakiCountOptions: SizeOption[];

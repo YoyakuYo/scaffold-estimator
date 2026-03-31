@@ -7,7 +7,12 @@ import { ScaffoldCalculatorWakugumiService } from './scaffold-calculator-wakugum
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
 import { ALL_RULES, KUSABI_TOP_GUARD_HEIGHT_MM } from './scaffold-rules';
-import { ALL_WAKUGUMI_RULES } from './scaffold-rules-wakugumi';
+import {
+  ALL_WAKUGUMI_RULES,
+  WAKUGUMI_FRAME_HEIGHT_MM,
+  scaffoldWidthFromWakugumiFrameSeries,
+  wakugumiFrameSeriesFromScaffoldWidthMm,
+} from './scaffold-rules-wakugumi';
 import { PolygonToWallsService } from './polygon-to-walls.service';
 import { runParametricPipeline } from './parametric-scaffold.service';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -25,6 +30,18 @@ export class ScaffoldConfigService {
     private polygonToWallsService: PolygonToWallsService,
   ) {}
 
+  /** Wakugumi: FT frame series fixes level height (1700mm) and layout width (600/900/1200). */
+  private applyWakugumiFrameSeries(dto: CreateScaffoldConfigDto): CreateScaffoldConfigDto {
+    const series =
+      dto.wakugumiFrameSeries ?? wakugumiFrameSeriesFromScaffoldWidthMm(dto.scaffoldWidthMm);
+    return {
+      ...dto,
+      wakugumiFrameSeries: series,
+      scaffoldWidthMm: scaffoldWidthFromWakugumiFrameSeries(series),
+      frameSizeMm: WAKUGUMI_FRAME_HEIGHT_MM,
+    };
+  }
+
   /**
    * Returns all dropdown options for the frontend (both kusabi + wakugumi).
    */
@@ -33,6 +50,8 @@ export class ScaffoldConfigService {
       ...ALL_RULES,
       wakugumi: {
         frameSizeOptions: ALL_WAKUGUMI_RULES.frameSizeOptions,
+        frameSeriesOptions: ALL_WAKUGUMI_RULES.frameSeriesOptions,
+        frameHeightMm: ALL_WAKUGUMI_RULES.frameHeightMm,
         spanSizes: ALL_WAKUGUMI_RULES.spanSizes,
         spanOptions: ALL_WAKUGUMI_RULES.spanOptions,
         habakiCountOptions: ALL_WAKUGUMI_RULES.habakiCountOptions,
@@ -49,6 +68,7 @@ export class ScaffoldConfigService {
     userId: string,
   ): Promise<{ config: ScaffoldConfiguration; result: ScaffoldCalculationResult; quantities: CalculatedQuantity[] }> {
     const scaffoldType = dto.scaffoldType || 'kusabi';
+    const dtoForCalc = scaffoldType === 'wakugumi' ? this.applyWakugumiFrameSeries(dto) : dto;
     this.logger.log(`Creating ${scaffoldType} scaffold config (mode: ${dto.mode})`);
 
     // ── Step 1: Build walls with optional per-wall width from parametric pipeline ──
@@ -108,8 +128,8 @@ export class ScaffoldConfigService {
         const w = wallsToCalculate[i];
         const sideKey = w.side.toLowerCase();
         if (widthBySide[sideKey] == null && widthBySide[i] == null) {
-          widthBySide[i] = dto.scaffoldWidthMm;
-          widthBySide[sideKey] = dto.scaffoldWidthMm;
+          widthBySide[i] = dtoForCalc.scaffoldWidthMm;
+          widthBySide[sideKey] = dtoForCalc.scaffoldWidthMm;
         }
       }
       const refMm = 10000;
@@ -179,12 +199,15 @@ export class ScaffoldConfigService {
         ...(w.tierGroup != null && { tierGroup: w.tierGroup }),
         ...(w.tierIndex != null && { tierIndex: w.tierIndex }),
       })),
-      scaffoldWidthMm: dto.scaffoldWidthMm,
+      scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
       // wallStandoffMm omitted from insert until migration 113 is applied; see calculationResult for value
       preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
       topGuardHeightMm:
-        scaffoldType === 'wakugumi' ? dto.frameSizeMm || 1700 : KUSABI_TOP_GUARD_HEIGHT_MM,
-      frameSizeMm: dto.frameSizeMm || 1700,
+        scaffoldType === 'wakugumi' ? dtoForCalc.frameSizeMm || 1700 : KUSABI_TOP_GUARD_HEIGHT_MM,
+      frameSizeMm: dtoForCalc.frameSizeMm || 1700,
+      ...(scaffoldType === 'wakugumi' && dtoForCalc.wakugumiFrameSeries
+        ? { wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries }
+        : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan || 2,
       endStopperType: dto.endStopperType || 'nuno',
       rentalType: dto.rentalType || null,
@@ -207,8 +230,9 @@ export class ScaffoldConfigService {
       result = this.calculatorWakugumiService.calculate({
         walls: wallsToCalculate,
         structureType: dto.structureType || '改修工事',
-        scaffoldWidthMm: dto.scaffoldWidthMm,
-        frameSizeMm: dto.frameSizeMm || 1700,
+        scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
+        frameSizeMm: dtoForCalc.frameSizeMm || 1700,
+        wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         endStopperType: dto.endStopperType || 'nuno',
         pattankoCornerCount: dto.pattankoCornerCount,
@@ -217,7 +241,7 @@ export class ScaffoldConfigService {
       result = this.calculatorService.calculate({
         walls: wallsToCalculate,
         structureType: dto.structureType || '改修工事',
-        scaffoldWidthMm: dto.scaffoldWidthMm,
+        scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
         pattankoCornerCount: dto.pattankoCornerCount,
       });
@@ -304,6 +328,7 @@ export class ScaffoldConfigService {
   ): Promise<{ config: ScaffoldConfiguration; result: ScaffoldCalculationResult; quantities: CalculatedQuantity[] }> {
     const config = await this.getConfig(configId);
     const scaffoldType = dto.scaffoldType || config.scaffoldType || 'kusabi';
+    const dtoForCalc = scaffoldType === 'wakugumi' ? this.applyWakugumiFrameSeries(dto) : dto;
     this.logger.log(`Updating and recalculating ${scaffoldType} config ${configId}`);
 
     let wallsToCalculate: WallCalculationInput[] = dto.walls.map((w) => ({
@@ -331,8 +356,8 @@ export class ScaffoldConfigService {
         const w = wallsToCalculate[i];
         const sideKey = w.side.toLowerCase();
         if (widthBySide[sideKey] == null && widthBySide[i] == null) {
-          widthBySide[i] = dto.scaffoldWidthMm;
-          widthBySide[sideKey] = dto.scaffoldWidthMm;
+          widthBySide[i] = dtoForCalc.scaffoldWidthMm;
+          widthBySide[sideKey] = dtoForCalc.scaffoldWidthMm;
         }
       }
       const refMm = 10000;
@@ -403,12 +428,15 @@ export class ScaffoldConfigService {
         ...(w.tierGroup != null && { tierGroup: w.tierGroup }),
         ...(w.tierIndex != null && { tierIndex: w.tierIndex }),
       })),
-      scaffoldWidthMm: dto.scaffoldWidthMm,
+      scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
       // wallStandoffMm omitted from update until migration 113 is applied
       preferredMainTatejiMm: dto.preferredMainTatejiMm ?? 1800,
       topGuardHeightMm:
-        scaffoldType === 'wakugumi' ? dto.frameSizeMm ?? 1700 : KUSABI_TOP_GUARD_HEIGHT_MM,
-      frameSizeMm: dto.frameSizeMm ?? 1700,
+        scaffoldType === 'wakugumi' ? dtoForCalc.frameSizeMm ?? 1700 : KUSABI_TOP_GUARD_HEIGHT_MM,
+      frameSizeMm: dtoForCalc.frameSizeMm ?? 1700,
+      ...(scaffoldType === 'wakugumi' && dtoForCalc.wakugumiFrameSeries
+        ? { wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries }
+        : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan ?? 2,
       endStopperType: dto.endStopperType ?? 'nuno',
       rentalType: dto.rentalType ?? null,
@@ -422,8 +450,9 @@ export class ScaffoldConfigService {
       result = this.calculatorWakugumiService.calculate({
         walls: wallsToCalculate,
         structureType: dto.structureType || '改修工事',
-        scaffoldWidthMm: dto.scaffoldWidthMm,
-        frameSizeMm: dto.frameSizeMm || 1700,
+        scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
+        frameSizeMm: dtoForCalc.frameSizeMm || 1700,
+        wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         endStopperType: dto.endStopperType || 'nuno',
         pattankoCornerCount: dto.pattankoCornerCount,
@@ -432,7 +461,7 @@ export class ScaffoldConfigService {
       result = this.calculatorService.calculate({
         walls: wallsToCalculate,
         structureType: dto.structureType || '改修工事',
-        scaffoldWidthMm: dto.scaffoldWidthMm,
+        scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
         pattankoCornerCount: dto.pattankoCornerCount,
       });
@@ -487,7 +516,10 @@ export class ScaffoldConfigService {
       ...(w.tierGroup != null && { tierGroup: w.tierGroup }),
       ...(w.tierIndex != null && { tierIndex: w.tierIndex }),
     }));
-    config.scaffoldWidthMm = dto.scaffoldWidthMm;
+    config.scaffoldWidthMm = dtoForCalc.scaffoldWidthMm;
+    if (scaffoldType === 'wakugumi' && dtoForCalc.wakugumiFrameSeries) {
+      config.wakugumiFrameSeries = dtoForCalc.wakugumiFrameSeries;
+    }
     config.wallStandoffMm = wallStandoffMm;
     config.calculationResult = calculationResult;
     config.status = 'calculated';

@@ -6,9 +6,9 @@ import {
   WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH,
   WAKUGUMI_CALC_RULES,
   WAKUGUMI_SHITASAN_SIZES,
-  WAKUGUMI_NEGARAMI_SIZES,
   findNearestSizeWakugumi,
   WakugumiLevelCalcResult,
+  type WakugumiFrameSeriesCode,
 } from './scaffold-rules-wakugumi';
 import { freeScaffoldEndCountForWall } from './scaffold-rules';
 import {
@@ -28,7 +28,7 @@ import {
  *
  * Key differences from Kusabi:
  *   - Frame (建枠) instead of individual posts
- *   - Level height = frame size (variable: 1700/1800/1900)
+ *   - Level height = 1700mm (FT-17 catalog)
  *   - Brace on BOTH faces (not just outer)
  *   - 下桟 (Shitasan) bottom horizontal instead of tesuri
  *   - No tesuri (手摺)
@@ -39,8 +39,10 @@ import {
 export interface WakugumiCalculationInput {
   walls: WallCalculationInput[];
   structureType?: '改修工事' | 'S造' | 'RC造';
-  scaffoldWidthMm: number;         // 600, 900, 1200
-  frameSizeMm: number;             // 1700, 1800, 1900
+  scaffoldWidthMm: number;         // 600, 900, 1200 (from FT frame series)
+  frameSizeMm: number;             // 1700 (FT-17)
+  /** FT-617 / FT-917 / FT-1217 — walk-through frame width line */
+  wakugumiFrameSeries?: WakugumiFrameSeriesCode;
   habakiCountPerSpan: number;      // 1 or 2
   endStopperType: 'nuno' | 'frame';
   /** @deprecated Ignored; one extra frame level is always applied. */
@@ -129,6 +131,7 @@ export class ScaffoldCalculatorWakugumiService {
       habakiCountPerSpan: input.habakiCountPerSpan,
       endStopperType: input.endStopperType,
       totalLevels: maxLevels,
+      wakugumiFrameSeries: input.wakugumiFrameSeries,
     };
   }
 
@@ -218,7 +221,6 @@ export class ScaffoldCalculatorWakugumiService {
       platform:    { jp: '踏板',       en: 'Plank' },
       habaki:      { jp: '巾木',       en: 'Toe Board' },
       stopper:     { jp: '端部',       en: 'End Stopper' },
-      negarami:    { jp: '根がらみ',   en: 'Base Stabilizer' },
       access:      { jp: '階段',       en: 'Stair' },
     };
 
@@ -289,41 +291,7 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 6. 根がらみ (Negarami) — BASE LEVEL ONLY ───────
-    // Span direction: N × 2 (front + back)
-    for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
-      sortOrder++;
-      components.push({
-        type: 'negarami_span',
-        category: CAT.negarami.jp,
-        categoryEn: CAT.negarami.en,
-        name: `Base Stabilizer (span) ${spanSizeMm}mm`,
-        nameJp: `根がらみ`,
-        sizeSpec: `${spanSizeMm}`,
-        unit: '本',
-        quantity: Number(count) * 2, // front + back, base level only
-        sortOrder,
-        materialCode: `WAKU-NEGARAMI-${spanSizeMm}`,
-      });
-    }
-
-    // Width direction: (N+1) post positions
-    const widthNegaramiSize = findNearestSizeWakugumi(widthMm, WAKUGUMI_NEGARAMI_SIZES);
-    sortOrder++;
-    components.push({
-      type: 'negarami_width',
-      category: CAT.negarami.jp,
-      categoryEn: CAT.negarami.en,
-      name: `Base Stabilizer (width) ${widthNegaramiSize}mm`,
-      nameJp: `根がらみ (幅)`,
-      sizeSpec: `${widthNegaramiSize}`,
-      unit: '本',
-      quantity: postPositions,
-      sortOrder,
-      materialCode: `WAKU-NEGARAMI-${widthNegaramiSize}`,
-    });
-
-    // ─── 7. 端部 (End Stopper) — free dead ends only (not 90° turns to next wall) ──
+    // ─── 6. 端部 (End Stopper) — free dead ends only (not 90° turns to next wall) ──
     const freeEnds = freeScaffoldEndCountForWall(wallIndex, input.walls.length);
     if (freeEnds > 0) {
       if (input.endStopperType === 'nuno') {
@@ -358,7 +326,7 @@ export class ScaffoldCalculatorWakugumiService {
       }
     }
 
-    // ─── 8. 踏板 / アンチ ────────────────────────────────
+    // ─── 7. 踏板 / アンチ ────────────────────────────────
     const anchiLayout = WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[widthMm] || WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[600];
     const totalAnchiSlots = totalSpans * Ltot;
 
@@ -418,7 +386,7 @@ export class ScaffoldCalculatorWakugumiService {
       }
     }
 
-    // ─── 9. 巾木 (Habaki) ────────────────────────────────
+    // ─── 8. 巾木 (Habaki) ────────────────────────────────
     // N × (1 or 2) × L levels
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
@@ -436,7 +404,7 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 10. 階段セット ──────────────────────────────────
+    // ─── 9. 階段セット ──────────────────────────────────
     const finalKaidanCount = kaidanCount || wall.stairAccessCount;
     if (finalKaidanCount > 0) {
       sortOrder++;
@@ -454,7 +422,7 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 11. 梁枠 (Hariwaku / Beam Frame) — door openings ──────
+    // ─── 10. 梁枠 (Hariwaku / Beam Frame) — door openings ──────
     const resolvedDoors: WallCalculationResult['doorOpenings'] = [];
     if (wall.doorOpenings && wall.doorOpenings.length > 0) {
       const cumulativePos: number[] = [0];
@@ -572,11 +540,10 @@ export class ScaffoldCalculatorWakugumiService {
       '建枠': 2,
       'ブレス': 3,
       '下桟': 4,
-      '根がらみ': 5,
-      '端部': 6,
-      '踏板': 7,
-      '巾木': 8,
-      '階段': 9,
+      '端部': 5,
+      '踏板': 6,
+      '巾木': 7,
+      '階段': 8,
     };
 
     return Array.from(map.values()).sort((a, b) => {

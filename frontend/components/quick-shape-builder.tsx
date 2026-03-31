@@ -48,6 +48,7 @@ export interface QuickShapeConfig {
   scaffoldWidthPerSide?: Record<string, number | undefined>;
   preferredMainTatejiMm: number;
   frameSizeMm: number;
+  wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
   endStopperType: 'nuno' | 'frame';
   structureType: '改修工事' | 'S造' | 'RC造';
@@ -98,7 +99,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
   const [scaffoldWidthMm, setScaffoldWidthMm] = useState(600);
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
-  const [frameSizeMm, setFrameSizeMm] = useState(1700);
+  const [frameSizeMm] = useState(1700);
+  const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<'FT617' | 'FT917' | 'FT1217'>('FT917');
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
   const [structureType, setStructureType] = useState<'改修工事' | 'S造' | 'RC造'>('改修工事');
@@ -175,6 +177,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
       scaffoldWidthPerSide: Object.keys(scaffoldWidthPerSide).length > 0 ? scaffoldWidthPerSide : undefined,
       preferredMainTatejiMm,
       frameSizeMm,
+      ...(scaffoldType === 'wakugumi' ? { wakugumiFrameSeries } : {}),
       habakiCountPerSpan,
       endStopperType,
       structureType,
@@ -508,14 +511,23 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'frameSize')}</label>
+                    <p className="text-sm text-gray-800 mb-2">1700mm (FT-17)</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'wakugumiFrameSeries')}</label>
                     <select
-                      value={frameSizeMm}
-                      onChange={(e) => setFrameSizeMm(Number(e.target.value))}
+                      value={wakugumiFrameSeries}
+                      onChange={(e) => {
+                        const s = e.target.value as 'FT617' | 'FT917' | 'FT1217';
+                        setWakugumiFrameSeries(s);
+                        const w = s === 'FT617' ? 600 : s === 'FT917' ? 900 : 1200;
+                        setScaffoldWidthMm(w);
+                      }}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value={1700}>1700mm</option>
-                      <option value={1800}>1800mm</option>
-                      <option value={1900}>1900mm</option>
+                      <option value="FT617">FT-617 (610mm)</option>
+                      <option value="FT917">FT-917 (914mm)</option>
+                      <option value="FT1217">FT-1217 (1219mm)</option>
                     </select>
                   </div>
                   <div>

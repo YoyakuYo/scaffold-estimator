@@ -111,6 +111,22 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
   return total;
 }
 
+const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
+
+type WakugumiFrameSeriesId = NonNullable<CreateScaffoldConfigDto['wakugumiFrameSeries']>;
+
+function scaffoldWidthMmFromWakugumiSeries(s: WakugumiFrameSeriesId): 600 | 900 | 1200 {
+  if (s === 'FT617') return 600;
+  if (s === 'FT917') return 900;
+  return 1200;
+}
+
+function wakugumiSeriesFromScaffoldWidthMm(w: number): WakugumiFrameSeriesId {
+  if (w <= 600) return 'FT617';
+  if (w <= 900) return 'FT917';
+  return 'FT1217';
+}
+
 /** Count corners that need pattanko (non-L-shaped, i.e. angle not ~90°). Same threshold as 3D view: |cos| >= 0.35. */
 function countPattankoCorners(vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>): number {
   const n = vertices.length;
@@ -802,7 +818,7 @@ export default function ScaffoldPage() {
 function ScaffoldPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   // ─── Input Mode ────────────────────────────────────────
   const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>('drawing');
@@ -817,6 +833,7 @@ function ScaffoldPageContent() {
     massingTiers?: VisionMassingTier[];
     scaffoldType: 'kusabi' | 'wakugumi';
     frameSizeMm?: number;
+    wakugumiFrameSeries?: WakugumiFrameSeriesId;
     wallLengthsFromDimText?: boolean;
     heightConfidence?: 'high' | 'medium' | 'low';
     drawingType?: 'plan' | '3d' | 'elevation' | 'section';
@@ -898,6 +915,7 @@ function ScaffoldPageContent() {
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
   // Wakugumi-specific
   const [frameSizeMm, setFrameSizeMm] = useState(1700);
+  const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<WakugumiFrameSeriesId>('FT917');
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
   const [walls, setWalls] = useState<WallState[]>([]);
@@ -921,9 +939,22 @@ function ScaffoldPageContent() {
     if (!editConfigId || !editConfig) return;
     setScaffoldType(editConfig.scaffoldType);
     setStructureType(editConfig.structureType || '改修工事');
-    setScaffoldWidthMm(editConfig.scaffoldWidthMm ?? 600);
+    const baseW = editConfig.scaffoldWidthMm ?? 600;
+    if (editConfig.scaffoldType === 'wakugumi') {
+      const s = editConfig.wakugumiFrameSeries;
+      if (s === 'FT617' || s === 'FT917' || s === 'FT1217') {
+        setWakugumiFrameSeries(s);
+        setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
+      } else {
+        setScaffoldWidthMm(baseW);
+        setWakugumiFrameSeries(wakugumiSeriesFromScaffoldWidthMm(baseW));
+      }
+      setFrameSizeMm(WAKUGUMI_FIXED_FRAME_HEIGHT_MM);
+    } else {
+      setScaffoldWidthMm(baseW);
+      setFrameSizeMm(editConfig.frameSizeMm ?? 1700);
+    }
     setPreferredMainTatejiMm(editConfig.preferredMainTatejiMm ?? 1800);
-    setFrameSizeMm(editConfig.frameSizeMm ?? 1700);
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
     setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
     setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
@@ -1225,7 +1256,8 @@ function ScaffoldPageContent() {
         preferredMainTatejiMm,
       }),
       ...(scaffoldType === 'wakugumi' && {
-        frameSizeMm,
+        frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+        wakugumiFrameSeries,
         habakiCountPerSpan,
         endStopperType,
       }),
@@ -1273,7 +1305,9 @@ function ScaffoldPageContent() {
         preferredMainTatejiMm: qConfig.preferredMainTatejiMm,
       }),
       ...(qConfig.scaffoldType === 'wakugumi' && {
-        frameSizeMm: qConfig.frameSizeMm,
+        frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+        wakugumiFrameSeries:
+          qConfig.wakugumiFrameSeries ?? wakugumiSeriesFromScaffoldWidthMm(qConfig.scaffoldWidthMm),
         habakiCountPerSpan: qConfig.habakiCountPerSpan,
         endStopperType: qConfig.endStopperType,
       }),
@@ -1477,7 +1511,7 @@ function ScaffoldPageContent() {
                     })();
                     const defaults = getAiBimDefaults();
                     const scaffoldType = footprint.scaffoldTypeHint ?? 'kusabi';
-                    const frameSize = scaffoldType === 'wakugumi' ? (footprint.frameSizeMm ?? 1800) : undefined;
+                    const aiWkSeries = wakugumiSeriesFromScaffoldWidthMm(defaults.scaffoldWidthMm);
                     const dto: CreateScaffoldConfigDto = {
                       projectId: 'default-project',
                       mode: 'manual',
@@ -1486,7 +1520,10 @@ function ScaffoldPageContent() {
                       walls,
                       scaffoldWidthMm: defaults.scaffoldWidthMm,
                       preferredMainTatejiMm: defaults.preferredMainTatejiMm,
-                      ...(scaffoldType === 'wakugumi' && frameSize != null && { frameSizeMm: frameSize }),
+                      ...(scaffoldType === 'wakugumi' && {
+                        frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+                        wakugumiFrameSeries: aiWkSeries,
+                      }),
                       buildingOutline,
                       ...(effectiveMassingTiers && effectiveMassingTiers.length > 0 && { massingTiers: effectiveMassingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
@@ -1500,7 +1537,8 @@ function ScaffoldPageContent() {
                       buildingOutline,
                       massingTiers: effectiveMassingTiers,
                       scaffoldType,
-                      frameSizeMm: frameSize,
+                      frameSizeMm: scaffoldType === 'wakugumi' ? WAKUGUMI_FIXED_FRAME_HEIGHT_MM : undefined,
+                      wakugumiFrameSeries: scaffoldType === 'wakugumi' ? aiWkSeries : undefined,
                       wallLengthsFromDimText: footprint.wallLengthsFromDimText,
                       heightConfidence: footprint.heightConfidence,
                       drawingType: footprint.drawingType,
@@ -1832,24 +1870,36 @@ function ScaffoldPageContent() {
                             value={aiBimPreview.scaffoldType}
                             onChange={(e) => {
                               const nextType = e.target.value as 'kusabi' | 'wakugumi';
-                              const nextFrameSize = nextType === 'wakugumi'
-                                ? (aiBimPreview.frameSizeMm ?? 1800)
-                                : undefined;
-                              setAiBimPreview({
-                                ...aiBimPreview,
-                                scaffoldType: nextType,
-                                frameSizeMm: nextFrameSize,
-                                dto: {
-                                  ...aiBimPreview.dto,
+                              if (nextType === 'wakugumi') {
+                                const series = wakugumiSeriesFromScaffoldWidthMm(aiBimPreview.dto.scaffoldWidthMm);
+                                setAiBimPreview({
+                                  ...aiBimPreview,
                                   scaffoldType: nextType,
-                                  ...(nextType === 'wakugumi'
-                                    ? { frameSizeMm: nextFrameSize, preferredMainTatejiMm: undefined }
-                                    : {
-                                        frameSizeMm: undefined,
-                                        preferredMainTatejiMm: getAiBimDefaults().preferredMainTatejiMm,
-                                      }),
-                                },
-                              });
+                                  frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+                                  wakugumiFrameSeries: series,
+                                  dto: {
+                                    ...aiBimPreview.dto,
+                                    scaffoldType: nextType,
+                                    frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+                                    wakugumiFrameSeries: series,
+                                    preferredMainTatejiMm: undefined,
+                                  },
+                                });
+                              } else {
+                                setAiBimPreview({
+                                  ...aiBimPreview,
+                                  scaffoldType: nextType,
+                                  frameSizeMm: undefined,
+                                  wakugumiFrameSeries: undefined,
+                                  dto: {
+                                    ...aiBimPreview.dto,
+                                    scaffoldType: nextType,
+                                    frameSizeMm: undefined,
+                                    wakugumiFrameSeries: undefined,
+                                    preferredMainTatejiMm: getAiBimDefaults().preferredMainTatejiMm,
+                                  },
+                                });
+                              }
                             }}
                             className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500"
                           >
@@ -1864,9 +1914,19 @@ function ScaffoldPageContent() {
                             value={aiBimPreview.dto.scaffoldWidthMm}
                             onChange={(e) => {
                               const width = Number(e.target.value) || 600;
+                              const series = wakugumiSeriesFromScaffoldWidthMm(width);
                               setAiBimPreview({
                                 ...aiBimPreview,
-                                dto: { ...aiBimPreview.dto, scaffoldWidthMm: width },
+                                wakugumiFrameSeries:
+                                  aiBimPreview.scaffoldType === 'wakugumi' ? series : aiBimPreview.wakugumiFrameSeries,
+                                dto: {
+                                  ...aiBimPreview.dto,
+                                  scaffoldWidthMm: width,
+                                  ...(aiBimPreview.scaffoldType === 'wakugumi' && {
+                                    wakugumiFrameSeries: series,
+                                    frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+                                  }),
+                                },
                               });
                             }}
                             className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500"
@@ -1881,27 +1941,48 @@ function ScaffoldPageContent() {
                         {/* Post / frame size */}
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">
-                            {aiBimPreview.scaffoldType === 'wakugumi' ? t('scaffold', 'frameSize') : t('scaffold', 'postSize')}
+                            {aiBimPreview.scaffoldType === 'wakugumi'
+                              ? t('scaffoldExtra', 'wakugumiFrameSeries')
+                              : t('scaffold', 'postSize')}
                           </label>
                           {aiBimPreview.scaffoldType === 'wakugumi' ? (
-                            <select
-                              value={aiBimPreview.frameSizeMm ?? 1800}
-                              onChange={(e) => {
-                                const fs = Number(e.target.value) || 1800;
-                                setAiBimPreview({
-                                  ...aiBimPreview,
-                                  frameSizeMm: fs,
-                                  dto: { ...aiBimPreview.dto, frameSizeMm: fs },
-                                });
-                              }}
-                              className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500"
-                            >
-                              {[1700, 1800, 1900].map((v) => (
-                                <option key={v} value={v}>
-                                  {v}mm
-                                </option>
-                              ))}
-                            </select>
+                            <div className="space-y-1">
+                              <select
+                                value={
+                                  aiBimPreview.wakugumiFrameSeries ??
+                                  wakugumiSeriesFromScaffoldWidthMm(aiBimPreview.dto.scaffoldWidthMm)
+                                }
+                                onChange={(e) => {
+                                  const s = e.target.value as WakugumiFrameSeriesId;
+                                  const width = scaffoldWidthMmFromWakugumiSeries(s);
+                                  setAiBimPreview({
+                                    ...aiBimPreview,
+                                    wakugumiFrameSeries: s,
+                                    frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+                                    dto: {
+                                      ...aiBimPreview.dto,
+                                      wakugumiFrameSeries: s,
+                                      scaffoldWidthMm: width,
+                                      frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+                                    },
+                                  });
+                                }}
+                                className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500"
+                              >
+                                {(rules?.wakugumi?.frameSeriesOptions ?? [
+                                  { value: 'FT617' as const, label: 'FT-617', labelJp: 'FT-617' },
+                                  { value: 'FT917' as const, label: 'FT-917', labelJp: 'FT-917' },
+                                  { value: 'FT1217' as const, label: 'FT-1217', labelJp: 'FT-1217' },
+                                ]).map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {locale === 'ja' ? opt.labelJp : opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="text-[10px] text-gray-500 leading-tight">
+                                {t('scaffoldExtra', 'frameHeightFixed1700')}
+                              </p>
+                            </div>
                           ) : (
                             <select
                               value={aiBimPreview.dto.preferredMainTatejiMm ?? getAiBimDefaults().preferredMainTatejiMm}
@@ -2154,7 +2235,13 @@ function ScaffoldPageContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setScaffoldType('wakugumi')}
+                  onClick={() => {
+                    setScaffoldType('wakugumi');
+                    const s = wakugumiSeriesFromScaffoldWidthMm(scaffoldWidthMm);
+                    setWakugumiFrameSeries(s);
+                    setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
+                    setFrameSizeMm(WAKUGUMI_FIXED_FRAME_HEIGHT_MM);
+                  }}
                   className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
                     scaffoldType === 'wakugumi'
                       ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
@@ -2184,27 +2271,59 @@ function ScaffoldPageContent() {
               <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'structureTypeHint')}</p>
             </div>
 
-            {/* Scaffold Width */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('scaffold', 'scaffoldWidth')}
-              </label>
-              <select
-                value={scaffoldWidthMm}
-                onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {(rules?.scaffoldWidths || [
-                  { value: 600, label: '600mm' },
-                  { value: 900, label: '900mm' },
-                  { value: 1200, label: '1200mm' },
-                ]).map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Scaffold width (kusabi) — wakugumi uses FT series below (sets layout width) */}
+            {scaffoldType === 'kusabi' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('scaffold', 'scaffoldWidth')}
+                </label>
+                <select
+                  value={scaffoldWidthMm}
+                  onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {(rules?.scaffoldWidths || [
+                    { value: 600, label: '600mm' },
+                    { value: 900, label: '900mm' },
+                    { value: 1200, label: '1200mm' },
+                  ]).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {scaffoldType === 'wakugumi' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('scaffoldExtra', 'wakugumiFrameSeries')}
+                </label>
+                <select
+                  value={wakugumiFrameSeries}
+                  onChange={(e) => {
+                    const s = e.target.value as WakugumiFrameSeriesId;
+                    setWakugumiFrameSeries(s);
+                    setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
+                  }}
+                  className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
+                >
+                  {(rules?.wakugumi?.frameSeriesOptions ?? [
+                    { value: 'FT617' as const, label: 'FT-617 (610mm)', labelJp: 'FT-617（幅610mm）' },
+                    { value: 'FT917' as const, label: 'FT-917 (914mm)', labelJp: 'FT-917（幅914mm）' },
+                    { value: 'FT1217' as const, label: 'FT-1217 (1219mm)', labelJp: 'FT-1217（幅1219mm）' },
+                  ]).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {locale === 'ja' ? opt.labelJp : opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('scaffold', 'scaffoldWidth')}: {scaffoldWidthMm}mm
+                </p>
+              </div>
+            )}
 
             {/* ─── Kusabi-specific fields ─── */}
             {scaffoldType === 'kusabi' && (
@@ -2236,27 +2355,15 @@ function ScaffoldPageContent() {
             {/* ─── Wakugumi-specific fields ─── */}
             {scaffoldType === 'wakugumi' && (
               <>
-                {/* Frame Size (建枠サイズ) */}
+                {/* Level height fixed FT-17 / 1700mm */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {t('scaffoldExtra', 'frameSize')}
                   </label>
-                  <select
-                    value={frameSizeMm}
-                    onChange={(e) => setFrameSizeMm(Number(e.target.value))}
-                    className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
-                  >
-                    {(rules?.wakugumi?.frameSizeOptions || [
-                      { value: 1700, label: t('scaffold', 'frameSize1700') },
-                      { value: 1800, label: t('scaffold', 'frameSize1800') },
-                      { value: 1900, label: t('scaffold', 'frameSize1900') },
-                    ]).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'frameSizeHint')}</p>
+                  <div className="w-full rounded-lg border border-orange-200 px-3 py-2 text-sm bg-orange-50/30 text-gray-800">
+                    {WAKUGUMI_FIXED_FRAME_HEIGHT_MM}mm (FT-17)
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'frameHeightFixed1700')}</p>
                 </div>
 
                 {/* Habaki Count (巾木枚数) */}

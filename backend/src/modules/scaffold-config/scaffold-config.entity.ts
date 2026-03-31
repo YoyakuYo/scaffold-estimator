@@ -102,6 +102,10 @@ export class ScaffoldConfiguration {
   @Column({ type: 'varchar', length: 10, name: 'end_stopper_type', default: 'nuno' })
   endStopperType: 'nuno' | 'frame';
 
+  /** Wakugumi walk-through frame line: FT-617 / FT-917 / FT-1217 (width between posts) */
+  @Column({ type: 'varchar', length: 10, name: 'wakugumi_frame_series', default: 'FT917' })
+  wakugumiFrameSeries: 'FT617' | 'FT917' | 'FT1217';
+
   // ─── Rental Period (Optional - can be set here or in quotation) ───────
   /** Rental period type: weekly, monthly, custom */
   @Column({ type: 'varchar', length: 20, name: 'rental_type', nullable: true })
