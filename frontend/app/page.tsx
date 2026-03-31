@@ -30,8 +30,6 @@ const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'F
 /** Generic construction / high-rise (Unsplash, free license). Optimized sizes via next/image. */
 const LANDING_HERO_PHOTO =
   'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1920&auto=format&fit=crop';
-const LANDING_TEAM_PHOTO =
-  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1200&auto=format&fit=crop';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -195,58 +193,96 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ─── About + laptop mock ───────────────────────────────── */}
-        <section className="border-b border-gray-200 bg-white py-16">
+        {/* ─── Three summary boxes: Input · Features · Why ──────── */}
+        <section className="border-b border-gray-200 bg-white py-12 md:py-16">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <p className="text-xs font-medium tracking-[0.28em] text-gray-400">{t('landing', 'aboutEyebrow')}</p>
-            <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">{t('landing', 'aboutTitle')}</h2>
-            <div className="mt-10 grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
-              <div>
-                <p className="leading-relaxed text-gray-600">{t('landing', 'aboutBody')}</p>
-                <ul className="mt-6 space-y-3 text-sm text-gray-800">
-                  <li className="flex gap-2">
-                    <span className="font-bold text-orange-600">•</span>
-                    {t('landing', 'aboutPoint1')}
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-orange-600">•</span>
-                    {t('landing', 'aboutPoint2')}
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="font-bold text-orange-600">•</span>
-                    {t('landing', 'aboutPoint3')}
-                  </li>
-                </ul>
-              </div>
-              <div className="relative h-[340px] overflow-hidden rounded-2xl shadow-xl ring-1 ring-black/5 sm:h-[380px]">
-                <Image
-                  src={LANDING_TEAM_PHOTO}
-                  alt={t('landing', 'teamImageAlt')}
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" aria-hidden />
-                <div className="absolute inset-x-5 bottom-5 flex justify-center sm:inset-x-8">
-                  <div className="w-full max-w-[340px] rounded-xl bg-gray-900 p-2 shadow-2xl ring-1 ring-white/15">
-                    <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3">
-                      <Image
-                        src="/icons/icon.svg"
-                        alt=""
-                        width={40}
-                        height={40}
-                        className="shrink-0"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                          {t('landing', 'mockupCaption')}
-                        </p>
-                        <p className="truncate text-sm font-semibold text-gray-900">{t('landing', 'appName')}</p>
+            <div className="grid gap-6 lg:grid-cols-3 lg:gap-8 lg:items-stretch">
+              {/* Box 1 — Drawing & manual / input summary */}
+              <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-gradient-to-b from-slate-50/80 to-white p-6 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+                  {t('landing', 'boxInputEyebrow')}
+                </p>
+                <h2 className="mt-2 text-lg font-bold leading-snug text-gray-900 md:text-xl">
+                  {t('landing', 'boxInputTitle')}
+                </h2>
+                <p className="mt-3 text-sm leading-relaxed text-gray-600">{t('features', 'coreSubtitle')}</p>
+                <p className="mt-3 text-xs leading-relaxed text-gray-500">{t('landing', 'boxInputFormats')}</p>
+                <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
+                  {[
+                    { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
+                    { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
+                    { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
+                    { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
+                  ].map((chip) => (
+                    <div
+                      key={chip.label}
+                      className="rounded-xl border border-gray-200/80 bg-white px-3 py-2.5 shadow-[0_1px_0_rgba(0,0,0,0.04)]"
+                    >
+                      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{chip.label}</div>
+                      <div className="mt-0.5 text-sm font-semibold text-gray-900">{chip.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              {/* Box 2 — Features (single card, compact grid) */}
+              <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm ring-1 ring-blue-600/10">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+                  {t('landing', 'boxFeaturesEyebrow')}
+                </p>
+                <h2 className="mt-2 text-lg font-bold text-gray-900 md:text-xl">{t('landing', 'sectionFeatures')}</h2>
+                <p className="mt-2 text-xs text-gray-500">{t('landing', 'boxFeaturesIntro')}</p>
+                <div className="mt-5 grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-4">
+                  {[
+                    { icon: Calculator, title: t('features', 'coreCalcTitle'), desc: t('features', 'coreCalcDesc'), bg: 'bg-blue-100', iconColor: 'text-blue-600' },
+                    { icon: Receipt, title: t('features', 'coreQuotationTitle'), desc: t('features', 'coreQuotationDesc'), bg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
+                    { icon: Box, title: t('features', 'coreVisualizationTitle'), desc: t('features', 'coreVisualizationDesc'), bg: 'bg-violet-100', iconColor: 'text-violet-600' },
+                    { icon: Ruler, title: t('landing', 'quickShapeTitle'), desc: t('landing', 'quickShapeDesc'), bg: 'bg-amber-100', iconColor: 'text-amber-600' },
+                    { icon: Building2, title: t('landing', 'perSideTitle'), desc: t('landing', 'perSideDesc'), bg: 'bg-sky-100', iconColor: 'text-sky-600' },
+                    { icon: CheckCircle, title: t('landing', 'deterministicTitle'), desc: t('landing', 'deterministicDesc'), bg: 'bg-teal-100', iconColor: 'text-teal-600' },
+                  ].map((f, i) => (
+                    <div key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${f.bg}`}>
+                        <f.icon className={`h-[18px] w-[18px] ${f.iconColor}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-semibold leading-tight text-gray-900">{f.title}</h3>
+                        <p className="mt-1 text-xs leading-snug text-gray-600">{f.desc}</p>
                       </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              </div>
+              </article>
+
+              {/* Box 3 — Why use it */}
+              <article className="flex h-full flex-col rounded-2xl border border-gray-200 bg-gradient-to-b from-white to-slate-50/90 p-6 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+                  {t('landing', 'boxWhyEyebrow')}
+                </p>
+                <h2 className="mt-2 text-lg font-bold text-gray-900 md:text-xl">{t('landing', 'sectionWhy')}</h2>
+                <p className="mt-2 text-xs text-gray-500">{t('landing', 'boxWhyIntro')}</p>
+                <ul className="mt-5 flex flex-1 flex-col gap-3">
+                  {[
+                    { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc') },
+                    { icon: Target, title: t('features', 'benefit2Title'), desc: t('features', 'benefit2Desc') },
+                    { icon: Users, title: t('features', 'benefit3Title'), desc: t('features', 'benefit3Desc') },
+                    { icon: CheckCircle, title: t('features', 'benefit4Title'), desc: t('features', 'benefit4Desc') },
+                  ].map((b, i) => (
+                    <li key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-white/80 px-3 py-2.5">
+                      <b.icon className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden />
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-900">{b.title}</div>
+                        <p className="mt-0.5 text-xs leading-snug text-gray-600">{b.desc}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-auto border-t border-gray-200 pt-4 text-center text-xs text-gray-500">
+                  <Link href="#install" className="font-medium text-blue-600 hover:underline">
+                    {t('landing', 'boxInstallHint')}
+                  </Link>
+                </p>
+              </article>
             </div>
           </div>
         </section>
@@ -352,90 +388,6 @@ export default function LandingPage() {
                 </ul>
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* ─── Stats (read-only) ─────────────────────────────────── */}
-        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { icon: TrendingUp, label: t('features', 'stat1Label'), value: t('features', 'stat1Value'), color: 'text-blue-600' },
-              { icon: Target, label: t('features', 'stat2Label'), value: t('features', 'stat2Value'), color: 'text-green-600' },
-              { icon: Building2, label: t('features', 'stat3Label'), value: t('features', 'stat3Value'), color: 'text-purple-600' },
-              { icon: Download, label: t('features', 'stat4Label'), value: t('features', 'stat4Value'), color: 'text-amber-600' },
-            ].map((stat, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-                <stat.icon className={`h-7 w-7 ${stat.color} mx-auto mb-2`} />
-                <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-                <div className="text-sm text-gray-500">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ─── Features (read-only) ──────────────────────────────── */}
-        <section className="bg-white border-y border-gray-200 py-14">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
-              {t('landing', 'sectionFeatures')}
-            </h2>
-            <p className="text-gray-600 text-center mb-10">
-              {t('features', 'coreSubtitle')}
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-              {[
-                { icon: Calculator, title: t('features', 'coreCalcTitle'), desc: t('features', 'coreCalcDesc'), bg: 'bg-blue-100', iconColor: 'text-blue-600' },
-                { icon: Receipt, title: t('features', 'coreQuotationTitle'), desc: t('features', 'coreQuotationDesc'), bg: 'bg-green-100', iconColor: 'text-green-600' },
-                { icon: Box, title: t('features', 'coreVisualizationTitle'), desc: t('features', 'coreVisualizationDesc'), bg: 'bg-purple-100', iconColor: 'text-purple-600' },
-              ].map((f, i) => (
-                <div key={i} className="rounded-xl border border-gray-200 p-6">
-                  <div className={`w-11 h-11 rounded-lg ${f.bg} flex items-center justify-center mb-4`}>
-                    <f.icon className={`h-6 w-6 ${f.iconColor}`} />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{f.title}</h3>
-                  <p className="text-sm text-gray-600">{f.desc}</p>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                { icon: Ruler, title: t('landing', 'quickShapeTitle'), desc: t('landing', 'quickShapeDesc'), bg: 'bg-purple-100', iconColor: 'text-purple-600' },
-                { icon: Building2, title: t('landing', 'perSideTitle'), desc: t('landing', 'perSideDesc'), bg: 'bg-blue-100', iconColor: 'text-blue-600' },
-                { icon: CheckCircle, title: t('landing', 'deterministicTitle'), desc: t('landing', 'deterministicDesc'), bg: 'bg-green-100', iconColor: 'text-green-600' },
-              ].map((f, i) => (
-                <div key={i} className="rounded-xl border border-gray-200 p-6">
-                  <div className={`w-11 h-11 rounded-lg ${f.bg} flex items-center justify-center mb-4`}>
-                    <f.icon className={`h-6 w-6 ${f.iconColor}`} />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{f.title}</h3>
-                  <p className="text-sm text-gray-600">{f.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ─── Why (benefits, read-only) ─────────────────────────── */}
-        <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
-            {t('landing', 'sectionWhy')}
-          </h2>
-          <p className="text-gray-600 text-center mb-10">{t('features', 'benefitsTitle')}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: TrendingUp, title: t('features', 'benefit1Title'), desc: t('features', 'benefit1Desc'), bg: 'bg-blue-100', iconColor: 'text-blue-600' },
-              { icon: Target, title: t('features', 'benefit2Title'), desc: t('features', 'benefit2Desc'), bg: 'bg-green-100', iconColor: 'text-green-600' },
-              { icon: Users, title: t('features', 'benefit3Title'), desc: t('features', 'benefit3Desc'), bg: 'bg-purple-100', iconColor: 'text-purple-600' },
-              { icon: CheckCircle, title: t('features', 'benefit4Title'), desc: t('features', 'benefit4Desc'), bg: 'bg-amber-100', iconColor: 'text-amber-600' },
-            ].map((b, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className={`w-10 h-10 rounded-lg ${b.bg} flex items-center justify-center mb-4`}>
-                  <b.icon className={`h-5 w-5 ${b.iconColor}`} />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-2">{b.title}</h3>
-                <p className="text-sm text-gray-600">{b.desc}</p>
-              </div>
-            ))}
           </div>
         </section>
 

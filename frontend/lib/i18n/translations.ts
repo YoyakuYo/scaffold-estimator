@@ -896,6 +896,27 @@ export const translations = {
     },
     sectionFeatures: { ja: '主な機能', en: 'Features', fr: 'Fonctionnalités' },
     sectionWhy: { ja: '選ばれる理由', en: 'Why use it', fr: 'Pourquoi nous choisir' },
+    /** 3-box landing layout ─────────────────────────────────── */
+    boxInputEyebrow: { ja: '入力', en: 'Input', fr: 'Saisie' },
+    boxInputTitle: { ja: '図面・手入力', en: 'Drawing & manual', fr: 'Plans et saisie manuelle' },
+    boxInputFormats: {
+      ja: 'PDF・DXF・画像、AI 抽出、手描き CAD、ファイル取込、または壁面テーブルで入力。',
+      en: 'PDF, DXF, images, AI extraction, hand-drawn CAD, file upload, or per-wall entry.',
+      fr: 'PDF, DXF, images, extraction IA, CAO tracée, import fichier ou saisie par façade.',
+    },
+    boxFeaturesEyebrow: { ja: '機能', en: 'Features', fr: 'Fonctionnalités' },
+    boxFeaturesIntro: {
+      ja: '積算から見積・図面出力までをこのツールで。',
+      en: 'From takeoff to quotations and drawing export—in one tool.',
+      fr: 'Du métré aux devis et exports de plans — dans un seul outil.',
+    },
+    boxWhyEyebrow: { ja: 'メリット', en: 'At a glance', fr: 'En bref' },
+    boxWhyIntro: {
+      ja: '標準ルールに沿った再現性のある足場積算を、チームですぐ共有。',
+      en: 'Reproducible, rule-based takeoff your team can share.',
+      fr: 'Métré reproductible et standardisé, partageable en équipe.',
+    },
+    boxInstallHint: { ja: '↓ インストールしてオフラインでも利用', en: '↓ Install for offline-capable desktop use', fr: '↓ Installer pour une utilisation hors ligne' },
     sectionInstall: { ja: 'インストールして使う', en: 'Install & use', fr: 'Installer et utiliser' },
     quickShapeTitle: { ja: 'クイックシェイプビルダー', en: 'Quick Shape Builder', fr: 'Créateur de forme rapide' },
     quickShapeDesc: { ja: '矩形・L字・カスタムポリゴンで建物形状を素早く定義。', en: 'Quickly define building shapes as rectangles, L-shapes, or custom polygons.', fr: 'Définissez rapidement la forme du bâtiment : rectangle, L ou polygone personnalisé.' },
