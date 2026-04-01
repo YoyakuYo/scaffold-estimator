@@ -537,11 +537,6 @@ export const translations = {
     quotationSameName: { ja: 'L', en: 'L', fr: 'L' },
     /** Quotation table: same 規格 as row above (same 分類+部材名). */
     quotationSameSpec: { ja: 'S', en: 'S', fr: 'S' },
-    quotationBySpecBanner: {
-      ja: '（規格別数量）',
-      en: '(quantities by specification)',
-      fr: '(quantités par spécification)',
-    },
     walls: { ja: '面', en: 'walls', fr: 'murs' },
     noWallData: { ja: '壁面データがありません', en: 'No wall data available', fr: 'Aucune donnée de mur' },
     dragHint: { ja: 'マウスドラッグで回転 / スクロールでズーム', en: 'Drag to rotate / Scroll to zoom', fr: 'Glisser pour tourner / Molette pour zoomer' },

@@ -304,27 +304,6 @@ export class ScaffoldExcelService {
         lastCategory = cat;
       }
 
-      const multi = grp.components.length > 1;
-      if (multi) {
-        const banner = sheet.addRow([`【${cat}】${grp.nameJp}（${grp.unit}）— 規格別数量`]);
-        sheet.mergeCells(banner.number, 1, banner.number, totalCols);
-        banner.getCell(1).font = { bold: true, size: 10, color: { argb: 'FF1F2937' } };
-        banner.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-        banner.getCell(1).fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE5E7EB' },
-        };
-        banner.eachCell((cell) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' },
-          };
-        });
-      }
-
       for (let i = 0; i < grp.components.length; i++) {
         const comp = grp.components[i];
         const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
@@ -763,7 +742,7 @@ export class ScaffoldExcelService {
     const groups = this.groupSummaryByMaterialForExcel(sorted);
 
     for (const grp of groups) {
-      const blockTitle = sheet.addRow([`【${grp.category}】${grp.nameJp}（${grp.unit}）`]);
+      const blockTitle = sheet.addRow([`【${grp.category}】${grp.nameJp}`]);
       blockTitle.font = { bold: true, size: 11 };
       sheet.mergeCells(blockTitle.number, 1, blockTitle.number, ncol);
       blockTitle.eachCell((cell) => {

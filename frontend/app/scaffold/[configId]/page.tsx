@@ -900,7 +900,6 @@ function QuotationTable({ result }: { result: any }) {
   const rowsWithGrouping = useMemo(() => {
     type Row =
       | { type: 'header'; category: string }
-      | { type: 'materialBanner'; title: string }
       | {
           type: 'detail';
           comp: CalculatedComponent;
@@ -927,14 +926,6 @@ function QuotationTable({ result }: { result: any }) {
       if (cat !== lastCategory) {
         rows.push({ type: 'header', category: cat });
         lastCategory = cat;
-      }
-      const multi = grp.components.length > 1;
-      if (multi) {
-        const nameLine =
-          locale === 'ja'
-            ? `${grp.nameJp}（${grp.unit}） ${t('result', 'quotationBySpecBanner')}`
-            : `${grp.components[0]?.name || grp.nameJp} (${grp.unit}) ${t('result', 'quotationBySpecBanner')}`;
-        rows.push({ type: 'materialBanner', title: nameLine });
       }
       for (let j = 0; j < grp.components.length; j++) {
         const comp = grp.components[j];
@@ -1041,19 +1032,6 @@ function QuotationTable({ result }: { result: any }) {
                   <tr key={`cat-${ri}`} className="bg-gray-100 border-b border-gray-200">
                     <td colSpan={5 + walls.length + subtotalColCount + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
                       {row.category}
-                    </td>
-                  </tr>
-                );
-              }
-
-              if (row.type === 'materialBanner') {
-                return (
-                  <tr key={`banner-${ri}`} className="bg-slate-100 border-b border-slate-200">
-                    <td
-                      colSpan={5 + walls.length + subtotalColCount + 1}
-                      className="px-3 py-2 text-xs font-semibold text-slate-800"
-                    >
-                      {row.title}
                     </td>
                   </tr>
                 );
