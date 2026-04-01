@@ -13,6 +13,7 @@ import {
   type EdgeHashiraLabeling,
 } from '@/lib/api/scaffold-configs';
 import { groupScaffoldSummaryByMaterial, scaffoldWallQuantityKey } from '@/lib/merge-scaffold-summary-rows';
+import { quotationComponentBaseName } from '@/lib/quotation-display-name';
 import { useI18n } from '@/lib/i18n';
 import {
   ArrowLeft,
@@ -934,7 +935,7 @@ function QuotationTable({ result }: { result: any }) {
           locale === 'ja'
             ? comp.category || ''
             : comp.categoryEn || comp.category || '';
-        const nameLogic = locale === 'ja' ? comp.nameJp : comp.name || comp.nameJp;
+        const nameLogic = quotationComponentBaseName(comp, locale);
         const catDisplay =
           catLogic === prevDetailCatLogic && prevDetailCatLogic !== ''
             ? sameCatMark
