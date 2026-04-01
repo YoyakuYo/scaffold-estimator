@@ -12,6 +12,12 @@ import {
   ScaffoldMaterial,
   type EdgeHashiraLabeling,
 } from '@/lib/api/scaffold-configs';
+import {
+  mergeScaffoldSummaryForQuotation,
+  baseEnglishMaterialName,
+  scaffoldWallQuantityKey,
+  type MergedScaffoldSummaryRow,
+} from '@/lib/merge-scaffold-summary-rows';
 import { useI18n } from '@/lib/i18n';
 import {
   ArrowLeft,
@@ -175,6 +181,11 @@ function ScaffoldResultPage() {
       endStopperType: (result.endStopperType ?? config.endStopperType ?? 'nuno') as 'nuno' | 'frame',
     };
   }, [result, config, rawResult]);
+
+  const quotationMergedRows = useMemo(
+    () => mergeScaffoldSummaryForQuotation(result?.summary ?? []),
+    [result?.summary],
+  );
 
   const resultFor3D = useMemo(() => {
     const base = resultMergedForViz ?? result;
@@ -630,7 +641,7 @@ function ScaffoldResultPage() {
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('resultExtra', 'tabOverall')}
           </h2>
-          <QuotationTable result={result} />
+          <QuotationTable result={result} mergedRows={quotationMergedRows} />
         </div>
 
         {result.walls && (
@@ -698,7 +709,7 @@ function ScaffoldResultPage() {
               {/* Summary stats */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-gray-900">{result.summary.length}</div>
+                  <div className="text-2xl font-bold text-gray-900">{quotationMergedRows.length}</div>
                   <div className="text-xs text-gray-500">{t('result', 'totalComponents')}</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
@@ -846,7 +857,13 @@ function SummaryCard({
 
 // ─── Quotation Table ──────────────────────────────────────────
 
-function QuotationTable({ result }: { result: any }) {
+function QuotationTable({
+  result,
+  mergedRows,
+}: {
+  result: any;
+  mergedRows: MergedScaffoldSummaryRow[];
+}) {
   const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
   const summary: CalculatedComponent[] = result.summary;
@@ -892,16 +909,7 @@ function QuotationTable({ result }: { result: any }) {
     return walls.map((wall) => {
       const m = new globalThis.Map<string, number>();
       for (const comp of wall.components) {
-        // For Nuno Bars, group by category + sizeSpec (same as backend aggregation)
-        // For other components, use materialCode or type-sizeSpec
-        let key: string;
-        if (comp.category === '布材') {
-          // Group all nuno bars by size: "布材-600", "布材-900", etc.
-          key = `${comp.category}-${comp.sizeSpec}`;
-        } else {
-          // For other components, use materialCode or type-sizeSpec
-          key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-        }
+        const key = scaffoldWallQuantityKey(comp);
         m.set(key, (m.get(key) || 0) + comp.quantity);
       }
       return m;
@@ -910,20 +918,25 @@ function QuotationTable({ result }: { result: any }) {
 
   // Group rows by category for visual separation
   const rowsWithGrouping = useMemo(() => {
-    const rows: Array<{ type: 'header'; category: string } | { type: 'row'; comp: CalculatedComponent; idx: number }> = [];
+    const rows: Array<
+      { type: 'header'; category: string } | { type: 'row'; merged: MergedScaffoldSummaryRow; idx: number }
+    > = [];
     let lastCategory = '';
     let itemNo = 0;
-    for (const comp of summary) {
-      const cat = locale === 'ja' ? (comp.category || '') : (comp.categoryEn || comp.category || '');
+    for (const merged of mergedRows) {
+      const cat =
+        locale === 'ja'
+          ? merged.category || ''
+          : merged.categoryEn || merged.representative.categoryEn || merged.category || '';
       if (cat !== lastCategory) {
         rows.push({ type: 'header', category: cat });
         lastCategory = cat;
       }
       itemNo++;
-      rows.push({ type: 'row', comp, idx: itemNo });
+      rows.push({ type: 'row', merged, idx: itemNo });
     }
     return rows;
-  }, [summary, locale]);
+  }, [mergedRows, locale]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -1082,29 +1095,37 @@ function QuotationTable({ result }: { result: any }) {
                 );
               }
 
-              const { comp, idx } = row;
-              let key: string;
-              if (comp.category === '布材') {
-                key = `${comp.category}-${comp.sizeSpec}`;
+              const { merged, idx } = row;
+              const perWall = wallMaps.map((m) =>
+                merged.keys.reduce((sum, k) => sum + (m.get(k) || 0), 0),
+              );
+              let total: number;
+              if (merged.hasPattankoOnly) {
+                const pc = summary.find((c: CalculatedComponent) => c.materialCode === 'PATTANKO');
+                total = pc?.quantity ?? perWall.reduce((a, b) => a + b, 0);
               } else {
-                key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+                total = perWall.reduce((a, b) => a + b, 0);
               }
-              const perWall = wallMaps.map((m) => m.get(key) || 0);
-              const total = comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
-              const catLabel = locale === 'ja' ? (comp.category || '') : (comp.categoryEn || comp.category || '');
+              const catLabel =
+                locale === 'ja'
+                  ? merged.category || ''
+                  : merged.categoryEn || merged.representative.categoryEn || merged.category || '';
+              const displayName =
+                locale === 'ja'
+                  ? merged.nameJp
+                  : baseEnglishMaterialName(merged.representative.name) || merged.representative.name || merged.nameJp;
+              const rowKey = `${merged.sortOrder}-${merged.keys.slice().sort().join('|')}`;
 
               return (
                 <tr
-                  key={key}
+                  key={rowKey}
                   className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
                 >
                   <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
                   <td className="px-3 py-2 text-gray-400 text-xs">{catLabel}</td>
-                  <td className="px-3 py-2 font-medium text-gray-800">
-                    {locale === 'ja' ? comp.nameJp : (comp.name || comp.nameJp)}
-                  </td>
-                  <td className="px-3 py-2 text-gray-600">{comp.sizeSpec}</td>
-                  <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">{displayName}</td>
+                  <td className="px-3 py-2 text-gray-600">{merged.sizeSpecJoined}</td>
+                  <td className="px-3 py-2 text-center text-gray-500">{merged.unit}</td>
                   {perWall.map((qty, wi) => (
                     <td key={wi} className="px-3 py-2 text-center text-gray-700">
                       {qty > 0 ? qty : '-'}
