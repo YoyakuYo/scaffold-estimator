@@ -503,9 +503,9 @@ export const translations = {
     title: { ja: '足場材料見積書', en: 'Scaffold Material Quotation', fr: 'Devis matériaux échafaudage' },
     subtitle: { ja: '足場 — 計算結果', en: 'Scaffold — Calculation Results', fr: 'Échafaudage — Résultats du calcul' },
     excelExport: {
-      ja: 'Excel出力（見積・階別・材料明細）',
-      en: 'Export Excel (quote, floors, breakdown)',
-      fr: 'Exporter Excel (devis, étages, détail)',
+      ja: 'Excel出力',
+      en: 'Export Excel',
+      fr: 'Exporter Excel',
     },
     excelFailed: { ja: 'Excel出力に失敗しました', en: 'Excel export failed', fr: "Échec de l'export Excel" },
     createQuotation: { ja: '見積書作成', en: 'Create Quotation', fr: 'Créer un devis' },
