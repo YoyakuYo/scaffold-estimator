@@ -194,6 +194,13 @@ export class ScaffoldExcelService {
     sheet.addRow([]);
 
     // ─── Material Table Header ───────────────────────────
+    const legendRow = sheet.addRow([
+      '※ 材料表：直上行と同じ「分類」は S、同じ「部材名」は L と表記します。',
+    ]);
+    sheet.mergeCells(legendRow.number, 1, legendRow.number, totalCols);
+    legendRow.getCell(1).font = { italic: true, size: 9, color: { argb: 'FF64748B' } };
+    legendRow.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+
     const wallNames = result.walls.map(w => w.sideJp);
     const headerRow = sheet.addRow([
       'No',
@@ -239,6 +246,9 @@ export class ScaffoldExcelService {
 
     let rowNum = 1;
     let lastCategory = '';
+    /** Same-as-above markers (Excel): S = 分類, L = 部材名 — avoids 〃 and full-text repeat. */
+    let prevDetailCategory = '';
+    let prevDetailNameJp = '';
 
     const applyDetailRowStyle = (dataRow: ExcelJS.Row, n: number, wallsLen: number) => {
       dataRow.getCell(1).alignment = { horizontal: 'center' };
@@ -322,16 +332,30 @@ export class ScaffoldExcelService {
           comp.materialCode === 'PATTANKO'
             ? comp.quantity
             : perWallQty.reduce((a, b) => a + b, 0);
+        const nameJp = comp.nameJp || '';
+        const catCell =
+          cat === prevDetailCategory && prevDetailCategory !== '' ? 'S' : cat;
+        const nameCell =
+          nameJp === prevDetailNameJp && prevDetailNameJp !== '' ? 'L' : nameJp;
+        prevDetailCategory = cat;
+        prevDetailNameJp = nameJp;
+
         const dataRow = sheet.addRow([
           rowNum,
-          cat,
-          comp.nameJp,
+          catCell,
+          nameCell,
           comp.sizeSpec || '',
           comp.unit,
           ...perWallQty,
           total,
         ]);
         applyDetailRowStyle(dataRow, rowNum, result.walls.length);
+        if (catCell === 'S') {
+          dataRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        if (nameCell === 'L') {
+          dataRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+        }
         rowNum++;
       }
     }

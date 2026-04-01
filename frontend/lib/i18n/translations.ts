@@ -531,6 +531,10 @@ export const translations = {
     colSpec: { ja: '規格', en: 'Spec', fr: 'Spéc.' },
     colUnit: { ja: '単位', en: 'Unit', fr: 'Unité' },
     colTotal: { ja: '合計', en: 'Total', fr: 'Total' },
+    /** Quotation table: same 分類 as row above (compact; pairs with quotationSameName). */
+    quotationSameCategory: { ja: 'S', en: 'S', fr: 'S' },
+    /** Quotation table: same 部材名 as row above. */
+    quotationSameName: { ja: 'L', en: 'L', fr: 'L' },
     quotationBySpecBanner: {
       ja: '（規格別数量）',
       en: '(quantities by specification)',

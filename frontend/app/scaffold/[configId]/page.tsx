@@ -905,10 +905,16 @@ function QuotationTable({ result }: { result: any }) {
           type: 'detail';
           comp: CalculatedComponent;
           idx: number;
+          catDisplay: string;
+          nameDisplay: string;
         };
     const rows: Row[] = [];
     let lastCategory = '';
     let itemNo = 0;
+    let prevDetailCatLogic = '';
+    let prevDetailNameLogic = '';
+    const sameCatMark = t('result', 'quotationSameCategory');
+    const sameNameMark = t('result', 'quotationSameName');
 
     for (const grp of materialGroups) {
       const cat =
@@ -930,10 +936,27 @@ function QuotationTable({ result }: { result: any }) {
       for (let j = 0; j < grp.components.length; j++) {
         const comp = grp.components[j];
         itemNo++;
+        const catLogic =
+          locale === 'ja'
+            ? comp.category || ''
+            : comp.categoryEn || comp.category || '';
+        const nameLogic = locale === 'ja' ? comp.nameJp : comp.name || comp.nameJp;
+        const catDisplay =
+          catLogic === prevDetailCatLogic && prevDetailCatLogic !== ''
+            ? sameCatMark
+            : catLogic;
+        const nameDisplay =
+          nameLogic === prevDetailNameLogic && prevDetailNameLogic !== ''
+            ? sameNameMark
+            : nameLogic;
+        prevDetailCatLogic = catLogic;
+        prevDetailNameLogic = nameLogic;
         rows.push({
           type: 'detail',
           comp,
           idx: itemNo,
+          catDisplay,
+          nameDisplay,
         });
       }
     }
@@ -1023,17 +1046,14 @@ function QuotationTable({ result }: { result: any }) {
                 );
               }
 
-              const { comp, idx } = row;
+              const { comp, idx, catDisplay, nameDisplay } = row;
               const key = scaffoldWallQuantityKey(comp);
               const perWall = wallMaps.map((m) => m.get(key) || 0);
               const total =
                 comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
-              const catLabel =
-                locale === 'ja'
-                  ? comp.category || ''
-                  : comp.categoryEn || comp.category || '';
-              const displayName = locale === 'ja' ? comp.nameJp : comp.name || comp.nameJp;
               const rowKey = `${comp.sortOrder}-${key}`;
+              const catIsMark = catDisplay === t('result', 'quotationSameCategory');
+              const nameIsMark = nameDisplay === t('result', 'quotationSameName');
 
               return (
                 <tr
@@ -1041,8 +1061,22 @@ function QuotationTable({ result }: { result: any }) {
                   className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
                 >
                   <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
-                  <td className="px-3 py-2 text-gray-600 text-xs">{catLabel}</td>
-                  <td className="px-3 py-2 font-medium text-gray-800">{displayName}</td>
+                  <td
+                    className={`px-3 py-2 text-xs ${
+                      catIsMark ? 'text-center text-slate-500 font-semibold' : 'text-gray-600'
+                    }`}
+                  >
+                    {catDisplay}
+                  </td>
+                  <td
+                    className={`px-3 py-2 ${
+                      nameIsMark
+                        ? 'text-center text-slate-500 font-semibold'
+                        : 'font-medium text-gray-800'
+                    }`}
+                  >
+                    {nameDisplay}
+                  </td>
                   <td className="px-3 py-2 text-gray-600">{comp.sizeSpec}</td>
                   <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
                   {perWall.map((qty, wi) => (
