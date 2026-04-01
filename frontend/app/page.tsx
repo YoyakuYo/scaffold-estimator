@@ -371,7 +371,7 @@ export default function LandingPage() {
                     </p>
 
                     <ul
-                      className="mt-8 flex list-none flex-wrap gap-3 overflow-x-auto p-0 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden"
+                      className="mt-8 m-0 flex list-none flex-wrap gap-3 overflow-x-auto p-0 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden"
                       aria-label={t('features', 'statsTitle')}
                     >
                       {[
