@@ -186,6 +186,11 @@ export class ScaffoldConfigService {
       mode: dto.mode,
       scaffoldType,
       structureType: dto.structureType || '改修工事',
+      siteName: (dto.siteName ?? '').trim() || null,
+      siteAddress: (dto.siteAddress ?? '').trim() || null,
+      siteEmail: (dto.siteEmail ?? '').trim() || null,
+      sitePhone: (dto.sitePhone ?? '').trim() || null,
+      siteFax: (dto.siteFax ?? '').trim() || null,
       buildingHeightMm: Math.max(...wallsToCalculate.map(w => w.wallHeightMm), 0),
       walls: wallsToCalculate.map(w => ({
         side: w.side,
@@ -415,6 +420,11 @@ export class ScaffoldConfigService {
       mode: dto.mode,
       scaffoldType,
       structureType: dto.structureType || '改修工事',
+      siteName: (dto.siteName ?? '').trim() || null,
+      siteAddress: (dto.siteAddress ?? '').trim() || null,
+      siteEmail: (dto.siteEmail ?? '').trim() || null,
+      sitePhone: (dto.sitePhone ?? '').trim() || null,
+      siteFax: (dto.siteFax ?? '').trim() || null,
       buildingHeightMm: Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0),
       walls: wallsToCalculate.map((w) => ({
         side: w.side,
@@ -503,6 +513,11 @@ export class ScaffoldConfigService {
     config.mode = dto.mode;
     config.scaffoldType = scaffoldType;
     config.structureType = dto.structureType || '改修工事';
+    config.siteName = (dto.siteName ?? '').trim() || null;
+    config.siteAddress = (dto.siteAddress ?? '').trim() || null;
+    config.siteEmail = (dto.siteEmail ?? '').trim() || null;
+    config.sitePhone = (dto.sitePhone ?? '').trim() || null;
+    config.siteFax = (dto.siteFax ?? '').trim() || null;
     config.buildingHeightMm = Math.max(...wallsToCalculate.map((w) => w.wallHeightMm), 0);
     config.walls = wallsToCalculate.map((w) => ({
       side: w.side,

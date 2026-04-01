@@ -31,6 +31,7 @@ import {
   Download,
   Plus,
   QrCode,
+  MapPin,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
@@ -428,6 +429,59 @@ function ScaffoldResultPage() {
             )}
           </div>
         </div>
+
+        {(config?.siteName ||
+          config?.siteAddress ||
+          config?.siteEmail ||
+          config?.sitePhone ||
+          config?.siteFax) && (
+          <div className="mb-4 p-4 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 print:break-inside-avoid">
+            <div className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-emerald-600" />
+              {t('scaffold', 'siteInfoSection')}
+            </div>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5">
+              {config?.siteName ? (
+                <>
+                  <dt className="text-gray-500">{t('scaffold', 'siteName')}</dt>
+                  <dd className="font-medium">{config.siteName}</dd>
+                </>
+              ) : null}
+              {config?.siteAddress ? (
+                <>
+                  <dt className="text-gray-500">{t('scaffold', 'siteAddress')}</dt>
+                  <dd className="font-medium sm:col-span-1">{config.siteAddress}</dd>
+                </>
+              ) : null}
+              {config?.siteEmail ? (
+                <>
+                  <dt className="text-gray-500">{t('scaffold', 'siteEmail')}</dt>
+                  <dd>
+                    <a href={`mailto:${config.siteEmail}`} className="text-blue-600 hover:underline">
+                      {config.siteEmail}
+                    </a>
+                  </dd>
+                </>
+              ) : null}
+              {config?.sitePhone ? (
+                <>
+                  <dt className="text-gray-500">{t('scaffold', 'sitePhone')}</dt>
+                  <dd>
+                    <a href={`tel:${config.sitePhone}`} className="text-blue-600 hover:underline">
+                      {config.sitePhone}
+                    </a>
+                  </dd>
+                </>
+              ) : null}
+              {config?.siteFax ? (
+                <>
+                  <dt className="text-gray-500">{t('scaffold', 'siteFax')}</dt>
+                  <dd className="font-medium">{config.siteFax}</dd>
+                </>
+              ) : null}
+            </dl>
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div

@@ -29,6 +29,10 @@ interface DrawingUploadProps {
   externalWallLengths: number[];
   buildingHeightMm: number | null;
   onBuildingHeightChange: (mm: number) => void;
+  /** Overrides the default label (e.g. default height for new edges, not a single building height). */
+  buildingHeightLabel?: string;
+  /** Short hint under the height field */
+  buildingHeightHint?: string;
 }
 
 interface Vertex { x: number; y: number }
@@ -138,6 +142,8 @@ export function DrawingUpload({
   externalWallLengths,
   buildingHeightMm,
   onBuildingHeightChange,
+  buildingHeightLabel,
+  buildingHeightHint,
 }: DrawingUploadProps) {
   const { t } = useI18n();
   const mmUnit = t('common', 'mm');
@@ -811,7 +817,7 @@ export function DrawingUpload({
           <div className="p-4 border-b border-gray-200">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <Building2 className="h-4 w-4 text-blue-600" />
-              {t('viewer', 'buildingHeight') || 'Building Height'}
+              {buildingHeightLabel || t('viewer', 'buildingHeight') || 'Building Height'}
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -826,6 +832,9 @@ export function DrawingUpload({
             {buildingHeightMm != null && buildingHeightMm > 0 && (
               <p className="text-xs text-gray-400 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
             )}
+            {buildingHeightHint ? (
+              <p className="text-xs text-gray-500 mt-1.5">{buildingHeightHint}</p>
+            ) : null}
           </div>
 
           {/* Wall Dimensions */}

@@ -52,6 +52,18 @@ export class ScaffoldExcelService {
     titleRow.alignment = { horizontal: 'center' };
     sheet.addRow([]);
 
+    // ─── Site / contact (optional) ─────────────────────────
+    const siteRows: [string, string][] = [];
+    if (config.siteName) siteRows.push(['現場名 / 件名', config.siteName]);
+    if (config.siteAddress) siteRows.push(['住所', config.siteAddress]);
+    if (config.siteEmail) siteRows.push(['メール', config.siteEmail]);
+    if (config.sitePhone) siteRows.push(['電話', config.sitePhone]);
+    if (config.siteFax) siteRows.push(['FAX', config.siteFax]);
+    for (const [k, v] of siteRows) {
+      sheet.addRow([k, v]);
+    }
+    if (siteRows.length > 0) sheet.addRow([]);
+
     // ─── Config Summary ──────────────────────────────────
     const scaffoldType = result.scaffoldType || 'kusabi';
     const isWakugumi = scaffoldType === 'wakugumi';

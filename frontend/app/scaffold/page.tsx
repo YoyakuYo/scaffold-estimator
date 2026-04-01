@@ -30,6 +30,7 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
+  MapPin,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
@@ -920,6 +921,11 @@ function ScaffoldPageContent() {
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
   const [walls, setWalls] = useState<WallState[]>([]);
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(null);
+  const [siteName, setSiteName] = useState('');
+  const [siteAddress, setSiteAddress] = useState('');
+  const [siteEmail, setSiteEmail] = useState('');
+  const [sitePhone, setSitePhone] = useState('');
+  const [siteFax, setSiteFax] = useState('');
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
   const [selectedWallIdx, setSelectedWallIdx] = useState<number | null>(null);
   const [prefilled, setPrefilled] = useState(false);
@@ -958,6 +964,11 @@ function ScaffoldPageContent() {
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
     setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
     setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
+    setSiteName(editConfig.siteName ?? '');
+    setSiteAddress(editConfig.siteAddress ?? '');
+    setSiteEmail(editConfig.siteEmail ?? '');
+    setSitePhone(editConfig.sitePhone ?? '');
+    setSiteFax(editConfig.siteFax ?? '');
     const wallList = editConfig.walls ?? [];
     if (wallList.length > 0) {
       const buildingH = editConfig.buildingHeightMm ?? 3000;
@@ -1141,11 +1152,13 @@ function ScaffoldPageContent() {
           if (existing && existing.side === w.side) {
             return { ...existing, lengthMm: w.lengthMm };
           }
+          const defaultH =
+            buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
           return {
             side: w.side,
         enabled: true,
             lengthMm: w.lengthMm,
-            heightMm: buildingHeightMm || 0,
+            heightMm: defaultH,
         stairAccessCount: 0,
         kaidanCount: 0,
         kaidanOffsets: [],
@@ -1168,26 +1181,12 @@ function ScaffoldPageContent() {
     [],
   );
 
-  // Sync building height to all enabled walls
-  useEffect(() => {
-    if (buildingHeightMm && buildingHeightMm > 0) {
-      setWalls((prev) =>
-        prev.map((w) => (w.enabled ? { ...w, heightMm: buildingHeightMm } : w)),
-      );
-    }
-  }, [buildingHeightMm]);
-
   // ─── Calculate handler ──────────────────────────────────
   const handleCalculate = () => {
     if (!perimeterModel.isClosed && !prefilled) {
       alert(t('scaffold', 'closePolygonFirst'));
       return;
     }
-    if (!buildingHeightMm || buildingHeightMm <= 0) {
-      alert(t('scaffold', 'enterBuildingHeightAlert'));
-      return;
-    }
-
     const enabledWalls: WallInput[] = [];
     const enabledOriginalIndices: number[] = [];
     for (let wi = 0; wi < walls.length; wi++) {
@@ -1199,7 +1198,7 @@ function ScaffoldPageContent() {
       enabledWalls.push({
         side: w.side,
         wallLengthMm: lenMm,
-        wallHeightMm: w.heightMm || buildingHeightMm,
+        wallHeightMm: w.heightMm > 0 ? w.heightMm : (buildingHeightMm ?? 0),
         stairAccessCount: w.stairAccessCount,
         kaidanCount: w.kaidanCount,
         kaidanOffsets: w.kaidanOffsets,
@@ -1251,6 +1250,11 @@ function ScaffoldPageContent() {
       structureType,
       walls: enabledWalls,
       scaffoldWidthMm,
+      siteName: siteName.trim(),
+      siteAddress: siteAddress.trim(),
+      siteEmail: siteEmail.trim(),
+      sitePhone: sitePhone.trim(),
+      siteFax: siteFax.trim(),
       ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
       ...(scaffoldType === 'kusabi' && {
         preferredMainTatejiMm,
@@ -2200,6 +2204,8 @@ function ScaffoldPageContent() {
           externalWallLengths={walls.map(w => w.lengthMm)}
           buildingHeightMm={buildingHeightMm}
           onBuildingHeightChange={setBuildingHeightMm}
+          buildingHeightLabel={t('scaffold', 'defaultHeightForDrawingMm')}
+          buildingHeightHint={t('scaffold', 'defaultHeightDrawingHint')}
         />
       </div>
 
@@ -2215,6 +2221,70 @@ function ScaffoldPageContent() {
             <Building2 className="h-5 w-5 text-blue-600" />
             {t('scaffold', 'buildingSettings')}
           </h2>
+
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2 flex-wrap">
+              <MapPin className="h-4 w-4 text-emerald-600" />
+              {t('scaffold', 'siteInfoSection')}
+              <span className="text-xs font-normal text-gray-500">
+                ({t('scaffold', 'optional')})
+              </span>
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteName')}</label>
+                <input
+                  type="text"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('scaffold', 'siteNamePlaceholder')}
+                  autoComplete="organization"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteAddress')}</label>
+                <input
+                  type="text"
+                  value={siteAddress}
+                  onChange={(e) => setSiteAddress(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('scaffold', 'siteAddressPlaceholder')}
+                  autoComplete="street-address"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteEmail')}</label>
+                <input
+                  type="email"
+                  value={siteEmail}
+                  onChange={(e) => setSiteEmail(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="name@example.com"
+                  autoComplete="email"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'sitePhone')}</label>
+                <input
+                  type="tel"
+                  value={sitePhone}
+                  onChange={(e) => setSitePhone(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  autoComplete="tel"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteFax')}</label>
+                <input
+                  type="tel"
+                  value={siteFax}
+                  onChange={(e) => setSiteFax(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
 
             {/* Scaffold Type Selector */}
             <div className="mb-4">
@@ -2414,7 +2484,8 @@ function ScaffoldPageContent() {
 
         {/* Wall Configuration */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">{t('scaffold', 'wallConfig')}</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('scaffold', 'wallConfig')}</h2>
+          <p className="text-sm text-gray-600 mb-4">{t('scaffold', 'perWallHeightIntro')}</p>
 
           {/* Quick Height Estimator */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -2458,6 +2529,23 @@ function ScaffoldPageContent() {
             <p className="text-xs text-blue-500 mt-1.5">
               {t('scaffold', 'quickHeightNote')}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const h = buildingHeightMm;
+                  if (!h || h < 1000) {
+                    alert(t('scaffold', 'enterDefaultHeightForApply'));
+                    return;
+                  }
+                  setWalls((prev) => prev.map((w) => (w.enabled ? { ...w, heightMm: h } : w)));
+                }}
+                className="px-3 py-1.5 text-xs font-medium bg-white border border-blue-400 rounded-lg hover:bg-blue-100 text-blue-800 transition-colors"
+              >
+                {t('scaffold', 'applyDefaultHeightToAllWalls')}
+              </button>
+              <span className="text-xs text-blue-600/80">{t('scaffold', 'applyDefaultHeightHint')}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">

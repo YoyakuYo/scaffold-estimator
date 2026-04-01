@@ -108,6 +108,12 @@ export interface CreateScaffoldConfigDto {
   };
   /** Optional: X/Y hashira labels per wall edge (saved with first calculate). */
   edgeHashiraLabeling?: EdgeHashiraLabeling;
+  /** Job site / quotation header (empty strings clear stored values on update) */
+  siteName?: string;
+  siteAddress?: string;
+  siteEmail?: string;
+  sitePhone?: string;
+  siteFax?: string;
 }
 
 export interface ScaffoldConfiguration {
@@ -118,6 +124,11 @@ export interface ScaffoldConfiguration {
   scaffoldType: 'kusabi' | 'wakugumi';
   structureType?: '改修工事' | 'S造' | 'RC造';
   buildingHeightMm: number;
+  siteName?: string | null;
+  siteAddress?: string | null;
+  siteEmail?: string | null;
+  sitePhone?: string | null;
+  siteFax?: string | null;
   walls: Array<{
     side: string;
     wallLengthMm: number;

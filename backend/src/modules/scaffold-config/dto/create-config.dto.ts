@@ -7,8 +7,10 @@ import {
   ValidateNested,
   Min,
   Max,
+  MaxLength,
   IsDateString,
   ValidateIf,
+  IsEmail,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { EdgeHashiraLabelingDto } from './patch-result-labels.dto';
@@ -265,4 +267,31 @@ export class CreateScaffoldConfigDto {
   @ValidateNested()
   @Type(() => EdgeHashiraLabelingDto)
   edgeHashiraLabeling?: EdgeHashiraLabelingDto;
+
+  /** Optional: job site / project name */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  siteName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  siteAddress?: string;
+
+  @IsOptional()
+  @ValidateIf((o) => o.siteEmail != null && String(o.siteEmail).trim() !== '')
+  @IsEmail()
+  @MaxLength(255)
+  siteEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  sitePhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  siteFax?: string;
 }

@@ -41,6 +41,22 @@ export class ScaffoldConfiguration {
   @Column({ type: 'int', name: 'building_height_mm' })
   buildingHeightMm: number;
 
+  /** Job site / project name (optional, for quotation header) */
+  @Column({ type: 'varchar', length: 255, name: 'site_name', nullable: true })
+  siteName: string | null;
+
+  @Column({ type: 'text', name: 'site_address', nullable: true })
+  siteAddress: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'site_email', nullable: true })
+  siteEmail: string | null;
+
+  @Column({ type: 'varchar', length: 100, name: 'site_phone', nullable: true })
+  sitePhone: string | null;
+
+  @Column({ type: 'varchar', length: 100, name: 'site_fax', nullable: true })
+  siteFax: string | null;
+
   // ─── Wall Definitions (JSON) ───────────────────────────
   // Array of { side, wallLengthMm, wallHeightMm, enabled, stairAccessCount, segments? }
   // side can be 'north' | 'south' | 'east' | 'west' or arbitrary edge names for complex polygons
