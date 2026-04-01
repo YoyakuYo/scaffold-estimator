@@ -26,6 +26,7 @@ interface WallResult {
   wallLengthMm: number;
   wallHeightMm: number;
   totalSpans: number;
+  stairAccessCount?: number;
   levelCalc: { fullLevels: number; totalHeight: number };
   components: CalculatedComponent[];
 }
@@ -209,6 +210,10 @@ export function MaterialBreakdownTable({
       key: `sec-${wi}-${edgeChordName(wi, walls.length, closedFootprint)}`,
       chord: edgeChordName(wi, walls.length, closedFootprint),
       lengthMm: wall.wallLengthMm,
+      wallHeightMm: wall.wallHeightMm,
+      totalSpans: wall.totalSpans,
+      fullLevels: wall.levelCalc?.fullLevels ?? 1,
+      stairAccessCount: wall.stairAccessCount ?? 0,
       xy: xyByWall[wi],
       rows: matrixRows.filter((r) => r.wallIndex === wi),
     }));
@@ -298,16 +303,25 @@ export function MaterialBreakdownTable({
             {breakdownSections.map((sec) => (
               <Fragment key={sec.key}>
                 <tr className="bg-slate-200/95 border-t border-slate-300">
-                  <td
-                    colSpan={tableColSpan}
-                    className="py-2 px-4 text-sm font-bold text-slate-900 tracking-wide"
-                  >
-                    {locale === 'ja' && '辺 '}
-                    {locale === 'fr' && 'Arête '}
-                    {locale === 'en' && 'Edge '}
-                    <span className="font-mono">{sec.chord}</span>
-                    {' — '}
-                    {sec.lengthMm.toLocaleString()} mm
+                  <td colSpan={tableColSpan} className="py-2 px-4">
+                    <div className="text-sm font-bold text-slate-900 tracking-wide">
+                      {locale === 'ja' && '辺 '}
+                      {locale === 'fr' && 'Arête '}
+                      {locale === 'en' && 'Edge '}
+                      <span className="font-mono">{sec.chord}</span>
+                      {' — '}
+                      {sec.lengthMm.toLocaleString()} mm
+                    </div>
+                    <div className="mt-1 text-xs font-normal text-slate-600">
+                      {t('resultExtra', 'spans')}: {sec.totalSpans}
+                      {' · '}
+                      {t('result', 'levels')}: {sec.fullLevels}
+                      {' · '}
+                      {t('result', 'wallHeight')}: {sec.wallHeightMm.toLocaleString()} mm
+                      {' · '}
+                      {t('resultExtra', 'stairs')}: {sec.stairAccessCount}
+                      {t('resultExtra', 'stairsUnit')}
+                    </div>
                   </td>
                 </tr>
                 {(() => {

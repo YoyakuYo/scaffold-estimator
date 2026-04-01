@@ -39,7 +39,7 @@ import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
-import { EdgeHashiraResultPanel, EdgeHashiraResultWallLine } from '@/components/edge-hashira-result-panel';
+import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -51,7 +51,7 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
   ),
 });
 
-type TabView = 'table' | 'perside' | 'breakdown' | '2d' | 'plan' | '3d';
+type TabView = 'table' | 'breakdown' | '2d' | 'plan' | '3d';
 
 /** Cumulative per-level summary: approximate quantities up to visibleLevels (scale by visibleLevels/totalLevels). */
 function getLevelSummary(
@@ -123,9 +123,14 @@ function ScaffoldResultPage() {
   const [showScanModal, setShowScanModal] = useState(false);
 
   // Support ?tab=3d, ?tab=2d from external links
-  const initialTab = (searchParams.get('tab') as TabView) || 'table';
+  const rawTab = searchParams.get('tab');
+  const normalizedTab =
+    rawTab === 'perside'
+      ? 'breakdown'
+      : (rawTab as TabView);
+  const initialTab = (normalizedTab || 'table') as TabView;
   const [activeTab, setActiveTab] = useState<TabView>(
-    ['table', 'perside', 'breakdown', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
+    ['table', 'breakdown', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
   );
   const [visibleLevels, setVisibleLevels] = useState<number>(1);
   const [materialPrices, setMaterialPrices] = useState<Record<string, number>>({});
@@ -575,17 +580,6 @@ function ScaffoldResultPage() {
             {t('resultExtra', 'tabOverall')}
           </button>
           <button
-            onClick={() => setActiveTab('perside')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'perside'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Building2 className="h-4 w-4" />
-            {t('resultExtra', 'tabPerSide')}
-          </button>
-          <button
             onClick={() => setActiveTab('breakdown')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'breakdown'
@@ -637,13 +631,6 @@ function ScaffoldResultPage() {
             {t('resultExtra', 'tabOverall')}
           </h2>
           <QuotationTable result={result} />
-        </div>
-
-        <div className={activeTab === 'perside' ? 'block' : 'hidden'}>
-          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
-            {t('resultExtra', 'tabPerSide')}
-          </h2>
-          <PerSideBreakdown result={result} />
         </div>
 
         {result.walls && (
@@ -1146,110 +1133,3 @@ function QuotationTable({ result }: { result: any }) {
   );
 }
 
-// ─── Per-Side Breakdown ──────────────────────────────────────
-
-function PerSideBreakdown({ result }: { result: any }) {
-  const { locale, t } = useI18n();
-  const walls: WallCalculationResult[] = result.walls;
-  const wallCount = walls.length;
-  const poly = result.polygonVertices;
-  const edgeLbl = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
-  const chordOpts =
-    wallCount > 0
-      ? {
-          wallCount,
-          closedLoop: Array.isArray(poly) && poly.length >= 3,
-        }
-      : undefined;
-
-  return (
-    <div className="space-y-6">
-      {walls.map((wall, idx) => {
-        const wallLabel = formatWallSide(
-          wall.side,
-          wall.sideJp,
-          locale,
-          chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
-        );
-        const postAlong = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
-        const hashiraSeg = edgeHashiraColumnRangeSegment(
-          edgeLbl,
-          idx,
-          walls.length,
-          wall.sideJp ?? '',
-          wall.side ?? '',
-          postAlong,
-        );
-        const componentsByCategory: Record<string, CalculatedComponent[]> = {};
-        for (const comp of wall.components) {
-          const cat = locale === 'ja' ? (comp.category || t('result', 'other')) : (comp.categoryEn || comp.category || t('result', 'other'));
-          if (!componentsByCategory[cat]) componentsByCategory[cat] = [];
-          componentsByCategory[cat].push(comp);
-        }
-
-        return (
-          <div key={`perside-${idx}-${wall.side}`} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 bg-gradient-to-r from-blue-50 to-white border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900">
-                  {wallLabel}
-                  {hashiraSeg ? (
-                    <span className="ml-2 text-base font-mono font-semibold text-slate-600">({hashiraSeg})</span>
-                  ) : null}
-                </h3>
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  <span>{t('resultExtra', 'wallLength')}: {wall.wallLengthMm.toLocaleString()}mm</span>
-                  <span>{t('resultExtra', 'spans')}: {wall.totalSpans}</span>
-                  <span>{t('resultExtra', 'stairs')}: {wall.stairAccessCount}{t('resultExtra', 'stairsUnit')}</span>
-                </div>
-              </div>
-              <EdgeHashiraResultWallLine
-                labeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
-                wallIndex={idx}
-                walls={walls}
-                closedFootprint={!!chordOpts?.closedLoop}
-              />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-2 text-left font-medium text-gray-600 w-10">#</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('resultExtra', 'colCategory')}</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('resultExtra', 'colName')}</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('resultExtra', 'colSpec')}</th>
-                    <th className="px-4 py-2 text-center font-medium text-gray-600">{t('resultExtra', 'colUnit')}</th>
-                    <th className="px-4 py-2 text-center font-medium text-gray-600">{t('resultExtra', 'colQty')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(componentsByCategory).map(([category, comps]) => (
-                    <>
-                      <tr key={`cat-${category}`} className="bg-gray-100">
-                        <td colSpan={6} className="px-4 py-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                          {category}
-                        </td>
-                      </tr>
-                      {comps.map((comp, ci) => (
-                        <tr key={`${comp.materialCode || comp.type}-${ci}`} className={`border-b border-gray-50 ${ci % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                          <td className="px-4 py-2 text-gray-400 text-center">{ci + 1}</td>
-                          <td className="px-4 py-2 text-gray-400 text-xs">{category}</td>
-                          <td className="px-4 py-2 font-medium text-gray-800">
-                            {locale === 'ja' ? comp.nameJp : (comp.name || comp.nameJp)}
-                          </td>
-                          <td className="px-4 py-2 text-gray-600">{comp.sizeSpec}</td>
-                          <td className="px-4 py-2 text-center text-gray-500">{comp.unit}</td>
-                          <td className="px-4 py-2 text-center font-bold text-blue-700">{comp.quantity}</td>
-                        </tr>
-                      ))}
-                    </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
