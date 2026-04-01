@@ -689,7 +689,7 @@ function UserDashboard() {
                                         onClick={async () => {
                                           setOpenMenuId(null);
                                           try {
-                                            const blob = await scaffoldConfigsApi.exportExcel(cfg.id);
+                                            const blob = await scaffoldConfigsApi.exportExcel(cfg.id, locale);
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement('a');
                                             a.href = url; a.download = `scaffold_${cfg.id.slice(0, 8)}.xlsx`; a.click();

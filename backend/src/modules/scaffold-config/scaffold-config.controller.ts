@@ -325,14 +325,18 @@ export class ScaffoldConfigController {
    * Download Excel quotation file.
    */
   @Get(':id/export/excel')
-  async exportExcel(@Param('id') configId: string, @Res() res: Response) {
+  async exportExcel(
+    @Param('id') configId: string,
+    @Query('lang') lang: string | undefined,
+    @Res() res: Response,
+  ) {
     const config = await this.configService.getConfig(configId);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
       return;
     }
 
-    const buffer = await this.excelService.generateQuotation(config);
+    const buffer = await this.excelService.generateQuotation(config, lang);
 
     res.setHeader(
       'Content-Type',

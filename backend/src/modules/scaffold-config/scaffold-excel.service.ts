@@ -14,8 +14,15 @@ import {
   distributeByScaffoldLevel,
 } from './material-breakdown-excel.util';
 import { compareCalculatedComponentsForBom } from './scaffold-bom-sort';
+import {
+  type ExcelExportLocale,
+  excelCategory,
+  excelMaterialName,
+  getScaffoldExcelStrings,
+  normalizeExcelLocale,
+  type ScaffoldExcelStrings,
+} from './scaffold-excel-i18n';
 
-const EDGE_TABLE_COLS = 7;
 const FILL_HEADER = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF2563EB' } };
 const FILL_SECTION = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFE5E7EB' } };
 const FILL_ALT = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF8FAFC' } };
@@ -29,9 +36,9 @@ const BORDER_THIN: Partial<ExcelJS.Borders> = {
 type BreakdownMatrixRow = {
   wallIndex: number;
   groupKey: string;
-  category: string;
+  categoryDisplay: string;
+  nameDisplay: string;
   bomSort: { type: string; sortOrder: number; sizeSpec: string };
-  nameJp: string;
   spec: string;
   unit: string;
   floorQty: number[];
@@ -39,30 +46,32 @@ type BreakdownMatrixRow = {
 };
 
 /**
- * Single worksheet 足場材料見積書: site header, edge geometry, spans,
- * overall totals, project-wide floor totals, then per-edge × floor breakdown.
+ * Single worksheet: site header, spans, localized overall totals, floor aggregate, per-edge × floor.
  */
 @Injectable()
 export class ScaffoldExcelService {
-  async generateQuotation(config: ScaffoldConfiguration): Promise<Buffer> {
+  async generateQuotation(config: ScaffoldConfiguration, lang?: string): Promise<Buffer> {
     const result: ScaffoldCalculationResult = config.calculationResult;
     if (!result) throw new Error('No calculation result available');
 
     const walls = result.walls;
     if (!walls.length) throw new Error('No walls in calculation result');
 
+    const locale = normalizeExcelLocale(lang);
+    const str = getScaffoldExcelStrings(locale);
+
     const wallColumnHeaders = this.buildExcelWallColumnHeaders(result);
-    const ctx = this.buildBreakdownContext(config, result);
+    const ctx = this.buildBreakdownContext(config, result, locale);
     const { matrixRows, buildingFloorCount, levelHeightMm } = ctx;
 
     const floorSectionCols = 5 + buildingFloorCount + 1;
-    const layoutMergeCols = Math.max(EDGE_TABLE_COLS, floorSectionCols, 10);
+    const layoutMergeCols = Math.max(floorSectionCols, 10);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Zoomen Reader';
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet('足場材料見積書', {
+    const sheet = workbook.addWorksheet(str.sheetName.slice(0, 31), {
       pageSetup: {
         paperSize: 9,
         orientation: 'landscape',
@@ -72,24 +81,21 @@ export class ScaffoldExcelService {
       },
     });
 
-    const scaffoldTypeLabel = result.scaffoldType === 'wakugumi' ? '枠組足場' : 'くさび式足場';
-    const titleRow = sheet.addRow([`${scaffoldTypeLabel} 材料見積書`]);
+    const docTitle =
+      result.scaffoldType === 'wakugumi' ? str.docTitleWakugumi : str.docTitleKusabi;
+    const titleRow = sheet.addRow([docTitle]);
     titleRow.font = { bold: true, size: 20 };
     titleRow.height = 28;
     sheet.mergeCells(titleRow.number, 1, titleRow.number, layoutMergeCols);
     titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
 
     sheet.addRow([]);
-    this.writeSiteContactGrid(sheet, config, layoutMergeCols);
-    this.writeGlobalSpecBanner(sheet, result, layoutMergeCols, levelHeightMm);
+    this.writeSiteContactGrid(sheet, config, layoutMergeCols, str);
+    this.writeGlobalSpecBanner(sheet, result, layoutMergeCols, levelHeightMm, str);
 
     sheet.addRow([]);
-    this.writeSectionBanner(sheet, '外形・各辺（コード／通り／寸法）', layoutMergeCols);
-    this.writeEdgesTable(sheet, result);
-
-    sheet.addRow([]);
-    this.writeSectionBanner(sheet, '各辺スパン', layoutMergeCols);
-    this.writeSpansTable(sheet, result, wallColumnHeaders);
+    this.writeSectionBanner(sheet, str.sectionSpans, layoutMergeCols);
+    this.writeSpansTable(sheet, result, wallColumnHeaders, str);
 
     const wallMaps: Map<string, number>[] = walls.map((wall) => {
       const m = new Map<string, number>();
@@ -104,16 +110,16 @@ export class ScaffoldExcelService {
     const materialGroups = this.groupSummaryByMaterialForExcel(sortedSummary);
 
     sheet.addRow([]);
-    this.writeSectionBanner(sheet, '1. 全体集計（全材料・合計数量）', layoutMergeCols);
-    this.writeOverallTotalsTable(sheet, materialGroups, wallMaps);
+    this.writeSectionBanner(sheet, str.sectionOverall, layoutMergeCols);
+    this.writeOverallTotalsTable(sheet, materialGroups, wallMaps, str, locale);
 
     sheet.addRow([]);
-    this.writeSectionBanner(sheet, '2. 建物階別集計（全辺合算）', layoutMergeCols);
-    this.writeProjectWideFloorTable(sheet, matrixRows, buildingFloorCount);
+    this.writeSectionBanner(sheet, str.sectionFloorAggregate, layoutMergeCols);
+    this.writeProjectWideFloorTable(sheet, matrixRows, buildingFloorCount, str);
 
     sheet.addRow([]);
-    this.writeSectionBanner(sheet, '3. 辺別・階別内訳（通り X/Y・辺 AB）', layoutMergeCols);
-    this.writePerEdgeFloorTables(sheet, config, result, ctx);
+    this.writeSectionBanner(sheet, str.sectionEdgeFloor, layoutMergeCols);
+    this.writePerEdgeFloorTables(sheet, result, ctx, str);
 
     const colCount = Math.max(layoutMergeCols, floorSectionCols);
     for (let c = 1; c <= colCount; c++) {
@@ -135,17 +141,22 @@ export class ScaffoldExcelService {
     }
   }
 
-  private writeSiteContactGrid(sheet: ExcelJS.Worksheet, config: ScaffoldConfiguration, mergeCols: number) {
-    const boxTitle = sheet.addRow(['現場・連絡先']);
+  private writeSiteContactGrid(
+    sheet: ExcelJS.Worksheet,
+    config: ScaffoldConfiguration,
+    mergeCols: number,
+    str: ScaffoldExcelStrings,
+  ) {
+    const boxTitle = sheet.addRow([str.siteContactTitle]);
     this.mergeBanner(sheet, boxTitle, Math.min(mergeCols, 10));
     boxTitle.getCell(1).font = { bold: true, size: 11 };
 
     const rows: [string, string][] = [
-      ['現場名・件名', config.siteName || '—'],
-      ['住所', config.siteAddress || '—'],
-      ['電話', config.sitePhone || '—'],
-      ['メール', config.siteEmail || '—'],
-      ['FAX', config.siteFax || '—'],
+      [str.siteName, config.siteName || str.empty],
+      [str.address, config.siteAddress || str.empty],
+      [str.phone, config.sitePhone || str.empty],
+      [str.email, config.siteEmail || str.empty],
+      [str.fax, config.siteFax || str.empty],
     ];
 
     for (const [label, value] of rows) {
@@ -167,23 +178,28 @@ export class ScaffoldExcelService {
     result: ScaffoldCalculationResult,
     mergeCols: number,
     levelHeightMm: number,
+    str: ScaffoldExcelStrings,
   ) {
     const isWk = result.scaffoldType === 'wakugumi';
     const maxH = Math.max(
       ...result.walls.map((w) => w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm),
       0,
     );
+    const typeLabel = isWk ? str.specScaffoldTypeWakugumi : str.specScaffoldTypeKusabi;
     const parts = [
-      isWk ? '枠組足場' : 'くさび式足場',
-      `足場幅 ${result.scaffoldWidthMm}mm`,
-      `段数 ${result.totalLevels}段`,
-      `1段の高さ ${levelHeightMm}mm`,
-      `最大足場高 ${maxH}mm`,
+      typeLabel,
+      `${str.specWidth} ${result.scaffoldWidthMm}mm`,
+      `${str.specLevels} ${result.totalLevels}`,
+      `${str.specLevelHeight} ${levelHeightMm}mm`,
+      `${str.specMaxHeight} ${maxH}mm`,
     ];
     if (isWk) {
-      parts.push(`建枠 ${result.frameSizeMm || 1700}mm`, `巾木 ${result.habakiCountPerSpan || 2}枚/スパン`);
+      parts.push(
+        `${str.specFrame} ${result.frameSizeMm || 1700}mm`,
+        `${str.specHabakiPerSpan} ${result.habakiCountPerSpan || 2}/span`,
+      );
     } else {
-      parts.push(`支柱 ${result.preferredMainTatejiMm}mm`, `上部 ${result.topGuardHeightMm}mm`);
+      parts.push(`${str.specPost} ${result.preferredMainTatejiMm}mm`, `${str.specTop} ${result.topGuardHeightMm}mm`);
     }
     const r = sheet.addRow([parts.join('  |  ')]);
     r.font = { size: 10 };
@@ -198,60 +214,22 @@ export class ScaffoldExcelService {
     this.mergeBanner(sheet, r, mergeCols);
   }
 
-  private writeEdgesTable(sheet: ExcelJS.Worksheet, result: ScaffoldCalculationResult) {
-    const walls = result.walls;
-    const poly = (result as { polygonVertices?: unknown[] }).polygonVertices;
-    const closed = Array.isArray(poly) && poly.length >= 3;
-    const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
-
-    const hdr = sheet.addRow([
-      '辺（AB）',
-      '交差軸',
-      '沿い通り',
-      '壁長 (mm)',
-      '足場高さ (mm)',
-      '足場段数',
-      '階段 (箇所)',
-    ]);
-    this.styleHeaderRowFull(hdr, 1, EDGE_TABLE_COLS);
-
-    for (let wi = 0; wi < walls.length; wi++) {
-      const w = walls[wi];
-      const chord = edgeChordNameExcel(wi, walls.length, closed);
-      const xy = resolveEdgeHashiraXY(labeling, wi, walls.length, w.sideJp ?? '', w.side ?? '');
-      const along =
-        xy.alongRange ||
-        (xy.alongStations.length > 0
-          ? `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`
-          : '—');
-      const cross = xy.crossLabel || '—';
-      const scaffoldH = w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm;
-      const dr = sheet.addRow([
-        chord,
-        cross,
-        along,
-        w.wallLengthMm,
-        scaffoldH,
-        w.levelCalc.fullLevels,
-        w.stairAccessCount ?? 0,
-      ]);
-      this.styleDataRowFull(dr, 1, EDGE_TABLE_COLS, [1, 2, 3, 6, 7]);
-      if (wi % 2 === 1) {
-        for (let c = 1; c <= EDGE_TABLE_COLS; c++) dr.getCell(c).fill = FILL_ALT;
-      }
-    }
-  }
-
   private writeSpansTable(
     sheet: ExcelJS.Worksheet,
     result: ScaffoldCalculationResult,
     wallLabels: string[],
+    str: ScaffoldExcelStrings,
   ) {
-    const hdr = sheet.addRow(['辺（表示名）', 'スパン数', 'スパン内訳', '壁長 (mm)']);
+    const hdr = sheet.addRow([
+      str.colEdgeLabel,
+      str.colSpanCount,
+      str.colSpanDetail,
+      str.colWallLengthMm,
+    ]);
     this.styleHeaderRowFull(hdr, 1, 4);
     for (let wi = 0; wi < result.walls.length; wi++) {
       const w = result.walls[wi];
-      const summary = this.summarizeSpans(w.spans);
+      const summary = this.summarizeSpans(w.spans, str);
       const dr = sheet.addRow([wallLabels[wi], w.totalSpans, summary, w.wallLengthMm]);
       this.styleDataRowFull(dr, 1, 4, [2, 3]);
       dr.getCell(1).alignment = { vertical: 'middle', wrapText: true };
@@ -290,22 +268,32 @@ export class ScaffoldExcelService {
     sheet: ExcelJS.Worksheet,
     materialGroups: Array<{ category: string; nameJp: string; unit: string; components: CalculatedComponent[] }>,
     wallMaps: Map<string, number>[],
+    str: ScaffoldExcelStrings,
+    locale: ExcelExportLocale,
   ) {
     const cols = 6;
-    const hdr = sheet.addRow(['No', '分類', '部材名', '規格（SIZE）', '単位', '合計']);
+    const hdr = sheet.addRow([
+      str.colNo,
+      str.colCategory,
+      str.colName,
+      str.colSpec,
+      str.colUnit,
+      str.colTotal,
+    ]);
     this.styleHeaderRowFull(hdr, 1, cols);
 
     let rowNum = 1;
     let lastCat = '';
-    let prevCat = '';
-    let prevName = '';
+    let prevCatDisplay = '';
+    let prevNameDisplay = '';
     let prevSpec = '';
 
     for (const grp of materialGroups) {
       const cat = grp.category || '';
       if (cat !== lastCat) {
         const band = sheet.addRow([]);
-        band.getCell(2).value = `【${cat}】`;
+        const catLabel = excelCategory(grp.components[0], locale);
+        band.getCell(2).value = catLabel ? `【${catLabel}】` : '';
         band.getCell(2).font = { bold: true, size: 10 };
         for (let c = 1; c <= cols; c++) {
           band.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
@@ -320,14 +308,22 @@ export class ScaffoldExcelService {
         const perWall = wallMaps.map((m) => m.get(mapKey) || 0);
         const total =
           comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
-        const nameJp = comp.nameJp || '';
+        const catD = excelCategory(comp, locale);
+        const nameD = excelMaterialName(comp, locale);
         const specRaw = comp.sizeSpec || '';
-        const catCell = cat === prevCat && prevCat !== '' ? '〃' : cat;
-        const nameCell = nameJp === prevName && prevName !== '' ? '〃' : nameJp;
+        const catCell =
+          catD === prevCatDisplay && prevCatDisplay !== '' ? str.sameAsAbove : catD;
+        const nameCell =
+          nameD === prevNameDisplay && prevNameDisplay !== '' ? str.sameAsAbove : nameD;
         const specCell =
-          specRaw === prevSpec && prevSpec !== '' && cat === prevCat && nameJp === prevName ? '〃' : specRaw;
-        prevCat = cat;
-        prevName = nameJp;
+          specRaw === prevSpec &&
+          prevSpec !== '' &&
+          catD === prevCatDisplay &&
+          nameD === prevNameDisplay
+            ? str.sameAsAbove
+            : specRaw;
+        prevCatDisplay = catD;
+        prevNameDisplay = nameD;
         prevSpec = specRaw;
 
         const dr = sheet.addRow([rowNum, catCell, nameCell, specCell, comp.unit, total]);
@@ -349,18 +345,30 @@ export class ScaffoldExcelService {
     }
   }
 
-  private writeProjectWideFloorTable(sheet: ExcelJS.Worksheet, matrixRows: BreakdownMatrixRow[], buildingFloorCount: number) {
-    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => `${i + 1}階`);
+  private writeProjectWideFloorTable(
+    sheet: ExcelJS.Worksheet,
+    matrixRows: BreakdownMatrixRow[],
+    buildingFloorCount: number,
+    str: ScaffoldExcelStrings,
+  ) {
+    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => str.floorN(i + 1));
     const nCol = 5 + buildingFloorCount + 1;
-    const hdr = sheet.addRow(['分類', '部材名', '規格', '単位', ...floorLabels, '合計']);
+    const hdr = sheet.addRow([
+      str.colCategory,
+      str.colMaterialName,
+      str.colSpec,
+      str.colUnit,
+      ...floorLabels,
+      str.colTotal,
+    ]);
     this.styleHeaderRowFull(hdr, 1, nCol);
 
     const merged = this.aggregateMatrixRowsByMaterial(matrixRows);
     let ri = 0;
     for (const row of merged) {
       const dr = sheet.addRow([
-        row.category,
-        row.nameJp,
+        row.categoryDisplay,
+        row.nameDisplay,
         row.spec,
         row.unit,
         ...row.floorQty,
@@ -387,7 +395,7 @@ export class ScaffoldExcelService {
       merged.reduce((acc, r) => acc + (r.floorQty[idx] || 0), 0),
     );
     const grand = merged.reduce((s, r) => s + r.total, 0);
-    const sumRow = sheet.addRow(['', '', '', '合計', ...floorSums, grand]);
+    const sumRow = sheet.addRow(['', '', '', str.sumLabel, ...floorSums, grand]);
     sumRow.font = { bold: true };
     for (let c = 1; c <= nCol; c++) {
       sumRow.getCell(c).border = {
@@ -403,16 +411,16 @@ export class ScaffoldExcelService {
   private aggregateMatrixRowsByMaterial(
     matrixRows: BreakdownMatrixRow[],
   ): Array<{
-    category: string;
-    nameJp: string;
+    categoryDisplay: string;
+    nameDisplay: string;
     spec: string;
     unit: string;
     floorQty: number[];
     total: number;
   }> {
     type Agg = {
-      category: string;
-      nameJp: string;
+      categoryDisplay: string;
+      nameDisplay: string;
       spec: string;
       unit: string;
       floorQty: number[];
@@ -431,8 +439,8 @@ export class ScaffoldExcelService {
         existing.total += r.total;
       } else {
         map.set(key, {
-          category: r.category,
-          nameJp: r.nameJp,
+          categoryDisplay: r.categoryDisplay,
+          nameDisplay: r.nameDisplay,
           spec: r.spec,
           unit: r.unit,
           floorQty: [...r.floorQty],
@@ -446,7 +454,11 @@ export class ScaffoldExcelService {
     return list.map(({ bomSort: _b, ...rest }) => rest);
   }
 
-  private buildBreakdownContext(config: ScaffoldConfiguration, result: ScaffoldCalculationResult) {
+  private buildBreakdownContext(
+    config: ScaffoldConfiguration,
+    result: ScaffoldCalculationResult,
+    locale: ExcelExportLocale,
+  ) {
     const walls = result.walls;
     const scaffoldType = result.scaffoldType || 'kusabi';
     const isWakugumi = scaffoldType === 'wakugumi';
@@ -469,13 +481,13 @@ export class ScaffoldExcelService {
         matrixRows.push({
           wallIndex: wi,
           groupKey: `${comp.type}\t${comp.nameJp}\t${comp.unit}`,
-          category: comp.category || '',
+          categoryDisplay: excelCategory(comp, locale),
+          nameDisplay: excelMaterialName(comp, locale),
           bomSort: {
             type: comp.type,
             sortOrder: comp.sortOrder,
             sizeSpec: comp.sizeSpec || '',
           },
-          nameJp: comp.nameJp || comp.name || comp.type,
           spec: comp.sizeSpec || '-',
           unit: comp.unit || '-',
           floorQty,
@@ -503,7 +515,6 @@ export class ScaffoldExcelService {
 
   private writePerEdgeFloorTables(
     sheet: ExcelJS.Worksheet,
-    _config: ScaffoldConfiguration,
     result: ScaffoldCalculationResult,
     ctx: {
       matrixRows: BreakdownMatrixRow[];
@@ -511,6 +522,7 @@ export class ScaffoldExcelService {
       levelHeightMm: number;
       scaffoldLevelCount: number;
     },
+    str: ScaffoldExcelStrings,
   ) {
     const walls = result.walls;
     const { matrixRows, buildingFloorCount } = ctx;
@@ -520,7 +532,7 @@ export class ScaffoldExcelService {
     const bannerMergeCols = 5 + buildingFloorCount + 1;
     const perEdgeColCount = 4 + buildingFloorCount;
 
-    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => `${i + 1}階`);
+    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => str.floorN(i + 1));
 
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
@@ -532,10 +544,11 @@ export class ScaffoldExcelService {
           ? `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`
           : '');
       const cross = xy.crossLabel || '';
-      const line1 = `辺 ${chord}  |  壁長 ${wall.wallLengthMm.toLocaleString()} mm  |  スパン ${wall.totalSpans}  |  足場段 ${wall.levelCalc?.fullLevels ?? 1}`;
+      const wallLen = wall.wallLengthMm.toLocaleString();
+      const line1 = str.edgeLine1(chord, wallLen, wall.totalSpans, wall.levelCalc?.fullLevels ?? 1);
       const line2 =
         cross || along
-          ? `通り: 交差 ${cross || '—'}  |  沿い ${along || '—'}`
+          ? str.edgeLine2(cross || str.empty, along || str.empty)
           : '';
 
       sheet.addRow([]);
@@ -547,7 +560,7 @@ export class ScaffoldExcelService {
       banner.getCell(1).border = BORDER_THIN as ExcelJS.Borders;
       if (banner.height != null) banner.height = line2 ? 36 : 22;
 
-      const hdr = sheet.addRow(['部材名', '規格', '単位', ...floorLabels, '合計']);
+      const hdr = sheet.addRow([str.colMaterialName, str.colSpec, str.colUnit, ...floorLabels, str.colTotal]);
       this.styleHeaderRowFull(hdr, 1, perEdgeColCount);
       hdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
@@ -555,7 +568,7 @@ export class ScaffoldExcelService {
       for (const g of wallGroups) {
         for (let i = 0; i < g.length; i++) {
           const row = g[i];
-          const dr = sheet.addRow([row.nameJp, row.spec, row.unit, ...row.floorQty, row.total]);
+          const dr = sheet.addRow([row.nameDisplay, row.spec, row.unit, ...row.floorQty, row.total]);
           for (let c = 1; c <= perEdgeColCount; c++) {
             dr.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
           }
@@ -572,7 +585,7 @@ export class ScaffoldExcelService {
         matrixRows.filter((r) => r.wallIndex === wi).reduce((acc, r) => acc + (r.floorQty[idx] || 0), 0),
       );
       const edgeGrand = matrixRows.filter((r) => r.wallIndex === wi).reduce((s, r) => s + r.total, 0);
-      const sub = sheet.addRow(['小計（当該辺）', '', '', ...edgeFloorSums, edgeGrand]);
+      const sub = sheet.addRow([str.subtotalEdge, '', '', ...edgeFloorSums, edgeGrand]);
       sub.font = { bold: true, size: 10 };
       for (let c = 1; c <= perEdgeColCount; c++) {
         sub.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
@@ -619,13 +632,13 @@ export class ScaffoldExcelService {
     return out;
   }
 
-  private summarizeSpans(spans: number[]): string {
+  private summarizeSpans(spans: number[], str: ScaffoldExcelStrings): string {
     const groups: Record<number, number> = {};
     for (const s of spans) {
       groups[s] = (groups[s] || 0) + 1;
     }
     return Object.entries(groups)
-      .map(([size, count]) => `${size}mm×${count}本`)
-      .join(' ＋ ');
+      .map(([size, count]) => `${size}mm×${count}${str.spanTimesSuffix}`)
+      .join(str.spanJoiner);
   }
 }

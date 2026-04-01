@@ -407,9 +407,10 @@ export const scaffoldConfigsApi = {
     return response.data;
   },
 
-  /** Download Excel quotation */
-  exportExcel: async (configId: string): Promise<Blob> => {
+  /** Download Excel quotation (`lang`: ja | en | fr — matches UI locale) */
+  exportExcel: async (configId: string, lang?: string): Promise<Blob> => {
     const response = await apiClient.get(`/scaffold-configs/${configId}/export/excel`, {
+      params: lang ? { lang } : undefined,
       responseType: 'blob',
       timeout: 60000, // 60s — export can be slow for large configs
     });

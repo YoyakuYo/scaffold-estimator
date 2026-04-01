@@ -351,7 +351,7 @@ function ScaffoldResultPage() {
   // ─── Excel Download ─────────────────────────────────────
   const handleExcelDownload = useCallback(async () => {
     try {
-      const blob = await scaffoldConfigsApi.exportExcel(configId);
+      const blob = await scaffoldConfigsApi.exportExcel(configId, locale);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -361,7 +361,7 @@ function ScaffoldResultPage() {
     } catch (e) {
       alert(t('result', 'excelFailed'));
     }
-  }, [configId, t]);
+  }, [configId, locale, t]);
 
   if (isLoading) {
     return (
