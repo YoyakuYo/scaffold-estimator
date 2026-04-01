@@ -289,6 +289,41 @@ export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
   return 1200;
 }
 
+/** Footprint vertex (fractional or mm — only turn direction matters for reflex detection). */
+export type OutlineVertexInput = { x?: number; y?: number; xFrac?: number; yFrac?: number };
+
+/**
+ * Per-vertex reflex flags for a simple polygon (no self-intersection).
+ * Vertex i is reflex (re-entrant / “inner” corner of the building) iff the exterior turn at i
+ * is opposite to convex outer corners — used for −300mm inset and no forced terminal bay at that corner.
+ * Wall i runs from vertex i → (i+1); it should use startKind = vertex i, endKind = vertex (i+1).
+ *
+ * Returns null if outline has fewer than 3 vertices.
+ */
+export function inferReflexVerticesFromOutline(outline: OutlineVertexInput[]): boolean[] | null {
+  const n = outline.length;
+  if (n < 3) return null;
+  const pts = outline.map((v) => ({
+    x: typeof v.xFrac === 'number' ? v.xFrac : v.x ?? 0,
+    y: typeof v.yFrac === 'number' ? v.yFrac : v.y ?? 0,
+  }));
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area2 += pts[i]!.x * pts[j]!.y - pts[j]!.x * pts[i]!.y;
+  }
+  const isCCW = area2 > 0;
+  const isReflex: boolean[] = Array.from({ length: n }, () => false);
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n]!;
+    const curr = pts[i]!;
+    const next = pts[(i + 1) % n]!;
+    const cross = (curr.x - prev.x) * (next.y - curr.y) - (curr.y - prev.y) * (next.x - curr.x);
+    isReflex[i] = isCCW ? cross < 0 : cross > 0;
+  }
+  return isReflex;
+}
+
 /**
  * Split one middle span into two valid modules (if possible) — prefer splitting the largest span.
  */

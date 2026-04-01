@@ -5,6 +5,7 @@ import {
   classifyKusabiRectangleEdgeRoles,
   cornerTerminalSpanMmKusabi,
   fitSpansToWallLengthWithCorner,
+  inferReflexVerticesFromOutline,
 } from './scaffold-rules';
 import {
   WAKUGUMI_CORNER_OVERRUN_MM,
@@ -13,6 +14,35 @@ import {
   cornerTerminalSpanMmWakugumi,
   fitSpansToWallLengthWithCornerWakugumi,
 } from './scaffold-rules-wakugumi';
+
+describe('inferReflexVerticesFromOutline', () => {
+  it('6-vertex orthogonal L: exactly one reflex (inner/re-entrant corner)', () => {
+    const outline = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 40, y: 50 },
+      { x: 40, y: 100 },
+      { x: 0, y: 100 },
+    ];
+    const r = inferReflexVerticesFromOutline(outline);
+    expect(r).not.toBeNull();
+    expect(r!.filter(Boolean).length).toBe(1);
+    expect(r![3]).toBe(true);
+  });
+
+  it('rectangle: no reflex vertices', () => {
+    const outline = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 80 },
+      { x: 0, y: 80 },
+    ];
+    const r = inferReflexVerticesFromOutline(outline);
+    expect(r).not.toBeNull();
+    expect(r!.every((v) => !v)).toBe(true);
+  });
+});
 
 describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
   it('rectangle short-edge hint: prefers 1200 then (terminal+300) before last terminal', () => {
