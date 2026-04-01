@@ -905,8 +905,6 @@ function QuotationTable({ result }: { result: any }) {
           type: 'detail';
           comp: CalculatedComponent;
           idx: number;
-          showCategory: boolean;
-          showName: boolean;
         };
     const rows: Row[] = [];
     let lastCategory = '';
@@ -936,8 +934,6 @@ function QuotationTable({ result }: { result: any }) {
           type: 'detail',
           comp,
           idx: itemNo,
-          showCategory: !multi,
-          showName: !multi || j === 0,
         });
       }
     }
@@ -1027,7 +1023,7 @@ function QuotationTable({ result }: { result: any }) {
                 );
               }
 
-              const { comp, idx, showCategory, showName } = row;
+              const { comp, idx } = row;
               const key = scaffoldWallQuantityKey(comp);
               const perWall = wallMaps.map((m) => m.get(key) || 0);
               const total =
@@ -1045,12 +1041,8 @@ function QuotationTable({ result }: { result: any }) {
                   className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
                 >
                   <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
-                  <td className="px-3 py-2 text-gray-400 text-xs">
-                    {showCategory ? catLabel : t('result', 'quotationDitto')}
-                  </td>
-                  <td className="px-3 py-2 font-medium text-gray-800">
-                    {showName ? displayName : t('result', 'quotationDitto')}
-                  </td>
+                  <td className="px-3 py-2 text-gray-600 text-xs">{catLabel}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">{displayName}</td>
                   <td className="px-3 py-2 text-gray-600">{comp.sizeSpec}</td>
                   <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
                   {perWall.map((qty, wi) => (

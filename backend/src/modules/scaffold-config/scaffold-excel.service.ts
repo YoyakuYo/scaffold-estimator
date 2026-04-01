@@ -322,13 +322,10 @@ export class ScaffoldExcelService {
           comp.materialCode === 'PATTANKO'
             ? comp.quantity
             : perWallQty.reduce((a, b) => a + b, 0);
-        const catCol = multi && i > 0 ? '〃' : cat;
-        const nameCol = multi && i > 0 ? '〃' : comp.nameJp;
-
         const dataRow = sheet.addRow([
           rowNum,
-          catCol,
-          nameCol,
+          cat,
+          comp.nameJp,
           comp.sizeSpec || '',
           comp.unit,
           ...perWallQty,
