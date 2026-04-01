@@ -975,6 +975,36 @@ export const translations = {
       en: 'PDF, DXF, images, AI layout extraction, traced CAD, uploads, and wall-by-wall tables—pick what fits the job.',
       fr: 'PDF, DXF, images, extraction IA, CAO tracée, import et saisie par façade — adaptez-vous au chantier.',
     },
+    inputWorkstationAlt: {
+      ja: '図面を表示するモニターとデスクのワークスペース',
+      en: 'Professional desk with a monitor showing architectural floor plans and elevations',
+      fr: 'Poste de travail professionnel avec plans d’architecture à l’écran',
+    },
+    inputWorkstationCaption: {
+      ja: 'PDF・DXF・画像など、お手持ちの図面からそのまま取り込み。現場のデジタルデータを足場積算の起点にできます。',
+      en: 'Bring PDFs, DXF, and images straight from your workstation—your drawings become the starting point for scaffold takeoff.',
+      fr: 'Importez PDF, DXF et images depuis votre poste : vos plans deviennent la base du métré d’échafaudage.',
+    },
+    inputBlueprintAlt: {
+      ja: '青写真の上に載った住宅の3Dモデル',
+      en: '3D house model over technical blueprints',
+      fr: 'Maquette 3D d’une maison sur plans techniques',
+    },
+    inputBlueprintTitle: {
+      ja: '平面の図面から、立体的なイメージへ',
+      en: 'From flat drawings to a vivid build picture',
+      fr: 'Du plan plat à une vision de chantier claire',
+    },
+    inputBlueprintLead: {
+      ja: '外形ポリゴンや壁長の抽出結果を、くさび式・枠組のルールに沿って数量化。図面と積算のギャップを小さくします。',
+      en: 'Turn extracted footprints and wall lengths into rule-based quantities for kusabi and wakugumi—closing the gap between the drawing and the bill of materials.',
+      fr: 'Transformez emprises et longueurs de façade en quantités selon les règles kusabi et wakugumi—réduisez l’écart entre plan et métré.',
+    },
+    inputBlueprintCaption: {
+      ja: '設計データの精度を活かしつつ、足場積算に必要な情報へスムーズに接続できます。',
+      en: 'Blueprint-grade detail, routed into an estimator-first workflow.',
+      fr: 'Précision « plan », intégrée à un flux pensé pour le métré.',
+    },
     boxFeaturesEyebrow: { ja: '機能', en: 'Features', fr: 'Fonctionnalités' },
     boxFeaturesIntro: {
       ja: '数量の確定から見積・図面まで、ワンツールで。',

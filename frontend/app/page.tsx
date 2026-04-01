@@ -325,40 +325,105 @@ export default function LandingPage() {
               {t('landing', 'appName')} — {t('landing', 'sectionFeatures')}
             </h2>
 
-            {/* Panel 1 — Input (cool gradient, white type) */}
-            <div className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-cyan-600 via-blue-600 to-indigo-700 p-[1px] shadow-[0_24px_50px_-12px_rgba(37,99,235,0.4)]">
-              <div className="rounded-[1.7rem] bg-gradient-to-br from-cyan-700 via-blue-700 to-indigo-800 px-6 py-8 sm:px-10 sm:py-10 md:px-12 md:py-11">
-                <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
-                  <div className="max-w-2xl">
-                    <span className="inline-flex items-center rounded-full bg-white/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white ring-1 ring-white/30">
+            {/* Panel 1 — Input: hero photo + copy + horizontal stat chips */}
+            <div className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-cyan-600 via-blue-600 to-indigo-700 p-[1px] shadow-[0_24px_50px_-12px_rgba(37,99,235,0.45)]">
+              <div className="rounded-[1.7rem] bg-gradient-to-br from-cyan-700 via-blue-700 to-indigo-800 px-6 py-8 sm:px-8 sm:py-10 md:px-10 md:py-11 lg:px-12">
+                <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-12 xl:gap-14">
+                  <div className="order-2 lg:order-none lg:col-span-5">
+                    <figure className="group relative mx-auto max-w-md lg:mx-0">
+                      <div
+                        className="pointer-events-none absolute -inset-3 rounded-[1.35rem] bg-gradient-to-br from-white/25 via-cyan-200/20 to-indigo-300/15 opacity-80 blur-xl transition duration-500 group-hover:opacity-100"
+                        aria-hidden
+                      />
+                      <div className="relative overflow-hidden rounded-2xl border border-white/35 bg-white/10 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.45)] ring-1 ring-white/20 backdrop-blur-sm">
+                        <div className="relative aspect-[4/3] w-full">
+                          <Image
+                            src="/landing/input-drawing-workstation.png"
+                            alt={t('landing', 'inputWorkstationAlt')}
+                            fill
+                            className="object-cover object-center transition duration-700 ease-out group-hover:scale-[1.02]"
+                            sizes="(max-width: 1024px) 100vw, 42vw"
+                          />
+                          <div
+                            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-indigo-950/50 via-transparent to-white/5"
+                            aria-hidden
+                          />
+                        </div>
+                      </div>
+                      <figcaption className="mt-4 text-sm leading-relaxed text-white/85 sm:text-[0.95rem]">
+                        {t('landing', 'inputWorkstationCaption')}
+                      </figcaption>
+                    </figure>
+                  </div>
+
+                  <div className="order-1 flex flex-col lg:order-none lg:col-span-7">
+                    <span className="inline-flex w-fit items-center rounded-full bg-white/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white ring-1 ring-white/35">
                       {t('landing', 'boxInputEyebrow')}
                     </span>
-                    <h3 className="mt-4 text-2xl font-extrabold leading-[1.15] tracking-tight text-white sm:text-3xl md:text-4xl">
+                    <h3 className="mt-4 text-2xl font-extrabold leading-[1.12] tracking-tight text-white sm:text-3xl md:text-[2.15rem] md:leading-[1.1]">
                       {t('landing', 'boxInputTitle')}
                     </h3>
-                    <p className="mt-5 text-base font-semibold leading-relaxed text-white sm:text-lg">
+                    <p className="mt-4 text-base font-semibold leading-relaxed text-cyan-50/95 sm:text-lg">
                       {t('features', 'coreSubtitle')}
                     </p>
-                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/90 sm:text-[0.95rem]">
+                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/88 sm:text-[0.95rem]">
                       {t('landing', 'boxInputFormats')}
                     </p>
+
+                    <ul
+                      className="mt-8 flex list-none flex-wrap gap-3 overflow-x-auto p-0 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden"
+                      aria-label={t('features', 'statsTitle')}
+                    >
+                      {[
+                        { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
+                        { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
+                        { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
+                        { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
+                      ].map((chip) => (
+                        <li
+                          key={chip.label}
+                          className="min-w-[9.5rem] shrink-0 snap-start rounded-2xl border border-white/25 bg-white/12 px-4 py-3.5 shadow-inner shadow-black/10 ring-1 ring-white/15 backdrop-blur-md transition hover:border-white/40 hover:bg-white/18 sm:min-w-0"
+                        >
+                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">{chip.label}</div>
+                          <div className="mt-1.5 text-base font-bold leading-tight text-white sm:text-lg">{chip.value}</div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="grid shrink-0 grid-cols-2 gap-3 sm:max-lg:grid-cols-4 lg:w-[min(100%,380px)] lg:grid-cols-2">
-                    {[
-                      { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
-                      { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
-                      { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
-                      { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
-                    ].map((chip) => (
-                      <div
-                        key={chip.label}
-                        className="rounded-2xl bg-white/15 px-4 py-3.5 text-left shadow-inner ring-1 ring-white/25 backdrop-blur-md transition hover:bg-white/20"
-                      >
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-white/75">{chip.label}</div>
-                        <div className="mt-1.5 text-base font-bold leading-tight text-white sm:text-lg">{chip.value}</div>
-                      </div>
-                    ))}
-                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Blueprint bridge — second visual + narrative (between Input and Features) */}
+            <div className="overflow-hidden rounded-[1.75rem] border border-slate-700/80 bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 shadow-[0_28px_70px_-20px_rgba(15,23,42,0.85)] ring-1 ring-cyan-500/15">
+              <div className="grid items-stretch lg:grid-cols-2">
+                <figure className="relative order-1 min-h-[220px] sm:min-h-[280px] lg:order-2 lg:min-h-[min(100%,420px)]">
+                  <div
+                    className="absolute inset-0 z-[1] bg-gradient-to-b from-slate-950/70 via-transparent to-slate-950/30 lg:bg-gradient-to-l lg:from-transparent lg:via-slate-950/15 lg:to-slate-950/85"
+                    aria-hidden
+                  />
+                  <Image
+                    src="/landing/input-blueprint-3d.png"
+                    alt={t('landing', 'inputBlueprintAlt')}
+                    fill
+                    className="object-cover object-[center_40%] lg:object-center"
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                  />
+                  <figcaption className="sr-only">{t('landing', 'inputBlueprintCaption')}</figcaption>
+                </figure>
+                <div className="order-2 flex flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 lg:order-1 lg:px-12 lg:py-14">
+                  <span className="inline-flex w-fit items-center rounded-full bg-cyan-400/15 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-300 ring-1 ring-cyan-400/35">
+                    {t('landing', 'boxInputEyebrow')}
+                  </span>
+                  <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl md:text-4xl">
+                    {t('landing', 'inputBlueprintTitle')}
+                  </h3>
+                  <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-300 sm:text-lg">
+                    {t('landing', 'inputBlueprintLead')}
+                  </p>
+                  <p className="mt-6 text-sm leading-relaxed text-slate-400 sm:text-[0.95rem]">
+                    {t('landing', 'inputBlueprintCaption')}
+                  </p>
                 </div>
               </div>
             </div>
