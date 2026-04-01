@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { ScaffoldConfiguration } from './scaffold-config.entity';
-import { ScaffoldCalculationResult, WallCalculationResult, CalculatedComponent } from './scaffold-calculator.service';
+import { ScaffoldCalculationResult, CalculatedComponent } from './scaffold-calculator.service';
 import {
   edgeChordNameExcel,
   excelQuotationWallColumnHeader,
@@ -15,19 +15,48 @@ import {
 } from './material-breakdown-excel.util';
 import { compareCalculatedComponentsForBom } from './scaffold-bom-sort';
 
+const EDGE_TABLE_COLS = 7;
+const FILL_HEADER = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF2563EB' } };
+const FILL_SECTION = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFE5E7EB' } };
+const FILL_ALT = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF8FAFC' } };
+const BORDER_THIN: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin' },
+  left: { style: 'thin' },
+  bottom: { style: 'thin' },
+  right: { style: 'thin' },
+};
+
+type BreakdownMatrixRow = {
+  wallIndex: number;
+  groupKey: string;
+  category: string;
+  bomSort: { type: string; sortOrder: number; sizeSpec: string };
+  nameJp: string;
+  spec: string;
+  unit: string;
+  floorQty: number[];
+  total: number;
+};
+
 /**
- * Generates a printable Excel workbook with a single worksheet (足場材料見積書):
- * main BOM, span summary, floor×wall logistics, spec×wall matrix, and material breakdown (階別).
+ * Single worksheet 足場材料見積書: site header, edge geometry, spans,
+ * overall totals, project-wide floor totals, then per-edge × floor breakdown.
  */
 @Injectable()
 export class ScaffoldExcelService {
-  private readonly logger = new Logger(ScaffoldExcelService.name);
-
   async generateQuotation(config: ScaffoldConfiguration): Promise<Buffer> {
     const result: ScaffoldCalculationResult = config.calculationResult;
     if (!result) throw new Error('No calculation result available');
 
+    const walls = result.walls;
+    if (!walls.length) throw new Error('No walls in calculation result');
+
     const wallColumnHeaders = this.buildExcelWallColumnHeaders(result);
+    const ctx = this.buildBreakdownContext(config, result);
+    const { matrixRows, buildingFloorCount, levelHeightMm } = ctx;
+
+    const floorSectionCols = 5 + buildingFloorCount + 1;
+    const layoutMergeCols = Math.max(EDGE_TABLE_COLS, floorSectionCols, 10);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Zoomen Reader';
@@ -35,7 +64,7 @@ export class ScaffoldExcelService {
 
     const sheet = workbook.addWorksheet('足場材料見積書', {
       pageSetup: {
-        paperSize: 9, // A4
+        paperSize: 9,
         orientation: 'landscape',
         fitToPage: true,
         fitToWidth: 1,
@@ -43,207 +72,26 @@ export class ScaffoldExcelService {
       },
     });
 
-    const edgeBorder = {
-      top: { style: 'thin' as ExcelJS.BorderStyle },
-      left: { style: 'thin' as ExcelJS.BorderStyle },
-      bottom: { style: 'thin' as ExcelJS.BorderStyle },
-      right: { style: 'thin' as ExcelJS.BorderStyle },
-    };
-    const fillSectionTitle = {
-      type: 'pattern' as const,
-      pattern: 'solid' as const,
-      fgColor: { argb: 'FFE5E7EB' },
-    };
-    const fillLabelCol = {
-      type: 'pattern' as const,
-      pattern: 'solid' as const,
-      fgColor: { argb: 'FFF9FAFB' },
-    };
-    const fillTableHeader = {
-      type: 'pattern' as const,
-      pattern: 'solid' as const,
-      fgColor: { argb: 'FF2563EB' },
-    };
-
-    const mergeRowTitle = (row: ExcelJS.Row, throughCol: number) => {
-      if (throughCol > 1) sheet.mergeCells(row.number, 1, row.number, throughCol);
-      for (let c = 1; c <= throughCol; c++) {
-        const cell = row.getCell(c);
-        cell.border = edgeBorder;
-      }
-      row.getCell(1).fill = fillSectionTitle;
-      row.getCell(1).font = { bold: true, size: 11 };
-      row.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-    };
-
-    const styleKeyValueRow = (row: ExcelJS.Row) => {
-      for (const c of [1, 2]) {
-        const cell = row.getCell(c);
-        cell.border = edgeBorder;
-        cell.alignment = { vertical: 'middle', wrapText: true };
-      }
-      row.getCell(1).fill = fillLabelCol;
-      row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-    };
-
-    const styleHeaderRow = (row: ExcelJS.Row, fromCol: number, toCol: number) => {
-      for (let c = fromCol; c <= toCol; c++) {
-        const cell = row.getCell(c);
-        cell.border = edgeBorder;
-        cell.fill = fillTableHeader;
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      }
-    };
-
-    const styleDataRow = (row: ExcelJS.Row, fromCol: number, toCol: number, centerCols?: number[]) => {
-      const centerSet = new Set(centerCols ?? []);
-      for (let c = fromCol; c <= toCol; c++) {
-        const cell = row.getCell(c);
-        cell.border = edgeBorder;
-        cell.alignment = {
-          horizontal: centerSet.has(c) ? 'center' : 'left',
-          vertical: 'middle',
-          wrapText: true,
-        };
-      }
-    };
-
-    // Total columns: No + 分類 + 部材名 + 規格 + 単位 + walls... + 合計
-    const totalCols = 5 + result.walls.length + 1;
-
-    // ─── Title ────────────────────────────────────────────
-    const scaffoldTypeLabel = (result.scaffoldType === 'wakugumi') ? '枠組足場' : 'くさび式足場';
+    const scaffoldTypeLabel = result.scaffoldType === 'wakugumi' ? '枠組足場' : 'くさび式足場';
     const titleRow = sheet.addRow([`${scaffoldTypeLabel} 材料見積書`]);
-    titleRow.font = { bold: true, size: 18 };
-    sheet.mergeCells(1, 1, 1, totalCols);
-    titleRow.alignment = { horizontal: 'center' };
+    titleRow.font = { bold: true, size: 20 };
+    titleRow.height = 28;
+    sheet.mergeCells(titleRow.number, 1, titleRow.number, layoutMergeCols);
+    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
     sheet.addRow([]);
+    this.writeSiteContactGrid(sheet, config, layoutMergeCols);
+    this.writeGlobalSpecBanner(sheet, result, layoutMergeCols, levelHeightMm);
 
-    // ─── Site / contact (optional) ─────────────────────────
-    const siteRows: [string, string][] = [];
-    if (config.siteName) siteRows.push(['現場名 / 件名', config.siteName]);
-    if (config.siteAddress) siteRows.push(['住所', config.siteAddress]);
-    if (config.siteEmail) siteRows.push(['メール', config.siteEmail]);
-    if (config.sitePhone) siteRows.push(['電話', config.sitePhone]);
-    if (config.siteFax) siteRows.push(['FAX', config.siteFax]);
-    if (siteRows.length > 0) {
-      const siteTitle = sheet.addRow(['現場情報']);
-      mergeRowTitle(siteTitle, 2);
-      for (const [k, v] of siteRows) {
-        const r = sheet.addRow([k, v]);
-        styleKeyValueRow(r);
-      }
-      sheet.addRow([]);
-    }
-
-    // ─── Config Summary ──────────────────────────────────
-    const scaffoldType = result.scaffoldType || 'kusabi';
-    const isWakugumi = scaffoldType === 'wakugumi';
-    const maxHeight = Math.max(...result.walls.map(w => w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm), 0);
-
-    const specTitle = sheet.addRow(['積算条件・仕様']);
-    mergeRowTitle(specTitle, 2);
-
-    const specRows: [string, string][] = [
-      ['足場タイプ', isWakugumi ? '枠組足場 (Wakugumi)' : 'くさび式足場 (Kusabi)'],
-      ['最大高さ (足場天端)', `${maxHeight}mm`],
-      ['足場幅', `${result.scaffoldWidthMm}mm`],
-    ];
-    if (isWakugumi) {
-      specRows.push(
-        ['建枠サイズ', `${result.frameSizeMm || 1700}mm`],
-        ['巾木枚数', `${result.habakiCountPerSpan || 2}枚/スパン`],
-        [
-          '端部タイプ',
-          result.endStopperType === 'frame' ? '枠タイプ (妻側枠)' : '布材タイプ (端部布材)',
-        ],
-      );
-    } else {
-      specRows.push(
-        ['支柱サイズ', `${result.preferredMainTatejiMm}mm`],
-        ['上部支柱', `${result.topGuardHeightMm}mm`],
-      );
-    }
-    const levelHeightMm = isWakugumi ? (result.frameSizeMm || 1800) : 1800;
-    specRows.push(['段数', `${result.totalLevels}段`], ['階高 (1段)', `${levelHeightMm}mm`]);
-    for (const pair of specRows) {
-      const r = sheet.addRow(pair);
-      styleKeyValueRow(r);
-    }
     sheet.addRow([]);
+    this.writeSectionBanner(sheet, '外形・各辺（コード／通り／寸法）', layoutMergeCols);
+    this.writeEdgesTable(sheet, result);
 
-    // ─── Wall dimensions (length & height per side) ───────
-    const wallDimTitle = sheet.addRow(['壁面寸法']);
-    mergeRowTitle(wallDimTitle, 4);
-    const dimHeader = sheet.addRow(['面', '壁長 (mm)', '足場高さ (mm)', '段数']);
-    styleHeaderRow(dimHeader, 1, 4);
-    for (let wi = 0; wi < result.walls.length; wi++) {
-      const w = result.walls[wi];
-      const scaffoldH = w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm;
-      const dr = sheet.addRow([wallColumnHeaders[wi], w.wallLengthMm, scaffoldH, w.levelCalc.fullLevels]);
-      styleDataRow(dr, 1, 4, [2, 3, 4]);
-      dr.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-    }
     sheet.addRow([]);
+    this.writeSectionBanner(sheet, '各辺スパン', layoutMergeCols);
+    this.writeSpansTable(sheet, result, wallColumnHeaders);
 
-    // ─── Floor labels (1階, 2階, ... with height range) ───
-    const floorTitle = sheet.addRow(['階（フロア）']);
-    mergeRowTitle(floorTitle, 3);
-    const floorHeader = sheet.addRow(['階', '高さ範囲 (mm)', '備考']);
-    styleHeaderRow(floorHeader, 1, 3);
-    for (let f = 1; f <= result.totalLevels; f++) {
-      const from = (f - 1) * levelHeightMm;
-      const to = f * levelHeightMm;
-      const label = f === 1 ? '1階' : f === 2 ? '2階' : f === 3 ? '3階' : `${f}階`;
-      const fr = sheet.addRow([label, `${from} ～ ${to}`, f === 1 ? '1st floor' : f === 2 ? '2nd floor' : `${f}th floor`]);
-      styleDataRow(fr, 1, 3, [1, 2]);
-    }
-    sheet.addRow([]);
-
-    // ─── Material Table Header ───────────────────────────
-    const legendRow = sheet.addRow([
-      '※ 材料表：直上行と同じ「分類」は S、同じ「部材名」は L。同一部材で直上行と同じ「規格」も S（列見出しで判別）。',
-    ]);
-    sheet.mergeCells(legendRow.number, 1, legendRow.number, totalCols);
-    legendRow.getCell(1).font = { italic: true, size: 9, color: { argb: 'FF64748B' } };
-    legendRow.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-
-    const headerRow = sheet.addRow([
-      'No',
-      '分類',
-      '部材名',
-      '規格（SIZE）',
-      '単位',
-      ...wallColumnHeaders,
-      '合計',
-    ]);
-    headerRow.font = { bold: true };
-    headerRow.alignment = { horizontal: 'center' };
-
-    // Style header cells
-    headerRow.eachCell((cell) => {
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF2563EB' },
-      };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
-      };
-    });
-    for (let i = 0; i < result.walls.length; i++) {
-      headerRow.getCell(6 + i).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    }
-
-    // ─── Material Rows ───────────────────────────────────
-    // Build wall maps for per-wall quantities
-    const wallMaps: Map<string, number>[] = result.walls.map(wall => {
+    const wallMaps: Map<string, number>[] = walls.map((wall) => {
       const m = new Map<string, number>();
       for (const comp of wall.components) {
         const key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
@@ -255,257 +103,351 @@ export class ScaffoldExcelService {
     const sortedSummary = this.sortSummaryForExcel(result.summary);
     const materialGroups = this.groupSummaryByMaterialForExcel(sortedSummary);
 
-    let rowNum = 1;
-    let lastCategory = '';
-    /** Same-as-above markers (Excel): S = 分類, L = 部材名, S = 規格 when same size as row above for same item. */
-    let prevDetailCategory = '';
-    let prevDetailNameJp = '';
-    let prevDetailSizeSpec = '';
-
-    const applyDetailRowStyle = (dataRow: ExcelJS.Row, n: number, wallsLen: number) => {
-      dataRow.getCell(1).alignment = { horizontal: 'center' };
-      dataRow.getCell(5).alignment = { horizontal: 'center' };
-      for (let i = 0; i < wallsLen + 1; i++) {
-        dataRow.getCell(6 + i).alignment = { horizontal: 'center' };
-      }
-      if (n % 2 === 0) {
-        dataRow.eachCell((cell) => {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFDBEAFE' },
-          };
-        });
-      }
-      dataRow.eachCell((cell) => {
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
-      });
-      const totalCell = dataRow.getCell(6 + wallsLen);
-      totalCell.font = { bold: true };
-      totalCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFEFF6FF' },
-      };
-    };
-
-    for (const grp of materialGroups) {
-      const cat = grp.category || '';
-      if (cat !== lastCategory) {
-        const catRow = sheet.addRow([]);
-        catRow.getCell(1).value = '';
-        catRow.getCell(2).value = `【${cat}】`;
-        catRow.getCell(2).font = { bold: true, size: 10, color: { argb: 'FF1F2937' } };
-        catRow.eachCell((cell) => {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF3F4F6' },
-          };
-          cell.border = {
-            top: { style: 'thin' },
-            bottom: { style: 'thin' },
-          };
-        });
-        lastCategory = cat;
-      }
-
-      for (let i = 0; i < grp.components.length; i++) {
-        const comp = grp.components[i];
-        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-        const perWallQty = wallMaps.map((m) => m.get(mapKey) || 0);
-        const total =
-          comp.materialCode === 'PATTANKO'
-            ? comp.quantity
-            : perWallQty.reduce((a, b) => a + b, 0);
-        const nameJp = comp.nameJp || '';
-        const specRaw = comp.sizeSpec || '';
-        const catCell =
-          cat === prevDetailCategory && prevDetailCategory !== '' ? 'S' : cat;
-        const nameCell =
-          nameJp === prevDetailNameJp && prevDetailNameJp !== '' ? 'L' : nameJp;
-        const specCell =
-          specRaw === prevDetailSizeSpec &&
-          prevDetailSizeSpec !== '' &&
-          cat === prevDetailCategory &&
-          nameJp === prevDetailNameJp
-            ? 'S'
-            : specRaw;
-        prevDetailCategory = cat;
-        prevDetailNameJp = nameJp;
-        prevDetailSizeSpec = specRaw;
-
-        const dataRow = sheet.addRow([
-          rowNum,
-          catCell,
-          nameCell,
-          specCell,
-          comp.unit,
-          ...perWallQty,
-          total,
-        ]);
-        applyDetailRowStyle(dataRow, rowNum, result.walls.length);
-        if (catCell === 'S') {
-          dataRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-        }
-        if (nameCell === 'L') {
-          dataRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-        }
-        if (specCell === 'S' && specRaw !== '') {
-          dataRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-        }
-        rowNum++;
-      }
-    }
-
-    // ─── Per-wall span info ──────────────────────────────
     sheet.addRow([]);
-    const spanBlockTitle = sheet.addRow(['スパン構成']);
-    mergeRowTitle(spanBlockTitle, 5);
-    const spanHeader = sheet.addRow(['面', '壁長 (mm)', 'スパン数', '階段', '構成（スパン内訳）']);
-    styleHeaderRow(spanHeader, 1, 5);
+    this.writeSectionBanner(sheet, '1. 全体集計（全材料・合計数量）', layoutMergeCols);
+    this.writeOverallTotalsTable(sheet, materialGroups, wallMaps);
 
-    for (let wi = 0; wi < result.walls.length; wi++) {
-      const wall = result.walls[wi];
-      const spanSummary = this.summarizeSpans(wall.spans);
-      const sr = sheet.addRow([
-        wallColumnHeaders[wi],
-        wall.wallLengthMm,
-        wall.totalSpans,
-        `${wall.stairAccessCount}箇所`,
-        spanSummary,
-      ]);
-      styleDataRow(sr, 1, 5, [2, 3, 4]);
-      sr.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-      sr.getCell(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    sheet.addRow([]);
+    this.writeSectionBanner(sheet, '2. 建物階別集計（全辺合算）', layoutMergeCols);
+    this.writeProjectWideFloorTable(sheet, matrixRows, buildingFloorCount);
+
+    sheet.addRow([]);
+    this.writeSectionBanner(sheet, '3. 辺別・階別内訳（通り X/Y・辺 AB）', layoutMergeCols);
+    this.writePerEdgeFloorTables(sheet, config, result, ctx);
+
+    const colCount = Math.max(layoutMergeCols, floorSectionCols);
+    for (let c = 1; c <= colCount; c++) {
+      sheet.getColumn(c).width = c <= 5 ? [6, 14, 26, 18, 8][c - 1] ?? 12 : 11;
     }
-
-    this.appendMaterialBreakdownSection(sheet, config, result);
-    this.appendFloorSideBreakdownSection(
-      sheet,
-      result,
-      wallColumnHeaders,
-      sortedSummary,
-      wallMaps,
-      levelHeightMm,
-    );
-    this.appendSpecMatrixSection(sheet, result, wallMaps);
-
-    // ─── Column Widths (shared: summary tables + BOM + スパン構成) ───
-    sheet.getColumn(1).width = 12;   // 項目・面・No
-    sheet.getColumn(2).width = 16;   // 値・壁長・分類
-    sheet.getColumn(3).width = 22;   // 足場高さ・部材名
-    sheet.getColumn(4).width = 14;   // 段数・規格
-    sheet.getColumn(5).width = 36;   // 単位・スパン構成（長文は折返し）
-    for (let i = 0; i < result.walls.length; i++) {
-      sheet.getColumn(6 + i).width = 12;
-    }
-    sheet.getColumn(6 + result.walls.length).width = 10; // 合計
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
   }
 
-  /** Per-floor × per-wall quantities (運搬用) — appended to main sheet. */
-  private appendFloorSideBreakdownSection(
+  private mergeBanner(sheet: ExcelJS.Worksheet, row: ExcelJS.Row, throughCol: number) {
+    if (throughCol > 1) sheet.mergeCells(row.number, 1, row.number, throughCol);
+    const cell = row.getCell(1);
+    cell.fill = FILL_SECTION;
+    cell.font = { bold: true, size: 12 };
+    cell.alignment = { vertical: 'middle', wrapText: true };
+    for (let c = 1; c <= throughCol; c++) {
+      row.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
+    }
+  }
+
+  private writeSiteContactGrid(sheet: ExcelJS.Worksheet, config: ScaffoldConfiguration, mergeCols: number) {
+    const boxTitle = sheet.addRow(['現場・連絡先']);
+    this.mergeBanner(sheet, boxTitle, Math.min(mergeCols, 10));
+    boxTitle.getCell(1).font = { bold: true, size: 11 };
+
+    const rows: [string, string][] = [
+      ['現場名・件名', config.siteName || '—'],
+      ['住所', config.siteAddress || '—'],
+      ['電話', config.sitePhone || '—'],
+      ['メール', config.siteEmail || '—'],
+      ['FAX', config.siteFax || '—'],
+    ];
+
+    for (const [label, value] of rows) {
+      const r = sheet.addRow([label, value]);
+      r.getCell(1).font = { bold: true, size: 10 };
+      r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      r.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+      r.getCell(1).border = BORDER_THIN as ExcelJS.Borders;
+      r.getCell(2).alignment = { vertical: 'middle', wrapText: true };
+      r.getCell(2).border = BORDER_THIN as ExcelJS.Borders;
+      sheet.mergeCells(r.number, 2, r.number, Math.min(mergeCols, 10));
+    }
+    sheet.getColumn(1).width = 14;
+    sheet.getColumn(2).width = 52;
+  }
+
+  private writeGlobalSpecBanner(
     sheet: ExcelJS.Worksheet,
     result: ScaffoldCalculationResult,
-    wallColumnHeaders: string[],
-    sortedSummary: CalculatedComponent[],
-    wallMaps: Map<string, number>[],
-    levelH: number,
-  ): void {
-    const numCorners = result.walls.length;
-    const ncol = wallColumnHeaders.length + 3;
-    sheet.addRow([]);
-    const blockTitle = sheet.addRow(['階・面別内訳（運搬用）']);
-    blockTitle.font = { bold: true, size: 12 };
-    sheet.mergeCells(blockTitle.number, 1, blockTitle.number, ncol);
-    blockTitle.getCell(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE5E7EB' },
-    };
-    blockTitle.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+    mergeCols: number,
+    levelHeightMm: number,
+  ) {
+    const isWk = result.scaffoldType === 'wakugumi';
+    const maxH = Math.max(
+      ...result.walls.map((w) => w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm),
+      0,
+    );
+    const parts = [
+      isWk ? '枠組足場' : 'くさび式足場',
+      `足場幅 ${result.scaffoldWidthMm}mm`,
+      `段数 ${result.totalLevels}段`,
+      `1段の高さ ${levelHeightMm}mm`,
+      `最大足場高 ${maxH}mm`,
+    ];
+    if (isWk) {
+      parts.push(`建枠 ${result.frameSizeMm || 1700}mm`, `巾木 ${result.habakiCountPerSpan || 2}枚/スパン`);
+    } else {
+      parts.push(`支柱 ${result.preferredMainTatejiMm}mm`, `上部 ${result.topGuardHeightMm}mm`);
+    }
+    const r = sheet.addRow([parts.join('  |  ')]);
+    r.font = { size: 10 };
+    sheet.mergeCells(r.number, 1, r.number, mergeCols);
+    r.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+    r.getCell(1).border = BORDER_THIN as ExcelJS.Borders;
+  }
 
-    for (let floor = 1; floor <= result.totalLevels; floor++) {
-      const floorLabel = floor === 1 ? '1階' : floor === 2 ? '2階' : `${floor}階`;
-      const rangeLabel = `${(floor - 1) * levelH}～${floor * levelH}mm`;
-      sheet.addRow([]);
-      const titleRow = sheet.addRow([`${floorLabel} (${rangeLabel})`]);
-      titleRow.font = { bold: true, size: 11 };
-      sheet.mergeCells(titleRow.number, 1, titleRow.number, ncol);
-      const subHeader = sheet.addRow(['部材名', '規格', ...wallColumnHeaders, '角部', '合計']);
-      subHeader.font = { bold: true };
-      subHeader.eachCell((c, colNumber) => {
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-        c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        c.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
-        if (colNumber >= 3 && colNumber <= 2 + result.walls.length) {
-          c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-        }
-      });
+  private writeSectionBanner(sheet: ExcelJS.Worksheet, title: string, mergeCols: number) {
+    const r = sheet.addRow([title]);
+    this.mergeBanner(sheet, r, mergeCols);
+  }
 
-      for (const comp of sortedSummary) {
-        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-        const perWallQty = wallMaps.map((m) => m.get(mapKey) || 0);
-        const isPattanko = comp.materialCode === 'PATTANKO';
-        const perWallPerLevel = result.walls.map((w, i) => {
-          const L = w.levelCalc.fullLevels;
-          if (L <= 0) return 0;
-          if (isPattanko) return 0;
-          return Math.round((perWallQty[i] || 0) / L);
-        });
-        const cornerPerLevel = isPattanko ? numCorners * 2 : 0;
-        const rowTotal = perWallPerLevel.reduce((a, b) => a + b, 0) + cornerPerLevel;
-        if (rowTotal <= 0) continue;
-        const dr = sheet.addRow([
-          comp.nameJp,
-          comp.sizeSpec || '',
-          ...perWallPerLevel,
-          isPattanko ? cornerPerLevel : '',
-          rowTotal,
-        ]);
-        dr.eachCell((cell, colNumber) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' },
-          };
-          if (colNumber <= 2) {
-            cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-          } else if (colNumber <= 2 + result.walls.length) {
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          } else {
-            cell.alignment = { horizontal: 'right', vertical: 'middle' };
-          }
-        });
+  private writeEdgesTable(sheet: ExcelJS.Worksheet, result: ScaffoldCalculationResult) {
+    const walls = result.walls;
+    const poly = (result as { polygonVertices?: unknown[] }).polygonVertices;
+    const closed = Array.isArray(poly) && poly.length >= 3;
+    const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
+
+    const hdr = sheet.addRow([
+      '辺（AB）',
+      '交差軸',
+      '沿い通り',
+      '壁長 (mm)',
+      '足場高さ (mm)',
+      '足場段数',
+      '階段 (箇所)',
+    ]);
+    this.styleHeaderRowFull(hdr, 1, EDGE_TABLE_COLS);
+
+    for (let wi = 0; wi < walls.length; wi++) {
+      const w = walls[wi];
+      const chord = edgeChordNameExcel(wi, walls.length, closed);
+      const xy = resolveEdgeHashiraXY(labeling, wi, walls.length, w.sideJp ?? '', w.side ?? '');
+      const along =
+        xy.alongRange ||
+        (xy.alongStations.length > 0
+          ? `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`
+          : '—');
+      const cross = xy.crossLabel || '—';
+      const scaffoldH = w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm;
+      const dr = sheet.addRow([
+        chord,
+        cross,
+        along,
+        w.wallLengthMm,
+        scaffoldH,
+        w.levelCalc.fullLevels,
+        w.stairAccessCount ?? 0,
+      ]);
+      this.styleDataRowFull(dr, 1, EDGE_TABLE_COLS, [1, 2, 3, 6, 7]);
+      if (wi % 2 === 1) {
+        for (let c = 1; c <= EDGE_TABLE_COLS; c++) dr.getCell(c).fill = FILL_ALT;
       }
     }
   }
 
-  /**
-   * Material breakdown (材料明細) — per edge, building-floor columns; appended to main sheet after BOM.
-   */
-  private appendMaterialBreakdownSection(
+  private writeSpansTable(
     sheet: ExcelJS.Worksheet,
-    config: ScaffoldConfiguration,
     result: ScaffoldCalculationResult,
-  ): void {
-    const walls = result.walls;
-    if (!walls?.length) return;
+    wallLabels: string[],
+  ) {
+    const hdr = sheet.addRow(['辺（表示名）', 'スパン数', 'スパン内訳', '壁長 (mm)']);
+    this.styleHeaderRowFull(hdr, 1, 4);
+    for (let wi = 0; wi < result.walls.length; wi++) {
+      const w = result.walls[wi];
+      const summary = this.summarizeSpans(w.spans);
+      const dr = sheet.addRow([wallLabels[wi], w.totalSpans, summary, w.wallLengthMm]);
+      this.styleDataRowFull(dr, 1, 4, [2, 3]);
+      dr.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+      dr.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      if (wi % 2 === 1) {
+        for (let c = 1; c <= 4; c++) dr.getCell(c).fill = FILL_ALT;
+      }
+    }
+  }
 
+  private styleHeaderRowFull(row: ExcelJS.Row, from: number, to: number) {
+    for (let c = from; c <= to; c++) {
+      const cell = row.getCell(c);
+      cell.fill = FILL_HEADER;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = BORDER_THIN as ExcelJS.Borders;
+    }
+  }
+
+  private styleDataRowFull(row: ExcelJS.Row, from: number, to: number, centerCols: number[]) {
+    const set = new Set(centerCols);
+    for (let c = from; c <= to; c++) {
+      const cell = row.getCell(c);
+      cell.border = BORDER_THIN as ExcelJS.Borders;
+      cell.alignment = {
+        horizontal: set.has(c) ? 'center' : 'right',
+        vertical: 'middle',
+        wrapText: true,
+      };
+    }
+    row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  }
+
+  private writeOverallTotalsTable(
+    sheet: ExcelJS.Worksheet,
+    materialGroups: Array<{ category: string; nameJp: string; unit: string; components: CalculatedComponent[] }>,
+    wallMaps: Map<string, number>[],
+  ) {
+    const cols = 6;
+    const hdr = sheet.addRow(['No', '分類', '部材名', '規格（SIZE）', '単位', '合計']);
+    this.styleHeaderRowFull(hdr, 1, cols);
+
+    let rowNum = 1;
+    let lastCat = '';
+    let prevCat = '';
+    let prevName = '';
+    let prevSpec = '';
+
+    for (const grp of materialGroups) {
+      const cat = grp.category || '';
+      if (cat !== lastCat) {
+        const band = sheet.addRow([]);
+        band.getCell(2).value = `【${cat}】`;
+        band.getCell(2).font = { bold: true, size: 10 };
+        for (let c = 1; c <= cols; c++) {
+          band.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+          band.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
+        }
+        sheet.mergeCells(band.number, 2, band.number, cols);
+        lastCat = cat;
+      }
+
+      for (const comp of grp.components) {
+        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+        const perWall = wallMaps.map((m) => m.get(mapKey) || 0);
+        const total =
+          comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
+        const nameJp = comp.nameJp || '';
+        const specRaw = comp.sizeSpec || '';
+        const catCell = cat === prevCat && prevCat !== '' ? '〃' : cat;
+        const nameCell = nameJp === prevName && prevName !== '' ? '〃' : nameJp;
+        const specCell =
+          specRaw === prevSpec && prevSpec !== '' && cat === prevCat && nameJp === prevName ? '〃' : specRaw;
+        prevCat = cat;
+        prevName = nameJp;
+        prevSpec = specRaw;
+
+        const dr = sheet.addRow([rowNum, catCell, nameCell, specCell, comp.unit, total]);
+        for (let c = 1; c <= cols; c++) {
+          dr.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
+        }
+        dr.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        dr.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        dr.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        dr.getCell(4).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        dr.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+        dr.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+        dr.getCell(6).font = { bold: true };
+        if (rowNum % 2 === 0) {
+          for (let c = 1; c <= cols; c++) dr.getCell(c).fill = FILL_ALT;
+        }
+        rowNum++;
+      }
+    }
+  }
+
+  private writeProjectWideFloorTable(sheet: ExcelJS.Worksheet, matrixRows: BreakdownMatrixRow[], buildingFloorCount: number) {
+    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => `${i + 1}階`);
+    const nCol = 5 + buildingFloorCount + 1;
+    const hdr = sheet.addRow(['分類', '部材名', '規格', '単位', ...floorLabels, '合計']);
+    this.styleHeaderRowFull(hdr, 1, nCol);
+
+    const merged = this.aggregateMatrixRowsByMaterial(matrixRows);
+    let ri = 0;
+    for (const row of merged) {
+      const dr = sheet.addRow([
+        row.category,
+        row.nameJp,
+        row.spec,
+        row.unit,
+        ...row.floorQty,
+        row.total,
+      ]);
+      for (let c = 1; c <= nCol; c++) {
+        dr.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
+      }
+      dr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      dr.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      dr.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      dr.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      for (let c = 5; c <= nCol; c++) {
+        dr.getCell(c).alignment = { horizontal: 'right', vertical: 'middle' };
+      }
+      dr.getCell(nCol).font = { bold: true };
+      if (ri % 2 === 1) {
+        for (let c = 1; c <= nCol; c++) dr.getCell(c).fill = FILL_ALT;
+      }
+      ri++;
+    }
+
+    const floorSums = Array.from({ length: buildingFloorCount }, (_, idx) =>
+      merged.reduce((acc, r) => acc + (r.floorQty[idx] || 0), 0),
+    );
+    const grand = merged.reduce((s, r) => s + r.total, 0);
+    const sumRow = sheet.addRow(['', '', '', '合計', ...floorSums, grand]);
+    sumRow.font = { bold: true };
+    for (let c = 1; c <= nCol; c++) {
+      sumRow.getCell(c).border = {
+        top: { style: 'medium' },
+        left: { style: 'thin' },
+        bottom: { style: 'medium' },
+        right: { style: 'thin' },
+      };
+      if (c >= 5) sumRow.getCell(c).alignment = { horizontal: 'right', vertical: 'middle' };
+    }
+  }
+
+  private aggregateMatrixRowsByMaterial(
+    matrixRows: BreakdownMatrixRow[],
+  ): Array<{
+    category: string;
+    nameJp: string;
+    spec: string;
+    unit: string;
+    floorQty: number[];
+    total: number;
+  }> {
+    type Agg = {
+      category: string;
+      nameJp: string;
+      spec: string;
+      unit: string;
+      floorQty: number[];
+      total: number;
+      bomSort: { type: string; sortOrder: number; sizeSpec: string };
+    };
+    const map = new Map<string, Agg>();
+
+    for (const r of matrixRows) {
+      const key = `${r.groupKey}\t${r.spec}`;
+      const existing = map.get(key);
+      if (existing) {
+        for (let i = 0; i < existing.floorQty.length; i++) {
+          existing.floorQty[i] += r.floorQty[i] || 0;
+        }
+        existing.total += r.total;
+      } else {
+        map.set(key, {
+          category: r.category,
+          nameJp: r.nameJp,
+          spec: r.spec,
+          unit: r.unit,
+          floorQty: [...r.floorQty],
+          total: r.total,
+          bomSort: r.bomSort,
+        });
+      }
+    }
+
+    const list = Array.from(map.values()).sort((a, b) => compareCalculatedComponentsForBom(a.bomSort, b.bomSort));
+    return list.map(({ bomSort: _b, ...rest }) => rest);
+  }
+
+  private buildBreakdownContext(config: ScaffoldConfiguration, result: ScaffoldCalculationResult) {
+    const walls = result.walls;
     const scaffoldType = result.scaffoldType || 'kusabi';
     const isWakugumi = scaffoldType === 'wakugumi';
     const levelHeightMm = isWakugumi ? (result.frameSizeMm || 1800) : 1800;
@@ -516,71 +458,8 @@ export class ScaffoldExcelService {
       1,
       result.totalLevels || Math.ceil(buildingHeightMm / levelHeightMm),
     );
-    const totalLevels = Math.max(1, result.totalLevels ?? scaffoldLevelCount);
 
-    const poly = (result as { polygonVertices?: unknown[] }).polygonVertices;
-    const closedFootprint = Array.isArray(poly) && poly.length >= 3;
-    const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
-
-    const totalCols = 5 + buildingFloorCount + 1;
-
-    sheet.addRow([]);
-    const blockTitle = sheet.addRow(['材料明細（階別・通り）']);
-    blockTitle.font = { bold: true, size: 12 };
-    sheet.mergeCells(blockTitle.number, 1, blockTitle.number, totalCols);
-    blockTitle.getCell(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE5E7EB' },
-    };
-    blockTitle.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-    sheet.addRow([]);
-
-    const metaRow = sheet.addRow([
-      `建物高さ: ${(buildingHeightMm / 1000).toFixed(1)}m`,
-      `足場幅: ${result.scaffoldWidthMm}mm`,
-      `段数: ${totalLevels}`,
-      `推定階数: ${buildingFloorCount}`,
-      `壁面数: ${walls.length}`,
-    ]);
-    metaRow.font = { size: 10 };
-    sheet.mergeCells(metaRow.number, 1, metaRow.number, totalCols);
-    sheet.addRow([]);
-
-    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => `${i + 1}階`);
-    const headerRow = sheet.addRow([
-      '線',
-      '通り',
-      '部材名',
-      '規格',
-      '単位',
-      ...floorLabels,
-      '合計',
-    ]);
-    headerRow.font = { bold: true };
-    headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
-      };
-    });
-
-    type BreakdownMatrixRow = {
-      wallIndex: number;
-      groupKey: string;
-      bomSort: { type: string; sortOrder: number; sizeSpec: string };
-      nameJp: string;
-      spec: string;
-      unit: string;
-      floorQty: number[];
-      total: number;
-    };
     const matrixRows: BreakdownMatrixRow[] = [];
-
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
       const wallLevels = wall.levelCalc?.fullLevels || 1;
@@ -590,6 +469,7 @@ export class ScaffoldExcelService {
         matrixRows.push({
           wallIndex: wi,
           groupKey: `${comp.type}\t${comp.nameJp}\t${comp.unit}`,
+          category: comp.category || '',
           bomSort: {
             type: comp.type,
             sortOrder: comp.sortOrder,
@@ -604,133 +484,103 @@ export class ScaffoldExcelService {
       }
     }
 
-    function groupBreakdownWallRows(wallRows: BreakdownMatrixRow[]): BreakdownMatrixRow[][] {
-      const sorted = [...wallRows].sort((a, b) =>
-        compareCalculatedComponentsForBom(a.bomSort, b.bomSort),
-      );
-      const groups: BreakdownMatrixRow[][] = [];
-      let lastKey = '';
-      for (const r of sorted) {
-        if (r.groupKey !== lastKey) {
-          groups.push([]);
-          lastKey = r.groupKey;
-        }
-        groups[groups.length - 1].push(r);
+    return { matrixRows, buildingFloorCount, levelHeightMm, scaffoldLevelCount };
+  }
+
+  private groupBreakdownWallRows(wallRows: BreakdownMatrixRow[]): BreakdownMatrixRow[][] {
+    const sorted = [...wallRows].sort((a, b) => compareCalculatedComponentsForBom(a.bomSort, b.bomSort));
+    const groups: BreakdownMatrixRow[][] = [];
+    let lastKey = '';
+    for (const r of sorted) {
+      if (r.groupKey !== lastKey) {
+        groups.push([]);
+        lastKey = r.groupKey;
       }
-      return groups;
+      groups[groups.length - 1].push(r);
     }
+    return groups;
+  }
+
+  private writePerEdgeFloorTables(
+    sheet: ExcelJS.Worksheet,
+    _config: ScaffoldConfiguration,
+    result: ScaffoldCalculationResult,
+    ctx: {
+      matrixRows: BreakdownMatrixRow[];
+      buildingFloorCount: number;
+      levelHeightMm: number;
+      scaffoldLevelCount: number;
+    },
+  ) {
+    const walls = result.walls;
+    const { matrixRows, buildingFloorCount } = ctx;
+    const poly = (result as { polygonVertices?: unknown[] }).polygonVertices;
+    const closedFootprint = Array.isArray(poly) && poly.length >= 3;
+    const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
+    const bannerMergeCols = 5 + buildingFloorCount + 1;
+    const perEdgeColCount = 4 + buildingFloorCount;
+
+    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => `${i + 1}階`);
 
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
       const chord = edgeChordNameExcel(wi, walls.length, closedFootprint);
-      const sectionText =
-        `辺 ${chord} — ${wall.wallLengthMm.toLocaleString()} mm` +
-        `  |  スパン: ${wall.totalSpans} · 段数: ${wall.levelCalc?.fullLevels ?? 1} · 高さ: ${(wall.wallHeightMm ?? 0).toLocaleString()} mm · 階段: ${wall.stairAccessCount ?? 0}箇所`;
-
-      const secRow = sheet.addRow([sectionText]);
-      secRow.font = { bold: true, size: 11 };
-      sheet.mergeCells(secRow.number, 1, secRow.number, totalCols);
-      secRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-      secRow.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-
       const xy = resolveEdgeHashiraXY(labeling, wi, walls.length, wall.sideJp ?? '', wall.side ?? '');
-      const alongOne =
+      const along =
         xy.alongRange ||
         (xy.alongStations.length > 0
           ? `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`
           : '');
-      if (xy.crossLabel || alongOne) {
-        const hRow = sheet.addRow([
-          xy.crossLabel ?? '',
-          alongOne || '',
-          '',
-          '',
-          '',
-          ...Array(buildingFloorCount + 1).fill(''),
-        ]);
-        hRow.eachCell((cell) => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' },
-          };
-        });
-      }
+      const cross = xy.crossLabel || '';
+      const line1 = `辺 ${chord}  |  壁長 ${wall.wallLengthMm.toLocaleString()} mm  |  スパン ${wall.totalSpans}  |  足場段 ${wall.levelCalc?.fullLevels ?? 1}`;
+      const line2 =
+        cross || along
+          ? `通り: 交差 ${cross || '—'}  |  沿い ${along || '—'}`
+          : '';
 
-      const wallGroups = groupBreakdownWallRows(matrixRows.filter((r) => r.wallIndex === wi));
+      sheet.addRow([]);
+      const banner = sheet.addRow([line1 + (line2 ? `\n${line2}` : '')]);
+      banner.font = { bold: true, size: 11 };
+      sheet.mergeCells(banner.number, 1, banner.number, bannerMergeCols);
+      banner.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      banner.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+      banner.getCell(1).border = BORDER_THIN as ExcelJS.Borders;
+      if (banner.height != null) banner.height = line2 ? 36 : 22;
+
+      const hdr = sheet.addRow(['部材名', '規格', '単位', ...floorLabels, '合計']);
+      this.styleHeaderRowFull(hdr, 1, perEdgeColCount);
+      hdr.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+      const wallGroups = this.groupBreakdownWallRows(matrixRows.filter((r) => r.wallIndex === wi));
       for (const g of wallGroups) {
-        const startRow = sheet.rowCount + 1;
         for (let i = 0; i < g.length; i++) {
           const row = g[i];
-          const dataRow = sheet.addRow([
-            '',
-            '',
-            i === 0 ? row.nameJp : '',
-            row.spec,
-            row.unit,
-            ...row.floorQty,
-            row.total,
-          ]);
-          const totalCol = 6 + buildingFloorCount;
-          dataRow.getCell(totalCol).font = { bold: true };
-          dataRow.eachCell((cell, colNumber) => {
-            cell.border = {
-              top: { style: 'thin' },
-              left: { style: 'thin' },
-              bottom: { style: 'thin' },
-              right: { style: 'thin' },
-            };
-            if (colNumber >= 6 && colNumber <= totalCol) {
-              cell.alignment = { horizontal: 'right' };
-            }
-          });
-        }
-        const endRow = sheet.rowCount;
-        if (g.length > 1) {
-          sheet.mergeCells(startRow, 1, endRow, 1);
-          sheet.mergeCells(startRow, 2, endRow, 2);
-          sheet.mergeCells(startRow, 3, endRow, 3);
-          for (let c = 1; c <= 3; c++) {
-            const cell = sheet.getCell(startRow, c);
-            cell.alignment = { vertical: 'top', wrapText: true };
+          const dr = sheet.addRow([row.nameJp, row.spec, row.unit, ...row.floorQty, row.total]);
+          for (let c = 1; c <= perEdgeColCount; c++) {
+            dr.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
           }
+          const lastC = perEdgeColCount;
+          dr.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+          for (let c = 4; c <= lastC; c++) {
+            dr.getCell(c).alignment = { horizontal: 'right', vertical: 'middle' };
+          }
+          dr.getCell(lastC).font = { bold: true };
         }
       }
-    }
 
-    const floorSums = Array.from({ length: buildingFloorCount }, (_, idx) =>
-      matrixRows.reduce((acc, r) => acc + (r.floorQty[idx] || 0), 0),
-    );
-    const grandTotal = matrixRows.reduce((s, r) => s + r.total, 0);
-    const sumRow = sheet.addRow([
-      '',
-      '',
-      '合計',
-      '',
-      '',
-      ...floorSums,
-      grandTotal,
-    ]);
-    sumRow.font = { bold: true };
-    sumRow.eachCell((cell, colNumber) => {
-      cell.border = {
-        top: { style: 'medium' },
-        left: { style: 'thin' },
-        bottom: { style: 'medium' },
-        right: { style: 'thin' },
-      };
-      if (colNumber >= 6) cell.alignment = { horizontal: 'right' };
-    });
-
-    sheet.getColumn(1).width = 10;
-    sheet.getColumn(2).width = 14;
-    sheet.getColumn(3).width = 24;
-    sheet.getColumn(4).width = 18;
-    sheet.getColumn(5).width = 8;
-    for (let c = 6; c <= totalCols; c++) {
-      sheet.getColumn(c).width = 10;
+      const edgeFloorSums = Array.from({ length: buildingFloorCount }, (_, idx) =>
+        matrixRows.filter((r) => r.wallIndex === wi).reduce((acc, r) => acc + (r.floorQty[idx] || 0), 0),
+      );
+      const edgeGrand = matrixRows.filter((r) => r.wallIndex === wi).reduce((s, r) => s + r.total, 0);
+      const sub = sheet.addRow(['小計（当該辺）', '', '', ...edgeFloorSums, edgeGrand]);
+      sub.font = { bold: true, size: 10 };
+      for (let c = 1; c <= perEdgeColCount; c++) {
+        sub.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
+        sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+      }
+      for (let c = 4; c <= perEdgeColCount; c++) {
+        sub.getCell(c).alignment = { horizontal: 'right', vertical: 'middle' };
+      }
     }
   }
 
@@ -769,104 +619,13 @@ export class ScaffoldExcelService {
     return out;
   }
 
-  /** 規格 × 壁面 matrix — appended to main sheet. */
-  private appendSpecMatrixSection(
-    sheet: ExcelJS.Worksheet,
-    result: ScaffoldCalculationResult,
-    wallMaps: Map<string, number>[],
-  ): void {
-    const walls = result.walls;
-    if (!walls?.length) return;
-
-    const wallColumnHeaders = this.buildExcelWallColumnHeaders(result);
-    const ncol = 2 + walls.length;
-
-    sheet.addRow([]);
-    const sectionBanner = sheet.addRow(['規格別・面別']);
-    sectionBanner.font = { bold: true, size: 12 };
-    sheet.mergeCells(sectionBanner.number, 1, sectionBanner.number, ncol);
-    sectionBanner.getCell(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE5E7EB' },
-    };
-    sectionBanner.getCell(1).alignment = { vertical: 'middle', wrapText: true };
-
-    const titleRow = sheet.addRow(['規格別・面別数量（壁面ごとの規格内訳）']);
-    titleRow.font = { bold: true, size: 14 };
-    sheet.mergeCells(titleRow.number, 1, titleRow.number, ncol);
-    titleRow.getCell(1).alignment = { horizontal: 'left' };
-    sheet.addRow([]);
-
-    const sorted = this.sortSummaryForExcel(result.summary);
-    const groups = this.groupSummaryByMaterialForExcel(sorted);
-
-    for (const grp of groups) {
-      const blockTitle = sheet.addRow([`【${grp.category}】${grp.nameJp}`]);
-      blockTitle.font = { bold: true, size: 11 };
-      sheet.mergeCells(blockTitle.number, 1, blockTitle.number, ncol);
-      blockTitle.eachCell((cell) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
-      });
-
-      const h = sheet.addRow(['規格', ...wallColumnHeaders, '合計']);
-      h.font = { bold: true };
-      h.eachCell((cell, colNumber) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
-        if (colNumber >= 2 && colNumber <= 1 + walls.length) {
-          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-        }
-      });
-
-      for (const comp of grp.components) {
-        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-        const perWall = wallMaps.map((m) => m.get(mapKey) || 0);
-        const total =
-          comp.materialCode === 'PATTANKO'
-            ? comp.quantity
-            : perWall.reduce((a, b) => a + b, 0);
-        const dataRow = sheet.addRow([comp.sizeSpec || '-', ...perWall, total]);
-        dataRow.eachCell((cell, colNumber) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' },
-          };
-          if (colNumber >= 2) cell.alignment = { horizontal: 'right' };
-        });
-      }
-
-      sheet.addRow([]);
-    }
-
-    sheet.getColumn(1).width = 20;
-    for (let i = 0; i < walls.length; i++) {
-      sheet.getColumn(2 + i).width = 11;
-    }
-    sheet.getColumn(2 + walls.length).width = 11;
-  }
-
   private summarizeSpans(spans: number[]): string {
     const groups: Record<number, number> = {};
     for (const s of spans) {
       groups[s] = (groups[s] || 0) + 1;
     }
     return Object.entries(groups)
-      .map(([size, count]) => `${size}mm×${count}`)
-      .join(' + ');
+      .map(([size, count]) => `${size}mm×${count}本`)
+      .join(' ＋ ');
   }
 }
