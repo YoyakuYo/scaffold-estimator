@@ -665,9 +665,22 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
             const same =
               facadeMm > 0 && Math.abs(runMm - facadeMm) < 0.5;
             if (same) {
-              return `${facadeMm.toLocaleString()}mm (${nSp}sp)`;
+              return (
+                <tspan x={dimLabelX} dy="0">
+                  {`[${facadeMm.toLocaleString()}mm (${nSp}sp)]`}
+                </tspan>
+              );
             }
-            return `${facadeMm.toLocaleString()}mm façade · ${runMm.toLocaleString()}mm run (${nSp}sp)`;
+            return (
+              <>
+                <tspan x={dimLabelX} dy="-0.55em">
+                  {`[${facadeMm.toLocaleString()}mm façade]`}
+                </tspan>
+                <tspan x={dimLabelX} dy="1.15em">
+                  {`[${runMm.toLocaleString()}mm run (${nSp}sp)]`}
+                </tspan>
+              </>
+            );
           })()}
         </text>
 
