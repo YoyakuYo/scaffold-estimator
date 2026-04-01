@@ -15,6 +15,11 @@ import {
   freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
 } from './scaffold-rules';
+import {
+  aggregateComponentsFromWalls,
+  collapseMultiSpanComponents,
+  KUSABI_COLLAPSE_MULTI_CODES,
+} from './scaffold-wall-components-collapse.util';
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -409,9 +414,10 @@ export class ScaffoldCalculatorService {
       materialCode: 'KUSABI-JB',
     });
 
-    // ─── 2. 支柱 (メイン) ────────────────────────────────
+    // ─── 2. 支柱 (メイン) — 上部支柱(トップガード)本数を同じ支柱行に合算（別行は出さない）
     sortOrder++;
     const mainCode = maCode(input.preferredMainTatejiMm);
+    const topGuardStackCount = Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction);
     components.push({
       type: 'post_main',
       category: CAT.post.jp,
@@ -424,29 +430,14 @@ export class ScaffoldCalculatorService {
         0,
         postPositions * 2 * levelCalc.mainPostsPerLine +
           totalExtraPosts * levelCalc.mainPostsPerLine -
-          cornerPostDeduction * levelCalc.mainPostsPerLine,
+          cornerPostDeduction * levelCalc.mainPostsPerLine +
+          topGuardStackCount,
       ),
       sortOrder,
       materialCode: `KUSABI-${mainCode}`,
     });
 
-    // ─── 3. 上部支柱 (トップガード) ─────────────────────
-    sortOrder++;
-    const topCode = maCode(KUSABI_TOP_GUARD_HEIGHT_MM);
-    components.push({
-      type: 'post_top',
-      category: CAT.post.jp,
-      categoryEn: CAT.post.en,
-      name: `Top Guard Post ${topCode}`,
-      nameJp: `上部支柱 ${topCode}`,
-      sizeSpec: `${KUSABI_TOP_GUARD_HEIGHT_MM}mm`,
-      unit: '本',
-      quantity: Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction),
-      sortOrder,
-      materialCode: `KUSABI-${topCode}-TOP`,
-    });
-
-    // ─── 4. ブレス (外面・交差筋違) ─────────────────────
+    // ─── 3. ブレス (外面・交差筋違) ─────────────────────
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
       components.push({
@@ -701,6 +692,8 @@ export class ScaffoldCalculatorService {
       }
     }
 
+    const collapsed = collapseMultiSpanComponents(components, KUSABI_COLLAPSE_MULTI_CODES);
+
     const reflexInsetMm = reflexCornerInsetTotalMm(wall.startCornerKind, wall.endCornerKind);
     const scaffoldFacadeBasisMm =
       reflexInsetMm > 0 ? Math.max(0, wall.wallLengthMm - reflexInsetMm) : undefined;
@@ -718,7 +711,7 @@ export class ScaffoldCalculatorService {
       kaidanSpanIndices: kaidanSpanIndices.length > 0 ? kaidanSpanIndices : undefined,
       needsExtendedBay: needsExtendedBay,
       segments: wall.segments,
-      components,
+      components: collapsed,
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
       doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
@@ -744,34 +737,9 @@ export class ScaffoldCalculatorService {
 
   /**
    * Aggregate components from all walls into a summary.
-   * Groups by materialCode, sums quantities.
-   * For Nuno Bars, groups by category + sizeSpec (combines all types by size).
+   * *-MULTI lines union 規格 across walls; 布材 without MULTI still keys by category+sizeSpec.
    */
   private aggregateComponents(walls: WallCalculationResult[]): CalculatedComponent[] {
-    const map = new Map<string, CalculatedComponent>();
-
-    for (const wall of walls) {
-      for (const comp of wall.components) {
-        // For Nuno Bars, group by category + sizeSpec (not by materialCode)
-        // This combines all nuno bar types (tesuri, stopper, negarami, bearer) by size
-        let key: string;
-        if (comp.category === '布材') {
-          // Group all nuno bars by size: "布材-600", "布材-900", etc.
-          key = `${comp.category}-${comp.sizeSpec}`;
-        } else {
-          // For other components, use materialCode or type-sizeSpec
-          key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-        }
-        
-        const existing = map.get(key);
-        if (existing) {
-          existing.quantity += comp.quantity;
-        } else {
-          map.set(key, { ...comp });
-        }
-      }
-    }
-
-    return Array.from(map.values()).sort(compareCalculatedComponentsForBom);
+    return aggregateComponentsFromWalls(walls, true);
   }
 }
