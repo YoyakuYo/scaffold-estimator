@@ -179,13 +179,8 @@ At every polygon corner where two walls meet:
 - Dimension editing: click any edge to enter exact mm length
 - On complete: generates vertices + wall inputs for scaffold calculation
 
-## Material Breakdown (材料明細)
-- **Component**: [material-breakdown-table.tsx](mdc:frontend/components/material-breakdown-table.tsx)
-- Per-floor, per-side breakdown of all scaffold materials
-- Expandable rows showing quantities at each floor level for each wall
-- Editable pricing: click unit price to enter cost per material
-- Auto-calculates total cost from quantities × prices
-- Shows on result page under "材料明細" tab
+## Per-floor / per-edge material detail
+- **Web UI**: Removed standalone Material Breakdown tab; use **Excel export** (`scaffold-excel.service.ts`) for 階別・辺別 tables.
 
 ## User Management & Authentication
 
@@ -234,7 +229,7 @@ At every polygon corner where two walls meet:
 ### Frontend Pages
 - Dashboard: [dashboard/page.tsx](mdc:frontend/app/dashboard/page.tsx) - Marketing-focused landing page
 - Scaffold calculator: [scaffold/page.tsx](mdc:frontend/app/scaffold/page.tsx) - 3 input modes: AI extraction, file upload, CAD drawing
-- Scaffold result: [scaffold/[configId]/page.tsx](mdc:frontend/app/scaffold/[configId]/page.tsx) - Results with material breakdown
+- Scaffold result: [scaffold/[configId]/page.tsx](mdc:frontend/app/scaffold/[configId]/page.tsx) - Results: quotation table, 2D/plan/3D, Excel export
 - User Management: [users/page.tsx](mdc:frontend/app/users/page.tsx)
 - User Profile: [profile/page.tsx](mdc:frontend/app/profile/page.tsx)
 - 2D view: [scaffold-2d-view.tsx](mdc:frontend/app/scaffold/[configId]/scaffold-2d-view.tsx)
@@ -242,7 +237,6 @@ At every polygon corner where two walls meet:
 
 ### Components
 - CAD Drawing Canvas: [cad-drawing-canvas.tsx](mdc:frontend/components/cad-drawing-canvas.tsx)
-- Material Breakdown Table: [material-breakdown-table.tsx](mdc:frontend/components/material-breakdown-table.tsx)
 - Quick Shape Builder: [quick-shape-builder.tsx](mdc:frontend/components/quick-shape-builder.tsx)
 - Drawing Upload: [DrawingUpload.tsx](mdc:frontend/components/drawing-upload/DrawingUpload.tsx)
 

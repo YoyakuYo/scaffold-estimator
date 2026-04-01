@@ -37,7 +37,6 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
-import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { normalizeScaffoldResultForQuotation } from '@/lib/scaffold-quotation-normalize';
@@ -53,7 +52,7 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
   ),
 });
 
-type TabView = 'table' | 'breakdown' | '2d' | 'plan' | '3d';
+type TabView = 'table' | '2d' | 'plan' | '3d';
 
 /** Cumulative per-level summary: approximate quantities up to visibleLevels (scale by visibleLevels/totalLevels). */
 function getLevelSummary(
@@ -126,13 +125,10 @@ function ScaffoldResultPage() {
 
   // Support ?tab=3d, ?tab=2d from external links
   const rawTab = searchParams.get('tab');
-  const normalizedTab =
-    rawTab === 'perside'
-      ? 'breakdown'
-      : (rawTab as TabView);
+  const normalizedTab = (rawTab === 'perside' || rawTab === 'breakdown' ? 'table' : rawTab) as TabView;
   const initialTab = (normalizedTab || 'table') as TabView;
   const [activeTab, setActiveTab] = useState<TabView>(
-    ['table', 'breakdown', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
+    ['table', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table',
   );
   const [visibleLevels, setVisibleLevels] = useState<number>(1);
 
@@ -589,17 +585,6 @@ function ScaffoldResultPage() {
             {t('resultExtra', 'tabOverall')}
           </button>
           <button
-            onClick={() => setActiveTab('breakdown')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'breakdown'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Ruler className="h-4 w-4" />
-            {t('result', 'materialBreakdownTitle')}
-          </button>
-          <button
             onClick={() => setActiveTab('2d')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === '2d'
@@ -641,23 +626,6 @@ function ScaffoldResultPage() {
           </h2>
           <QuotationTable result={resultForDisplay ?? result} />
         </div>
-
-        {result.walls && (
-          <div className={activeTab === 'breakdown' ? 'block' : 'hidden'}>
-            <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
-              {t('result', 'materialBreakdownTitle')}
-            </h2>
-            <MaterialBreakdownTable
-              walls={(resultForDisplay ?? result).walls!}
-              buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m: number, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
-              scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
-              totalLevels={maxLevels}
-              levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
-              edgeHashiraLabeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
-              polygonVertexCount={Array.isArray(result.polygonVertices) ? result.polygonVertices.length : 0}
-            />
-          </div>
-        )}
 
         <div className={`${activeTab === '2d' ? 'block' : 'hidden'} print:overflow-visible`}>
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
