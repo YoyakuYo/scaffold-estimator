@@ -919,17 +919,14 @@ function QuotationTable({ result }: { result: any }) {
           type: 'detail';
           comp: CalculatedComponent;
           idx: number;
-          catDisplay: string;
           nameDisplay: string;
           specDisplay: string;
         };
     const rows: Row[] = [];
     let lastCategory = '';
     let itemNo = 0;
-    let prevDetailCatLogic = '';
     let prevDetailNameLogic = '';
     let prevDetailSpecLogic = '';
-    const sameCatMark = t('result', 'quotationSameCategory');
     const sameNameMark = t('result', 'quotationSameName');
     const sameSpecMark = t('result', 'quotationSameSpec');
 
@@ -945,15 +942,7 @@ function QuotationTable({ result }: { result: any }) {
       for (let j = 0; j < grp.components.length; j++) {
         const comp = grp.components[j];
         itemNo++;
-        const catLogic =
-          locale === 'ja'
-            ? comp.category || ''
-            : comp.categoryEn || comp.category || '';
         const nameLogic = quotationComponentBaseName(comp, locale);
-        const catDisplay =
-          catLogic === prevDetailCatLogic && prevDetailCatLogic !== ''
-            ? sameCatMark
-            : catLogic;
         const nameDisplay =
           nameLogic === prevDetailNameLogic && prevDetailNameLogic !== ''
             ? sameNameMark
@@ -962,18 +951,15 @@ function QuotationTable({ result }: { result: any }) {
         const specDisplay =
           specLogic === prevDetailSpecLogic &&
           prevDetailSpecLogic !== '' &&
-          catLogic === prevDetailCatLogic &&
           nameLogic === prevDetailNameLogic
             ? sameSpecMark
             : specLogic;
-        prevDetailCatLogic = catLogic;
         prevDetailNameLogic = nameLogic;
         prevDetailSpecLogic = specLogic;
         rows.push({
           type: 'detail',
           comp,
           idx: itemNo,
-          catDisplay,
           nameDisplay,
           specDisplay,
         });
@@ -990,7 +976,6 @@ function QuotationTable({ result }: { result: any }) {
           <thead>
             <tr className="bg-blue-600 text-white">
               <th className="px-3 py-2 text-left font-medium w-12">{t('result', 'colNo')}</th>
-              <th className="px-3 py-2 text-left font-medium">{t('result', 'colCategory')}</th>
               <th className="px-3 py-2 text-left font-medium">{t('result', 'colName')}</th>
               <th className="px-3 py-2 text-left font-medium">{t('result', 'colSpec')}</th>
               <th className="px-3 py-2 text-center font-medium w-14">{t('result', 'colUnit')}</th>
@@ -1045,20 +1030,19 @@ function QuotationTable({ result }: { result: any }) {
               if (row.type === 'header') {
                 return (
                   <tr key={`cat-${ri}`} className="bg-gray-100 border-b border-gray-200">
-                    <td colSpan={5 + walls.length + subtotalColCount + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <td colSpan={4 + walls.length + subtotalColCount + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
                       {row.category}
                     </td>
                   </tr>
                 );
               }
 
-              const { comp, idx, catDisplay, nameDisplay, specDisplay } = row;
+              const { comp, idx, nameDisplay, specDisplay } = row;
               const key = scaffoldWallQuantityKey(comp);
               const perWall = wallMaps.map((m) => m.get(key) || 0);
               const total =
                 comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
               const rowKey = `${comp.sortOrder}-${key}`;
-              const catIsMark = catDisplay === t('result', 'quotationSameCategory');
               const nameIsMark = nameDisplay === t('result', 'quotationSameName');
               const specIsMark = specDisplay === t('result', 'quotationSameSpec');
 
@@ -1068,13 +1052,6 @@ function QuotationTable({ result }: { result: any }) {
                   className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
                 >
                   <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
-                  <td
-                    className={`px-3 py-2 text-xs ${
-                      catIsMark ? 'text-center text-slate-500 font-semibold' : 'text-gray-600'
-                    }`}
-                  >
-                    {catDisplay}
-                  </td>
                   <td
                     className={`px-3 py-2 ${
                       nameIsMark

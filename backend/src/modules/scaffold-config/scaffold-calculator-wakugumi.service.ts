@@ -19,12 +19,6 @@ import {
   ScaffoldCalculationResult,
   WallSegment,
 } from './scaffold-calculator.service';
-import {
-  aggregateComponentsFromWalls,
-  collapseMultiSpanComponents,
-  WAKUGUMI_COLLAPSE_MULTI_CODES,
-} from './scaffold-wall-components-collapse.util';
-
 /**
  * ═══════════════════════════════════════════════════════════════
  * 枠組足場 (Wakugumi / Frame Scaffold) Quantity Calculator Engine
@@ -483,8 +477,6 @@ export class ScaffoldCalculatorWakugumiService {
       }
     }
 
-    const collapsed = collapseMultiSpanComponents(components, WAKUGUMI_COLLAPSE_MULTI_CODES);
-
     // Build LevelCalcResult compatible with kusabi interface
     const levelCalcCompat = {
       fullLevels: levelCalc.fullLevels,
@@ -514,7 +506,7 @@ export class ScaffoldCalculatorWakugumiService {
       kaidanSpanIndices: kaidanSpanIndices.length > 0 ? kaidanSpanIndices : undefined,
       needsExtendedBay,
       segments: wall.segments,
-      components: collapsed,
+      components,
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
       doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
@@ -535,6 +527,21 @@ export class ScaffoldCalculatorWakugumiService {
   }
 
   private aggregateComponents(walls: WallCalculationResult[]): CalculatedComponent[] {
-    return aggregateComponentsFromWalls(walls, false);
+    const map = new Map<string, CalculatedComponent>();
+
+    for (const wall of walls) {
+      for (const comp of wall.components) {
+        const key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+
+        const existing = map.get(key);
+        if (existing) {
+          existing.quantity += comp.quantity;
+        } else {
+          map.set(key, { ...comp });
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort(compareCalculatedComponentsForBom);
   }
 }

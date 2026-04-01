@@ -15,12 +15,6 @@ import {
   freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
 } from './scaffold-rules';
-import {
-  aggregateComponentsFromWalls,
-  collapseMultiSpanComponents,
-  KUSABI_COLLAPSE_MULTI_CODES,
-} from './scaffold-wall-components-collapse.util';
-
 /**
  * ═══════════════════════════════════════════════════════════════
  * くさび式足場 (Kusabi Scaffold) Quantity Calculator Engine
@@ -692,8 +686,6 @@ export class ScaffoldCalculatorService {
       }
     }
 
-    const collapsed = collapseMultiSpanComponents(components, KUSABI_COLLAPSE_MULTI_CODES);
-
     const reflexInsetMm = reflexCornerInsetTotalMm(wall.startCornerKind, wall.endCornerKind);
     const scaffoldFacadeBasisMm =
       reflexInsetMm > 0 ? Math.max(0, wall.wallLengthMm - reflexInsetMm) : undefined;
@@ -711,7 +703,7 @@ export class ScaffoldCalculatorService {
       kaidanSpanIndices: kaidanSpanIndices.length > 0 ? kaidanSpanIndices : undefined,
       needsExtendedBay: needsExtendedBay,
       segments: wall.segments,
-      components: collapsed,
+      components,
       scaffoldWidthMm: widthMm,
       layoutMode: wall.layoutMode ?? 'double_post',
       doorOpenings: resolvedDoors.length > 0 ? resolvedDoors : undefined,
@@ -737,9 +729,29 @@ export class ScaffoldCalculatorService {
 
   /**
    * Aggregate components from all walls into a summary.
-   * *-MULTI lines union 規格 across walls; 布材 without MULTI still keys by category+sizeSpec.
+   * For Nuno Bars, groups by category + sizeSpec (combines all types by size).
    */
   private aggregateComponents(walls: WallCalculationResult[]): CalculatedComponent[] {
-    return aggregateComponentsFromWalls(walls, true);
+    const map = new Map<string, CalculatedComponent>();
+
+    for (const wall of walls) {
+      for (const comp of wall.components) {
+        let key: string;
+        if (comp.category === '布材') {
+          key = `${comp.category}-${comp.sizeSpec}`;
+        } else {
+          key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+        }
+
+        const existing = map.get(key);
+        if (existing) {
+          existing.quantity += comp.quantity;
+        } else {
+          map.set(key, { ...comp });
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort(compareCalculatedComponentsForBom);
   }
 }
