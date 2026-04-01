@@ -40,7 +40,6 @@ import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
-import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -951,93 +950,6 @@ function QuotationTable({ result }: { result: any }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Span Info per wall + wall dimensions + scaffold level labels */}
-      <div className="p-4 bg-gray-50 border-b border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-600 mb-2">{t('result', 'spanConfig')}</h3>
-        <EdgeHashiraResultPanel
-          labeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
-          walls={walls}
-          closedFootprint={!!chordOpts?.closedLoop}
-          className="mb-3"
-        />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          {walls.map((wall, idx) => {
-            const spanGroups: Record<number, number> = {};
-            wall.spans.forEach((s: number) => {
-              spanGroups[s] = (spanGroups[s] || 0) + 1;
-            });
-            const spanStr = Object.entries(spanGroups)
-              .map(([sz, ct]) => `${sz}mm×${ct}`)
-              .join(' + ');
-            const scaffoldH = wall.levelCalc.topPlankHeightMm + wall.levelCalc.topGuardHeightMm;
-            const postAlongCard = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
-            const hashiraCard = edgeHashiraColumnRangeSegment(
-              edgeLbl,
-              idx,
-              walls.length,
-              wall.sideJp ?? '',
-              wall.side ?? '',
-              postAlongCard,
-            );
-            return (
-              <div key={`wall-${idx}-${wall.side}`} className="bg-white rounded-lg p-2 border border-gray-100">
-                <div className="font-semibold text-gray-700">
-                  {formatWallSide(
-                    wall.side,
-                    wall.sideJp,
-                    locale,
-                    chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
-                  )}
-                </div>
-                {hashiraCard ? (
-                  <div className="text-[11px] font-mono font-medium text-slate-600 mt-0.5">({hashiraCard})</div>
-                ) : null}
-                {(wall as any).baseHeightMm > 0 && (
-                  <div className="text-xs text-violet-600">
-                    {t('result', 'tierGlPlus').replace('{{m}}', ((wall as any).baseHeightMm / 1000).toFixed(1))}
-                  </div>
-                )}
-                <div className="text-gray-500">
-                  {t('result', 'wallLengthLabel')} {wall.wallLengthMm.toLocaleString()}mm | {t('result', 'wallHeight')} {scaffoldH.toLocaleString()}mm
-                </div>
-                <div className="text-gray-500">
-                  {wall.totalSpans}{t('result', 'spansLabel')} | {wall.levelCalc.fullLevels}{t('result', 'levelsUnit')}
-                </div>
-                <div className="text-gray-400">{spanStr}</div>
-                <div className="text-gray-400">
-                  {t('result', 'stairsLabel')} {wall.stairAccessCount}{t('result', 'stairsUnit')}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {/* Scaffold level labels (1段, 2段, ... with height range) */}
-        {result.totalLevels > 0 && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
-            <h4 className="text-xs font-semibold text-gray-500 mb-2">
-              {t('result', 'scaffoldLevelsHeader')}
-            </h4>
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: result.totalLevels }, (_, i) => i + 1).map((f) => {
-                const levelHeightMm = result.scaffoldType === 'wakugumi' ? (result.frameSizeMm || 1800) : 1800;
-                const from = (f - 1) * levelHeightMm;
-                const to = f * levelHeightMm;
-                const label = t('result', 'scaffoldLevelBandLabel').replace(/\{\{n\}\}/g, String(f));
-                return (
-                  <span
-                    key={f}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-gray-200 text-xs text-gray-700"
-                  >
-                    <span className="font-medium">{label}</span>
-                    <span className="text-gray-400">{from.toLocaleString()}～{to.toLocaleString()}mm</span>
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Material Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
