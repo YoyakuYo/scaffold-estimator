@@ -313,10 +313,10 @@ export default function LandingPage() {
           aria-labelledby="landing-value-props-heading"
         >
           <div
-            className="pointer-events-none absolute inset-0 opacity-[0.55]"
+            className="pointer-events-none absolute inset-0 opacity-[0.7]"
             style={{
               backgroundImage:
-                'radial-gradient(ellipse 120% 80% at 100% 0%, rgba(14,165,233,0.16), transparent 50%), radial-gradient(ellipse 100% 60% at 0% 100%, rgba(99,102,241,0.12), transparent 45%)',
+                'radial-gradient(ellipse 120% 80% at 100% 0%, rgba(15,23,42,0.06), transparent 50%), radial-gradient(ellipse 100% 60% at 0% 100%, rgba(15,23,42,0.05), transparent 45%)',
             }}
             aria-hidden
           />
@@ -325,17 +325,17 @@ export default function LandingPage() {
               {t('landing', 'appName')} — {t('landing', 'sectionFeatures')}
             </h2>
 
-            {/* Panel 1 — Input: hero photo + copy + horizontal stat chips */}
-            <div className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-cyan-600 via-blue-600 to-indigo-700 p-[1px] shadow-[0_24px_50px_-12px_rgba(37,99,235,0.45)]">
-              <div className="rounded-[1.7rem] bg-gradient-to-br from-cyan-700 via-blue-700 to-indigo-800 px-6 py-8 sm:px-8 sm:py-10 md:px-10 md:py-11 lg:px-12">
+            {/* Panel 1 — Input: hero photo + copy + horizontal stat chips (neutral, no accent color) */}
+            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-[0_24px_50px_-18px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/[0.04]">
+              <div className="px-6 py-8 sm:px-8 sm:py-10 md:px-10 md:py-11 lg:px-12">
                 <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-12 xl:gap-14">
                   <div className="order-2 lg:order-none lg:col-span-5">
                     <figure className="group relative mx-auto max-w-md lg:mx-0">
                       <div
-                        className="pointer-events-none absolute -inset-3 rounded-[1.35rem] bg-gradient-to-br from-white/25 via-cyan-200/20 to-indigo-300/15 opacity-80 blur-xl transition duration-500 group-hover:opacity-100"
+                        className="pointer-events-none absolute -inset-3 rounded-[1.35rem] bg-slate-300/25 opacity-60 blur-2xl transition duration-500 group-hover:opacity-90"
                         aria-hidden
                       />
-                      <div className="relative overflow-hidden rounded-2xl border border-white/35 bg-white/10 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.45)] ring-1 ring-white/20 backdrop-blur-sm">
+                      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_20px_40px_-16px_rgba(15,23,42,0.18)]">
                         <div className="relative aspect-[4/3] w-full">
                           <Image
                             src="/landing/input-drawing-workstation.png"
@@ -345,28 +345,28 @@ export default function LandingPage() {
                             sizes="(max-width: 1024px) 100vw, 42vw"
                           />
                           <div
-                            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-indigo-950/50 via-transparent to-white/5"
+                            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-900/25 via-transparent to-white/30"
                             aria-hidden
                           />
                         </div>
                       </div>
-                      <figcaption className="mt-4 text-sm leading-relaxed text-white/85 sm:text-[0.95rem]">
+                      <figcaption className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-[0.95rem]">
                         {t('landing', 'inputWorkstationCaption')}
                       </figcaption>
                     </figure>
                   </div>
 
                   <div className="order-1 flex flex-col lg:order-none lg:col-span-7">
-                    <span className="inline-flex w-fit items-center rounded-full bg-white/20 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white ring-1 ring-white/35">
+                    <span className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-100 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-600">
                       {t('landing', 'boxInputEyebrow')}
                     </span>
-                    <h3 className="mt-4 text-2xl font-extrabold leading-[1.12] tracking-tight text-white sm:text-3xl md:text-[2.15rem] md:leading-[1.1]">
+                    <h3 className="mt-4 text-2xl font-extrabold leading-[1.12] tracking-tight text-slate-900 sm:text-3xl md:text-[2.15rem] md:leading-[1.1]">
                       {t('landing', 'boxInputTitle')}
                     </h3>
-                    <p className="mt-4 text-base font-semibold leading-relaxed text-cyan-50/95 sm:text-lg">
+                    <p className="mt-4 text-base font-semibold leading-relaxed text-slate-800 sm:text-lg">
                       {t('features', 'coreSubtitle')}
                     </p>
-                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/88 sm:text-[0.95rem]">
+                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600 sm:text-[0.95rem]">
                       {t('landing', 'boxInputFormats')}
                     </p>
 
@@ -382,10 +382,10 @@ export default function LandingPage() {
                       ].map((chip) => (
                         <li
                           key={chip.label}
-                          className="min-w-[9.5rem] shrink-0 snap-start rounded-2xl border border-white/25 bg-white/12 px-4 py-3.5 shadow-inner shadow-black/10 ring-1 ring-white/15 backdrop-blur-md transition hover:border-white/40 hover:bg-white/18 sm:min-w-0"
+                          className="min-w-[9.5rem] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm transition hover:border-slate-300 hover:bg-white sm:min-w-0"
                         >
-                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">{chip.label}</div>
-                          <div className="mt-1.5 text-base font-bold leading-tight text-white sm:text-lg">{chip.value}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{chip.label}</div>
+                          <div className="mt-1.5 text-base font-bold leading-tight text-slate-900 sm:text-lg">{chip.value}</div>
                         </li>
                       ))}
                     </ul>
@@ -394,12 +394,12 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Blueprint bridge — second visual + narrative (between Input and Features) */}
-            <div className="overflow-hidden rounded-[1.75rem] border border-slate-700/80 bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 shadow-[0_28px_70px_-20px_rgba(15,23,42,0.85)] ring-1 ring-cyan-500/15">
+            {/* Blueprint bridge — second visual + narrative (neutral chrome) */}
+            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-[0_28px_60px_-20px_rgba(15,23,42,0.14)] ring-1 ring-slate-900/[0.04]">
               <div className="grid items-stretch lg:grid-cols-2">
                 <figure className="relative order-1 min-h-[220px] sm:min-h-[280px] lg:order-2 lg:min-h-[min(100%,420px)]">
                   <div
-                    className="absolute inset-0 z-[1] bg-gradient-to-b from-slate-950/70 via-transparent to-slate-950/30 lg:bg-gradient-to-l lg:from-transparent lg:via-slate-950/15 lg:to-slate-950/85"
+                    className="absolute inset-0 z-[1] bg-gradient-to-b from-slate-900/20 via-transparent to-slate-900/10 lg:bg-gradient-to-l lg:from-transparent lg:via-slate-900/5 lg:to-slate-900/25"
                     aria-hidden
                   />
                   <Image
@@ -411,17 +411,17 @@ export default function LandingPage() {
                   />
                   <figcaption className="sr-only">{t('landing', 'inputBlueprintCaption')}</figcaption>
                 </figure>
-                <div className="order-2 flex flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 lg:order-1 lg:px-12 lg:py-14">
-                  <span className="inline-flex w-fit items-center rounded-full bg-cyan-400/15 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-300 ring-1 ring-cyan-400/35">
+                <div className="order-2 flex flex-col justify-center border-slate-100 bg-zinc-50/80 px-6 py-10 sm:px-10 sm:py-12 lg:order-1 lg:border-r lg:px-12 lg:py-14">
+                  <span className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-600">
                     {t('landing', 'boxInputEyebrow')}
                   </span>
-                  <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl md:text-4xl">
+                  <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl md:text-4xl">
                     {t('landing', 'inputBlueprintTitle')}
                   </h3>
-                  <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-300 sm:text-lg">
+                  <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-600 sm:text-lg">
                     {t('landing', 'inputBlueprintLead')}
                   </p>
-                  <p className="mt-6 text-sm leading-relaxed text-slate-400 sm:text-[0.95rem]">
+                  <p className="mt-6 text-sm leading-relaxed text-slate-500 sm:text-[0.95rem]">
                     {t('landing', 'inputBlueprintCaption')}
                   </p>
                 </div>
