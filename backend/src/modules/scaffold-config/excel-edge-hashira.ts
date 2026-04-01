@@ -147,3 +147,65 @@ export function edgeChordNameExcel(wallIndex: number, wallCount: number, closed:
   const nV = wallCount + 1;
   return `${vertexEdgeLetter(wallIndex, nV)}${vertexEdgeLetter(wallIndex + 1, nV)}`;
 }
+
+/**
+ * Matches frontend `edgeHashiraColumnRangeSegment` — along-edge station range for column headers.
+ */
+export function edgeHashiraColumnRangeSegmentExcel(
+  labeling: EdgeHashiraLabeling | null | undefined,
+  wallIndex: number,
+  wallCount: number,
+  sideJp: string,
+  side: string,
+  postCountAlongEdge: number,
+): string | null {
+  const xy = resolveEdgeHashiraXY(labeling, wallIndex, wallCount, sideJp, side);
+  if (xy.alongRange) return xy.alongRange;
+  if (xy.alongStations.length > 0) {
+    return `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`;
+  }
+  if (postCountAlongEdge >= 2) {
+    const norm = normalizeEdgeHashiraForWallCount(labeling ?? undefined, wallCount);
+    const axis = norm.assignments[wallIndex]?.axis === 'Y' ? 'Y' : 'X';
+    return `${axis}1–${axis}${postCountAlongEdge}`;
+  }
+  return null;
+}
+
+export type ExcelWallHeaderInput = {
+  side: string;
+  sideJp?: string;
+  spans?: number[];
+  baseHeightMm?: number;
+};
+
+/**
+ * Multi-line header for 見積表 / 面別列: chord (AB), optional (X1–Xn), optional tier GL+m (matches result page).
+ */
+export function excelQuotationWallColumnHeader(
+  wallIndex: number,
+  walls: ExcelWallHeaderInput[],
+  closedFootprint: boolean,
+  labeling: EdgeHashiraLabeling | undefined,
+): string {
+  const wallCount = walls.length;
+  const chord = edgeChordNameExcel(wallIndex, wallCount, closedFootprint);
+  const wall = walls[wallIndex];
+  if (!wall) return chord;
+  const postAlong = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
+  const seg = edgeHashiraColumnRangeSegmentExcel(
+    labeling,
+    wallIndex,
+    wallCount,
+    wall.sideJp ?? '',
+    wall.side ?? '',
+    postAlong,
+  );
+  const lines: string[] = [chord];
+  if (seg) lines.push(`(${seg})`);
+  const baseH = wall.baseHeightMm ?? 0;
+  if (baseH > 0) {
+    lines.push(` GL+${(baseH / 1000).toFixed(0)}m`);
+  }
+  return lines.join('\n');
+}

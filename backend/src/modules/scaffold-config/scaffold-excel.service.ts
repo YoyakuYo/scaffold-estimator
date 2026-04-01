@@ -2,7 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { ScaffoldCalculationResult, WallCalculationResult, CalculatedComponent } from './scaffold-calculator.service';
-import { edgeChordNameExcel, resolveEdgeHashiraXY, type EdgeHashiraLabeling } from './excel-edge-hashira';
+import {
+  edgeChordNameExcel,
+  excelQuotationWallColumnHeader,
+  resolveEdgeHashiraXY,
+  type EdgeHashiraLabeling,
+} from './excel-edge-hashira';
 import {
   aggregateLevelQtyToFloors,
   buildingFloorCountFromHeight,
@@ -21,6 +26,8 @@ export class ScaffoldExcelService {
   async generateQuotation(config: ScaffoldConfiguration): Promise<Buffer> {
     const result: ScaffoldCalculationResult = config.calculationResult;
     if (!result) throw new Error('No calculation result available');
+
+    const wallColumnHeaders = this.buildExcelWallColumnHeaders(result);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Zoomen Reader';
@@ -172,10 +179,12 @@ export class ScaffoldExcelService {
     mergeRowTitle(wallDimTitle, 4);
     const dimHeader = sheet.addRow(['面', '壁長 (mm)', '足場高さ (mm)', '段数']);
     styleHeaderRow(dimHeader, 1, 4);
-    for (const w of result.walls) {
+    for (let wi = 0; wi < result.walls.length; wi++) {
+      const w = result.walls[wi];
       const scaffoldH = w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm;
-      const dr = sheet.addRow([w.sideJp, w.wallLengthMm, scaffoldH, w.levelCalc.fullLevels]);
+      const dr = sheet.addRow([wallColumnHeaders[wi], w.wallLengthMm, scaffoldH, w.levelCalc.fullLevels]);
       styleDataRow(dr, 1, 4, [2, 3, 4]);
+      dr.getCell(1).alignment = { vertical: 'middle', wrapText: true };
     }
     sheet.addRow([]);
 
@@ -201,14 +210,13 @@ export class ScaffoldExcelService {
     legendRow.getCell(1).font = { italic: true, size: 9, color: { argb: 'FF64748B' } };
     legendRow.getCell(1).alignment = { vertical: 'middle', wrapText: true };
 
-    const wallNames = result.walls.map(w => w.sideJp);
     const headerRow = sheet.addRow([
       'No',
       '分類',
       '部材名',
       '規格（SIZE）',
       '単位',
-      ...wallNames,
+      ...wallColumnHeaders,
       '合計',
     ]);
     headerRow.font = { bold: true };
@@ -229,6 +237,9 @@ export class ScaffoldExcelService {
         right: { style: 'thin' },
       };
     });
+    for (let i = 0; i < result.walls.length; i++) {
+      headerRow.getCell(6 + i).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    }
 
     // ─── Material Rows ───────────────────────────────────
     // Build wall maps for per-wall quantities
@@ -359,16 +370,18 @@ export class ScaffoldExcelService {
     const spanHeader = sheet.addRow(['面', '壁長 (mm)', 'スパン数', '階段', '構成（スパン内訳）']);
     styleHeaderRow(spanHeader, 1, 5);
 
-    for (const wall of result.walls) {
+    for (let wi = 0; wi < result.walls.length; wi++) {
+      const wall = result.walls[wi];
       const spanSummary = this.summarizeSpans(wall.spans);
       const sr = sheet.addRow([
-        wall.sideJp,
+        wallColumnHeaders[wi],
         wall.wallLengthMm,
         wall.totalSpans,
         `${wall.stairAccessCount}箇所`,
         spanSummary,
       ]);
       styleDataRow(sr, 1, 5, [2, 3, 4]);
+      sr.getCell(1).alignment = { vertical: 'middle', wrapText: true };
       sr.getCell(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
     }
 
@@ -376,7 +389,6 @@ export class ScaffoldExcelService {
     const sheet2 = workbook.addWorksheet('階・面別内訳', {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
-    const wallNames2 = result.walls.map(w => w.sideJp);
     const numCorners = result.walls.length;
     const levelH = levelHeightMm;
 
@@ -386,12 +398,15 @@ export class ScaffoldExcelService {
       sheet2.addRow([]);
       const titleRow = sheet2.addRow([`${floorLabel} (${rangeLabel}) — 積算内訳（運搬用）`]);
       titleRow.font = { bold: true, size: 12 };
-      sheet2.mergeCells(titleRow.number, 1, titleRow.number, wallNames2.length + 3);
-      const subHeader = sheet2.addRow(['部材名', '規格', ...wallNames2, '角部', '合計']);
+      sheet2.mergeCells(titleRow.number, 1, titleRow.number, wallColumnHeaders.length + 3);
+      const subHeader = sheet2.addRow(['部材名', '規格', ...wallColumnHeaders, '角部', '合計']);
       subHeader.font = { bold: true };
-      subHeader.eachCell((c) => {
+      subHeader.eachCell((c, colNumber) => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
         c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        if (colNumber >= 3 && colNumber <= 2 + result.walls.length) {
+          c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        }
       });
 
       for (const comp of sortedSummary) {
@@ -419,7 +434,7 @@ export class ScaffoldExcelService {
 
     sheet2.getColumn(1).width = 22;
     sheet2.getColumn(2).width = 14;
-    for (let i = 0; i < wallNames2.length + 2; i++) sheet2.getColumn(3 + i).width = 10;
+    for (let i = 0; i < wallColumnHeaders.length + 2; i++) sheet2.getColumn(3 + i).width = 11;
 
     this.appendSpecMatrixByWall(workbook, result, wallMaps);
     this.appendMaterialBreakdownSheet(workbook, config, result);
@@ -431,7 +446,7 @@ export class ScaffoldExcelService {
     sheet.getColumn(4).width = 14;   // 段数・規格
     sheet.getColumn(5).width = 36;   // 単位・スパン構成（長文は折返し）
     for (let i = 0; i < result.walls.length; i++) {
-      sheet.getColumn(6 + i).width = 10;
+      sheet.getColumn(6 + i).width = 12;
     }
     sheet.getColumn(6 + result.walls.length).width = 10; // 合計
 
@@ -682,6 +697,15 @@ export class ScaffoldExcelService {
     }
   }
 
+  private buildExcelWallColumnHeaders(result: ScaffoldCalculationResult): string[] {
+    const poly = (result as { polygonVertices?: unknown[] }).polygonVertices;
+    const closedFootprint = Array.isArray(poly) && poly.length >= 3;
+    const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
+    return result.walls.map((_, wi) =>
+      excelQuotationWallColumnHeader(wi, result.walls, closedFootprint, labeling),
+    );
+  }
+
   private sortSummaryForExcel(summary: CalculatedComponent[]): CalculatedComponent[] {
     return [...summary].sort(compareCalculatedComponentsForBom);
   }
@@ -729,7 +753,7 @@ export class ScaffoldExcelService {
       },
     });
 
-    const wallNames = walls.map((w) => w.sideJp);
+    const wallColumnHeaders = this.buildExcelWallColumnHeaders(result);
     const ncol = 2 + walls.length;
 
     const titleRow = sheet.addRow(['規格別・面別数量（壁面ごとの規格内訳）']);
@@ -755,9 +779,9 @@ export class ScaffoldExcelService {
         };
       });
 
-      const h = sheet.addRow(['規格', ...wallNames, '合計']);
+      const h = sheet.addRow(['規格', ...wallColumnHeaders, '合計']);
       h.font = { bold: true };
-      h.eachCell((cell) => {
+      h.eachCell((cell, colNumber) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
         cell.border = {
@@ -766,6 +790,9 @@ export class ScaffoldExcelService {
           bottom: { style: 'thin' },
           right: { style: 'thin' },
         };
+        if (colNumber >= 2 && colNumber <= 1 + walls.length) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        }
       });
 
       for (const comp of grp.components) {
