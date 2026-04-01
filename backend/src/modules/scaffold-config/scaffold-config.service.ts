@@ -19,6 +19,23 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 import { correctLegacyMassingTiers } from './massing-tier-normalizer';
 
+/** Supabase PostgREST column names for optional site / contact fields on scaffold_configurations. */
+const SCAFFOLD_SITE_SNAKE_KEYS = ['site_name', 'site_address', 'site_email', 'site_phone', 'site_fax'] as const;
+
+function stripScaffoldSiteSnakeKeys(payload: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...payload };
+  for (const k of SCAFFOLD_SITE_SNAKE_KEYS) delete next[k];
+  return next;
+}
+
+function isPostgrestMissingScaffoldSiteColumnError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const o = err as { code?: string; message?: string };
+  if (o.code !== 'PGRST204') return false;
+  const msg = String(o.message ?? '');
+  return SCAFFOLD_SITE_SNAKE_KEYS.some((k) => msg.includes(k));
+}
+
 @Injectable()
 export class ScaffoldConfigService {
   private readonly logger = new Logger(ScaffoldConfigService.name);
@@ -29,6 +46,37 @@ export class ScaffoldConfigService {
     private calculatorWakugumiService: ScaffoldCalculatorWakugumiService,
     private polygonToWallsService: PolygonToWallsService,
   ) {}
+
+  /** Non-empty site/contact fields from DTO for JSON fallback when DB has no site_* columns. */
+  private scaffoldSiteContactFromDto(dto: CreateScaffoldConfigDto): Record<string, string | null> | null {
+    const siteName = (dto.siteName ?? '').trim() || null;
+    const siteAddress = (dto.siteAddress ?? '').trim() || null;
+    const siteEmail = (dto.siteEmail ?? '').trim() || null;
+    const sitePhone = (dto.sitePhone ?? '').trim() || null;
+    const siteFax = (dto.siteFax ?? '').trim() || null;
+    if (!siteName && !siteAddress && !siteEmail && !sitePhone && !siteFax) return null;
+    return { siteName, siteAddress, siteEmail, sitePhone, siteFax };
+  }
+
+  /** Fills top-level site fields from calculationResult.siteContact (legacy DB without columns). */
+  private hydrateSiteContactFromCalculationResult(config: ScaffoldConfiguration): void {
+    const cr = config.calculationResult as Record<string, unknown> | null | undefined;
+    const sc = cr?.siteContact;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return;
+    const o = sc as Record<string, unknown>;
+    const take = (field: keyof ScaffoldConfiguration, key: string) => {
+      const cur = config[field];
+      if (cur != null && String(cur).trim() !== '') return;
+      const v = o[key];
+      if (typeof v === 'string' && v.trim() !== '')
+        (config as unknown as Record<string, unknown>)[field as string] = v;
+    };
+    take('siteName', 'siteName');
+    take('siteAddress', 'siteAddress');
+    take('siteEmail', 'siteEmail');
+    take('sitePhone', 'sitePhone');
+    take('siteFax', 'siteFax');
+  }
 
   /** Wakugumi: FT frame series fixes level height (1700mm) and layout width (600/900/1200). */
   private applyWakugumiFrameSeries(dto: CreateScaffoldConfigDto): CreateScaffoldConfigDto {
@@ -180,7 +228,7 @@ export class ScaffoldConfigService {
     }
 
     const client = this.supabase.getClient();
-    const configIns = mapPayloadToSnake<Record<string, unknown>>({
+    const configIns = mapPayloadToSnake({
       projectId: dto.projectId,
       drawingId: dto.drawingId || null,
       mode: dto.mode,
@@ -221,7 +269,23 @@ export class ScaffoldConfigService {
       createdBy: userId,
       status: 'configured',
     });
-    const { data: savedConfigRow, error: configErr } = await client.from('scaffold_configurations').insert(configIns).select().single();
+    let usedSiteColumnFallback = false;
+    let { data: savedConfigRow, error: configErr } = await client
+      .from('scaffold_configurations')
+      .insert(configIns)
+      .select()
+      .single();
+    if (configErr && isPostgrestMissingScaffoldSiteColumnError(configErr)) {
+      this.logger.warn(
+        'scaffold_configurations: site_* columns missing; retrying insert without them. Run migration AddScaffoldSiteContactColumns or supabase-migrations/019_scaffold_site_contact.sql.',
+      );
+      usedSiteColumnFallback = true;
+      ({ data: savedConfigRow, error: configErr } = await client
+        .from('scaffold_configurations')
+        .insert(stripScaffoldSiteSnakeKeys(configIns as Record<string, unknown>))
+        .select()
+        .single());
+    }
     if (configErr || !savedConfigRow) {
       this.logger.error('Insert config failed', configErr);
       throw new BadRequestException('Failed to save configuration.');
@@ -258,6 +322,7 @@ export class ScaffoldConfigService {
       dto.massingTiers as any,
       result.walls as any,
     );
+    const siteContactFallback = usedSiteColumnFallback ? this.scaffoldSiteContactFromDto(dto) : null;
     const calculationResult = {
       ...result,
       wallStandoffMm: standoffMm,
@@ -271,6 +336,7 @@ export class ScaffoldConfigService {
       ...(dto.ifcFileUrl && { ifcFileUrl: dto.ifcFileUrl }),
       ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
       ...(dto.edgeHashiraLabeling && { edgeHashiraLabeling: dto.edgeHashiraLabeling }),
+      ...(siteContactFallback ? { siteContact: siteContactFallback } : {}),
     };
     await client
       .from('scaffold_configurations')
@@ -279,6 +345,7 @@ export class ScaffoldConfigService {
     savedConfig.calculationResult = calculationResult;
     savedConfig.wallStandoffMm = standoffMm;
     savedConfig.status = 'calculated';
+    this.hydrateSiteContactFromCalculationResult(savedConfig);
 
     const priceMap = await this.buildPriceMap(scaffoldType);
     const quantityInserts: Record<string, unknown>[] = [];
@@ -493,7 +560,7 @@ export class ScaffoldConfigService {
     const keepMassingTiers =
       Array.isArray(massingForResult) && massingForResult.length > 0;
 
-    const calculationResult = {
+    let calculationResult: Record<string, unknown> = {
       ...result,
       wallStandoffMm: wallStandoffMm,
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 ? { polygonVertices: dto.buildingOutline } : {}),
@@ -508,8 +575,25 @@ export class ScaffoldConfigService {
           ? { edgeHashiraLabeling: prevEdgeLabels }
           : {}),
     };
-    configUpdates.calculation_result = calculationResult;
-    await client.from('scaffold_configurations').update(configUpdates).eq('id', configId);
+    const siteContactPatch = this.scaffoldSiteContactFromDto(dto);
+    const updatesPayload = configUpdates as Record<string, unknown>;
+    updatesPayload.calculation_result = calculationResult;
+    let { error: updErr } = await client.from('scaffold_configurations').update(updatesPayload).eq('id', configId);
+    if (updErr && isPostgrestMissingScaffoldSiteColumnError(updErr)) {
+      this.logger.warn(
+        'scaffold_configurations: site_* columns missing on update; retrying without them. Run migration AddScaffoldSiteContactColumns or supabase-migrations/019_scaffold_site_contact.sql.',
+      );
+      if (siteContactPatch) {
+        calculationResult = { ...calculationResult, siteContact: siteContactPatch };
+      }
+      const stripped = stripScaffoldSiteSnakeKeys(updatesPayload);
+      stripped.calculation_result = calculationResult;
+      ({ error: updErr } = await client.from('scaffold_configurations').update(stripped).eq('id', configId));
+    }
+    if (updErr) {
+      this.logger.error('Update config failed', updErr);
+      throw new BadRequestException('Failed to save configuration.');
+    }
     config.mode = dto.mode;
     config.scaffoldType = scaffoldType;
     config.structureType = dto.structureType || '改修工事';
@@ -579,6 +663,7 @@ export class ScaffoldConfigService {
     const config = mapRowToCamel<ScaffoldConfiguration>(row as Record<string, unknown>);
     if (!config) throw new NotFoundException('Scaffold configuration not found');
     this.applyLegacyMassingCorrection(config);
+    this.hydrateSiteContactFromCalculationResult(config);
     return config;
   }
 
