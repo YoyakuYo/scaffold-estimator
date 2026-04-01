@@ -36,6 +36,73 @@ export class ScaffoldExcelService {
       },
     });
 
+    const edgeBorder = {
+      top: { style: 'thin' as ExcelJS.BorderStyle },
+      left: { style: 'thin' as ExcelJS.BorderStyle },
+      bottom: { style: 'thin' as ExcelJS.BorderStyle },
+      right: { style: 'thin' as ExcelJS.BorderStyle },
+    };
+    const fillSectionTitle = {
+      type: 'pattern' as const,
+      pattern: 'solid' as const,
+      fgColor: { argb: 'FFE5E7EB' },
+    };
+    const fillLabelCol = {
+      type: 'pattern' as const,
+      pattern: 'solid' as const,
+      fgColor: { argb: 'FFF9FAFB' },
+    };
+    const fillTableHeader = {
+      type: 'pattern' as const,
+      pattern: 'solid' as const,
+      fgColor: { argb: 'FF2563EB' },
+    };
+
+    const mergeRowTitle = (row: ExcelJS.Row, throughCol: number) => {
+      if (throughCol > 1) sheet.mergeCells(row.number, 1, row.number, throughCol);
+      for (let c = 1; c <= throughCol; c++) {
+        const cell = row.getCell(c);
+        cell.border = edgeBorder;
+      }
+      row.getCell(1).fill = fillSectionTitle;
+      row.getCell(1).font = { bold: true, size: 11 };
+      row.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+    };
+
+    const styleKeyValueRow = (row: ExcelJS.Row) => {
+      for (const c of [1, 2]) {
+        const cell = row.getCell(c);
+        cell.border = edgeBorder;
+        cell.alignment = { vertical: 'middle', wrapText: true };
+      }
+      row.getCell(1).fill = fillLabelCol;
+      row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    };
+
+    const styleHeaderRow = (row: ExcelJS.Row, fromCol: number, toCol: number) => {
+      for (let c = fromCol; c <= toCol; c++) {
+        const cell = row.getCell(c);
+        cell.border = edgeBorder;
+        cell.fill = fillTableHeader;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      }
+    };
+
+    const styleDataRow = (row: ExcelJS.Row, fromCol: number, toCol: number, centerCols?: number[]) => {
+      const centerSet = new Set(centerCols ?? []);
+      for (let c = fromCol; c <= toCol; c++) {
+        const cell = row.getCell(c);
+        cell.border = edgeBorder;
+        cell.alignment = {
+          horizontal: centerSet.has(c) ? 'center' : 'left',
+          vertical: 'middle',
+          wrapText: true,
+        };
+      }
+    };
+
     // Total columns: No + 分類 + 部材名 + 規格 + 単位 + walls... + 合計
     const totalCols = 5 + result.walls.length + 1;
 
@@ -54,53 +121,75 @@ export class ScaffoldExcelService {
     if (config.siteEmail) siteRows.push(['メール', config.siteEmail]);
     if (config.sitePhone) siteRows.push(['電話', config.sitePhone]);
     if (config.siteFax) siteRows.push(['FAX', config.siteFax]);
-    for (const [k, v] of siteRows) {
-      sheet.addRow([k, v]);
+    if (siteRows.length > 0) {
+      const siteTitle = sheet.addRow(['現場情報']);
+      mergeRowTitle(siteTitle, 2);
+      for (const [k, v] of siteRows) {
+        const r = sheet.addRow([k, v]);
+        styleKeyValueRow(r);
+      }
+      sheet.addRow([]);
     }
-    if (siteRows.length > 0) sheet.addRow([]);
 
     // ─── Config Summary ──────────────────────────────────
     const scaffoldType = result.scaffoldType || 'kusabi';
     const isWakugumi = scaffoldType === 'wakugumi';
     const maxHeight = Math.max(...result.walls.map(w => w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm), 0);
 
-    sheet.addRow(['足場タイプ', isWakugumi ? '枠組足場 (Wakugumi)' : 'くさび式足場 (Kusabi)']);
-    sheet.addRow(['最大建物高さ', `${maxHeight}mm`]);
-    sheet.addRow(['足場幅', `${result.scaffoldWidthMm}mm`]);
+    const specTitle = sheet.addRow(['積算条件・仕様']);
+    mergeRowTitle(specTitle, 2);
 
+    const specRows: [string, string][] = [
+      ['足場タイプ', isWakugumi ? '枠組足場 (Wakugumi)' : 'くさび式足場 (Kusabi)'],
+      ['最大高さ (足場天端)', `${maxHeight}mm`],
+      ['足場幅', `${result.scaffoldWidthMm}mm`],
+    ];
     if (isWakugumi) {
-      sheet.addRow(['建枠サイズ', `${result.frameSizeMm || 1700}mm`]);
-      sheet.addRow(['巾木枚数', `${result.habakiCountPerSpan || 2}枚/スパン`]);
-      sheet.addRow(['端部タイプ', result.endStopperType === 'frame' ? '枠タイプ (妻側枠)' : '布材タイプ (端部布材)']);
+      specRows.push(
+        ['建枠サイズ', `${result.frameSizeMm || 1700}mm`],
+        ['巾木枚数', `${result.habakiCountPerSpan || 2}枚/スパン`],
+        [
+          '端部タイプ',
+          result.endStopperType === 'frame' ? '枠タイプ (妻側枠)' : '布材タイプ (端部布材)',
+        ],
+      );
     } else {
-      sheet.addRow(['支柱サイズ', `${result.preferredMainTatejiMm}mm`]);
-      sheet.addRow(['上部支柱', `${result.topGuardHeightMm}mm`]);
+      specRows.push(
+        ['支柱サイズ', `${result.preferredMainTatejiMm}mm`],
+        ['上部支柱', `${result.topGuardHeightMm}mm`],
+      );
     }
-
-    sheet.addRow(['段数', `${result.totalLevels}段`]);
     const levelHeightMm = isWakugumi ? (result.frameSizeMm || 1800) : 1800;
-    sheet.addRow(['階高', `${levelHeightMm}mm`]);
+    specRows.push(['段数', `${result.totalLevels}段`], ['階高 (1段)', `${levelHeightMm}mm`]);
+    for (const pair of specRows) {
+      const r = sheet.addRow(pair);
+      styleKeyValueRow(r);
+    }
     sheet.addRow([]);
 
     // ─── Wall dimensions (length & height per side) ───────
-    sheet.addRow(['壁面寸法']);
+    const wallDimTitle = sheet.addRow(['壁面寸法']);
+    mergeRowTitle(wallDimTitle, 4);
     const dimHeader = sheet.addRow(['面', '壁長 (mm)', '足場高さ (mm)', '段数']);
-    dimHeader.font = { bold: true };
+    styleHeaderRow(dimHeader, 1, 4);
     for (const w of result.walls) {
       const scaffoldH = w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm;
-      sheet.addRow([w.sideJp, w.wallLengthMm, scaffoldH, w.levelCalc.fullLevels]);
+      const dr = sheet.addRow([w.sideJp, w.wallLengthMm, scaffoldH, w.levelCalc.fullLevels]);
+      styleDataRow(dr, 1, 4, [2, 3, 4]);
     }
     sheet.addRow([]);
 
     // ─── Floor labels (1階, 2階, ... with height range) ───
-    sheet.addRow(['階（フロア）']);
+    const floorTitle = sheet.addRow(['階（フロア）']);
+    mergeRowTitle(floorTitle, 3);
     const floorHeader = sheet.addRow(['階', '高さ範囲 (mm)', '備考']);
-    floorHeader.font = { bold: true };
+    styleHeaderRow(floorHeader, 1, 3);
     for (let f = 1; f <= result.totalLevels; f++) {
       const from = (f - 1) * levelHeightMm;
       const to = f * levelHeightMm;
       const label = f === 1 ? '1階' : f === 2 ? '2階' : f === 3 ? '3階' : `${f}階`;
-      sheet.addRow([label, `${from} ～ ${to}`, f === 1 ? '1st floor' : f === 2 ? '2nd floor' : `${f}th floor`]);
+      const fr = sheet.addRow([label, `${from} ～ ${to}`, f === 1 ? '1st floor' : f === 2 ? '2nd floor' : `${f}th floor`]);
+      styleDataRow(fr, 1, 3, [1, 2]);
     }
     sheet.addRow([]);
 
@@ -252,19 +341,22 @@ export class ScaffoldExcelService {
 
     // ─── Per-wall span info ──────────────────────────────
     sheet.addRow([]);
-    sheet.addRow([]);
-    const spanInfoTitle = sheet.addRow(['スパン構成']);
-    spanInfoTitle.font = { bold: true, size: 14 };
+    const spanBlockTitle = sheet.addRow(['スパン構成']);
+    mergeRowTitle(spanBlockTitle, 5);
+    const spanHeader = sheet.addRow(['面', '壁長 (mm)', 'スパン数', '階段', '構成（スパン内訳）']);
+    styleHeaderRow(spanHeader, 1, 5);
 
     for (const wall of result.walls) {
       const spanSummary = this.summarizeSpans(wall.spans);
-      sheet.addRow([
+      const sr = sheet.addRow([
         wall.sideJp,
-        `壁長: ${wall.wallLengthMm}mm`,
-        `スパン数: ${wall.totalSpans}`,
-        `階段: ${wall.stairAccessCount}箇所`,
-        `構成: ${spanSummary}`,
+        wall.wallLengthMm,
+        wall.totalSpans,
+        `${wall.stairAccessCount}箇所`,
+        spanSummary,
       ]);
+      styleDataRow(sr, 1, 5, [2, 3, 4]);
+      sr.getCell(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
     }
 
     // ─── Sheet 2: Per-floor, per-side breakdown (for transport) ──
@@ -319,12 +411,12 @@ export class ScaffoldExcelService {
     this.appendSpecMatrixByWall(workbook, result, wallMaps);
     this.appendMaterialBreakdownSheet(workbook, config, result);
 
-    // ─── Column Widths ───────────────────────────────────
-    sheet.getColumn(1).width = 5;    // No
-    sheet.getColumn(2).width = 12;   // 分類
-    sheet.getColumn(3).width = 18;   // 部材名
-    sheet.getColumn(4).width = 20;   // 規格
-    sheet.getColumn(5).width = 7;    // 単位
+    // ─── Column Widths (shared: summary tables + BOM + スパン構成) ───
+    sheet.getColumn(1).width = 12;   // 項目・面・No
+    sheet.getColumn(2).width = 16;   // 値・壁長・分類
+    sheet.getColumn(3).width = 22;   // 足場高さ・部材名
+    sheet.getColumn(4).width = 14;   // 段数・規格
+    sheet.getColumn(5).width = 36;   // 単位・スパン構成（長文は折返し）
     for (let i = 0; i < result.walls.length; i++) {
       sheet.getColumn(6 + i).width = 10;
     }
