@@ -27,6 +27,89 @@ import { authApi } from '@/lib/api/auth';
 
 const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
 
+const LANDING_HERO_3D_SLIDES = [
+  '/landing/hero-scaffold-3d.png',
+  '/landing/hero-scaffold-3d-b.png',
+] as const;
+
+const LANDING_HERO_3D_INTERVAL_MS = 5000;
+
+function LandingHero3DVisual({
+  alt,
+  badgeLabel,
+  metaLabel,
+  rotateHint,
+}: {
+  alt: string;
+  badgeLabel: string;
+  metaLabel: string;
+  rotateHint: string;
+}) {
+  const [active, setActive] = useState(0);
+  const [motionOk, setMotionOk] = useState(true);
+  const sizes = '(max-width: 1024px) 100vw, 58vw';
+  const imageClassName = 'object-contain object-center p-3 sm:p-4';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => setMotionOk(!mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  useEffect(() => {
+    if (!motionOk || LANDING_HERO_3D_SLIDES.length < 2) return;
+    const id = window.setInterval(
+      () => setActive((i) => (i + 1) % LANDING_HERO_3D_SLIDES.length),
+      LANDING_HERO_3D_INTERVAL_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [motionOk]);
+
+  return (
+    <>
+      <div className="relative aspect-[4/3] w-full sm:aspect-[5/4] lg:aspect-[16/11] lg:min-h-[min(52vh,440px)]">
+        {LANDING_HERO_3D_SLIDES.map((src, i) => (
+          <Image
+            key={src}
+            src={src}
+            alt={alt}
+            fill
+            priority={i === 0}
+            sizes={sizes}
+            className={`${imageClassName} transition-opacity duration-1000 ease-in-out motion-reduce:transition-none ${
+              i === active ? 'z-[1] opacity-100' : 'z-0 opacity-0'
+            }`}
+          />
+        ))}
+        <span className="sr-only" aria-live="polite">
+          {active + 1} / {LANDING_HERO_3D_SLIDES.length}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-slate-950/90 px-4 py-2.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/90">{badgeLabel}</span>
+        <div
+          className="flex items-center justify-center gap-1.5"
+          aria-hidden
+          title={rotateHint}
+        >
+          {LANDING_HERO_3D_SLIDES.map((src, i) => (
+            <span
+              key={src}
+              className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${
+                i === active ? 'scale-125 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.6)]' : 'bg-slate-600'
+              }`}
+            />
+          ))}
+        </div>
+        <span className="text-[11px] text-slate-400">{metaLabel}</span>
+      </div>
+    </>
+  );
+}
+
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
@@ -200,22 +283,12 @@ export default function LandingPage() {
                     aria-hidden
                   />
                   <div className="relative overflow-hidden rounded-3xl border border-cyan-400/35 bg-gradient-to-b from-slate-800/90 to-slate-950 shadow-[0_0_0_1px_rgba(34,211,238,0.12),0_25px_80px_-20px_rgba(0,0,0,0.75),0_0_60px_-30px_rgba(34,211,238,0.35)] ring-1 ring-white/10">
-                    <div className="relative aspect-[4/3] w-full sm:aspect-[5/4] lg:aspect-[16/11] lg:min-h-[min(52vh,440px)]">
-                      <Image
-                        src="/landing/hero-scaffold-3d.png"
-                        alt={t('landing', 'hero3dAlt')}
-                        fill
-                        priority
-                        className="object-contain object-center p-3 sm:p-4"
-                        sizes="(max-width: 1024px) 100vw, 58vw"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/90 px-4 py-2.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/90">
-                        {t('landing', 'hero3dBadge')}
-                      </span>
-                      <span className="text-[11px] text-slate-400">{t('landing', 'hero3dMeta')}</span>
-                    </div>
+                    <LandingHero3DVisual
+                      alt={t('landing', 'hero3dAlt')}
+                      badgeLabel={t('landing', 'hero3dBadge')}
+                      metaLabel={t('landing', 'hero3dMeta')}
+                      rotateHint={t('landing', 'hero3dRotateHint')}
+                    />
                   </div>
 
                   {/* Floating 2D inset — desktop / large tablet */}

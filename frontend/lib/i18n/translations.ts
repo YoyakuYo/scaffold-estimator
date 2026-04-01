@@ -918,6 +918,11 @@ export const translations = {
       en: 'X1–X10 · Y1–Y5',
       fr: 'X1–X10 · Y1–Y5',
     },
+    hero3dRotateHint: {
+      ja: '約5秒ごとに画像が切り替わります',
+      en: 'Image changes about every 5 seconds',
+      fr: 'L’image change environ toutes les 5 secondes',
+    },
     heroAppVisualCredit: {
       ja: '※ 画面は本システムの出力イメージです',
       en: 'Visuals: sample output from this system',
