@@ -528,13 +528,15 @@ export const translations = {
     colNo: { ja: 'No', en: 'No', fr: 'N°' },
     colCategory: { ja: '分類', en: 'Category', fr: 'Catégorie' },
     colName: { ja: '部材名', en: 'Component', fr: 'Composant' },
-    colSpec: { ja: '規格', en: 'Spec', fr: 'Spéc.' },
+    colSpec: { ja: '規格（SIZE）', en: 'Spec (SIZE)', fr: 'Spéc. (taille)' },
     colUnit: { ja: '単位', en: 'Unit', fr: 'Unité' },
     colTotal: { ja: '合計', en: 'Total', fr: 'Total' },
     /** Quotation table: same 分類 as row above (compact; pairs with quotationSameName). */
     quotationSameCategory: { ja: 'S', en: 'S', fr: 'S' },
     /** Quotation table: same 部材名 as row above. */
     quotationSameName: { ja: 'L', en: 'L', fr: 'L' },
+    /** Quotation table: same 規格 as row above (same 分類+部材名). */
+    quotationSameSpec: { ja: 'S', en: 'S', fr: 'S' },
     quotationBySpecBanner: {
       ja: '（規格別数量）',
       en: '(quantities by specification)',

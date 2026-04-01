@@ -907,14 +907,17 @@ function QuotationTable({ result }: { result: any }) {
           idx: number;
           catDisplay: string;
           nameDisplay: string;
+          specDisplay: string;
         };
     const rows: Row[] = [];
     let lastCategory = '';
     let itemNo = 0;
     let prevDetailCatLogic = '';
     let prevDetailNameLogic = '';
+    let prevDetailSpecLogic = '';
     const sameCatMark = t('result', 'quotationSameCategory');
     const sameNameMark = t('result', 'quotationSameName');
+    const sameSpecMark = t('result', 'quotationSameSpec');
 
     for (const grp of materialGroups) {
       const cat =
@@ -949,14 +952,24 @@ function QuotationTable({ result }: { result: any }) {
           nameLogic === prevDetailNameLogic && prevDetailNameLogic !== ''
             ? sameNameMark
             : nameLogic;
+        const specLogic = comp.sizeSpec || '';
+        const specDisplay =
+          specLogic === prevDetailSpecLogic &&
+          prevDetailSpecLogic !== '' &&
+          catLogic === prevDetailCatLogic &&
+          nameLogic === prevDetailNameLogic
+            ? sameSpecMark
+            : specLogic;
         prevDetailCatLogic = catLogic;
         prevDetailNameLogic = nameLogic;
+        prevDetailSpecLogic = specLogic;
         rows.push({
           type: 'detail',
           comp,
           idx: itemNo,
           catDisplay,
           nameDisplay,
+          specDisplay,
         });
       }
     }
@@ -1046,7 +1059,7 @@ function QuotationTable({ result }: { result: any }) {
                 );
               }
 
-              const { comp, idx, catDisplay, nameDisplay } = row;
+              const { comp, idx, catDisplay, nameDisplay, specDisplay } = row;
               const key = scaffoldWallQuantityKey(comp);
               const perWall = wallMaps.map((m) => m.get(key) || 0);
               const total =
@@ -1054,6 +1067,7 @@ function QuotationTable({ result }: { result: any }) {
               const rowKey = `${comp.sortOrder}-${key}`;
               const catIsMark = catDisplay === t('result', 'quotationSameCategory');
               const nameIsMark = nameDisplay === t('result', 'quotationSameName');
+              const specIsMark = specDisplay === t('result', 'quotationSameSpec');
 
               return (
                 <tr
@@ -1077,7 +1091,13 @@ function QuotationTable({ result }: { result: any }) {
                   >
                     {nameDisplay}
                   </td>
-                  <td className="px-3 py-2 text-gray-600">{comp.sizeSpec}</td>
+                  <td
+                    className={`px-3 py-2 text-gray-600 ${
+                      specIsMark ? 'text-center text-slate-500 font-semibold' : ''
+                    }`}
+                  >
+                    {specDisplay}
+                  </td>
                   <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
                   {perWall.map((qty, wi) => (
                     <td key={wi} className="px-3 py-2 text-center text-gray-700">

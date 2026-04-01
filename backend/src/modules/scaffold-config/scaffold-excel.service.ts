@@ -195,7 +195,7 @@ export class ScaffoldExcelService {
 
     // ─── Material Table Header ───────────────────────────
     const legendRow = sheet.addRow([
-      '※ 材料表：直上行と同じ「分類」は S、同じ「部材名」は L と表記します。',
+      '※ 材料表：直上行と同じ「分類」は S、同じ「部材名」は L。同一部材で直上行と同じ「規格」も S（列見出しで判別）。',
     ]);
     sheet.mergeCells(legendRow.number, 1, legendRow.number, totalCols);
     legendRow.getCell(1).font = { italic: true, size: 9, color: { argb: 'FF64748B' } };
@@ -206,7 +206,7 @@ export class ScaffoldExcelService {
       'No',
       '分類',
       '部材名',
-      '規格',
+      '規格（SIZE）',
       '単位',
       ...wallNames,
       '合計',
@@ -246,9 +246,10 @@ export class ScaffoldExcelService {
 
     let rowNum = 1;
     let lastCategory = '';
-    /** Same-as-above markers (Excel): S = 分類, L = 部材名 — avoids 〃 and full-text repeat. */
+    /** Same-as-above markers (Excel): S = 分類, L = 部材名, S = 規格 when same size as row above for same item. */
     let prevDetailCategory = '';
     let prevDetailNameJp = '';
+    let prevDetailSizeSpec = '';
 
     const applyDetailRowStyle = (dataRow: ExcelJS.Row, n: number, wallsLen: number) => {
       dataRow.getCell(1).alignment = { horizontal: 'center' };
@@ -333,18 +334,27 @@ export class ScaffoldExcelService {
             ? comp.quantity
             : perWallQty.reduce((a, b) => a + b, 0);
         const nameJp = comp.nameJp || '';
+        const specRaw = comp.sizeSpec || '';
         const catCell =
           cat === prevDetailCategory && prevDetailCategory !== '' ? 'S' : cat;
         const nameCell =
           nameJp === prevDetailNameJp && prevDetailNameJp !== '' ? 'L' : nameJp;
+        const specCell =
+          specRaw === prevDetailSizeSpec &&
+          prevDetailSizeSpec !== '' &&
+          cat === prevDetailCategory &&
+          nameJp === prevDetailNameJp
+            ? 'S'
+            : specRaw;
         prevDetailCategory = cat;
         prevDetailNameJp = nameJp;
+        prevDetailSizeSpec = specRaw;
 
         const dataRow = sheet.addRow([
           rowNum,
           catCell,
           nameCell,
-          comp.sizeSpec || '',
+          specCell,
           comp.unit,
           ...perWallQty,
           total,
@@ -355,6 +365,9 @@ export class ScaffoldExcelService {
         }
         if (nameCell === 'L') {
           dataRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        if (specCell === 'S' && specRaw !== '') {
+          dataRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
         }
         rowNum++;
       }
