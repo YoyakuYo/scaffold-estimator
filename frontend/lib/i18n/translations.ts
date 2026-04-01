@@ -1005,6 +1005,9 @@ export const translations = {
       en: 'Blueprint-grade detail, routed into an estimator-first workflow.',
       fr: 'Précision « plan », intégrée à un flux pensé pour le métré.',
     },
+    /** Decorative sheet refs (title block, aria-hidden friendly copy still translated) */
+    inputSheetRef1: { ja: '図面-01', en: 'DWG-01', fr: 'PLAN-01' },
+    inputSheetRef2: { ja: '図面-02', en: 'DWG-02', fr: 'PLAN-02' },
     boxFeaturesEyebrow: { ja: '機能', en: 'Features', fr: 'Fonctionnalités' },
     boxFeaturesIntro: {
       ja: '数量の確定から見積・図面まで、ワンツールで。',

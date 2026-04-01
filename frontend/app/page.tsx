@@ -309,14 +309,16 @@ export default function LandingPage() {
 
         {/* ─── Value props: stacked high-contrast panels (Input → Features → Why) ─ */}
         <section
-          className="relative border-b border-slate-800/10 bg-[#e8eaef] py-14 md:py-20"
+          className="relative border-b border-zinc-800/20 bg-[#b8b4ac] py-14 md:py-20"
           aria-labelledby="landing-value-props-heading"
         >
+          {/* Site fill + light survey grid (civil / drafting pad) */}
           <div
-            className="pointer-events-none absolute inset-0 opacity-[0.7]"
+            className="pointer-events-none absolute inset-0 opacity-[0.85]"
             style={{
               backgroundImage:
-                'radial-gradient(ellipse 120% 80% at 100% 0%, rgba(15,23,42,0.06), transparent 50%), radial-gradient(ellipse 100% 60% at 0% 100%, rgba(15,23,42,0.05), transparent 45%)',
+                'linear-gradient(rgba(24,24,27,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(24,24,27,0.06) 1px, transparent 1px), radial-gradient(ellipse 100% 80% at 50% 0%, rgba(255,255,255,0.12), transparent 55%)',
+              backgroundSize: '32px 32px, 32px 32px, auto',
             }}
             aria-hidden
           />
@@ -325,81 +327,119 @@ export default function LandingPage() {
               {t('landing', 'appName')} — {t('landing', 'sectionFeatures')}
             </h2>
 
-            {/* Panel 1 — Input: hero photo + copy + horizontal stat chips (neutral, no accent color) */}
-            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-[0_24px_50px_-18px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/[0.04]">
-              <div className="px-6 py-8 sm:px-8 sm:py-10 md:px-10 md:py-11 lg:px-12">
-                <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-12 xl:gap-14">
-                  <div className="order-2 lg:order-none lg:col-span-5">
-                    <figure className="group relative mx-auto max-w-md lg:mx-0">
-                      <div
-                        className="pointer-events-none absolute -inset-3 rounded-[1.35rem] bg-slate-300/25 opacity-60 blur-2xl transition duration-500 group-hover:opacity-90"
-                        aria-hidden
-                      />
-                      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_20px_40px_-16px_rgba(15,23,42,0.18)]">
-                        <div className="relative aspect-[4/3] w-full">
-                          <Image
-                            src="/landing/input-drawing-workstation.png"
-                            alt={t('landing', 'inputWorkstationAlt')}
-                            fill
-                            className="object-cover object-center transition duration-700 ease-out group-hover:scale-[1.02]"
-                            sizes="(max-width: 1024px) 100vw, 42vw"
+            {/* Panel 1 — Input: drawing-register / title-block (civil engineering sheet) */}
+            <div className="overflow-hidden rounded-sm border-2 border-zinc-800 bg-[#e6e4df] shadow-[6px_6px_0_0_rgba(24,24,27,0.2),0_24px_48px_-12px_rgba(0,0,0,0.35)]">
+              <div className="flex items-center justify-between border-b-2 border-zinc-800 bg-zinc-900 px-4 py-2.5 sm:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="hidden h-px w-8 shrink-0 bg-stone-500 sm:block" aria-hidden />
+                  <span className="truncate text-[10px] font-bold uppercase tracking-[0.28em] text-stone-400">
+                    {t('landing', 'boxInputEyebrow')}
+                  </span>
+                </div>
+                <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500" aria-hidden>
+                  {t('landing', 'inputSheetRef1')}
+                </span>
+              </div>
+              <div
+                className="relative border-l-[3px] border-zinc-800"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(rgba(39,39,42,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(39,39,42,0.04) 1px, transparent 1px)',
+                  backgroundSize: '28px 28px',
+                }}
+              >
+                <div className="px-5 py-8 sm:px-7 sm:py-9 md:px-9 md:py-10 lg:px-10 lg:py-11">
+                  <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-11 xl:gap-12">
+                    <div className="order-2 lg:order-none lg:col-span-5">
+                      <figure className="group relative mx-auto max-w-md lg:mx-0">
+                        <div className="relative p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)] ring-1 ring-zinc-700">
+                          <div className="border border-zinc-600 bg-zinc-800">
+                            <div className="relative aspect-[4/3] w-full bg-zinc-900">
+                              <Image
+                                src="/landing/input-drawing-workstation.png"
+                                alt={t('landing', 'inputWorkstationAlt')}
+                                fill
+                                className="object-cover object-center transition duration-700 ease-out group-hover:scale-[1.015]"
+                                sizes="(max-width: 1024px) 100vw, 42vw"
+                              />
+                              <div
+                                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950/40 via-transparent to-zinc-100/10"
+                                aria-hidden
+                              />
+                            </div>
+                          </div>
+                          <div
+                            className="absolute -bottom-1 -right-1 h-4 w-4 border-b-2 border-r-2 border-zinc-800 bg-[#e6e4df]"
+                            aria-hidden
                           />
                           <div
-                            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-900/25 via-transparent to-white/30"
+                            className="absolute -left-1 -top-1 h-4 w-4 border-l-2 border-t-2 border-zinc-800 bg-[#e6e4df]"
                             aria-hidden
                           />
                         </div>
-                      </div>
-                      <figcaption className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-[0.95rem]">
-                        {t('landing', 'inputWorkstationCaption')}
-                      </figcaption>
-                    </figure>
-                  </div>
+                        <figcaption className="mt-4 border-t border-zinc-400/80 pt-3 text-sm leading-relaxed text-zinc-700 sm:text-[0.95rem]">
+                          {t('landing', 'inputWorkstationCaption')}
+                        </figcaption>
+                      </figure>
+                    </div>
 
-                  <div className="order-1 flex flex-col lg:order-none lg:col-span-7">
-                    <span className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-100 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-600">
-                      {t('landing', 'boxInputEyebrow')}
-                    </span>
-                    <h3 className="mt-4 text-2xl font-extrabold leading-[1.12] tracking-tight text-slate-900 sm:text-3xl md:text-[2.15rem] md:leading-[1.1]">
-                      {t('landing', 'boxInputTitle')}
-                    </h3>
-                    <p className="mt-4 text-base font-semibold leading-relaxed text-slate-800 sm:text-lg">
-                      {t('features', 'coreSubtitle')}
-                    </p>
-                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600 sm:text-[0.95rem]">
-                      {t('landing', 'boxInputFormats')}
-                    </p>
+                    <div className="order-1 flex flex-col lg:order-none lg:col-span-7">
+                      <h3 className="text-2xl font-bold leading-[1.12] tracking-tight text-zinc-900 sm:text-3xl md:text-[2.1rem] md:leading-[1.08]">
+                        {t('landing', 'boxInputTitle')}
+                      </h3>
+                      <p className="mt-3 text-base font-semibold leading-relaxed text-zinc-800 sm:text-lg">
+                        {t('features', 'coreSubtitle')}
+                      </p>
+                      <p className="mt-3 max-w-xl border-l-2 border-zinc-500 pl-4 text-sm leading-relaxed text-zinc-700 sm:text-[0.95rem]">
+                        {t('landing', 'boxInputFormats')}
+                      </p>
 
-                    <ul
-                      className="mt-8 m-0 flex list-none flex-wrap gap-3 overflow-x-auto p-0 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden"
-                      aria-label={t('features', 'statsTitle')}
-                    >
-                      {[
-                        { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
-                        { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
-                        { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
-                        { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
-                      ].map((chip) => (
-                        <li
-                          key={chip.label}
-                          className="min-w-[9.5rem] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm transition hover:border-slate-300 hover:bg-white sm:min-w-0"
-                        >
-                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{chip.label}</div>
-                          <div className="mt-1.5 text-base font-bold leading-tight text-slate-900 sm:text-lg">{chip.value}</div>
-                        </li>
-                      ))}
-                    </ul>
+                      <ul
+                        className="mt-8 m-0 flex list-none flex-wrap gap-2.5 overflow-x-auto p-0 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-3 sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden"
+                        aria-label={t('features', 'statsTitle')}
+                      >
+                        {[
+                          { label: t('features', 'stat1Label'), value: t('features', 'stat1Value') },
+                          { label: t('features', 'stat2Label'), value: t('features', 'stat2Value') },
+                          { label: t('features', 'stat3Label'), value: t('features', 'stat3Value') },
+                          { label: t('features', 'stat4Label'), value: t('features', 'stat4Value') },
+                        ].map((chip) => (
+                          <li
+                            key={chip.label}
+                            className="min-w-[9.25rem] shrink-0 snap-start border border-zinc-600/80 bg-[#d4d1cb] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_0_rgba(0,0,0,0.08)] transition hover:border-zinc-700 sm:min-w-0"
+                          >
+                            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                              {chip.label}
+                            </div>
+                            <div className="mt-1 text-base font-bold leading-tight tracking-tight text-zinc-900 sm:text-lg">
+                              {chip.value}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Blueprint bridge — second visual + narrative (neutral chrome) */}
-            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white shadow-[0_28px_60px_-20px_rgba(15,23,42,0.14)] ring-1 ring-slate-900/[0.04]">
+            {/* Blueprint bridge — matching register sheet */}
+            <div className="overflow-hidden rounded-sm border-2 border-zinc-800 bg-[#ddd9d3] shadow-[6px_6px_0_0_rgba(24,24,27,0.2),0_28px_52px_-14px_rgba(0,0,0,0.32)]">
+              <div className="flex items-center justify-between border-b-2 border-zinc-800 bg-zinc-900 px-4 py-2.5 sm:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="hidden h-px w-8 shrink-0 bg-stone-500 sm:block" aria-hidden />
+                  <span className="truncate text-[10px] font-bold uppercase tracking-[0.28em] text-stone-400">
+                    {t('landing', 'boxInputEyebrow')}
+                  </span>
+                </div>
+                <span className="shrink-0 font-mono text-[10px] tabular-nums text-zinc-500" aria-hidden>
+                  {t('landing', 'inputSheetRef2')}
+                </span>
+              </div>
               <div className="grid items-stretch lg:grid-cols-2">
-                <figure className="relative order-1 min-h-[220px] sm:min-h-[280px] lg:order-2 lg:min-h-[min(100%,420px)]">
+                <figure className="relative order-1 min-h-[220px] border-b-2 border-zinc-800 sm:min-h-[280px] lg:order-2 lg:min-h-[min(100%,440px)] lg:border-b-0 lg:border-l-2 lg:border-zinc-800">
                   <div
-                    className="absolute inset-0 z-[1] bg-gradient-to-b from-slate-900/20 via-transparent to-slate-900/10 lg:bg-gradient-to-l lg:from-transparent lg:via-slate-900/5 lg:to-slate-900/25"
+                    className="absolute inset-0 z-[1] bg-gradient-to-b from-zinc-950/25 via-transparent to-zinc-950/15 lg:bg-gradient-to-l lg:from-transparent lg:via-zinc-950/10 lg:to-zinc-950/30"
                     aria-hidden
                   />
                   <Image
@@ -411,17 +451,22 @@ export default function LandingPage() {
                   />
                   <figcaption className="sr-only">{t('landing', 'inputBlueprintCaption')}</figcaption>
                 </figure>
-                <div className="order-2 flex flex-col justify-center border-slate-100 bg-zinc-50/80 px-6 py-10 sm:px-10 sm:py-12 lg:order-1 lg:border-r lg:px-12 lg:py-14">
-                  <span className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-white px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-600">
-                    {t('landing', 'boxInputEyebrow')}
-                  </span>
-                  <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl md:text-4xl">
+                <div
+                  className="order-2 flex flex-col justify-center border-zinc-800 px-5 py-9 sm:px-8 sm:py-11 lg:order-1 lg:border-r-2 lg:px-10 lg:py-12"
+                  style={{
+                    backgroundImage:
+                      'linear-gradient(rgba(39,39,42,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(39,39,42,0.035) 1px, transparent 1px)',
+                    backgroundSize: '28px 28px',
+                    backgroundColor: '#e0ddd7',
+                  }}
+                >
+                  <h3 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl md:text-[2.1rem]">
                     {t('landing', 'inputBlueprintTitle')}
                   </h3>
-                  <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-600 sm:text-lg">
+                  <p className="mt-3 max-w-lg border-l-2 border-zinc-500 pl-4 text-base leading-relaxed text-zinc-700 sm:text-lg">
                     {t('landing', 'inputBlueprintLead')}
                   </p>
-                  <p className="mt-6 text-sm leading-relaxed text-slate-500 sm:text-[0.95rem]">
+                  <p className="mt-5 text-sm leading-relaxed text-zinc-600 sm:text-[0.95rem]">
                     {t('landing', 'inputBlueprintCaption')}
                   </p>
                 </div>
