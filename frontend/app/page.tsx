@@ -27,10 +27,6 @@ import { authApi } from '@/lib/api/auth';
 
 const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
 
-/** Generic construction / high-rise (Unsplash, free license). Optimized sizes via next/image. */
-const LANDING_HERO_PHOTO =
-  'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1920&auto=format&fit=crop';
-
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
@@ -121,75 +117,129 @@ export default function LandingPage() {
       </header>
 
       <main>
-        {/* ─── Hero (photo + lightweight scaffold overlay) ──────── */}
-        <section className="relative min-h-[72vh] w-full overflow-hidden bg-slate-900 text-white">
-          <Image
-            src={LANDING_HERO_PHOTO}
-            alt={t('landing', 'heroImageAlt')}
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover"
+        {/* ─── Hero: product 3D + 2D elevation (app output) ───── */}
+        <section className="relative isolate min-h-[min(92vh,900px)] w-full overflow-hidden bg-gradient-to-br from-slate-950 via-[#0a1628] to-indigo-950 text-white">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-90"
+            aria-hidden
+            style={{
+              backgroundImage:
+                'radial-gradient(ellipse 80% 55% at 85% 20%, rgba(56,189,248,0.22), transparent 55%), radial-gradient(ellipse 70% 50% at 10% 80%, rgba(99,102,241,0.18), transparent 50%), radial-gradient(ellipse 50% 40% at 50% 100%, rgba(14,165,233,0.12), transparent 45%)',
+            }}
           />
           <div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/82 via-black/48 to-black/25"
+            className="pointer-events-none absolute inset-0 opacity-[0.07]"
             aria-hidden
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)',
+              backgroundSize: '48px 48px',
+            }}
           />
-          <div className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" aria-hidden>
-            <div className="landing-scaffold-rise absolute bottom-0 right-0 top-[16%] w-[min(46vw,540px)] max-md:top-[22%] max-md:w-[min(72vw,380px)]">
-              <div
-                className="relative h-full w-full border-x border-white/45 opacity-[0.4]"
-                style={{
-                  backgroundImage: `repeating-linear-gradient(90deg, transparent 0, transparent 27px, rgba(255,255,255,0.22) 27px, rgba(255,255,255,0.22) 28px),
-                    repeating-linear-gradient(0deg, transparent 0, transparent 34px, rgba(255,255,255,0.16) 34px, rgba(255,255,255,0.16) 35px)`,
-                }}
-              />
-              <div className="absolute inset-0 bg-[linear-gradient(125deg,transparent_46%,rgba(255,255,255,0.11)_48.5%,rgba(255,255,255,0.11)_51.5%,transparent_54%)]" />
-            </div>
-          </div>
 
-          <div className="relative z-10 mx-auto flex min-h-[72vh] max-w-6xl flex-col justify-end px-4 pb-14 pt-28 sm:px-6 sm:pb-16 lg:px-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/75">
-              {t('landing', 'forConstruction')}
-            </p>
-            <h1 className="mt-3 max-w-3xl text-3xl font-bold leading-tight sm:text-4xl md:text-5xl">
-              {t('landing', 'heroTitle')}
-            </h1>
-            <p className="mt-4 max-w-2xl text-lg text-white/90 sm:text-xl">
-              {t('landing', 'heroSubtitle')}
-            </p>
-            <p className="mt-2 max-w-xl text-sm text-white/65">{t('landing', 'tagline')}</p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link
-                href="/register"
-                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition-colors hover:bg-blue-700"
-              >
-                {t('landing', 'heroCtaRegister')}
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-xl border border-white/35 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/15"
-              >
-                {t('landing', 'logIn')}
-              </Link>
-              <Link
-                href="#install"
-                className="inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-white/85 underline-offset-4 hover:text-white hover:underline"
-              >
-                {t('landing', 'heroCtaInstall')}
-              </Link>
-            </div>
-          </div>
+          <div className="relative z-10 mx-auto flex min-h-[min(92vh,900px)] max-w-7xl flex-col justify-center px-4 py-16 sm:px-6 lg:px-8 lg:py-12">
+            <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-10">
+              <div className="order-2 text-center lg:order-none lg:col-span-5 lg:text-left">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-300/90">
+                  {t('landing', 'forConstruction')}
+                </p>
+                <h1 className="mt-3 text-3xl font-bold leading-[1.12] tracking-tight sm:text-4xl md:text-5xl lg:text-[2.65rem] lg:leading-[1.08]">
+                  <span className="bg-gradient-to-r from-white via-cyan-50 to-sky-200 bg-clip-text text-transparent">
+                    {t('landing', 'heroTitle')}
+                  </span>
+                </h1>
+                <p className="mt-4 max-w-xl text-lg text-slate-200/95 sm:text-xl mx-auto lg:mx-0">
+                  {t('landing', 'heroSubtitle')}
+                </p>
+                <p className="mt-2 max-w-lg text-sm text-slate-400 mx-auto lg:mx-0">{t('landing', 'tagline')}</p>
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/40 ring-1 ring-white/20 transition hover:from-sky-400 hover:to-blue-500 hover:shadow-cyan-500/25"
+                  >
+                    {t('landing', 'heroCtaRegister')}
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/10"
+                  >
+                    {t('landing', 'logIn')}
+                  </Link>
+                  <Link
+                    href="#install"
+                    className="inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-cyan-200/90 underline-offset-4 hover:text-white hover:underline"
+                  >
+                    {t('landing', 'heroCtaInstall')}
+                  </Link>
+                </div>
+                <p className="mt-6 text-center text-[11px] leading-snug text-slate-500 lg:text-left">
+                  {t('landing', 'heroAppVisualCredit')}
+                </p>
+                {/* 2D elevation — full width on small screens below CTAs */}
+                <div className="mt-8 overflow-hidden rounded-2xl border border-white/15 bg-slate-900/50 shadow-xl ring-1 ring-cyan-500/20 lg:hidden">
+                  <div className="relative aspect-[16/10] w-full bg-gradient-to-b from-slate-800/80 to-slate-900">
+                    <Image
+                      src="/landing/hero-scaffold-2d-elevation.png"
+                      alt={t('landing', 'hero2dAlt')}
+                      fill
+                      className="object-contain object-center p-2"
+                      sizes="100vw"
+                      priority
+                    />
+                  </div>
+                  <p className="border-t border-white/10 bg-slate-950/80 px-3 py-2 text-center text-[11px] font-medium uppercase tracking-wider text-cyan-200/80">
+                    {t('landing', 'hero2dCaption')}
+                  </p>
+                </div>
+              </div>
 
-          <div className="absolute bottom-3 right-3 z-10 max-w-[min(100%-1.5rem,20rem)] text-right text-[11px] leading-snug text-white/55">
-            <a
-              href="https://unsplash.com/license"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-white/30 underline-offset-2 hover:text-white/80"
-            >
-              {t('landing', 'unsplashCredit')}
-            </a>
+              <div className="order-1 lg:order-none lg:col-span-7">
+                <div className="relative mx-auto w-full max-w-2xl lg:max-w-none">
+                  <div
+                    className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-cyan-500/25 via-blue-600/20 to-indigo-600/25 blur-2xl lg:-inset-8"
+                    aria-hidden
+                  />
+                  <div className="relative overflow-hidden rounded-3xl border border-cyan-400/35 bg-gradient-to-b from-slate-800/90 to-slate-950 shadow-[0_0_0_1px_rgba(34,211,238,0.12),0_25px_80px_-20px_rgba(0,0,0,0.75),0_0_60px_-30px_rgba(34,211,238,0.35)] ring-1 ring-white/10">
+                    <div className="relative aspect-[4/3] w-full sm:aspect-[5/4] lg:aspect-[16/11] lg:min-h-[min(52vh,440px)]">
+                      <Image
+                        src="/landing/hero-scaffold-3d.png"
+                        alt={t('landing', 'hero3dAlt')}
+                        fill
+                        priority
+                        className="object-contain object-center p-3 sm:p-4"
+                        sizes="(max-width: 1024px) 100vw, 58vw"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-950/90 px-4 py-2.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/90">
+                        {t('landing', 'hero3dBadge')}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{t('landing', 'hero3dMeta')}</span>
+                    </div>
+                  </div>
+
+                  {/* Floating 2D inset — desktop / large tablet */}
+                  <div className="pointer-events-none absolute -bottom-2 left-0 z-20 hidden w-[min(100%,340px)] -translate-x-1 translate-y-1/4 lg:block lg:-left-4 lg:bottom-10 lg:translate-x-0 lg:translate-y-0">
+                    <div
+                      className="pointer-events-auto rotate-[-2deg] overflow-hidden rounded-2xl border border-white/20 bg-slate-900/95 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.85)] ring-1 ring-cyan-500/25 transition duration-300 hover:rotate-0 hover:ring-cyan-400/40"
+                    >
+                      <div className="relative aspect-[4/3] w-full">
+                        <Image
+                          src="/landing/hero-scaffold-2d-elevation.png"
+                          alt={t('landing', 'hero2dAlt')}
+                          fill
+                          className="object-cover object-top"
+                          sizes="340px"
+                        />
+                      </div>
+                      <p className="border-t border-white/10 bg-slate-950 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-cyan-200/90">
+                        {t('landing', 'hero2dCaption')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 

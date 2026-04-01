@@ -893,6 +893,36 @@ export const translations = {
       en: 'High-rise building under construction',
       fr: 'Gratte-ciel en construction',
     },
+    hero3dAlt: {
+      ja: 'アプリで生成した足場の3Dプレビュー（複数段・スパン寸法付き）',
+      en: '3D scaffold preview from the app with levels and span dimensions',
+      fr: 'Aperçu 3D d’échafaudage généré par l’app avec niveaux et travées',
+    },
+    hero2dAlt: {
+      ja: 'くさび式足場の2D立面組立図（スパン・レベル表示）',
+      en: '2D kusabi scaffold elevation with spans and level marks',
+      fr: 'Élévation 2D d’échafaudage kusabi avec travées et niveaux',
+    },
+    hero2dCaption: {
+      ja: '2D 組立図',
+      en: '2D assembly',
+      fr: 'Assemblage 2D',
+    },
+    hero3dBadge: {
+      ja: '3Dプレビュー',
+      en: '3D preview',
+      fr: 'Aperçu 3D',
+    },
+    hero3dMeta: {
+      ja: 'X1–X10 · Y1–Y5',
+      en: 'X1–X10 · Y1–Y5',
+      fr: 'X1–X10 · Y1–Y5',
+    },
+    heroAppVisualCredit: {
+      ja: '※ 画面は本システムの出力イメージです',
+      en: 'Visuals: sample output from this system',
+      fr: 'Visuels : exemple de sortie de ce système',
+    },
     teamImageAlt: {
       ja: 'オフィスでチームが協働する様子',
       en: 'Team collaborating in an office',
