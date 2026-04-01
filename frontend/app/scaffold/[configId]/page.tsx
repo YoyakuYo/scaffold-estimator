@@ -40,6 +40,7 @@ import Scaffold2DView from './scaffold-2d-view';
 import { MaterialBreakdownTable } from '@/components/material-breakdown-table';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
+import { normalizeScaffoldResultForQuotation } from '@/lib/scaffold-quotation-normalize';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 
 // Dynamic import — Three.js cannot run during SSR
@@ -176,6 +177,13 @@ function ScaffoldResultPage() {
     };
   }, [result, config, rawResult]);
 
+  /** 見積表・内訳: merge top guard into posts + one row per plank/brace/nuno/habaki (works with stale API JSON). */
+  const resultForDisplay = useMemo(() => {
+    if (!result) return undefined;
+    const base = resultMergedForViz ?? result;
+    return normalizeScaffoldResultForQuotation(base);
+  }, [result, resultMergedForViz]);
+
   const resultFor3D = useMemo(() => {
     const base = resultMergedForViz ?? result;
     if (!base) return base;
@@ -303,7 +311,8 @@ function ScaffoldResultPage() {
 
   // ─── Download BOM CSV ─────────────────────────────────────
   const handleBomCsvDownload = useCallback(async () => {
-    if (!result?.summary?.length) return;
+    const bomResult = resultForDisplay ?? result;
+    if (!bomResult?.summary?.length) return;
     let weightByCode = new Map<string, number>();
     try {
       const materials: ScaffoldMaterial[] = await scaffoldConfigsApi.listMaterials();
@@ -321,7 +330,7 @@ function ScaffoldResultPage() {
     const dash = t('result', 'bomCsvWeightDash');
     const kg = t('result', 'bomCsvWeightKgSuffix');
     const header = `${col1},${col2},${col3}\n`;
-    const rows = result.summary.map((c: CalculatedComponent) => {
+    const rows = bomResult.summary.map((c: CalculatedComponent) => {
       const name = (c.nameJp || c.name || c.type).replace(/,/g, ' ');
       const qty = String(c.quantity);
       const unitW = c.materialCode ? weightByCode.get(c.materialCode) : undefined;
@@ -337,7 +346,7 @@ function ScaffoldResultPage() {
     a.download = `${t('result', 'bomExportFilenamePrefix')}_${configId.slice(0, 8)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [result, configId, t]);
+  }, [result, resultForDisplay, configId, t]);
 
   // ─── Excel Download ─────────────────────────────────────
   const handleExcelDownload = useCallback(async () => {
@@ -630,7 +639,7 @@ function ScaffoldResultPage() {
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('resultExtra', 'tabOverall')}
           </h2>
-          <QuotationTable result={result} />
+          <QuotationTable result={resultForDisplay ?? result} />
         </div>
 
         {result.walls && (
@@ -639,7 +648,7 @@ function ScaffoldResultPage() {
               {t('result', 'materialBreakdownTitle')}
             </h2>
             <MaterialBreakdownTable
-              walls={result.walls}
+              walls={(resultForDisplay ?? result).walls!}
               buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m: number, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
               scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
               totalLevels={maxLevels}
@@ -695,12 +704,17 @@ function ScaffoldResultPage() {
               {/* Summary stats */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-gray-900">{(result.summary ?? []).length}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {((resultForDisplay ?? result).summary ?? []).length}
+                  </div>
                   <div className="text-xs text-gray-500">{t('result', 'totalComponents')}</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-gray-900">
-                    {result.summary.reduce((sum: number, c: CalculatedComponent) => sum + c.quantity, 0).toLocaleString()}
+                    {(resultForDisplay ?? result).summary.reduce(
+                      (sum: number, c: CalculatedComponent) => sum + c.quantity,
+                      0,
+                    ).toLocaleString()}
                   </div>
                   <div className="text-xs text-gray-500">{t('result', 'totalParts')}</div>
                 </div>
