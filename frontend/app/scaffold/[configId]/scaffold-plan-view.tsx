@@ -555,12 +555,20 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
     const textAngle = Math.atan2(dy, dx) * 180 / Math.PI;
     const readableAngle = (textAngle > 90 || textAngle < -90) ? textAngle + 180 : textAngle;
     const isVerticalEdge = Math.abs(Math.abs(textAngle) - 90) < 20;
-    // Push vertical edge labels further out so they clear the span numbers
-    const labelOffset = isVerticalEdge ? stripOffset + 38 : stripOffset + 22;
+    // Anchor point: outward from façade (same for all edges)
+    const labelOffset = isVerticalEdge ? stripOffset + 44 : stripOffset + 22;
     const labelX = midX + nx * labelOffset;
     const labelY = midY + ny * labelOffset;
-    // On vertical edges, separate kanji from measurement (like N/S) so they don't overlap
-    const labelGap = isVerticalEdge ? 22 : 8;
+    /**
+     * Stack edge code (AB) vs dimension line along the **outward normal**, not SVG ±Y.
+     * For ~90° readable text, ±labelY offset rotates into overlap along the edge; (nx,ny) keeps
+     * the same visual gap as horizontal edges (code further out, dimensions closer to strip).
+     */
+    const stackAlongNormal = isVerticalEdge ? 14 : 8;
+    const sideLabelX = labelX + nx * stackAlongNormal;
+    const sideLabelY = labelY + ny * stackAlongNormal;
+    const dimLabelX = labelX - nx * stackAlongNormal;
+    const dimLabelY = labelY - ny * stackAlongNormal;
 
     const sideLabel = edgeChordName(idx, walls.length, isClosed);
 
@@ -628,27 +636,27 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
           );
         })}
 
-        {/* Wall label — on the side; for East/West separate kanji from measurement so they don't overlap */}
+        {/* Wall label + dimensions: separated along outward normal (works for any rotation). */}
         <text
-          x={labelX}
-          y={labelY - labelGap}
+          x={sideLabelX}
+          y={sideLabelY}
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={12}
           fontWeight="bold"
           fill={col.text}
-          transform={`rotate(${readableAngle}, ${labelX}, ${labelY - labelGap})`}
+          transform={`rotate(${readableAngle}, ${sideLabelX}, ${sideLabelY})`}
         >
           {sideLabel}
         </text>
         <text
-          x={labelX}
-          y={labelY + labelGap}
+          x={dimLabelX}
+          y={dimLabelY}
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={9}
           fill={DIM_COLOR}
-          transform={`rotate(${readableAngle}, ${labelX}, ${labelY + labelGap})`}
+          transform={`rotate(${readableAngle}, ${dimLabelX}, ${dimLabelY})`}
         >
           {(() => {
             const facadeMm = planFacadeBasisMm(wall);
