@@ -16,8 +16,8 @@ import {
 import { compareCalculatedComponentsForBom } from './scaffold-bom-sort';
 
 /**
- * Generates a printable Excel quotation (足場材料見積書)
- * with per-wall columns, Japanese material names, categories, and unit column.
+ * Generates a printable Excel workbook with a single worksheet (足場材料見積書):
+ * main BOM, span summary, floor×wall logistics, spec×wall matrix, and material breakdown (階別).
  */
 @Injectable()
 export class ScaffoldExcelService {
@@ -385,25 +385,72 @@ export class ScaffoldExcelService {
       sr.getCell(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
     }
 
-    // ─── Sheet 2: Per-floor, per-side breakdown (for transport) ──
-    const sheet2 = workbook.addWorksheet('階・面別内訳', {
-      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
-    });
+    this.appendMaterialBreakdownSection(sheet, config, result);
+    this.appendFloorSideBreakdownSection(
+      sheet,
+      result,
+      wallColumnHeaders,
+      sortedSummary,
+      wallMaps,
+      levelHeightMm,
+    );
+    this.appendSpecMatrixSection(sheet, result, wallMaps);
+
+    // ─── Column Widths (shared: summary tables + BOM + スパン構成) ───
+    sheet.getColumn(1).width = 12;   // 項目・面・No
+    sheet.getColumn(2).width = 16;   // 値・壁長・分類
+    sheet.getColumn(3).width = 22;   // 足場高さ・部材名
+    sheet.getColumn(4).width = 14;   // 段数・規格
+    sheet.getColumn(5).width = 36;   // 単位・スパン構成（長文は折返し）
+    for (let i = 0; i < result.walls.length; i++) {
+      sheet.getColumn(6 + i).width = 12;
+    }
+    sheet.getColumn(6 + result.walls.length).width = 10; // 合計
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  /** Per-floor × per-wall quantities (運搬用) — appended to main sheet. */
+  private appendFloorSideBreakdownSection(
+    sheet: ExcelJS.Worksheet,
+    result: ScaffoldCalculationResult,
+    wallColumnHeaders: string[],
+    sortedSummary: CalculatedComponent[],
+    wallMaps: Map<string, number>[],
+    levelH: number,
+  ): void {
     const numCorners = result.walls.length;
-    const levelH = levelHeightMm;
+    const ncol = wallColumnHeaders.length + 3;
+    sheet.addRow([]);
+    const blockTitle = sheet.addRow(['階・面別内訳（運搬用）']);
+    blockTitle.font = { bold: true, size: 12 };
+    sheet.mergeCells(blockTitle.number, 1, blockTitle.number, ncol);
+    blockTitle.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE5E7EB' },
+    };
+    blockTitle.getCell(1).alignment = { vertical: 'middle', wrapText: true };
 
     for (let floor = 1; floor <= result.totalLevels; floor++) {
       const floorLabel = floor === 1 ? '1階' : floor === 2 ? '2階' : `${floor}階`;
       const rangeLabel = `${(floor - 1) * levelH}～${floor * levelH}mm`;
-      sheet2.addRow([]);
-      const titleRow = sheet2.addRow([`${floorLabel} (${rangeLabel}) — 積算内訳（運搬用）`]);
-      titleRow.font = { bold: true, size: 12 };
-      sheet2.mergeCells(titleRow.number, 1, titleRow.number, wallColumnHeaders.length + 3);
-      const subHeader = sheet2.addRow(['部材名', '規格', ...wallColumnHeaders, '角部', '合計']);
+      sheet.addRow([]);
+      const titleRow = sheet.addRow([`${floorLabel} (${rangeLabel})`]);
+      titleRow.font = { bold: true, size: 11 };
+      sheet.mergeCells(titleRow.number, 1, titleRow.number, ncol);
+      const subHeader = sheet.addRow(['部材名', '規格', ...wallColumnHeaders, '角部', '合計']);
       subHeader.font = { bold: true };
       subHeader.eachCell((c, colNumber) => {
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
         c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        c.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
         if (colNumber >= 3 && colNumber <= 2 + result.walls.length) {
           c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         }
@@ -422,58 +469,42 @@ export class ScaffoldExcelService {
         const cornerPerLevel = isPattanko ? numCorners * 2 : 0;
         const rowTotal = perWallPerLevel.reduce((a, b) => a + b, 0) + cornerPerLevel;
         if (rowTotal <= 0) continue;
-        sheet2.addRow([
+        const dr = sheet.addRow([
           comp.nameJp,
           comp.sizeSpec || '',
           ...perWallPerLevel,
           isPattanko ? cornerPerLevel : '',
           rowTotal,
         ]);
+        dr.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          if (colNumber <= 2) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+          } else if (colNumber <= 2 + result.walls.length) {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          }
+        });
       }
     }
-
-    sheet2.getColumn(1).width = 22;
-    sheet2.getColumn(2).width = 14;
-    for (let i = 0; i < wallColumnHeaders.length + 2; i++) sheet2.getColumn(3 + i).width = 11;
-
-    this.appendSpecMatrixByWall(workbook, result, wallMaps);
-    this.appendMaterialBreakdownSheet(workbook, config, result);
-
-    // ─── Column Widths (shared: summary tables + BOM + スパン構成) ───
-    sheet.getColumn(1).width = 12;   // 項目・面・No
-    sheet.getColumn(2).width = 16;   // 値・壁長・分類
-    sheet.getColumn(3).width = 22;   // 足場高さ・部材名
-    sheet.getColumn(4).width = 14;   // 段数・規格
-    sheet.getColumn(5).width = 36;   // 単位・スパン構成（長文は折返し）
-    for (let i = 0; i < result.walls.length; i++) {
-      sheet.getColumn(6 + i).width = 12;
-    }
-    sheet.getColumn(6 + result.walls.length).width = 10; // 合計
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(buffer);
   }
 
   /**
-   * Third sheet: 材料明細 — matches result-page Material Breakdown (per edge, floor columns, UTF-8).
+   * Material breakdown (材料明細) — per edge, building-floor columns; appended to main sheet after BOM.
    */
-  private appendMaterialBreakdownSheet(
-    workbook: ExcelJS.Workbook,
+  private appendMaterialBreakdownSection(
+    sheet: ExcelJS.Worksheet,
     config: ScaffoldConfiguration,
     result: ScaffoldCalculationResult,
   ): void {
     const walls = result.walls;
     if (!walls?.length) return;
-
-    const sheet = workbook.addWorksheet('材料明細', {
-      pageSetup: {
-        paperSize: 9,
-        orientation: 'landscape',
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-      },
-    });
 
     const scaffoldType = result.scaffoldType || 'kusabi';
     const isWakugumi = scaffoldType === 'wakugumi';
@@ -493,10 +524,16 @@ export class ScaffoldExcelService {
 
     const totalCols = 5 + buildingFloorCount + 1;
 
-    const titleRow = sheet.addRow(['材料明細']);
-    titleRow.font = { bold: true, size: 16 };
-    sheet.mergeCells(1, 1, 1, totalCols);
-    titleRow.alignment = { horizontal: 'center' };
+    sheet.addRow([]);
+    const blockTitle = sheet.addRow(['材料明細（階別・通り）']);
+    blockTitle.font = { bold: true, size: 12 };
+    sheet.mergeCells(blockTitle.number, 1, blockTitle.number, totalCols);
+    blockTitle.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE5E7EB' },
+    };
+    blockTitle.getCell(1).alignment = { vertical: 'middle', wrapText: true };
     sheet.addRow([]);
 
     const metaRow = sheet.addRow([
@@ -732,29 +769,28 @@ export class ScaffoldExcelService {
     return out;
   }
 
-  /**
-   * One sheet per request: each material (部材名+単位) as a block with 規格 × 壁面 columns.
-   */
-  private appendSpecMatrixByWall(
-    workbook: ExcelJS.Workbook,
+  /** 規格 × 壁面 matrix — appended to main sheet. */
+  private appendSpecMatrixSection(
+    sheet: ExcelJS.Worksheet,
     result: ScaffoldCalculationResult,
     wallMaps: Map<string, number>[],
   ): void {
     const walls = result.walls;
     if (!walls?.length) return;
 
-    const sheet = workbook.addWorksheet('規格別・面別', {
-      pageSetup: {
-        paperSize: 9,
-        orientation: 'landscape',
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-      },
-    });
-
     const wallColumnHeaders = this.buildExcelWallColumnHeaders(result);
     const ncol = 2 + walls.length;
+
+    sheet.addRow([]);
+    const sectionBanner = sheet.addRow(['規格別・面別']);
+    sectionBanner.font = { bold: true, size: 12 };
+    sheet.mergeCells(sectionBanner.number, 1, sectionBanner.number, ncol);
+    sectionBanner.getCell(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE5E7EB' },
+    };
+    sectionBanner.getCell(1).alignment = { vertical: 'middle', wrapText: true };
 
     const titleRow = sheet.addRow(['規格別・面別数量（壁面ごとの規格内訳）']);
     titleRow.font = { bold: true, size: 14 };
