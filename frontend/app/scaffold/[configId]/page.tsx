@@ -621,10 +621,10 @@ function ScaffoldResultPage() {
 
         {/* Tab content: only the active tab is printed (browser print / “Print this tab”). */}
         <div className={activeTab === 'table' ? 'block' : 'hidden'}>
-          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
-            {t('resultExtra', 'tabOverall')}
-          </h2>
-          <QuotationTable result={resultForDisplay ?? result} />
+          <QuotationTable
+            result={resultForDisplay ?? result}
+            heading={t('resultExtra', 'tabOverall')}
+          />
         </div>
 
         <div className={`${activeTab === '2d' ? 'block' : 'hidden'} print:overflow-visible`}>
@@ -825,7 +825,7 @@ function SummaryCard({
 
 // ─── Quotation Table ──────────────────────────────────────────
 
-function QuotationTable({ result }: { result: any }) {
+function QuotationTable({ result, heading }: { result: any; heading?: string }) {
   const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
   const summary: CalculatedComponent[] = result.summary;
@@ -937,131 +937,142 @@ function QuotationTable({ result }: { result: any }) {
   }, [materialGroups, locale, t]);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Material Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-blue-600 text-white">
-              <th className="px-3 py-2 text-left font-medium w-12">{t('result', 'colNo')}</th>
-              <th className="px-3 py-2 text-left font-medium">{t('result', 'colName')}</th>
-              <th className="px-3 py-2 text-left font-medium">{t('result', 'colSpec')}</th>
-              <th className="px-3 py-2 text-center font-medium w-14">{t('result', 'colUnit')}</th>
-              {walls.map((wall, idx) => {
-                const baseH = (wall as any).baseHeightMm ?? 0;
-                const tierLabel =
-                  baseH > 0 ? t('result', 'tierHeaderElevation').replace('{{m}}', (baseH / 1000).toFixed(0)) : '';
-                const postAlong = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
-                const hashiraSeg = edgeHashiraColumnRangeSegment(
-                  edgeLbl,
-                  idx,
-                  walls.length,
-                  wall.sideJp ?? '',
-                  wall.side ?? '',
-                  postAlong,
-                );
-                return (
-                  <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
-                    <div>
-                      {formatWallSide(
-                        wall.side,
-                        wall.sideJp,
-                        locale,
-                        chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
-                      )}
-                    </div>
-                    {hashiraSeg ? (
-                      <div className="text-[10px] font-normal opacity-95 font-mono tracking-tight">({hashiraSeg})</div>
-                    ) : null}
-                    {tierLabel && <div className="text-[10px] font-normal opacity-80">{tierLabel}</div>}
-                  </th>
-                );
-              })}
-              {/* Tier group subtotal columns */}
-              {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => (
-                info.wallIndices.length > 1 ? (
-                  <th key={`grp-${grp}`} className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-500">
-                    <div>{info.label}</div>
-                    <div className="text-[10px] font-normal opacity-80">{t('result', 'subtotal')}</div>
-                  </th>
-                ) : null
-              ))}
-              <th className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-700">{t('result', 'colTotal')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rowsWithGrouping.map((row, ri) => {
-              const subtotalColCount = hasTierWalls && tierGroupOrder
-                ? Array.from(tierGroupOrder.values()).filter((g) => g.wallIndices.length > 1).length
-                : 0;
+    <section
+      className="print:break-inside-avoid"
+      aria-labelledby={heading ? 'overall-totals-heading' : undefined}
+    >
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {heading ? (
+          <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-gray-200 bg-slate-50/90">
+            <h2 id="overall-totals-heading" className="text-lg font-bold text-gray-900 tracking-tight">
+              {heading}
+            </h2>
+          </div>
+        ) : null}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-blue-600 text-white">
+                <th className="px-3 py-2 text-left font-medium w-12">{t('result', 'colNo')}</th>
+                <th className="px-3 py-2 text-left font-medium">{t('result', 'colName')}</th>
+                <th className="px-3 py-2 text-left font-medium">{t('result', 'colSpec')}</th>
+                <th className="px-3 py-2 text-center font-medium w-14">{t('result', 'colUnit')}</th>
+                {walls.map((wall, idx) => {
+                  const baseH = (wall as any).baseHeightMm ?? 0;
+                  const tierLabel =
+                    baseH > 0 ? t('result', 'tierHeaderElevation').replace('{{m}}', (baseH / 1000).toFixed(0)) : '';
+                  const postAlong = (Array.isArray(wall.spans) ? wall.spans.length : 0) + 1;
+                  const hashiraSeg = edgeHashiraColumnRangeSegment(
+                    edgeLbl,
+                    idx,
+                    walls.length,
+                    wall.sideJp ?? '',
+                    wall.side ?? '',
+                    postAlong,
+                  );
+                  return (
+                    <th key={`wall-th-${idx}-${wall.side}`} className="px-3 py-2 text-center font-medium min-w-[80px]">
+                      <div>
+                        {formatWallSide(
+                          wall.side,
+                          wall.sideJp,
+                          locale,
+                          chordOpts ? { wallIndex: idx, ...chordOpts } : undefined,
+                        )}
+                      </div>
+                      {hashiraSeg ? (
+                        <div className="text-[10px] font-normal opacity-95 font-mono tracking-tight">({hashiraSeg})</div>
+                      ) : null}
+                      {tierLabel && <div className="text-[10px] font-normal opacity-80">{tierLabel}</div>}
+                    </th>
+                  );
+                })}
+                {/* Tier group subtotal columns */}
+                {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => (
+                  info.wallIndices.length > 1 ? (
+                    <th key={`grp-${grp}`} className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-500">
+                      <div>{info.label}</div>
+                      <div className="text-[10px] font-normal opacity-80">{t('result', 'subtotal')}</div>
+                    </th>
+                  ) : null
+                ))}
+                <th className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-700">{t('result', 'colTotal')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsWithGrouping.map((row, ri) => {
+                const subtotalColCount = hasTierWalls && tierGroupOrder
+                  ? Array.from(tierGroupOrder.values()).filter((g) => g.wallIndices.length > 1).length
+                  : 0;
 
-              if (row.type === 'header') {
+                if (row.type === 'header') {
+                  return (
+                    <tr key={`cat-${ri}`} className="bg-gray-100 border-b border-gray-200">
+                      <td colSpan={4 + walls.length + subtotalColCount + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
+                        {row.category}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                const { comp, idx, nameDisplay, specDisplay } = row;
+                const key = scaffoldWallQuantityKey(comp);
+                const perWall = wallMaps.map((m) => m.get(key) || 0);
+                const total =
+                  comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
+                const rowKey = `${comp.sortOrder}-${key}`;
+                const nameIsMark = nameDisplay === t('result', 'quotationSameName');
+                const specIsMark = specDisplay === t('result', 'quotationSameSpec');
+
                 return (
-                  <tr key={`cat-${ri}`} className="bg-gray-100 border-b border-gray-200">
-                    <td colSpan={4 + walls.length + subtotalColCount + 1} className="px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      {row.category}
+                  <tr
+                    key={rowKey}
+                    className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
+                  >
+                    <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
+                    <td
+                      className={`px-3 py-2 ${
+                        nameIsMark
+                          ? 'text-center text-slate-500 font-semibold'
+                          : 'font-medium text-gray-800'
+                      }`}
+                    >
+                      {nameDisplay}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-gray-600 ${
+                        specIsMark ? 'text-center text-slate-500 font-semibold' : ''
+                      }`}
+                    >
+                      {specDisplay}
+                    </td>
+                    <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
+                    {perWall.map((qty, wi) => (
+                      <td key={wi} className="px-3 py-2 text-center text-gray-700">
+                        {qty > 0 ? qty : '-'}
+                      </td>
+                    ))}
+                    {/* Tier group subtotal cells */}
+                    {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => {
+                      if (info.wallIndices.length <= 1) return null;
+                      const subtotal = info.wallIndices.reduce((sum, wi) => sum + (perWall[wi] || 0), 0);
+                      return (
+                        <td key={`sub-${grp}`} className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50">
+                          {subtotal > 0 ? subtotal : '-'}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center font-bold text-blue-700 bg-blue-50">
+                      {total}
                     </td>
                   </tr>
                 );
-              }
-
-              const { comp, idx, nameDisplay, specDisplay } = row;
-              const key = scaffoldWallQuantityKey(comp);
-              const perWall = wallMaps.map((m) => m.get(key) || 0);
-              const total =
-                comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
-              const rowKey = `${comp.sortOrder}-${key}`;
-              const nameIsMark = nameDisplay === t('result', 'quotationSameName');
-              const specIsMark = specDisplay === t('result', 'quotationSameSpec');
-
-              return (
-                <tr
-                  key={rowKey}
-                  className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
-                >
-                  <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
-                  <td
-                    className={`px-3 py-2 ${
-                      nameIsMark
-                        ? 'text-center text-slate-500 font-semibold'
-                        : 'font-medium text-gray-800'
-                    }`}
-                  >
-                    {nameDisplay}
-                  </td>
-                  <td
-                    className={`px-3 py-2 text-gray-600 ${
-                      specIsMark ? 'text-center text-slate-500 font-semibold' : ''
-                    }`}
-                  >
-                    {specDisplay}
-                  </td>
-                  <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
-                  {perWall.map((qty, wi) => (
-                    <td key={wi} className="px-3 py-2 text-center text-gray-700">
-                      {qty > 0 ? qty : '-'}
-                    </td>
-                  ))}
-                  {/* Tier group subtotal cells */}
-                  {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => {
-                    if (info.wallIndices.length <= 1) return null;
-                    const subtotal = info.wallIndices.reduce((sum, wi) => sum + (perWall[wi] || 0), 0);
-                    return (
-                      <td key={`sub-${grp}`} className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50">
-                        {subtotal > 0 ? subtotal : '-'}
-                      </td>
-                    );
-                  })}
-                  <td className="px-3 py-2 text-center font-bold text-blue-700 bg-blue-50">
-                    {total}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
