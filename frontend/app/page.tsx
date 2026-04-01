@@ -8,7 +8,6 @@ import { useEffect, useState, useRef } from 'react';
 import {
   Calculator,
   Building2,
-  Download,
   CheckCircle,
   Target,
   TrendingUp,
@@ -21,7 +20,6 @@ import {
   Ruler,
 } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
-import { usePwaInstall } from '@/lib/pwa-install-context';
 import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
 
@@ -113,7 +111,6 @@ function LandingHero3DVisual({
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
-  const { canInstall, triggerInstall } = usePwaInstall();
   const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const localeMenuRef = useRef<HTMLDivElement>(null);
@@ -247,12 +244,6 @@ export default function LandingPage() {
                     className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/10"
                   >
                     {t('landing', 'logIn')}
-                  </Link>
-                  <Link
-                    href="#install"
-                    className="inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-cyan-200/90 underline-offset-4 hover:text-white hover:underline"
-                  >
-                    {t('landing', 'heroCtaInstall')}
                   </Link>
                 </div>
                 <p className="mt-6 text-center text-[11px] leading-snug text-slate-500 lg:text-left">
@@ -443,11 +434,6 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-8 text-center text-sm font-semibold text-slate-600">
-                  <Link href="#install" className="text-blue-600 underline decoration-sky-300 decoration-2 underline-offset-4 transition hover:text-blue-800">
-                    {t('landing', 'boxInstallHint')}
-                  </Link>
-                </p>
               </div>
             </div>
           </div>
@@ -556,63 +542,6 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
-
-        {/* ─── Install CTA (big) ────────────────────────────────── */}
-        <section id="install" className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-16">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-3">
-              {t('landing', 'sectionInstall')}
-            </h2>
-            <p className="text-lg text-blue-100 mb-6">
-              {t('landing', 'installTitle')}
-            </p>
-            <p className="text-blue-100/90 text-sm mb-8">
-              {t('landing', 'installSubtitle')}
-            </p>
-            <div className="flex flex-col items-center gap-4">
-              {canInstall ? (
-                <button
-                  onClick={() => triggerInstall()}
-                  className="inline-flex items-center gap-3 px-8 py-4 bg-white text-blue-600 rounded-xl font-semibold text-lg hover:bg-blue-50 shadow-lg transition-colors"
-                >
-                  <Download className="h-6 w-6" />
-                  {t('landing', 'installCta')}
-                </button>
-              ) : (
-                <p className="text-sm text-blue-100/90 max-w-md">
-                  {t('landing', 'installCtaUnavailable')}
-                </p>
-              )}
-              <p className="text-blue-100/90 text-sm mt-2">
-                {t('landing', 'afterInstall')}
-              </p>
-              <div className="flex flex-wrap justify-center gap-3 mt-2">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 hover:bg-white/30 rounded-lg font-medium text-sm border border-white/30"
-                >
-                  <LogIn className="h-4 w-4" />
-                  {t('landing', 'logIn')}
-                </Link>
-                <Link
-                  href="/register"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-lg font-medium text-sm"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  {t('landing', 'register')}
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── Footer ────────────────────────────────────────────── */}
-        <footer className="bg-white border-t border-gray-200 py-8">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm text-gray-500">
-            <p>{t('landing', 'appName')}</p>
-            <p className="mt-1">{t('landing', 'tagline')}</p>
-          </div>
-        </footer>
       </main>
     </div>
   );
