@@ -9,18 +9,6 @@ import {
   distributeByScaffoldLevel,
 } from './material-breakdown-excel.util';
 
-/** One logical line in the BOM after merging same 部材名 + 分類 + 単位 (e.g. all ブレス sizes → one row). */
-interface MergedMaterialRow {
-  category: string;
-  nameJp: string;
-  unit: string;
-  sizeSpecJoined: string;
-  sortOrder: number;
-  /** Per-wall map keys (materialCode or type-sizeSpec). */
-  keys: string[];
-  hasPattankoOnly: boolean;
-}
-
 /**
  * Generates a printable Excel quotation (足場材料見積書)
  * with per-wall columns, Japanese material names, categories, and unit column.
@@ -156,25 +144,46 @@ export class ScaffoldExcelService {
       return m;
     });
 
-    const mergedRows = this.mergeSummaryForExcel(result.summary);
+    const sortedSummary = this.sortSummaryForExcel(result.summary);
+    const materialGroups = this.groupSummaryByMaterialForExcel(sortedSummary);
 
     let rowNum = 1;
     let lastCategory = '';
 
-    for (const row of mergedRows) {
-      const perWallQty = wallMaps.map(m =>
-        row.keys.reduce((sum, k) => sum + (m.get(k) || 0), 0),
-      );
-      let total: number;
-      if (row.hasPattankoOnly) {
-        const pc = result.summary.find(c => c.materialCode === 'PATTANKO');
-        total = pc?.quantity ?? perWallQty.reduce((a, b) => a + b, 0);
-      } else {
-        total = perWallQty.reduce((a, b) => a + b, 0);
+    const applyDetailRowStyle = (dataRow: ExcelJS.Row, n: number, wallsLen: number) => {
+      dataRow.getCell(1).alignment = { horizontal: 'center' };
+      dataRow.getCell(5).alignment = { horizontal: 'center' };
+      for (let i = 0; i < wallsLen + 1; i++) {
+        dataRow.getCell(6 + i).alignment = { horizontal: 'center' };
       }
+      if (n % 2 === 0) {
+        dataRow.eachCell((cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFDBEAFE' },
+          };
+        });
+      }
+      dataRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+      const totalCell = dataRow.getCell(6 + wallsLen);
+      totalCell.font = { bold: true };
+      totalCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFEFF6FF' },
+      };
+    };
 
-      // Category separator row
-      const cat = row.category || '';
+    for (const grp of materialGroups) {
+      const cat = grp.category || '';
       if (cat !== lastCategory) {
         const catRow = sheet.addRow([]);
         catRow.getCell(1).value = '';
@@ -194,54 +203,50 @@ export class ScaffoldExcelService {
         lastCategory = cat;
       }
 
-      const dataRow = sheet.addRow([
-        rowNum,
-        cat,
-        row.nameJp,
-        row.sizeSpecJoined,
-        row.unit,
-        ...perWallQty,
-        total,
-      ]);
-
-      // Center-align number columns
-      dataRow.getCell(1).alignment = { horizontal: 'center' };
-      dataRow.getCell(5).alignment = { horizontal: 'center' };
-      for (let i = 0; i < result.walls.length + 1; i++) {
-        dataRow.getCell(6 + i).alignment = { horizontal: 'center' };
-      }
-
-      // Alternate row colors
-      if (rowNum % 2 === 0) {
-        dataRow.eachCell((cell) => {
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFDBEAFE' },
+      const multi = grp.components.length > 1;
+      if (multi) {
+        const banner = sheet.addRow([`【${cat}】${grp.nameJp}（${grp.unit}）— 規格別数量`]);
+        sheet.mergeCells(banner.number, 1, banner.number, totalCols);
+        banner.getCell(1).font = { bold: true, size: 10, color: { argb: 'FF1F2937' } };
+        banner.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+        banner.getCell(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE5E7EB' },
+        };
+        banner.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
           };
         });
       }
 
-      // Borders for all cells
-      dataRow.eachCell((cell) => {
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
-      });
+      for (let i = 0; i < grp.components.length; i++) {
+        const comp = grp.components[i];
+        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+        const perWallQty = wallMaps.map((m) => m.get(mapKey) || 0);
+        const total =
+          comp.materialCode === 'PATTANKO'
+            ? comp.quantity
+            : perWallQty.reduce((a, b) => a + b, 0);
+        const catCol = multi && i > 0 ? '〃' : cat;
+        const nameCol = multi && i > 0 ? '〃' : comp.nameJp;
 
-      // Bold total column
-      const totalCell = dataRow.getCell(6 + result.walls.length);
-      totalCell.font = { bold: true };
-      totalCell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFEFF6FF' },
-      };
-
-      rowNum++;
+        const dataRow = sheet.addRow([
+          rowNum,
+          catCol,
+          nameCol,
+          comp.sizeSpec || '',
+          comp.unit,
+          ...perWallQty,
+          total,
+        ]);
+        applyDetailRowStyle(dataRow, rowNum, result.walls.length);
+        rowNum++;
+      }
     }
 
     // ─── Per-wall span info ──────────────────────────────
@@ -283,11 +288,10 @@ export class ScaffoldExcelService {
         c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       });
 
-      for (const row of mergedRows) {
-        const perWallQty = wallMaps.map(m =>
-          row.keys.reduce((sum, k) => sum + (m.get(k) || 0), 0),
-        );
-        const isPattanko = row.hasPattankoOnly;
+      for (const comp of sortedSummary) {
+        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+        const perWallQty = wallMaps.map((m) => m.get(mapKey) || 0);
+        const isPattanko = comp.materialCode === 'PATTANKO';
         const perWallPerLevel = result.walls.map((w, i) => {
           const L = w.levelCalc.fullLevels;
           if (L <= 0) return 0;
@@ -298,8 +302,8 @@ export class ScaffoldExcelService {
         const rowTotal = perWallPerLevel.reduce((a, b) => a + b, 0) + cornerPerLevel;
         if (rowTotal <= 0) continue;
         sheet2.addRow([
-          row.nameJp,
-          row.sizeSpecJoined,
+          comp.nameJp,
+          comp.sizeSpec || '',
           ...perWallPerLevel,
           isPattanko ? cornerPerLevel : '',
           rowTotal,
@@ -311,6 +315,7 @@ export class ScaffoldExcelService {
     sheet2.getColumn(2).width = 14;
     for (let i = 0; i < wallNames2.length + 2; i++) sheet2.getColumn(3 + i).width = 10;
 
+    this.appendSpecMatrixByWall(workbook, result, wallMaps);
     this.appendMaterialBreakdownSheet(workbook, config, result);
 
     // ─── Column Widths ───────────────────────────────────
@@ -539,74 +544,125 @@ export class ScaffoldExcelService {
     }
   }
 
-  /**
-   * Merge repeated 部材名 rows (same category + display name + unit) into one Excel line,
-   * with 規格 = "600 / 1200 / …" and per-wall qty = sum of all matching size lines.
-   */
-  private mergeSummaryForExcel(summary: CalculatedComponent[]): MergedMaterialRow[] {
-    const sorted = [...summary].sort((a, b) => {
+  private sortSummaryForExcel(summary: CalculatedComponent[]): CalculatedComponent[] {
+    return [...summary].sort((a, b) => {
       const ca = a.category || '';
       const cb = b.category || '';
       if (ca !== cb) return ca.localeCompare(cb, 'ja');
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
       return (a.sizeSpec || '').localeCompare(b.sizeSpec || '', 'ja');
     });
+  }
 
-    type Acc = {
-      category: string;
-      nameJp: string;
-      unit: string;
-      sortOrder: number;
-      keys: Set<string>;
-      specsOrdered: string[];
-      specSeen: Set<string>;
-      pattankoKeys: number;
-    };
-
-    const groups = new Map<string, Acc>();
-    const order: string[] = [];
-
+  private groupSummaryByMaterialForExcel(
+    sorted: CalculatedComponent[],
+  ): Array<{ category: string; nameJp: string; unit: string; components: CalculatedComponent[] }> {
+    const gk = (c: CalculatedComponent) =>
+      `${c.category || ''}\t${c.nameJp || ''}\t${c.unit || ''}`;
+    const out: Array<{ category: string; nameJp: string; unit: string; components: CalculatedComponent[] }> = [];
     for (const comp of sorted) {
-      const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-      const gKey = `${comp.category || ''}\t${comp.nameJp}\t${comp.unit}`;
-      let g = groups.get(gKey);
-      if (!g) {
-        g = {
+      const prev = out[out.length - 1];
+      if (prev && gk(prev.components[0]) === gk(comp)) {
+        prev.components.push(comp);
+      } else {
+        out.push({
           category: comp.category || '',
           nameJp: comp.nameJp,
           unit: comp.unit,
-          sortOrder: comp.sortOrder,
-          keys: new Set(),
-          specsOrdered: [],
-          specSeen: new Set(),
-          pattankoKeys: 0,
+          components: [comp],
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * One sheet per request: each material (部材名+単位) as a block with 規格 × 壁面 columns.
+   */
+  private appendSpecMatrixByWall(
+    workbook: ExcelJS.Workbook,
+    result: ScaffoldCalculationResult,
+    wallMaps: Map<string, number>[],
+  ): void {
+    const walls = result.walls;
+    if (!walls?.length) return;
+
+    const sheet = workbook.addWorksheet('規格別・面別', {
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+    });
+
+    const wallNames = walls.map((w) => w.sideJp);
+    const ncol = 2 + walls.length;
+
+    const titleRow = sheet.addRow(['規格別・面別数量（壁面ごとの規格内訳）']);
+    titleRow.font = { bold: true, size: 14 };
+    sheet.mergeCells(titleRow.number, 1, titleRow.number, ncol);
+    titleRow.getCell(1).alignment = { horizontal: 'left' };
+    sheet.addRow([]);
+
+    const sorted = this.sortSummaryForExcel(result.summary);
+    const groups = this.groupSummaryByMaterialForExcel(sorted);
+
+    for (const grp of groups) {
+      const blockTitle = sheet.addRow([`【${grp.category}】${grp.nameJp}（${grp.unit}）`]);
+      blockTitle.font = { bold: true, size: 11 };
+      sheet.mergeCells(blockTitle.number, 1, blockTitle.number, ncol);
+      blockTitle.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
         };
-        groups.set(gKey, g);
-        order.push(gKey);
+      });
+
+      const h = sheet.addRow(['規格', ...wallNames, '合計']);
+      h.font = { bold: true };
+      h.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+
+      for (const comp of grp.components) {
+        const mapKey = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
+        const perWall = wallMaps.map((m) => m.get(mapKey) || 0);
+        const total =
+          comp.materialCode === 'PATTANKO'
+            ? comp.quantity
+            : perWall.reduce((a, b) => a + b, 0);
+        const dataRow = sheet.addRow([comp.sizeSpec || '-', ...perWall, total]);
+        dataRow.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          if (colNumber >= 2) cell.alignment = { horizontal: 'right' };
+        });
       }
-      g.sortOrder = Math.min(g.sortOrder, comp.sortOrder);
-      g.keys.add(mapKey);
-      const sp = (comp.sizeSpec || '').trim();
-      if (sp && !g.specSeen.has(sp)) {
-        g.specSeen.add(sp);
-        g.specsOrdered.push(sp);
-      }
-      if (comp.materialCode === 'PATTANKO') g.pattankoKeys += 1;
+
+      sheet.addRow([]);
     }
 
-    return order.map((k) => {
-      const g = groups.get(k)!;
-      const hasPattankoOnly = g.pattankoKeys === g.keys.size && g.pattankoKeys > 0;
-      return {
-        category: g.category,
-        nameJp: g.nameJp,
-        unit: g.unit,
-        sizeSpecJoined: g.specsOrdered.join(' / '),
-        sortOrder: g.sortOrder,
-        keys: [...g.keys],
-        hasPattankoOnly,
-      };
-    });
+    sheet.getColumn(1).width = 20;
+    for (let i = 0; i < walls.length; i++) {
+      sheet.getColumn(2 + i).width = 11;
+    }
+    sheet.getColumn(2 + walls.length).width = 11;
   }
 
   private summarizeSpans(spans: number[]): string {

@@ -12,12 +12,7 @@ import {
   ScaffoldMaterial,
   type EdgeHashiraLabeling,
 } from '@/lib/api/scaffold-configs';
-import {
-  mergeScaffoldSummaryForQuotation,
-  baseEnglishMaterialName,
-  scaffoldWallQuantityKey,
-  type MergedScaffoldSummaryRow,
-} from '@/lib/merge-scaffold-summary-rows';
+import { groupScaffoldSummaryByMaterial, scaffoldWallQuantityKey } from '@/lib/merge-scaffold-summary-rows';
 import { useI18n } from '@/lib/i18n';
 import {
   ArrowLeft,
@@ -181,11 +176,6 @@ function ScaffoldResultPage() {
       endStopperType: (result.endStopperType ?? config.endStopperType ?? 'nuno') as 'nuno' | 'frame',
     };
   }, [result, config, rawResult]);
-
-  const quotationMergedRows = useMemo(
-    () => mergeScaffoldSummaryForQuotation(result?.summary ?? []),
-    [result?.summary],
-  );
 
   const resultFor3D = useMemo(() => {
     const base = resultMergedForViz ?? result;
@@ -641,7 +631,7 @@ function ScaffoldResultPage() {
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('resultExtra', 'tabOverall')}
           </h2>
-          <QuotationTable result={result} mergedRows={quotationMergedRows} />
+          <QuotationTable result={result} />
         </div>
 
         {result.walls && (
@@ -709,7 +699,7 @@ function ScaffoldResultPage() {
               {/* Summary stats */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-gray-900">{quotationMergedRows.length}</div>
+                  <div className="text-2xl font-bold text-gray-900">{(result.summary ?? []).length}</div>
                   <div className="text-xs text-gray-500">{t('result', 'totalComponents')}</div>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
@@ -857,13 +847,7 @@ function SummaryCard({
 
 // ─── Quotation Table ──────────────────────────────────────────
 
-function QuotationTable({
-  result,
-  mergedRows,
-}: {
-  result: any;
-  mergedRows: MergedScaffoldSummaryRow[];
-}) {
+function QuotationTable({ result }: { result: any }) {
   const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
   const summary: CalculatedComponent[] = result.summary;
@@ -916,27 +900,54 @@ function QuotationTable({
     });
   }, [walls]);
 
-  // Group rows by category for visual separation
+  const materialGroups = useMemo(() => groupScaffoldSummaryByMaterial(summary), [summary]);
+
   const rowsWithGrouping = useMemo(() => {
-    const rows: Array<
-      { type: 'header'; category: string } | { type: 'row'; merged: MergedScaffoldSummaryRow; idx: number }
-    > = [];
+    type Row =
+      | { type: 'header'; category: string }
+      | { type: 'materialBanner'; title: string }
+      | {
+          type: 'detail';
+          comp: CalculatedComponent;
+          idx: number;
+          showCategory: boolean;
+          showName: boolean;
+        };
+    const rows: Row[] = [];
     let lastCategory = '';
     let itemNo = 0;
-    for (const merged of mergedRows) {
+
+    for (const grp of materialGroups) {
       const cat =
         locale === 'ja'
-          ? merged.category || ''
-          : merged.categoryEn || merged.representative.categoryEn || merged.category || '';
+          ? grp.category || ''
+          : grp.categoryEn || grp.components[0]?.categoryEn || grp.category || '';
       if (cat !== lastCategory) {
         rows.push({ type: 'header', category: cat });
         lastCategory = cat;
       }
-      itemNo++;
-      rows.push({ type: 'row', merged, idx: itemNo });
+      const multi = grp.components.length > 1;
+      if (multi) {
+        const nameLine =
+          locale === 'ja'
+            ? `${grp.nameJp}（${grp.unit}） ${t('result', 'quotationBySpecBanner')}`
+            : `${grp.components[0]?.name || grp.nameJp} (${grp.unit}) ${t('result', 'quotationBySpecBanner')}`;
+        rows.push({ type: 'materialBanner', title: nameLine });
+      }
+      for (let j = 0; j < grp.components.length; j++) {
+        const comp = grp.components[j];
+        itemNo++;
+        rows.push({
+          type: 'detail',
+          comp,
+          idx: itemNo,
+          showCategory: !multi,
+          showName: !multi || j === 0,
+        });
+      }
     }
     return rows;
-  }, [mergedRows, locale]);
+  }, [materialGroups, locale, t]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -1095,26 +1106,30 @@ function QuotationTable({
                 );
               }
 
-              const { merged, idx } = row;
-              const perWall = wallMaps.map((m) =>
-                merged.keys.reduce((sum, k) => sum + (m.get(k) || 0), 0),
-              );
-              let total: number;
-              if (merged.hasPattankoOnly) {
-                const pc = summary.find((c: CalculatedComponent) => c.materialCode === 'PATTANKO');
-                total = pc?.quantity ?? perWall.reduce((a, b) => a + b, 0);
-              } else {
-                total = perWall.reduce((a, b) => a + b, 0);
+              if (row.type === 'materialBanner') {
+                return (
+                  <tr key={`banner-${ri}`} className="bg-slate-100 border-b border-slate-200">
+                    <td
+                      colSpan={5 + walls.length + subtotalColCount + 1}
+                      className="px-3 py-2 text-xs font-semibold text-slate-800"
+                    >
+                      {row.title}
+                    </td>
+                  </tr>
+                );
               }
+
+              const { comp, idx, showCategory, showName } = row;
+              const key = scaffoldWallQuantityKey(comp);
+              const perWall = wallMaps.map((m) => m.get(key) || 0);
+              const total =
+                comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
               const catLabel =
                 locale === 'ja'
-                  ? merged.category || ''
-                  : merged.categoryEn || merged.representative.categoryEn || merged.category || '';
-              const displayName =
-                locale === 'ja'
-                  ? merged.nameJp
-                  : baseEnglishMaterialName(merged.representative.name) || merged.representative.name || merged.nameJp;
-              const rowKey = `${merged.sortOrder}-${merged.keys.slice().sort().join('|')}`;
+                  ? comp.category || ''
+                  : comp.categoryEn || comp.category || '';
+              const displayName = locale === 'ja' ? comp.nameJp : comp.name || comp.nameJp;
+              const rowKey = `${comp.sortOrder}-${key}`;
 
               return (
                 <tr
@@ -1122,10 +1137,14 @@ function QuotationTable({
                   className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}
                 >
                   <td className="px-3 py-2 text-gray-400 text-center">{idx}</td>
-                  <td className="px-3 py-2 text-gray-400 text-xs">{catLabel}</td>
-                  <td className="px-3 py-2 font-medium text-gray-800">{displayName}</td>
-                  <td className="px-3 py-2 text-gray-600">{merged.sizeSpecJoined}</td>
-                  <td className="px-3 py-2 text-center text-gray-500">{merged.unit}</td>
+                  <td className="px-3 py-2 text-gray-400 text-xs">
+                    {showCategory ? catLabel : t('result', 'quotationDitto')}
+                  </td>
+                  <td className="px-3 py-2 font-medium text-gray-800">
+                    {showName ? displayName : t('result', 'quotationDitto')}
+                  </td>
+                  <td className="px-3 py-2 text-gray-600">{comp.sizeSpec}</td>
+                  <td className="px-3 py-2 text-center text-gray-500">{comp.unit}</td>
                   {perWall.map((qty, wi) => (
                     <td key={wi} className="px-3 py-2 text-center text-gray-700">
                       {qty > 0 ? qty : '-'}
