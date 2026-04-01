@@ -2,6 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { ScaffoldCalculationResult, WallCalculationResult, CalculatedComponent } from './scaffold-calculator.service';
+import { edgeChordNameExcel, resolveEdgeHashiraXY, type EdgeHashiraLabeling } from './excel-edge-hashira';
+import {
+  aggregateLevelQtyToFloors,
+  buildingFloorCountFromHeight,
+  distributeByScaffoldLevel,
+} from './material-breakdown-excel.util';
 
 /** One logical line in the BOM after merging same 部材名 + 分類 + 単位 (e.g. all ブレス sizes → one row). */
 interface MergedMaterialRow {
@@ -305,6 +311,8 @@ export class ScaffoldExcelService {
     sheet2.getColumn(2).width = 14;
     for (let i = 0; i < wallNames2.length + 2; i++) sheet2.getColumn(3 + i).width = 10;
 
+    this.appendMaterialBreakdownSheet(workbook, config, result);
+
     // ─── Column Widths ───────────────────────────────────
     sheet.getColumn(1).width = 5;    // No
     sheet.getColumn(2).width = 12;   // 分類
@@ -318,6 +326,217 @@ export class ScaffoldExcelService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  /**
+   * Third sheet: 材料明細 — matches result-page Material Breakdown (per edge, floor columns, UTF-8).
+   */
+  private appendMaterialBreakdownSheet(
+    workbook: ExcelJS.Workbook,
+    config: ScaffoldConfiguration,
+    result: ScaffoldCalculationResult,
+  ): void {
+    const walls = result.walls;
+    if (!walls?.length) return;
+
+    const sheet = workbook.addWorksheet('材料明細', {
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+    });
+
+    const scaffoldType = result.scaffoldType || 'kusabi';
+    const isWakugumi = scaffoldType === 'wakugumi';
+    const levelHeightMm = isWakugumi ? (result.frameSizeMm || 1800) : 1800;
+    const buildingHeightMm =
+      config.buildingHeightMm ?? Math.max(3000, ...walls.map((w) => w.wallHeightMm ?? 0));
+    const buildingFloorCount = buildingFloorCountFromHeight(buildingHeightMm);
+    const scaffoldLevelCount = Math.max(
+      1,
+      result.totalLevels || Math.ceil(buildingHeightMm / levelHeightMm),
+    );
+    const totalLevels = Math.max(1, result.totalLevels ?? scaffoldLevelCount);
+
+    const poly = (result as { polygonVertices?: unknown[] }).polygonVertices;
+    const closedFootprint = Array.isArray(poly) && poly.length >= 3;
+    const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
+
+    const totalCols = 5 + buildingFloorCount + 3;
+
+    const titleRow = sheet.addRow(['材料明細']);
+    titleRow.font = { bold: true, size: 16 };
+    sheet.mergeCells(1, 1, 1, totalCols);
+    titleRow.alignment = { horizontal: 'center' };
+    sheet.addRow([]);
+
+    const metaRow = sheet.addRow([
+      `建物高さ: ${(buildingHeightMm / 1000).toFixed(1)}m`,
+      `足場幅: ${result.scaffoldWidthMm}mm`,
+      `段数: ${totalLevels}`,
+      `推定階数: ${buildingFloorCount}`,
+      `壁面数: ${walls.length}`,
+    ]);
+    metaRow.font = { size: 10 };
+    sheet.mergeCells(metaRow.number, 1, metaRow.number, totalCols);
+    sheet.addRow([]);
+
+    const floorLabels = Array.from({ length: buildingFloorCount }, (_, i) => `${i + 1}階`);
+    const headerRow = sheet.addRow([
+      '線',
+      '通り',
+      '部材名',
+      '規格',
+      '単位',
+      ...floorLabels,
+      '合計',
+      '単価(¥)',
+      '金額(¥)',
+    ]);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    type MatrixRow = {
+      wallIndex: number;
+      nameJp: string;
+      spec: string;
+      unit: string;
+      floorQty: number[];
+      total: number;
+    };
+    const matrixRows: MatrixRow[] = [];
+
+    for (let wi = 0; wi < walls.length; wi++) {
+      const wall = walls[wi];
+      const wallLevels = wall.levelCalc?.fullLevels || 1;
+      for (const comp of wall.components) {
+        const levelQty = distributeByScaffoldLevel(comp, wallLevels, scaffoldLevelCount);
+        const floorQty = aggregateLevelQtyToFloors(levelQty, levelHeightMm, buildingFloorCount);
+        matrixRows.push({
+          wallIndex: wi,
+          nameJp: comp.nameJp || comp.name || comp.type,
+          spec: comp.sizeSpec || '-',
+          unit: comp.unit || '-',
+          floorQty,
+          total: floorQty.reduce((s, n) => s + n, 0),
+        });
+      }
+    }
+
+    for (let wi = 0; wi < walls.length; wi++) {
+      const wall = walls[wi];
+      const chord = edgeChordNameExcel(wi, walls.length, closedFootprint);
+      const sectionText =
+        `辺 ${chord} — ${wall.wallLengthMm.toLocaleString()} mm` +
+        `  |  スパン: ${wall.totalSpans} · 段数: ${wall.levelCalc?.fullLevels ?? 1} · 高さ: ${(wall.wallHeightMm ?? 0).toLocaleString()} mm · 階段: ${wall.stairAccessCount ?? 0}箇所`;
+
+      const secRow = sheet.addRow([sectionText]);
+      secRow.font = { bold: true, size: 11 };
+      sheet.mergeCells(secRow.number, 1, secRow.number, totalCols);
+      secRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      secRow.getCell(1).alignment = { vertical: 'middle', wrapText: true };
+
+      const xy = resolveEdgeHashiraXY(labeling, wi, walls.length, wall.sideJp ?? '', wall.side ?? '');
+      const alongOne =
+        xy.alongRange ||
+        (xy.alongStations.length > 0
+          ? `${xy.alongStations[0]}–${xy.alongStations[xy.alongStations.length - 1]}`
+          : '');
+      if (xy.crossLabel || alongOne) {
+        const hRow = sheet.addRow([
+          xy.crossLabel ?? '',
+          alongOne || '',
+          '',
+          '',
+          '',
+          ...Array(buildingFloorCount + 3).fill(''),
+        ]);
+        hRow.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+      }
+
+      const wallRows = matrixRows.filter((r) => r.wallIndex === wi);
+      for (const row of wallRows) {
+        const dataRow = sheet.addRow([
+          '',
+          '',
+          row.nameJp,
+          row.spec,
+          row.unit,
+          ...row.floorQty,
+          row.total,
+          '',
+          '',
+        ]);
+        const totalCol = 6 + buildingFloorCount;
+        dataRow.getCell(totalCol).font = { bold: true };
+        dataRow.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+          if (colNumber >= 6 && colNumber <= totalCol) {
+            cell.alignment = { horizontal: 'right' };
+          }
+        });
+      }
+    }
+
+    const floorSums = Array.from({ length: buildingFloorCount }, (_, idx) =>
+      matrixRows.reduce((acc, r) => acc + (r.floorQty[idx] || 0), 0),
+    );
+    const grandTotal = matrixRows.reduce((s, r) => s + r.total, 0);
+    const sumRow = sheet.addRow([
+      '',
+      '',
+      '合計',
+      '',
+      '',
+      ...floorSums,
+      grandTotal,
+      '',
+      '',
+    ]);
+    sumRow.font = { bold: true };
+    sumRow.eachCell((cell, colNumber) => {
+      cell.border = {
+        top: { style: 'medium' },
+        left: { style: 'thin' },
+        bottom: { style: 'medium' },
+        right: { style: 'thin' },
+      };
+      if (colNumber >= 6) cell.alignment = { horizontal: 'right' };
+    });
+
+    sheet.getColumn(1).width = 10;
+    sheet.getColumn(2).width = 14;
+    sheet.getColumn(3).width = 24;
+    sheet.getColumn(4).width = 18;
+    sheet.getColumn(5).width = 8;
+    for (let c = 6; c <= totalCols; c++) {
+      sheet.getColumn(c).width = c <= 5 + buildingFloorCount ? 10 : 12;
+    }
   }
 
   /**
