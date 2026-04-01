@@ -133,7 +133,6 @@ function ScaffoldResultPage() {
     ['table', 'breakdown', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table'
   );
   const [visibleLevels, setVisibleLevels] = useState<number>(1);
-  const [materialPrices, setMaterialPrices] = useState<Record<string, number>>({});
 
   // Fetch config (includes calculationResult)
   const { data: config, isLoading } = useQuery<ScaffoldConfiguration>({
@@ -640,13 +639,10 @@ function ScaffoldResultPage() {
             </h2>
             <MaterialBreakdownTable
               walls={result.walls}
-              summary={result.summary ?? []}
               buildingHeightMm={config?.buildingHeightMm ?? result.walls.reduce((m: number, w: WallCalculationResult) => Math.max(m, w.wallHeightMm ?? 0), 3000)}
               scaffoldWidthMm={result.scaffoldWidthMm ?? 900}
               totalLevels={maxLevels}
               levelHeightMm={result.scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800}
-              prices={materialPrices}
-              onPriceChange={(code, price) => setMaterialPrices((prev) => ({ ...prev, [code]: price }))}
               edgeHashiraLabeling={(result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling}
               polygonVertexCount={Array.isArray(result.polygonVertices) ? result.polygonVertices.length : 0}
             />

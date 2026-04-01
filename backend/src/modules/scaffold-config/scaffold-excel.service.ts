@@ -371,7 +371,7 @@ export class ScaffoldExcelService {
     const closedFootprint = Array.isArray(poly) && poly.length >= 3;
     const labeling = (result as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
 
-    const totalCols = 5 + buildingFloorCount + 3;
+    const totalCols = 5 + buildingFloorCount + 1;
 
     const titleRow = sheet.addRow(['材料明細']);
     titleRow.font = { bold: true, size: 16 };
@@ -399,8 +399,6 @@ export class ScaffoldExcelService {
       '単位',
       ...floorLabels,
       '合計',
-      '単価(¥)',
-      '金額(¥)',
     ]);
     headerRow.font = { bold: true };
     headerRow.eachCell((cell) => {
@@ -414,15 +412,17 @@ export class ScaffoldExcelService {
       };
     });
 
-    type MatrixRow = {
+    type BreakdownMatrixRow = {
       wallIndex: number;
+      groupKey: string;
+      bomSort: { type: string; sortOrder: number; sizeSpec: string };
       nameJp: string;
       spec: string;
       unit: string;
       floorQty: number[];
       total: number;
     };
-    const matrixRows: MatrixRow[] = [];
+    const matrixRows: BreakdownMatrixRow[] = [];
 
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
@@ -432,6 +432,12 @@ export class ScaffoldExcelService {
         const floorQty = aggregateLevelQtyToFloors(levelQty, levelHeightMm, buildingFloorCount);
         matrixRows.push({
           wallIndex: wi,
+          groupKey: `${comp.type}\t${comp.nameJp}\t${comp.unit}`,
+          bomSort: {
+            type: comp.type,
+            sortOrder: comp.sortOrder,
+            sizeSpec: comp.sizeSpec || '',
+          },
           nameJp: comp.nameJp || comp.name || comp.type,
           spec: comp.sizeSpec || '-',
           unit: comp.unit || '-',
@@ -439,6 +445,22 @@ export class ScaffoldExcelService {
           total: floorQty.reduce((s, n) => s + n, 0),
         });
       }
+    }
+
+    function groupBreakdownWallRows(wallRows: BreakdownMatrixRow[]): BreakdownMatrixRow[][] {
+      const sorted = [...wallRows].sort((a, b) =>
+        compareCalculatedComponentsForBom(a.bomSort, b.bomSort),
+      );
+      const groups: BreakdownMatrixRow[][] = [];
+      let lastKey = '';
+      for (const r of sorted) {
+        if (r.groupKey !== lastKey) {
+          groups.push([]);
+          lastKey = r.groupKey;
+        }
+        groups[groups.length - 1].push(r);
+      }
+      return groups;
     }
 
     for (let wi = 0; wi < walls.length; wi++) {
@@ -467,7 +489,7 @@ export class ScaffoldExcelService {
           '',
           '',
           '',
-          ...Array(buildingFloorCount + 3).fill(''),
+          ...Array(buildingFloorCount + 1).fill(''),
         ]);
         hRow.eachCell((cell) => {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
@@ -480,32 +502,44 @@ export class ScaffoldExcelService {
         });
       }
 
-      const wallRows = matrixRows.filter((r) => r.wallIndex === wi);
-      for (const row of wallRows) {
-        const dataRow = sheet.addRow([
-          '',
-          '',
-          row.nameJp,
-          row.spec,
-          row.unit,
-          ...row.floorQty,
-          row.total,
-          '',
-          '',
-        ]);
-        const totalCol = 6 + buildingFloorCount;
-        dataRow.getCell(totalCol).font = { bold: true };
-        dataRow.eachCell((cell, colNumber) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' },
-          };
-          if (colNumber >= 6 && colNumber <= totalCol) {
-            cell.alignment = { horizontal: 'right' };
+      const wallGroups = groupBreakdownWallRows(matrixRows.filter((r) => r.wallIndex === wi));
+      for (const g of wallGroups) {
+        const startRow = sheet.rowCount + 1;
+        for (let i = 0; i < g.length; i++) {
+          const row = g[i];
+          const dataRow = sheet.addRow([
+            '',
+            '',
+            i === 0 ? row.nameJp : '',
+            row.spec,
+            row.unit,
+            ...row.floorQty,
+            row.total,
+          ]);
+          const totalCol = 6 + buildingFloorCount;
+          dataRow.getCell(totalCol).font = { bold: true };
+          dataRow.eachCell((cell, colNumber) => {
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' },
+            };
+            if (colNumber >= 6 && colNumber <= totalCol) {
+              cell.alignment = { horizontal: 'right' };
+            }
+          });
+        }
+        const endRow = sheet.rowCount;
+        if (g.length > 1) {
+          sheet.mergeCells(startRow, 1, endRow, 1);
+          sheet.mergeCells(startRow, 2, endRow, 2);
+          sheet.mergeCells(startRow, 3, endRow, 3);
+          for (let c = 1; c <= 3; c++) {
+            const cell = sheet.getCell(startRow, c);
+            cell.alignment = { vertical: 'top', wrapText: true };
           }
-        });
+        }
       }
     }
 
@@ -521,8 +555,6 @@ export class ScaffoldExcelService {
       '',
       ...floorSums,
       grandTotal,
-      '',
-      '',
     ]);
     sumRow.font = { bold: true };
     sumRow.eachCell((cell, colNumber) => {
@@ -541,7 +573,7 @@ export class ScaffoldExcelService {
     sheet.getColumn(4).width = 18;
     sheet.getColumn(5).width = 8;
     for (let c = 6; c <= totalCols; c++) {
-      sheet.getColumn(c).width = c <= 5 + buildingFloorCount ? 10 : 12;
+      sheet.getColumn(c).width = 10;
     }
   }
 

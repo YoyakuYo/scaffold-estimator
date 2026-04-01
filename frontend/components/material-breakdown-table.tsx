@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo } from 'react';
 import { Package } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { EdgeHashiraLabeling } from '@/lib/api/scaffold-configs';
@@ -16,19 +16,12 @@ type MatrixRow = {
   unit: string;
   floorQty: number[];
   total: number;
-  code: string;
   groupKey: string;
   bomSort: { type: string; sortOrder: number; sizeSpec: string };
 };
 
-type BreakdownDisplayRow =
-  | { kind: 'banner'; key: string; title: string }
-  | { kind: 'detail'; key: string; row: MatrixRow; materialCell: string };
-
-function buildBreakdownDisplayRows(
-  wallRows: MatrixRow[],
-  labels: { ditto: string; bySpecBanner: string },
-): BreakdownDisplayRow[] {
+/** Same material (type + JP name + unit): one 部材 cell with rowSpan, one row per 規格. */
+function groupBreakdownMaterialRows(wallRows: MatrixRow[]): Array<{ material: string; rows: MatrixRow[] }> {
   const sorted = [...wallRows].sort((a, b) =>
     compareCalculatedComponentsForBom(a.bomSort, b.bomSort),
   );
@@ -41,33 +34,10 @@ function buildBreakdownDisplayRows(
     }
     groups[groups.length - 1].push(r);
   }
-  const out: BreakdownDisplayRow[] = [];
-  for (const g of groups) {
-    if (g.length > 1) {
-      out.push({
-        kind: 'banner',
-        key: `banner-${g[0].key}`,
-        title: `${g[0].material}（${g[0].unit}） ${labels.bySpecBanner}`,
-      });
-      for (const row of g) {
-        out.push({
-          kind: 'detail',
-          key: row.key,
-          row,
-          materialCell: labels.ditto,
-        });
-      }
-    } else {
-      const row = g[0];
-      out.push({
-        kind: 'detail',
-        key: row.key,
-        row,
-        materialCell: row.material,
-      });
-    }
-  }
-  return out;
+  return groups.map((rows) => ({
+    material: rows[0].material,
+    rows,
+  }));
 }
 
 interface CalculatedComponent {
@@ -119,13 +89,10 @@ function aggregateLevelQtyToFloors(
 
 interface Props {
   walls: WallResult[];
-  summary: CalculatedComponent[];
   buildingHeightMm: number;
   scaffoldWidthMm: number;
   totalLevels: number;
   levelHeightMm?: number;
-  onPriceChange?: (materialCode: string, price: number) => void;
-  prices?: Record<string, number>;
   edgeHashiraLabeling?: EdgeHashiraLabeling | null;
   /** For closed chord naming (polygon in calculation result). */
   polygonVertexCount?: number;
@@ -133,19 +100,14 @@ interface Props {
 
 export function MaterialBreakdownTable({
   walls,
-  summary,
   buildingHeightMm,
   scaffoldWidthMm,
   totalLevels,
   levelHeightMm = 1800,
-  onPriceChange,
-  prices = {},
   edgeHashiraLabeling,
   polygonVertexCount = 0,
 }: Props) {
   const { t, locale } = useI18n();
-  const [editingPrice, setEditingPrice] = useState<string | null>(null);
-  const [priceValue, setPriceValue] = useState('');
 
   /** Scaffold lift tiers (段) — column count and quantity distribution. */
   const scaffoldLevelCount = useMemo(() => {
@@ -250,7 +212,6 @@ export function MaterialBreakdownTable({
           unit: comp.unit || '-',
           floorQty,
           total: floorQty.reduce((sum, n) => sum + n, 0),
-          code: comp.materialCode || comp.type,
           groupKey,
           bomSort: {
             type: comp.type,
@@ -263,7 +224,7 @@ export function MaterialBreakdownTable({
     return rows;
   }, [walls, scaffoldLevelCount, buildingFloorCount, levelHeightMm, locale]);
 
-  const tableColSpan = 5 + floorColumnLabels.length + 3;
+  const tableColSpan = 5 + floorColumnLabels.length + 1;
 
   const breakdownSections = useMemo(() => {
     const closedFootprint = polygonVertexCount >= 3;
@@ -279,29 +240,10 @@ export function MaterialBreakdownTable({
         stairAccessCount: wall.stairAccessCount ?? 0,
         xy: xyByWall[wi],
         rows: wallRows,
-        displayRows: buildBreakdownDisplayRows(wallRows, {
-          ditto: t('result', 'quotationDitto'),
-          bySpecBanner: t('result', 'quotationBySpecBanner'),
-        }),
+        materialGroups: groupBreakdownMaterialRows(wallRows),
       };
     });
-  }, [walls, matrixRows, polygonVertexCount, xyByWall, t]);
-
-  const handlePriceSubmit = (code: string) => {
-    const val = parseFloat(priceValue);
-    if (!isNaN(val) && val >= 0 && onPriceChange) {
-      onPriceChange(code, val);
-    }
-    setEditingPrice(null);
-  };
-
-  const totalCost = useMemo(() => {
-    return summary.reduce((acc, comp) => {
-      const code = comp.materialCode || comp.type;
-      const price = prices[code] || 0;
-      return acc + comp.quantity * price;
-    }, 0);
-  }, [summary, prices]);
+  }, [walls, matrixRows, polygonVertexCount, xyByWall]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -310,11 +252,6 @@ export function MaterialBreakdownTable({
           <Package className="h-5 w-5" />
           {t('result', 'materialBreakdownTitle')}
         </h3>
-        {totalCost > 0 && (
-          <span className="text-white/90 text-sm font-mono">
-            {t('result', 'colTotal')}: ¥{totalCost.toLocaleString()}
-          </span>
-        )}
       </div>
 
       <div className="bg-blue-50 px-6 py-2 border-b border-blue-100 flex items-center gap-6 text-xs text-blue-700">
@@ -358,12 +295,6 @@ export function MaterialBreakdownTable({
               ))}
               <th className="text-right py-3 px-3 font-semibold text-gray-700 min-w-[80px]">
                 {t('result', 'colTotal')}
-              </th>
-              <th className="text-right py-3 px-3 font-semibold text-gray-700 min-w-[100px]">
-                {t('result', 'unitPriceYen')}
-              </th>
-              <th className="text-right py-3 px-3 font-semibold text-gray-700 min-w-[110px]">
-                {t('result', 'lineTotalYen')}
               </th>
             </tr>
           </thead>
@@ -420,67 +351,45 @@ export function MaterialBreakdownTable({
                     </tr>
                   );
                 })()}
-                {sec.displayRows.map((dr) => {
-                  if (dr.kind === 'banner') {
+                {sec.materialGroups.map((grp) => (
+                  <Fragment key={`mg-${grp.rows[0]?.key ?? ''}`}>
+                    {grp.rows.map((row, ri) => {
+                    const rs = grp.rows.length;
                     return (
-                      <tr key={dr.key} className="bg-slate-100/90 border-b border-slate-200">
-                        <td colSpan={2} className="py-2 px-4" />
-                        <td colSpan={3} className="py-2 px-4 text-sm font-semibold text-slate-800">
-                          {dr.title}
-                        </td>
-                        {floorColumnLabels.map((fl) => (
-                          <td key={`${dr.key}-h-${fl}`} className="py-2 bg-slate-100/90" aria-hidden />
+                      <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
+                        {ri === 0 ? (
+                          <>
+                            <td
+                              className="py-2.5 px-4 bg-white align-top border-r border-gray-100"
+                              rowSpan={rs}
+                            />
+                            <td
+                              className="py-2.5 px-4 bg-white align-top border-r border-gray-100"
+                              rowSpan={rs}
+                            />
+                            <td
+                              className="py-2.5 px-4 font-medium text-gray-800 align-top bg-white border-r border-gray-100"
+                              rowSpan={rs}
+                            >
+                              {grp.material}
+                            </td>
+                          </>
+                        ) : null}
+                        <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
+                        <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
+                        {row.floorQty.map((qty, idx) => (
+                          <td key={`${row.key}-fl${idx}`} className="py-2.5 px-3 text-right font-mono text-gray-700">
+                            {qty.toLocaleString()}
+                          </td>
                         ))}
-                        <td colSpan={3} className="py-2 bg-slate-100/90" aria-hidden />
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-gray-900">
+                          {row.total.toLocaleString()}
+                        </td>
                       </tr>
                     );
-                  }
-                  const row = dr.row;
-                  const price = prices[row.code] || 0;
-                  return (
-                    <tr key={dr.key} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-2.5 px-4 bg-white" />
-                      <td className="py-2.5 px-4 bg-white" />
-                      <td className="py-2.5 px-4 font-medium text-gray-800">{dr.materialCell}</td>
-                      <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
-                      {row.floorQty.map((qty, idx) => (
-                        <td key={`${row.key}-fl${idx}`} className="py-2.5 px-3 text-right font-mono text-gray-700">
-                          {qty.toLocaleString()}
-                        </td>
-                      ))}
-                      <td className="py-2.5 px-3 text-right font-mono font-semibold text-gray-900">
-                        {row.total.toLocaleString()}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        {editingPrice === row.code ? (
-                          <input
-                            type="number"
-                            value={priceValue}
-                            onChange={(e) => setPriceValue(e.target.value)}
-                            onBlur={() => handlePriceSubmit(row.code)}
-                            onKeyDown={(e) => e.key === 'Enter' && handlePriceSubmit(row.code)}
-                            className="w-20 border border-blue-300 rounded px-1 py-0.5 text-xs text-right font-mono"
-                            autoFocus
-                          />
-                        ) : (
-                          <span
-                            className="font-mono text-gray-600 cursor-pointer hover:text-blue-600"
-                            onClick={() => {
-                              setEditingPrice(row.code);
-                              setPriceValue(String(price || ''));
-                            }}
-                          >
-                            {price > 0 ? `¥${price.toLocaleString()}` : '—'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-gray-700">
-                        {price > 0 ? `¥${(row.total * price).toLocaleString()}` : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                  })}
+                  </Fragment>
+                ))}
               </Fragment>
             ))}
           </tbody>
@@ -499,10 +408,6 @@ export function MaterialBreakdownTable({
               })}
               <td className="py-3 px-3 text-right font-mono font-bold text-gray-900">
                 {matrixRows.reduce((sum, row) => sum + row.total, 0).toLocaleString()}
-              </td>
-              <td className="py-3 px-3" />
-              <td className="py-3 px-3 text-right font-mono font-bold text-gray-900">
-                {totalCost > 0 ? `¥${totalCost.toLocaleString()}` : '—'}
               </td>
             </tr>
           </tfoot>
