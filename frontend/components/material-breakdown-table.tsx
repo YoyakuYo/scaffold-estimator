@@ -6,6 +6,69 @@ import { useI18n } from '@/lib/i18n';
 import type { EdgeHashiraLabeling } from '@/lib/api/scaffold-configs';
 import { EdgeHashiraResultPanel } from '@/components/edge-hashira-result-panel';
 import { edgeChordName, resolveEdgeHashiraXY } from '@/lib/edge-hashira-labels';
+import { compareCalculatedComponentsForBom } from '@/lib/scaffold-bom-sort';
+
+type MatrixRow = {
+  key: string;
+  wallIndex: number;
+  material: string;
+  spec: string;
+  unit: string;
+  floorQty: number[];
+  total: number;
+  code: string;
+  groupKey: string;
+  bomSort: { type: string; sortOrder: number; sizeSpec: string };
+};
+
+type BreakdownDisplayRow =
+  | { kind: 'banner'; key: string; title: string }
+  | { kind: 'detail'; key: string; row: MatrixRow; materialCell: string };
+
+function buildBreakdownDisplayRows(
+  wallRows: MatrixRow[],
+  labels: { ditto: string; bySpecBanner: string },
+): BreakdownDisplayRow[] {
+  const sorted = [...wallRows].sort((a, b) =>
+    compareCalculatedComponentsForBom(a.bomSort, b.bomSort),
+  );
+  const groups: MatrixRow[][] = [];
+  let lastKey = '';
+  for (const r of sorted) {
+    if (r.groupKey !== lastKey) {
+      groups.push([]);
+      lastKey = r.groupKey;
+    }
+    groups[groups.length - 1].push(r);
+  }
+  const out: BreakdownDisplayRow[] = [];
+  for (const g of groups) {
+    if (g.length > 1) {
+      out.push({
+        kind: 'banner',
+        key: `banner-${g[0].key}`,
+        title: `${g[0].material}（${g[0].unit}） ${labels.bySpecBanner}`,
+      });
+      for (const row of g) {
+        out.push({
+          kind: 'detail',
+          key: row.key,
+          row,
+          materialCell: labels.ditto,
+        });
+      }
+    } else {
+      const row = g[0];
+      out.push({
+        kind: 'detail',
+        key: row.key,
+        row,
+        materialCell: row.material,
+      });
+    }
+  }
+  return out;
+}
 
 interface CalculatedComponent {
   type: string;
@@ -170,16 +233,7 @@ export function MaterialBreakdownTable({
   );
 
   const matrixRows = useMemo(() => {
-    const rows: Array<{
-      key: string;
-      wallIndex: number;
-      material: string;
-      spec: string;
-      unit: string;
-      floorQty: number[];
-      total: number;
-      code: string;
-    }> = [];
+    const rows: MatrixRow[] = [];
 
     for (let wi = 0; wi < walls.length; wi++) {
       const wall = walls[wi];
@@ -187,6 +241,7 @@ export function MaterialBreakdownTable({
       for (const comp of wall.components) {
         const levelQty = distributeByScaffoldLevel(comp, wallLevels);
         const floorQty = aggregateLevelQtyToFloors(levelQty, levelHeightMm, buildingFloorCount);
+        const groupKey = `${comp.type}\t${comp.nameJp}\t${comp.unit}`;
         rows.push({
           key: `${wi}::${wall.side}::${comp.type}::${comp.sizeSpec}`,
           wallIndex: wi,
@@ -196,28 +251,41 @@ export function MaterialBreakdownTable({
           floorQty,
           total: floorQty.reduce((sum, n) => sum + n, 0),
           code: comp.materialCode || comp.type,
+          groupKey,
+          bomSort: {
+            type: comp.type,
+            sortOrder: comp.sortOrder,
+            sizeSpec: comp.sizeSpec || '',
+          },
         });
       }
     }
     return rows;
-  }, [walls, scaffoldLevelCount, buildingFloorCount, levelHeightMm, locale, xyByWall]);
+  }, [walls, scaffoldLevelCount, buildingFloorCount, levelHeightMm, locale]);
 
   const tableColSpan = 5 + floorColumnLabels.length + 3;
 
   const breakdownSections = useMemo(() => {
     const closedFootprint = polygonVertexCount >= 3;
-    return walls.map((wall, wi) => ({
-      key: `sec-${wi}-${edgeChordName(wi, walls.length, closedFootprint)}`,
-      chord: edgeChordName(wi, walls.length, closedFootprint),
-      lengthMm: wall.wallLengthMm,
-      wallHeightMm: wall.wallHeightMm,
-      totalSpans: wall.totalSpans,
-      fullLevels: wall.levelCalc?.fullLevels ?? 1,
-      stairAccessCount: wall.stairAccessCount ?? 0,
-      xy: xyByWall[wi],
-      rows: matrixRows.filter((r) => r.wallIndex === wi),
-    }));
-  }, [walls, matrixRows, polygonVertexCount, xyByWall]);
+    return walls.map((wall, wi) => {
+      const wallRows = matrixRows.filter((r) => r.wallIndex === wi);
+      return {
+        key: `sec-${wi}-${edgeChordName(wi, walls.length, closedFootprint)}`,
+        chord: edgeChordName(wi, walls.length, closedFootprint),
+        lengthMm: wall.wallLengthMm,
+        wallHeightMm: wall.wallHeightMm,
+        totalSpans: wall.totalSpans,
+        fullLevels: wall.levelCalc?.fullLevels ?? 1,
+        stairAccessCount: wall.stairAccessCount ?? 0,
+        xy: xyByWall[wi],
+        rows: wallRows,
+        displayRows: buildBreakdownDisplayRows(wallRows, {
+          ditto: t('result', 'quotationDitto'),
+          bySpecBanner: t('result', 'quotationBySpecBanner'),
+        }),
+      };
+    });
+  }, [walls, matrixRows, polygonVertexCount, xyByWall, t]);
 
   const handlePriceSubmit = (code: string) => {
     const val = parseFloat(priceValue);
@@ -352,13 +420,28 @@ export function MaterialBreakdownTable({
                     </tr>
                   );
                 })()}
-                {sec.rows.map((row) => {
+                {sec.displayRows.map((dr) => {
+                  if (dr.kind === 'banner') {
+                    return (
+                      <tr key={dr.key} className="bg-slate-100/90 border-b border-slate-200">
+                        <td colSpan={2} className="py-2 px-4" />
+                        <td colSpan={3} className="py-2 px-4 text-sm font-semibold text-slate-800">
+                          {dr.title}
+                        </td>
+                        {floorColumnLabels.map((fl) => (
+                          <td key={`${dr.key}-h-${fl}`} className="py-2 bg-slate-100/90" aria-hidden />
+                        ))}
+                        <td colSpan={3} className="py-2 bg-slate-100/90" aria-hidden />
+                      </tr>
+                    );
+                  }
+                  const row = dr.row;
                   const price = prices[row.code] || 0;
                   return (
-                    <tr key={row.key} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={dr.key} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2.5 px-4 bg-white" />
                       <td className="py-2.5 px-4 bg-white" />
-                      <td className="py-2.5 px-4 font-medium text-gray-800">{row.material}</td>
+                      <td className="py-2.5 px-4 font-medium text-gray-800">{dr.materialCell}</td>
                       <td className="py-2.5 px-3 text-gray-700">{row.spec}</td>
                       <td className="py-2.5 px-3 text-center text-gray-700">{row.unit}</td>
                       {row.floorQty.map((qty, idx) => (
