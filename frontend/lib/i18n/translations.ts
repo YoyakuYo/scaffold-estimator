@@ -1195,6 +1195,21 @@ export const translations = {
   // ─── Result Page Extras ─────────────────────────────────────
   resultExtra: {
     tabOverall: { ja: '全体数量', en: 'Overall Totals', fr: 'Totaux généraux' },
+    perLiftSectionTitle: {
+      ja: '段別（足場段）内訳 — 各辺',
+      en: 'Per-lift breakdown by edge',
+      fr: 'Détail par niveau d’échafaudage (par côté)',
+    },
+    perLiftSectionNote: {
+      ja: 'Excel 見積の段別配分と同じルールで、各段の数量を辺ごとに表示します。段の合計は上の全体表と整合します。',
+      en: 'Quantities per scaffold lift and per edge, using the same split rules as the BOM Excel export. Sums across lifts match the overall table above.',
+      fr: 'Quantités par niveau d’échafaudage et par côté, avec les mêmes règles que l’export Excel. Les sommes par niveaux correspondent au tableau global ci-dessus.',
+    },
+    perLiftTableTitle: {
+      ja: '第{{n}}段（約 {{fromMm}}–{{toMm}} mm）',
+      en: 'Lift {{n}} (approx. {{fromMm}}–{{toMm}} mm)',
+      fr: 'Niveau {{n}} (env. {{fromMm}}–{{toMm}} mm)',
+    },
     tabPerSide: { ja: '面別数量', en: 'Per-Side Breakdown', fr: 'Détail par face' },
     wallLength: { ja: '壁長', en: 'Wall Length', fr: 'Longueur mur' },
     spans: { ja: 'スパン', en: 'Spans', fr: 'Travées' },

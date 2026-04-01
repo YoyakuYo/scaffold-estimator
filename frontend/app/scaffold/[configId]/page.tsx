@@ -40,6 +40,7 @@ import Scaffold2DView from './scaffold-2d-view';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { normalizeScaffoldResultForQuotation } from '@/lib/scaffold-quotation-normalize';
+import { buildWallMapsForScaffoldLevel, distributeByScaffoldLevel } from '@/lib/scaffold-per-level-distribute';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 
 // Dynamic import — Three.js cannot run during SSR
@@ -620,11 +621,13 @@ function ScaffoldResultPage() {
         </div>
 
         {/* Tab content: only the active tab is printed (browser print / “Print this tab”). */}
-        <div className={activeTab === 'table' ? 'block' : 'hidden'}>
+        <div className={activeTab === 'table' ? 'block space-y-8' : 'hidden'}>
           <QuotationTable
             result={resultForDisplay ?? result}
             heading={t('resultExtra', 'tabOverall')}
+            sectionHeadingId="overall-totals-heading"
           />
+          <PerLiftBomSection result={resultForDisplay ?? result} />
         </div>
 
         <div className={`${activeTab === '2d' ? 'block' : 'hidden'} print:overflow-visible`}>
@@ -825,7 +828,21 @@ function SummaryCard({
 
 // ─── Quotation Table ──────────────────────────────────────────
 
-function QuotationTable({ result, heading }: { result: any; heading?: string }) {
+function QuotationTable({
+  result,
+  heading,
+  wallMaps: wallMapsProp,
+  levelSlice,
+  headerVariant = 'blue',
+  sectionHeadingId,
+}: {
+  result: any;
+  heading?: string;
+  wallMaps?: globalThis.Map<string, number>[];
+  levelSlice?: { levelIndex: number; scaffoldLevelCount: number; maxFullLevels: number };
+  headerVariant?: 'blue' | 'slate';
+  sectionHeadingId?: string;
+}) {
   const { locale, t } = useI18n();
   const walls: WallCalculationResult[] = result.walls;
   const summary: CalculatedComponent[] = result.summary;
@@ -864,10 +881,11 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
     return groups;
   }, [walls, hasTierWalls, locale, chordOpts]);
 
-  // Build per-wall quantity maps
+  // Build per-wall quantity maps (or use precomputed maps for per-lift tables)
   // IMPORTANT: Use the same key generation logic as backend aggregation
   // Use globalThis.Map so the built-in constructor is always used (avoids shadowing by lucide-react Map icon)
   const wallMaps = useMemo(() => {
+    if (wallMapsProp) return wallMapsProp;
     return walls.map((wall) => {
       const m = new globalThis.Map<string, number>();
       for (const comp of wall.components) {
@@ -876,7 +894,12 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
       }
       return m;
     });
-  }, [walls]);
+  }, [walls, wallMapsProp]);
+
+  const headBg = headerVariant === 'slate' ? 'bg-slate-600' : 'bg-blue-600';
+  const grpHeadBg = headerVariant === 'slate' ? 'bg-slate-500' : 'bg-blue-500';
+  const totHeadBg = headerVariant === 'slate' ? 'bg-slate-700' : 'bg-blue-700';
+  const headingDomId = heading ? sectionHeadingId ?? 'quotation-table-heading' : undefined;
 
   const materialGroups = useMemo(() => groupScaffoldSummaryByMaterial(summary), [summary]);
 
@@ -939,12 +962,12 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
   return (
     <section
       className="print:break-inside-avoid"
-      aria-labelledby={heading ? 'overall-totals-heading' : undefined}
+      aria-labelledby={headingDomId}
     >
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {heading ? (
           <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-gray-200 bg-slate-50/90">
-            <h2 id="overall-totals-heading" className="text-lg font-bold text-gray-900 tracking-tight">
+            <h2 id={headingDomId} className="text-lg font-bold text-gray-900 tracking-tight">
               {heading}
             </h2>
           </div>
@@ -952,7 +975,7 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-blue-600 text-white">
+              <tr className={`${headBg} text-white`}>
                 <th className="px-3 py-2 text-left font-medium w-12">{t('result', 'colNo')}</th>
                 <th className="px-3 py-2 text-left font-medium">{t('result', 'colName')}</th>
                 <th className="px-3 py-2 text-left font-medium">{t('result', 'colSpec')}</th>
@@ -990,13 +1013,13 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
                 {/* Tier group subtotal columns */}
                 {hasTierWalls && tierGroupOrder && Array.from(tierGroupOrder.entries()).map(([grp, info]) => (
                   info.wallIndices.length > 1 ? (
-                    <th key={`grp-${grp}`} className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-500">
+                    <th key={`grp-${grp}`} className={`px-3 py-2 text-center font-medium min-w-[80px] ${grpHeadBg}`}>
                       <div>{info.label}</div>
                       <div className="text-[10px] font-normal opacity-80">{t('result', 'subtotal')}</div>
                     </th>
                   ) : null
                 ))}
-                <th className="px-3 py-2 text-center font-medium min-w-[80px] bg-blue-700">{t('result', 'colTotal')}</th>
+                <th className={`px-3 py-2 text-center font-medium min-w-[80px] ${totHeadBg}`}>{t('result', 'colTotal')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1018,8 +1041,18 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
                 const { comp, idx, nameDisplay, specDisplay } = row;
                 const key = scaffoldWallQuantityKey(comp);
                 const perWall = wallMaps.map((m) => m.get(key) || 0);
-                const total =
-                  comp.materialCode === 'PATTANKO' ? comp.quantity : perWall.reduce((a, b) => a + b, 0);
+                const total = (() => {
+                  if (comp.materialCode === 'PATTANKO' && levelSlice) {
+                    const arr = distributeByScaffoldLevel(
+                      comp,
+                      levelSlice.maxFullLevels,
+                      levelSlice.scaffoldLevelCount,
+                    );
+                    return arr[levelSlice.levelIndex] ?? 0;
+                  }
+                  if (comp.materialCode === 'PATTANKO') return comp.quantity;
+                  return perWall.reduce((a, b) => a + b, 0);
+                })();
                 const rowKey = `${comp.sortOrder}-${key}`;
                 const nameIsMark = nameDisplay === t('result', 'quotationSameName');
                 const specIsMark = specDisplay === t('result', 'quotationSameSpec');
@@ -1073,6 +1106,58 @@ function QuotationTable({ result, heading }: { result: any; heading?: string }) 
         </div>
       </div>
     </section>
+  );
+}
+
+/** Per-scaffold-lift BOM tables (per-edge columns), same distribution rules as Excel export. */
+function PerLiftBomSection({ result }: { result: any }) {
+  const { t } = useI18n();
+  const walls = result.walls as WallCalculationResult[] | undefined;
+  const wallMapsByLevel = useMemo(() => {
+    if (!Array.isArray(walls) || walls.length === 0) return null;
+    const scaffoldLevelCount = Math.max(
+      1,
+      result.totalLevels ?? Math.max(1, ...walls.map((w) => w.levelCalc?.fullLevels ?? 1)),
+    );
+    if (scaffoldLevelCount <= 1) return null;
+    return Array.from({ length: scaffoldLevelCount }, (_, li) =>
+      buildWallMapsForScaffoldLevel(walls, li, scaffoldLevelCount),
+    );
+  }, [walls, result.totalLevels]);
+
+  if (!wallMapsByLevel || !walls?.length) return null;
+
+  const scaffoldType = result.scaffoldType ?? 'kusabi';
+  const levelHeightMm = scaffoldType === 'wakugumi' ? (result.frameSizeMm ?? 1800) : 1800;
+  const scaffoldLevelCount = wallMapsByLevel.length;
+  const maxFullLevels = Math.max(1, ...walls.map((w) => w.levelCalc?.fullLevels ?? 1));
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-700">
+        <p className="font-semibold text-slate-900">{t('resultExtra', 'perLiftSectionTitle')}</p>
+        <p className="mt-1 text-slate-600">{t('resultExtra', 'perLiftSectionNote')}</p>
+      </div>
+      {wallMapsByLevel.map((wallMaps, li) => {
+        const fromMm = li * levelHeightMm;
+        const toMm = (li + 1) * levelHeightMm;
+        const title = t('resultExtra', 'perLiftTableTitle')
+          .replace(/\{\{n\}\}/g, String(li + 1))
+          .replace(/\{\{fromMm\}\}/g, fromMm.toLocaleString())
+          .replace(/\{\{toMm\}\}/g, toMm.toLocaleString());
+        return (
+          <QuotationTable
+            key={li}
+            result={result}
+            heading={title}
+            wallMaps={wallMaps}
+            levelSlice={{ levelIndex: li, scaffoldLevelCount, maxFullLevels }}
+            headerVariant="slate"
+            sectionHeadingId={`per-lift-heading-${li}`}
+          />
+        );
+      })}
+    </div>
   );
 }
 
