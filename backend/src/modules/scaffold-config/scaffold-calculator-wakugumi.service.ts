@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { compareCalculatedComponentsForBom } from './scaffold-bom-sort';
 import {
   fitSpansToWallLengthWakugumi,
   fitSpansToWallLengthWithCornerWakugumi,
@@ -117,6 +118,7 @@ export class ScaffoldCalculatorWakugumiService {
         materialCode: 'PATTANKO',
       });
     }
+    summary.sort(compareCalculatedComponentsForBom);
 
     this.logger.log(`Wakugumi calculation complete: ${wallResults.length} walls, ${summary.length} material types`);
 
@@ -540,33 +542,6 @@ export class ScaffoldCalculatorWakugumiService {
       }
     }
 
-    const categoryOrder: Record<string, number> = {
-      '基礎部材': 1,
-      '建枠': 2,
-      'ブレス': 3,
-      '下桟': 4,
-      '端部': 5,
-      '踏板': 6,
-      '巾木': 7,
-      '階段': 8,
-    };
-
-    return Array.from(map.values()).sort((a, b) => {
-      const catA = categoryOrder[a.category] || 99;
-      const catB = categoryOrder[b.category] || 99;
-      if (catA !== catB) return catA - catB;
-
-      if (a.category === b.category) {
-        const extractSize = (spec: string): number => {
-          const match = spec.match(/(\d+)/);
-          return match ? parseInt(match[1], 10) : 0;
-        };
-        const sizeA = extractSize(a.sizeSpec);
-        const sizeB = extractSize(b.sizeSpec);
-        if (sizeA !== sizeB) return sizeA - sizeB;
-      }
-
-      return a.sortOrder - b.sortOrder;
-    });
+    return Array.from(map.values()).sort(compareCalculatedComponentsForBom);
   }
 }

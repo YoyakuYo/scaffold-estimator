@@ -1,4 +1,5 @@
 import type { CalculatedComponent } from '@/lib/api/scaffold-configs';
+import { compareCalculatedComponentsForBom } from '@/lib/scaffold-bom-sort';
 
 /** Same key as backend Excel wall aggregation: materialCode or type-sizeSpec. */
 export function scaffoldWallQuantityKey(comp: CalculatedComponent): string {
@@ -15,13 +16,7 @@ export interface MaterialSummaryGroup {
 }
 
 function sortSummary(summary: CalculatedComponent[]): CalculatedComponent[] {
-  return [...summary].sort((a, b) => {
-    const ca = a.category || '';
-    const cb = b.category || '';
-    if (ca !== cb) return ca.localeCompare(cb, 'ja');
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return (a.sizeSpec || '').localeCompare(b.sizeSpec || '', 'ja');
-  });
+  return [...summary].sort(compareCalculatedComponentsForBom);
 }
 
 const groupKey = (c: CalculatedComponent) =>

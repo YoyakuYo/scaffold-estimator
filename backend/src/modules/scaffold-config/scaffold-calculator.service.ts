@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { compareCalculatedComponentsForBom } from './scaffold-bom-sort';
 import {
   fitSpansToWallLength,
   fitSpansToWallLengthWithCorner,
@@ -254,6 +255,7 @@ export class ScaffoldCalculatorService {
         materialCode: 'PATTANKO',
       });
     }
+    summary.sort(compareCalculatedComponentsForBom);
 
     this.logger.log(`Calculation complete: ${wallResults.length} walls, ${summary.length} material types`);
 
@@ -770,38 +772,6 @@ export class ScaffoldCalculatorService {
       }
     }
 
-    // Sort: first by category, then by size (for nuno bars), then by sortOrder
-    return Array.from(map.values()).sort((a, b) => {
-      // Category order: 基礎部材, 支柱, ブレス, 布材, 踏板, 巾木, 階段
-      const categoryOrder: Record<string, number> = {
-        '基礎部材': 1,
-        '支柱': 2,
-        'ブレス': 3,
-        '布材': 4,
-        '踏板': 5,
-        '巾木': 6,
-        '階段': 7,
-      };
-      const catA = categoryOrder[a.category] || 99;
-      const catB = categoryOrder[b.category] || 99;
-      if (catA !== catB) return catA - catB;
-
-      // For same category, sort by size (extract number from sizeSpec)
-      if (a.category === b.category) {
-        // Extract numeric size from sizeSpec (handles "600", "500×600", etc.)
-        const extractSize = (spec: string): number => {
-          // Try to extract first number from sizeSpec
-          const match = spec.match(/(\d+)/);
-          return match ? parseInt(match[1], 10) : 0;
-        };
-        
-        const sizeA = extractSize(a.sizeSpec);
-        const sizeB = extractSize(b.sizeSpec);
-        if (sizeA !== sizeB) return sizeA - sizeB;
-      }
-
-      // Finally by sortOrder
-      return a.sortOrder - b.sortOrder;
-    });
+    return Array.from(map.values()).sort(compareCalculatedComponentsForBom);
   }
 }

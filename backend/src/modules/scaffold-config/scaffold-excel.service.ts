@@ -8,6 +8,7 @@ import {
   buildingFloorCountFromHeight,
   distributeByScaffoldLevel,
 } from './material-breakdown-excel.util';
+import { compareCalculatedComponentsForBom } from './scaffold-bom-sort';
 
 /**
  * Generates a printable Excel quotation (足場材料見積書)
@@ -545,13 +546,7 @@ export class ScaffoldExcelService {
   }
 
   private sortSummaryForExcel(summary: CalculatedComponent[]): CalculatedComponent[] {
-    return [...summary].sort((a, b) => {
-      const ca = a.category || '';
-      const cb = b.category || '';
-      if (ca !== cb) return ca.localeCompare(cb, 'ja');
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      return (a.sizeSpec || '').localeCompare(b.sizeSpec || '', 'ja');
-    });
+    return [...summary].sort(compareCalculatedComponentsForBom);
   }
 
   private groupSummaryByMaterialForExcel(
