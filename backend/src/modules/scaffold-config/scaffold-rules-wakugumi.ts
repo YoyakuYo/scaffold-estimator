@@ -251,12 +251,13 @@ export function fitSpansToWallLengthWithCornerWakugumi(
   const endIsConvex = endKind !== 'reflex';
 
   if (!startIsConvex || !endIsConvex) {
+    const reflexInset =
+      (startIsConvex ? 0 : WAKUGUMI_CORNER_OVERRUN_MM) + (endIsConvex ? 0 : WAKUGUMI_CORNER_OVERRUN_MM);
+    const effectiveFacadeMm = Math.max(0, wallLengthMm - reflexInset);
     const prefix = startIsConvex ? [WAKUGUMI_CORNER_START_SPAN_MM] : [];
     const suffix = endIsConvex ? [terminal] : [];
     const runTarget =
-      wallLengthMm +
-      (endIsConvex ? (WAKUGUMI_CORNER_OVERRUN_MM + terminal) : -WAKUGUMI_CORNER_OVERRUN_MM) +
-      (startIsConvex ? 0 : -WAKUGUMI_CORNER_OVERRUN_MM);
+      effectiveFacadeMm + (endIsConvex ? WAKUGUMI_CORNER_OVERRUN_MM + terminal : 0);
     const middleTarget = runTarget - prefix.reduce((a, b) => a + b, 0) - suffix.reduce((a, b) => a + b, 0);
     if (middleTarget <= 0) return [...prefix, ...suffix];
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);

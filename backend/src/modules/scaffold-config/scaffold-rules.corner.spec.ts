@@ -6,6 +6,7 @@ import {
   cornerTerminalSpanMmKusabi,
   fitSpansToWallLengthWithCorner,
   inferReflexVerticesFromOutline,
+  scaffoldFacadeBasisMmFromCorners,
 } from './scaffold-rules';
 import {
   WAKUGUMI_CORNER_OVERRUN_MM,
@@ -41,6 +42,18 @@ describe('inferReflexVerticesFromOutline', () => {
     const r = inferReflexVerticesFromOutline(outline);
     expect(r).not.toBeNull();
     expect(r!.every((v) => !v)).toBe(true);
+  });
+});
+
+describe('scaffoldFacadeBasisMmFromCorners', () => {
+  it('subtracts 300mm per reflex end (6000 + reflex at end → 5700)', () => {
+    expect(scaffoldFacadeBasisMmFromCorners(6000, 'convex', 'reflex')).toBe(5700);
+  });
+  it('subtracts 600mm when both ends reflex', () => {
+    expect(scaffoldFacadeBasisMmFromCorners(6000, 'reflex', 'reflex')).toBe(5400);
+  });
+  it('unchanged when both convex', () => {
+    expect(scaffoldFacadeBasisMmFromCorners(6000, 'convex', 'convex')).toBe(6000);
   });
 });
 

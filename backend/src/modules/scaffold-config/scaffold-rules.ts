@@ -280,6 +280,32 @@ export const CORNER_SPAN_MM = 600;
  */
 export const CORNER_START_SPAN_MM = 1800;
 
+/** Total mm to subtract from nominal wall length for reflex (inner/re-entrant) corners on that edge. */
+export function reflexCornerInsetTotalMm(
+  startCornerKind?: 'convex' | 'reflex',
+  endCornerKind?: 'convex' | 'reflex',
+  overrunMm: number = CORNER_OVERRUN_MM,
+): number {
+  let t = 0;
+  if (startCornerKind === 'reflex') t += overrunMm;
+  if (endCornerKind === 'reflex') t += overrunMm;
+  return t;
+}
+
+/**
+ * Façade length used for span layout along one edge: building face length minus 300mm per reflex corner.
+ * Example: 6000mm wall with reflex at one end → 5700mm basis (inner corner is “closed”, no +300 overrun there).
+ */
+export function scaffoldFacadeBasisMmFromCorners(
+  wallLengthMm: number,
+  startCornerKind?: 'convex' | 'reflex',
+  endCornerKind?: 'convex' | 'reflex',
+  overrunMm: number = CORNER_OVERRUN_MM,
+): number {
+  const inset = reflexCornerInsetTotalMm(startCornerKind, endCornerKind, overrunMm);
+  return Math.max(0, wallLengthMm - inset);
+}
+
 /** Corner terminal bay length = scaffold width (600 / 900 / 1200). */
 export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
@@ -468,6 +494,8 @@ export function classifyKusabiRectangleEdgeRoles(
 /**
  * Span fitting for walls that meet at corners (closed polygon).
  * - Run along the wall = **wallLength + 300 + terminal**; first bay **1800**; last = terminal.
+ * - **Reflex (inner) corner:** subtract **300mm** from nominal wall length **per** reflex vertex on that edge
+ *   (effective façade = `scaffoldFacadeBasisMmFromCorners`), then no terminal at reflex and no +300 there.
  * - Middle = **wall + 300 − 1800**, filled from **SPAN_SIZES** (exact when possible).
  * - **Rectangle hint** (`rectangleEdgeRole`): *prefer* long sides as all-1800 middle when possible; *prefer*
  *   short sides ending middle with **1200** then **(terminal+300)** when possible (overrun in penultimate bay).
@@ -497,16 +525,15 @@ export function fitSpansToWallLengthWithCorner(
   const startIsConvex = startKind !== 'reflex';
   const endIsConvex = endKind !== 'reflex';
 
-  // New rule (inner/reflex corners):
-  // - Reflex corner: inset by 300mm and DO NOT force the corner terminal bay.
-  // - Convex corner: keep the existing +300mm overrun and terminal bay behavior.
+  // Inner/reflex (re-entrant) corners: subtract overrunMm from nominal wall length per reflex vertex,
+  // then apply convex-end extension (+300 + terminal) only where the end corner is convex.
   if (!startIsConvex || !endIsConvex) {
+    const reflexInset =
+      (startIsConvex ? 0 : CORNER_OVERRUN_MM) + (endIsConvex ? 0 : CORNER_OVERRUN_MM);
+    const effectiveFacadeMm = Math.max(0, wallLengthMm - reflexInset);
     const prefix = startIsConvex ? [start] : [];
     const suffix = endIsConvex ? [terminal] : [];
-    const runTarget =
-      wallLengthMm +
-      (endIsConvex ? (CORNER_OVERRUN_MM + terminal) : -CORNER_OVERRUN_MM) +
-      (startIsConvex ? 0 : -CORNER_OVERRUN_MM);
+    const runTarget = effectiveFacadeMm + (endIsConvex ? CORNER_OVERRUN_MM + terminal : 0);
     const middleTarget = runTarget - prefix.reduce((a, b) => a + b, 0) - suffix.reduce((a, b) => a + b, 0);
     if (middleTarget <= 0) return [...prefix, ...suffix];
     // Reflex corner rule: do not allow spans to exceed the target run (no overrun).

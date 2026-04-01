@@ -10,7 +10,7 @@ import {
   WakugumiLevelCalcResult,
   type WakugumiFrameSeriesCode,
 } from './scaffold-rules-wakugumi';
-import { freeScaffoldEndCountForWall } from './scaffold-rules';
+import { freeScaffoldEndCountForWall, reflexCornerInsetTotalMm } from './scaffold-rules';
 import {
   WallCalculationInput,
   CalculatedComponent,
@@ -488,6 +488,10 @@ export class ScaffoldCalculatorWakugumiService {
       topGuardPostHeightMm: input.frameSizeMm,
     };
 
+    const reflexInsetMmW = reflexCornerInsetTotalMm(wall.startCornerKind, wall.endCornerKind);
+    const scaffoldFacadeBasisMmW =
+      reflexInsetMmW > 0 ? Math.max(0, wall.wallLengthMm - reflexInsetMmW) : undefined;
+
     return {
       side: wall.side,
       sideJp: getSideLabel(wall.side),
@@ -508,6 +512,7 @@ export class ScaffoldCalculatorWakugumiService {
       baseHeightMm: wall.baseHeightMm,
       tierGroup: wall.tierGroup,
       tierIndex: wall.tierIndex,
+      ...(scaffoldFacadeBasisMmW != null ? { scaffoldFacadeBasisMm: scaffoldFacadeBasisMmW } : {}),
     };
   }
 

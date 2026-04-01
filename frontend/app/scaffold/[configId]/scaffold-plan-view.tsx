@@ -28,6 +28,11 @@ const PLAN_RUN_EXTEND_OVERFACADE = true;
 const DIM_COLOR = '#6b7280';
 const DIM_TEXT = '#374151';
 
+/** Scaffold-relevant façade length (5700 after inner corner) vs physical wallLengthMm (6000). */
+function planFacadeBasisMm(wall: WallCalculationResult): number {
+  return wall.scaffoldFacadeBasisMm ?? wall.wallLengthMm ?? 0;
+}
+
 interface Props {
   result: any;
   /** When set, X/Y 支柱番号 can be persisted to calculation_result. */
@@ -145,7 +150,7 @@ function planExtendFactor(
   let accum = 0;
   for (const s of spans) accum += s;
   const totalLen = accum || (wall.wallLengthMm ?? 1);
-  const facadeMm = wall.wallLengthMm ?? 0;
+  const facadeMm = planFacadeBasisMm(wall);
   if (
     PLAN_RUN_EXTEND_OVERFACADE &&
     isClosed &&
@@ -542,7 +547,6 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
     let accum = 0;
     for (const s of spans) { accum += s; postPositions.push(accum); }
     const totalLen = accum || (wall.wallLengthMm ?? 1);
-    const facadeMm = wall.wallLengthMm ?? 0;
     const extendFactor = planExtendFactor(wall, isClosed, walls.length);
 
     // Edge midpoint for labels (stay on the side for all edges)
@@ -647,7 +651,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
           transform={`rotate(${readableAngle}, ${labelX}, ${labelY + labelGap})`}
         >
           {(() => {
-            const facadeMm = wall.wallLengthMm ?? 0;
+            const facadeMm = planFacadeBasisMm(wall);
             const nSp = wall.totalSpans ?? spans.length;
             const runMm = totalLen;
             const same =

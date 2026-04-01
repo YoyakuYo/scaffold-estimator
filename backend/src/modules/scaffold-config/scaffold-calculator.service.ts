@@ -12,6 +12,7 @@ import {
   findNearestSize,
   LevelCalcResult,
   freeScaffoldEndCountForWall,
+  reflexCornerInsetTotalMm,
 } from './scaffold-rules';
 
 /**
@@ -123,6 +124,11 @@ export interface WallCalculationResult {
   tierGroup?: string;
   /** Tier index (0-based) within the tierGroup. */
   tierIndex?: number;
+  /**
+   * Façade length used for span layout: wallLengthMm minus 300mm per reflex (inner) corner on this edge.
+   * Omitted when both ends are convex.
+   */
+  scaffoldFacadeBasisMm?: number;
 }
 
 export interface ScaffoldCalculationResult {
@@ -693,6 +699,10 @@ export class ScaffoldCalculatorService {
       }
     }
 
+    const reflexInsetMm = reflexCornerInsetTotalMm(wall.startCornerKind, wall.endCornerKind);
+    const scaffoldFacadeBasisMm =
+      reflexInsetMm > 0 ? Math.max(0, wall.wallLengthMm - reflexInsetMm) : undefined;
+
     return {
       side: wall.side,
       sideJp: getSideLabel(wall.side),
@@ -713,6 +723,7 @@ export class ScaffoldCalculatorService {
       baseHeightMm: wall.baseHeightMm,
       tierGroup: wall.tierGroup,
       tierIndex: wall.tierIndex,
+      ...(scaffoldFacadeBasisMm != null ? { scaffoldFacadeBasisMm } : {}),
     };
   }
 

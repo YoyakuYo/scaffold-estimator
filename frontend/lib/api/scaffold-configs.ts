@@ -182,6 +182,8 @@ export interface WallCalculationResult {
   /** Multi-segment wall shape (passed through from input) */
   segments?: WallSegment[];
   components: CalculatedComponent[];
+  /** Façade length used for span layout after −300mm per reflex corner (inner); omit if both ends convex. */
+  scaffoldFacadeBasisMm?: number;
   /** Per-wall scaffold width used (from parametric or global). */
   scaffoldWidthMm?: number;
   /** Buragetto layout: bracket = single-pole when obstacle too close. */
