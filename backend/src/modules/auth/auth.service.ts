@@ -251,6 +251,17 @@ export class AuthService {
     const { data: existing } = await client.from('users').select('id').eq('email', dto.email).maybeSingle();
     if (existing) throw new ConflictException('このメールアドレスは既に使用されています。');
 
+    const targetCompanyId = dto.companyId || adminCompanyId;
+    const caps = await this.subscriptionService.resolveEffectiveCapabilitiesForCompany(targetCompanyId);
+    if (caps.maxSeats > 0 && caps.maxSeats < 9000) {
+      const used = await this.subscriptionService.countCompanySeats(targetCompanyId);
+      if (used >= caps.maxSeats) {
+        throw new BadRequestException(
+          'Seat limit reached for your subscription. Upgrade in Billing or remove a user before adding another.',
+        );
+      }
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(dto.password, salt);
     const userIns = mapPayloadToSnake<Record<string, unknown>>({

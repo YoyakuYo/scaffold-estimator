@@ -11,6 +11,7 @@ import {
   WallInput,
   WallSegment,
 } from '@/lib/api/scaffold-configs';
+import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { useI18n } from '@/lib/i18n';
 import { PerimeterModel } from '@/lib/perimeter-model';
 import {
@@ -1233,6 +1234,42 @@ function ScaffoldPageContent() {
   });
   const subscriptionMessage = rulesError && (rulesErrorDetail as Error)?.message;
 
+  const { data: subscriptionInfo } = useQuery({
+    queryKey: ['my-subscription'],
+    queryFn: subscriptionsApi.getMine,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const caps = subscriptionInfo?.capabilities;
+  const planGatesRelaxed = caps === undefined;
+  const canAi = planGatesRelaxed || caps.aiExtract === true;
+  const canCad = planGatesRelaxed || caps.cadDraw === true;
+  const canFile = planGatesRelaxed || caps.fileUpload === true;
+  const canQuick = planGatesRelaxed || caps.quickShape === true;
+
+  useEffect(() => {
+    if (planGatesRelaxed) return;
+    if (inputMode === 'ai_extract' && !canAi) setInputMode('drawing');
+    if (inputMode === 'cad_draw' && !canCad) setInputMode('drawing');
+    if (!canFile && manualSubTab === 'drawing' && !editConfigId) {
+      setManualSubTab('quick');
+      setInputMode('quick');
+    }
+    if (!canQuick && inputMode === 'quick' && !editConfigId) {
+      setInputMode('drawing');
+      setManualSubTab('drawing');
+    }
+  }, [
+    planGatesRelaxed,
+    canAi,
+    canCad,
+    canFile,
+    canQuick,
+    inputMode,
+    manualSubTab,
+    editConfigId,
+  ]);
+
   const calculateMutation = useMutation({
     mutationFn: ({
       dto,
@@ -1501,8 +1538,9 @@ function ScaffoldPageContent() {
   const savedUiInputPath = (editConfig?.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
     ?.uiInputPath;
   const showDrawingUpload =
-    (manualSubTab === 'drawing' && !editConfigId) ||
-    (!!editConfigId && savedUiInputPath !== 'quick' && savedUiInputPath !== 'ai_extract');
+    canFile &&
+    ((manualSubTab === 'drawing' && !editConfigId) ||
+      (!!editConfigId && savedUiInputPath !== 'quick' && savedUiInputPath !== 'ai_extract'));
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
@@ -1525,40 +1563,71 @@ function ScaffoldPageContent() {
           {/* ─── Mode Selector (4 sections) ─── */}
           {!editConfigId && (
             <div className="flex flex-wrap gap-2 mt-4">
-              <button
-                onClick={() => setInputMode('ai_extract')}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                  inputMode === 'ai_extract'
-                    ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <ScanLine className="h-4 w-4" />
-                {t('scaffoldExtra', 'aiExtractTab')}
-              </button>
-              <button
-                onClick={() => setInputMode('drawing')}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                  inputMode === 'drawing'
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <Upload className="h-4 w-4" />
-                {t('scaffoldExtra', 'fileUploadTab')}
-              </button>
-              <button
-                onClick={() => setInputMode('cad_draw')}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                  inputMode === 'cad_draw'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }`}
-              >
-                <PenTool className="h-4 w-4" />
-                {t('scaffoldExtra', 'cadDrawTab')}
-              </button>
+              {canAi && (
+                <button
+                  type="button"
+                  onClick={() => setInputMode('ai_extract')}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    inputMode === 'ai_extract'
+                      ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <ScanLine className="h-4 w-4" />
+                  {t('scaffoldExtra', 'aiExtractTab')}
+                </button>
+              )}
+              {(canFile || canQuick) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (canFile) {
+                      setInputMode('drawing');
+                      setManualSubTab('drawing');
+                    } else {
+                      setInputMode('quick');
+                      setManualSubTab('quick');
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    inputMode === 'drawing' || inputMode === 'quick'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <Upload className="h-4 w-4" />
+                  {canFile ? t('scaffoldExtra', 'fileUploadTab') : t('scaffoldExtra', 'quickBuilder')}
+                </button>
+              )}
+              {canCad && (
+                <button
+                  type="button"
+                  onClick={() => setInputMode('cad_draw')}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    inputMode === 'cad_draw'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <PenTool className="h-4 w-4" />
+                  {t('scaffoldExtra', 'cadDrawTab')}
+                </button>
+              )}
             </div>
+          )}
+
+          {!editConfigId && !planGatesRelaxed && (!canAi || !canCad) && (
+            <p className="mt-3 text-xs text-gray-600 max-w-3xl">
+              {!canAi && <span className="block">{t('scaffoldExtra', 'planGatePremiumOnly')}</span>}
+              {!canCad && (
+                <span className="block mt-1">{t('scaffoldExtra', 'planGateMediumOnly')}</span>
+              )}
+            </p>
+          )}
+          {!editConfigId && !planGatesRelaxed && canFile && !canAi && (
+            <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 max-w-3xl">
+              {t('scaffoldExtra', 'planGateFileUploadNote')}
+            </p>
           )}
 
           {/* Subscription required (when rules fail with 403) */}
@@ -2373,10 +2442,13 @@ function ScaffoldPageContent() {
       {/* ═══════════════════════════════════════════════════════
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
-      {(inputMode !== 'ai_extract' && inputMode !== 'cad_draw' || editConfigId) && (<>
+      {((inputMode !== 'ai_extract' && inputMode !== 'cad_draw') || editConfigId) &&
+        (canFile || canQuick || !!editConfigId) && (<>
       {/* Sub-tab selector (disabled while editing an existing config) */}
+      {(canFile || canQuick) && (
       <div className="max-w-[1600px] mx-auto px-4 mb-4">
         <div className="inline-flex rounded-lg bg-gray-100 p-1">
+          {canFile && (
           <button
             type="button"
             disabled={!!editConfigId}
@@ -2394,6 +2466,8 @@ function ScaffoldPageContent() {
             <PenTool className="h-3.5 w-3.5" />
             {t('scaffoldExtra', 'drawingUpload')}
           </button>
+          )}
+          {canQuick && (
           <button
             type="button"
             disabled={!!editConfigId}
@@ -2411,11 +2485,13 @@ function ScaffoldPageContent() {
             <Zap className="h-3.5 w-3.5" />
             {t('scaffoldExtra', 'quickBuilder')}
           </button>
+          )}
         </div>
       </div>
+      )}
 
       {/* Quick Shape Builder */}
-      {manualSubTab === 'quick' && !editConfigId && (
+      {manualSubTab === 'quick' && !editConfigId && canQuick && (
         <div className="max-w-[1200px] mx-auto px-4 pb-8">
           <QuickShapeBuilder
             onSubmit={handleQuickShapeSubmit}
@@ -2453,6 +2529,7 @@ function ScaffoldPageContent() {
             onBuildingHeightChange={setBuildingHeightMm}
             buildingHeightLabel={t('scaffold', 'defaultHeightForDrawingMm')}
             buildingHeightHint={t('scaffold', 'defaultHeightDrawingHint')}
+            allowAiPoweredFileParsing={canAi}
           />
         </div>
       )}
@@ -2483,6 +2560,7 @@ function ScaffoldPageContent() {
             </div>
           </div>
         )}
+      </>)}
 
       {/* ═══════════════════════════════════════════════════════
           WALL CONFIG + CALCULATE (shown when walls exist)
@@ -3128,7 +3206,6 @@ function ScaffoldPageContent() {
         </button>
       </div>
       )}
-      </>)}
       </>)}
     </div>
   );

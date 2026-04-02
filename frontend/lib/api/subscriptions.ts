@@ -58,6 +58,17 @@ export interface SubscriptionInfo {
   checkoutPlans?: CheckoutPlanTier[];
   /** Present when backend BANK_TRANSFER_* is set; may be absent on older APIs. */
   bankTransfer?: BankTransferInstructions | null;
+  /** Company-wide feature gates from paid/trial plan (from API). */
+  capabilities?: PlanCapabilities;
+  seatUsage?: { used: number; limit: number };
+}
+
+export interface PlanCapabilities {
+  maxSeats: number;
+  fileUpload: boolean;
+  quickShape: boolean;
+  cadDraw: boolean;
+  aiExtract: boolean;
 }
 
 export interface SubscriberRow {

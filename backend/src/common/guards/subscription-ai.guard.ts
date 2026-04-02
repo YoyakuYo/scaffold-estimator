@@ -7,7 +7,7 @@ import {
 import { SubscriptionService } from '../../modules/subscription/subscription.service';
 
 @Injectable()
-export class SubscriptionActiveGuard implements CanActivate {
+export class SubscriptionAiGuard implements CanActivate {
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -15,10 +15,10 @@ export class SubscriptionActiveGuard implements CanActivate {
     const user = req.user;
     if (!user) return false;
     if (user.role === 'superadmin') return true;
-    const ok = await this.subscriptionService.hasActiveAccess(user.id, user.role);
-    if (!ok) {
+    const caps = await this.subscriptionService.resolveEffectiveCapabilities(user.id, user.role);
+    if (!caps.aiExtract) {
       throw new ForbiddenException(
-        'Active subscription or trial required. Open Billing to subscribe or renew.',
+        'AI extraction requires a Premium subscription. Upgrade in Billing or use file upload / CAD on a Medium plan.',
       );
     }
     return true;

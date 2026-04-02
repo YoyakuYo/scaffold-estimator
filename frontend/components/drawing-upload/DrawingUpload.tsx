@@ -33,6 +33,11 @@ interface DrawingUploadProps {
   buildingHeightLabel?: string;
   /** Short hint under the height field */
   buildingHeightHint?: string;
+  /**
+   * When false, image/PDF skips Vision/AI API (Premium-only); DXF still uses client parser.
+   * Default true.
+   */
+  allowAiPoweredFileParsing?: boolean;
 }
 
 interface Vertex { x: number; y: number }
@@ -144,6 +149,7 @@ export function DrawingUpload({
   onBuildingHeightChange,
   buildingHeightLabel,
   buildingHeightHint,
+  allowAiPoweredFileParsing = true,
 }: DrawingUploadProps) {
   const { t } = useI18n();
   const mmUnit = t('common', 'mm');
@@ -322,46 +328,48 @@ export function DrawingUpload({
     }
   }, [t]);
 
-  // ── Process via AI vision API (image/PDF) — auto-extract shape and dimensions ──
+  // ── Process via AI vision API (image/PDF) — auto-extract shape and dimensions (Premium) ──
   const processBackend = useCallback(async (f: File, fk: FileKind) => {
     try {
       setStatus(t('scaffoldExtra', 'analyzingFileAutoDetecting') || 'Analyzing file and auto-detecting building shape and dimensions...');
-      const { visionBimApi } = await import('@/lib/api/vision-bim');
 
-      try {
-        const result = await visionBimApi.extractDimensions(f);
+      if (allowAiPoweredFileParsing) {
+        const { visionBimApi } = await import('@/lib/api/vision-bim');
+        try {
+          const result = await visionBimApi.extractDimensions(f);
 
-        if (result.vertices && result.vertices.length >= 3) {
-          const verts = result.vertices as Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
-          const hasMm = verts.some(v => (v.x ?? 0) > 100 || (v.y ?? 0) > 100);
-          const pts: Vertex[] = verts.map(v => ({
-            x: v.x ?? v.xFrac ?? 0,
-            y: v.y ?? v.yFrac ?? 0,
-          }));
+          if (result.vertices && result.vertices.length >= 3) {
+            const verts = result.vertices as Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>;
+            const hasMm = verts.some(v => (v.x ?? 0) > 100 || (v.y ?? 0) > 100);
+            const pts: Vertex[] = verts.map(v => ({
+              x: v.x ?? v.xFrac ?? 0,
+              y: v.y ?? v.yFrac ?? 0,
+            }));
 
-          const wallMm = result.wallLengthsMm && result.wallLengthsMm.length === pts.length
-            ? result.wallLengthsMm
-            : recalcLengths(pts);
+            const wallMm = result.wallLengthsMm && result.wallLengthsMm.length === pts.length
+              ? result.wallLengthsMm
+              : recalcLengths(pts);
 
-          setShape({ verts: pts, wallMm, coordsAreMm: hasMm });
+            setShape({ verts: pts, wallMm, coordsAreMm: hasMm });
 
-          if (result.buildingHeightMm && result.buildingHeightMm >= 1000) {
-            onBuildingHeightChange(result.buildingHeightMm);
+            if (result.buildingHeightMm && result.buildingHeightMm >= 1000) {
+              onBuildingHeightChange(result.buildingHeightMm);
+            }
+
+            const shapeType = pts.length === 4
+              ? (t('scaffoldExtra', 'shapeRectangle') || 'Rectangle')
+              : pts.length === 6
+                ? (t('scaffoldExtra', 'shapeLType') || 'L-shape')
+                : pts.length === 8
+                  ? (t('scaffoldExtra', 'shapeZUTType') || 'Z/U/T shape')
+                  : `${pts.length}${t('scaffoldExtra', 'shapePolygonSuffix') || '-gon'}`;
+            setStatus(fillI18nTemplate(t('scaffoldExtra', 'shapeDetectedEditableTpl'), { shape: shapeType, count: pts.length }));
+            setPhase('editor');
+            return;
           }
-
-          const shapeType = pts.length === 4
-            ? (t('scaffoldExtra', 'shapeRectangle') || 'Rectangle')
-            : pts.length === 6
-              ? (t('scaffoldExtra', 'shapeLType') || 'L-shape')
-              : pts.length === 8
-                ? (t('scaffoldExtra', 'shapeZUTType') || 'Z/U/T shape')
-                : `${pts.length}${t('scaffoldExtra', 'shapePolygonSuffix') || '-gon'}`;
-          setStatus(fillI18nTemplate(t('scaffoldExtra', 'shapeDetectedEditableTpl'), { shape: shapeType, count: pts.length }));
-          setPhase('editor');
-          return;
+        } catch (visionErr: any) {
+          console.warn('Vision API extraction failed, falling back to basic upload:', visionErr?.message);
         }
-      } catch (visionErr: any) {
-        console.warn('Vision API extraction failed, falling back to basic upload:', visionErr?.message);
       }
 
       // Fallback: basic backend upload for OCR
@@ -422,7 +430,7 @@ export function DrawingUpload({
       setErrMsg(`${t('viewer', 'processingError') || 'Processing error'}: ${err.message}`);
       setPhase('error');
     }
-  }, [onBuildingHeightChange, t]);
+  }, [allowAiPoweredFileParsing, onBuildingHeightChange, t]);
 
   // ── Dropzone ──
   const onDrop = useCallback(async (accepted: File[]) => {

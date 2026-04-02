@@ -12,6 +12,14 @@ import { User } from '../auth/user.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 import { CheckoutPlanTier, CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import {
+  NO_ACCESS_CAPABILITIES,
+  SUPERADMIN_CAPABILITIES,
+  capabilitiesForPlan,
+  capabilitiesForTrial,
+  mergeCapabilitiesMax,
+  type EffectivePlanCapabilities,
+} from './plan-capabilities';
 
 const TRIAL_DAYS = 14;
 
@@ -252,6 +260,63 @@ export class SubscriptionService {
     return false;
   }
 
+  /**
+   * Company-wide entitlements: best active paid plan wins; if none, valid trial uses trial caps.
+   */
+  async aggregateCompanyCapabilities(subs: Subscription[]): Promise<EffectivePlanCapabilities> {
+    const now = new Date();
+    let paidMerge: EffectivePlanCapabilities | null = null;
+    let hasValidTrial = false;
+    for (const sub of subs) {
+      const s = await this.expireTrialIfNeeded(sub);
+      if (s.status === 'active' && s.plan && s.plan !== 'free_trial') {
+        const c = capabilitiesForPlan(s.plan);
+        if (c.maxSeats > 0) {
+          paidMerge = paidMerge ? mergeCapabilitiesMax(paidMerge, c) : c;
+        }
+      }
+      if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) {
+        hasValidTrial = true;
+      }
+    }
+    if (paidMerge && paidMerge.maxSeats > 0) return paidMerge;
+    if (hasValidTrial) return capabilitiesForTrial();
+    return NO_ACCESS_CAPABILITIES;
+  }
+
+  async resolveEffectiveCapabilitiesForCompany(companyId: string): Promise<EffectivePlanCapabilities> {
+    const { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+    const subs = mapRowsToCamel<Subscription>(rows || []);
+    return this.aggregateCompanyCapabilities(subs);
+  }
+
+  async resolveEffectiveCapabilities(userId: string, role?: string): Promise<EffectivePlanCapabilities> {
+    if (role === 'superadmin') return SUPERADMIN_CAPABILITIES;
+    const user = await this.getUserOrFail(userId);
+    const companyId = user.companyId;
+    if (!companyId) return NO_ACCESS_CAPABILITIES;
+    let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+    let subs = mapRowsToCamel<Subscription>(rows || []);
+    if (subs.length === 0) {
+      await this.ensureSubscriptionForUser(userId);
+      const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+      subs = mapRowsToCamel<Subscription>(res.data || []);
+    }
+    return this.aggregateCompanyCapabilities(subs);
+  }
+
+  async countCompanySeats(companyId: string): Promise<number> {
+    const { count, error } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .neq('role', 'superadmin');
+    if (error) return 0;
+    return count ?? 0;
+  }
+
   async getMySubscription(userId: string): Promise<any> {
     const user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
@@ -263,6 +328,11 @@ export class SubscriptionService {
         : 0;
     const hasAccess = await this.hasActiveAccess(userId, user.role);
     const checkoutTiers = this.getAvailableCheckoutTiers();
+    const capabilities = await this.resolveEffectiveCapabilities(userId, user.role);
+    const seatUsed =
+      user.companyId && user.role !== 'superadmin'
+        ? await this.countCompanySeats(user.companyId)
+        : 0;
     return {
       ...sub,
       hasAccess,
@@ -271,6 +341,11 @@ export class SubscriptionService {
       isStripeConfigured: !!this.stripe && checkoutTiers.length > 0,
       checkoutPlans: checkoutTiers,
       bankTransfer: this.getBankTransferInstructions(user.email),
+      capabilities,
+      seatUsage:
+        user.role === 'superadmin'
+          ? undefined
+          : { used: seatUsed, limit: capabilities.maxSeats },
     };
   }
 

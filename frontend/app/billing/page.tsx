@@ -15,7 +15,16 @@ import {
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
 import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { usersApi } from '@/lib/api/users';
-import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark } from 'lucide-react';
+import {
+  Loader2,
+  CreditCard,
+  AlertTriangle,
+  CheckCircle,
+  CalendarDays,
+  Shield,
+  Landmark,
+  Check,
+} from 'lucide-react';
 
 const CHECKOUT_TIER_ORDER: CheckoutPlanTier[] = ['basic', 'medium', 'premium', 'standard'];
 
@@ -32,20 +41,7 @@ function subscriptionPlanLabel(plan: SubscriptionPlan, t: BillingT): string {
   }
 }
 
-function checkoutTierButtonLabel(tier: CheckoutPlanTier, t: BillingT): string {
-  switch (tier) {
-    case 'basic':
-      return t('billing', 'planTierBasic');
-    case 'medium':
-      return t('billing', 'planTierMedium');
-    case 'premium':
-      return t('billing', 'planTierPremium');
-    case 'standard':
-      return t('billing', 'planTierStandard');
-  }
-}
-
-function StripeCheckoutActions({
+function PlanTierPricingGrid({
   subscription,
   checkoutMutation,
   portalMutation,
@@ -65,45 +61,114 @@ function StripeCheckoutActions({
     .slice()
     .sort((a, b) => CHECKOUT_TIER_ORDER.indexOf(a) - CHECKOUT_TIER_ORDER.indexOf(b));
 
+  const bullet = (text: string) => (
+    <li key={text} className="flex gap-2 text-sm text-gray-700">
+      <Check className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" aria-hidden />
+      <span>{text}</span>
+    </li>
+  );
+
+  const cardForTier = (tier: CheckoutPlanTier) => {
+    if (tier === 'standard') {
+      return {
+        title: t('billing', 'planTierStandard'),
+        lines: [] as string[],
+        bullets: [t('billing', 'planCardStandardBlurb')],
+      };
+    }
+    if (tier === 'basic') {
+      return {
+        title: t('billing', 'planCardBasicTitle'),
+        lines: [
+          t('billing', 'planCardBasicLicense'),
+          t('billing', 'planCardBasicYearly'),
+          t('billing', 'planCardBasicSeats'),
+        ],
+        bullets: [t('billing', 'planCardBasicF1'), t('billing', 'planCardBasicF2')],
+      };
+    }
+    if (tier === 'medium') {
+      return {
+        title: t('billing', 'planCardMediumTitle'),
+        lines: [
+          t('billing', 'planCardMediumLicense'),
+          t('billing', 'planCardMediumYearly'),
+          t('billing', 'planCardMediumSeats'),
+        ],
+        bullets: [t('billing', 'planCardMediumF1'), t('billing', 'planCardMediumF2')],
+      };
+    }
+    return {
+      title: t('billing', 'planCardPremiumTitle'),
+      lines: [
+        t('billing', 'planCardPremiumLicense'),
+        t('billing', 'planCardPremiumYearly'),
+        t('billing', 'planCardPremiumSeats'),
+      ],
+      bullets: [t('billing', 'planCardPremiumF1'), t('billing', 'planCardPremiumF2')],
+    };
+  };
+
   return (
     <>
       {plans.length > 1 && (
-        <p className="text-sm text-gray-600 mb-3">{t('billing', 'choosePlanStripe')}</p>
+        <p className="text-sm text-gray-600 mb-4">{t('billing', 'choosePlanStripe')}</p>
       )}
-      <div className="flex gap-3 flex-wrap">
+      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {plans.length === 0 ? (
-          <button
-            type="button"
-            onClick={() => checkoutMutation.mutate()}
-            disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {checkoutMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CreditCard className="h-4 w-4" />
-            )}
-            {t('billing', 'startPaidPlan')}
-          </button>
-        ) : (
-          plans.map((tier) => (
+          <div className="rounded-2xl border-2 border-blue-100 bg-gradient-to-b from-blue-50 to-white p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">{t('billing', 'stripeSectionTitle')}</h3>
             <button
-              key={tier}
               type="button"
-              onClick={() => checkoutMutation.mutate(tier)}
+              onClick={() => checkoutMutation.mutate()}
               disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
             >
               {checkoutMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <CreditCard className="h-4 w-4" />
               )}
-              {plans.length === 1 ? t('billing', 'startPaidPlan') : checkoutTierButtonLabel(tier, t)}
+              {t('billing', 'startPaidPlan')}
             </button>
-          ))
+          </div>
+        ) : (
+          plans.map((tier) => {
+            const c = cardForTier(tier);
+            return (
+              <div
+                key={tier}
+                className="flex flex-col rounded-2xl border-2 border-blue-200 bg-gradient-to-b from-blue-50/90 to-white p-6 shadow-md"
+              >
+                <h3 className="text-xl font-bold text-blue-950 mb-3">{c.title}</h3>
+                <div className="space-y-2 mb-4">
+                  {c.lines.map((line) => (
+                    <p key={line} className="text-sm font-medium text-gray-800">
+                      {line}
+                    </p>
+                  ))}
+                </div>
+                <ul className="space-y-2 mb-6 flex-1">{c.bullets.map((b) => bullet(b))}</ul>
+                <button
+                  type="button"
+                  onClick={() => checkoutMutation.mutate(tier)}
+                  disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+                  className="mt-auto w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {checkoutMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CreditCard className="h-4 w-4" />
+                  )}
+                  {plans.length === 1 ? t('billing', 'startPaidPlan') : t('billing', 'planCardSubscribe')}
+                </button>
+              </div>
+            );
+          })
         )}
-        {isActive && (
+      </div>
+      {isActive && (
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={() => portalMutation.mutate()}
@@ -117,8 +182,8 @@ function StripeCheckoutActions({
             )}
             {t('billing', 'openBillingPortal')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 }
@@ -247,7 +312,7 @@ export default function BillingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">{t('billing', 'title')}</h1>
           <p className="text-gray-500 mt-1">
@@ -306,6 +371,16 @@ export default function BillingPage() {
               )}
             </p>
           )}
+
+          {subscription.seatUsage &&
+            subscription.seatUsage.limit > 0 &&
+            subscription.seatUsage.limit < 9000 && (
+              <p className="text-sm text-gray-600 mt-3">
+                {t('billing', 'seatUsage')
+                  .replace('{used}', String(subscription.seatUsage.used))
+                  .replace('{limit}', String(subscription.seatUsage.limit))}
+              </p>
+            )}
         </div>
 
         {bankTransfer ? (
@@ -357,7 +432,7 @@ export default function BillingPage() {
                   {t('billing', 'stripeSectionTitle')}
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
-                <StripeCheckoutActions
+                <PlanTierPricingGrid
                   subscription={subscription}
                   checkoutMutation={checkoutMutation}
                   portalMutation={portalMutation}
@@ -461,7 +536,7 @@ export default function BillingPage() {
               {t('billing', 'stripeSectionTitle')}
             </h2>
             <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
-            <StripeCheckoutActions
+            <PlanTierPricingGrid
               subscription={subscription}
               checkoutMutation={checkoutMutation}
               portalMutation={portalMutation}

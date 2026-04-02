@@ -11,10 +11,11 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
+import { SubscriptionAiGuard } from '../../common/guards/subscription-ai.guard';
 import { VisionBimService, VisionFootprintResult } from './vision-bim.service';
 
 @Controller('vision-bim')
-@UseGuards(JwtAuthGuard, SubscriptionActiveGuard)
+@UseGuards(JwtAuthGuard, SubscriptionActiveGuard, SubscriptionAiGuard)
 export class VisionBimController {
   constructor(private readonly visionBim: VisionBimService) {}
 
