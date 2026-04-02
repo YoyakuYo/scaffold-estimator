@@ -223,15 +223,19 @@ export default function LandingPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-300/90">
                   {t('landing', 'forConstruction')}
                 </p>
-                <h1 className="mt-3 text-3xl font-bold leading-[1.12] tracking-tight sm:text-4xl md:text-5xl lg:text-[2.65rem] lg:leading-[1.08]">
+                <h1 className="mt-3 text-2xl font-bold leading-[1.15] tracking-tight sm:text-3xl md:text-4xl lg:text-[2.15rem] lg:leading-[1.12]">
                   <span className="bg-gradient-to-r from-white via-cyan-50 to-sky-200 bg-clip-text text-transparent">
                     {t('landing', 'heroTitle')}
                   </span>
                 </h1>
-                <p className="mt-4 max-w-xl text-lg text-slate-200/95 sm:text-xl mx-auto lg:mx-0">
-                  {t('landing', 'heroSubtitle')}
-                </p>
-                <p className="mt-2 max-w-lg text-sm text-slate-400 mx-auto lg:mx-0">{t('landing', 'tagline')}</p>
+                {t('landing', 'heroSubtitle').trim() ? (
+                  <p className="mt-4 max-w-xl text-lg text-slate-200/95 sm:text-xl mx-auto lg:mx-0">
+                    {t('landing', 'heroSubtitle')}
+                  </p>
+                ) : null}
+                {t('landing', 'tagline').trim() ? (
+                  <p className="mt-2 max-w-lg text-sm text-slate-400 mx-auto lg:mx-0">{t('landing', 'tagline')}</p>
+                ) : null}
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
                   <Link
                     href="/register"

@@ -921,9 +921,13 @@ export const translations = {
   // ─── Landing Page (public marketing) ─────────────────────────────
   landing: {
     appName: { ja: '仮設材積算システム', en: 'Scaffold Material Estimation System', fr: "Système d'estimation des matériaux d'échafaudage" },
-    tagline: { ja: '図面取込・手入力で、足場数量を確定的に算出。', en: 'Deterministic scaffold takeoff—no guesswork.', fr: 'Métré d’échafaudage déterministe—sans approximation.' },
-    heroTitle: { ja: '足場積算を、シンプルに。', en: 'Scaffolding estimator.', fr: 'Estimateur d’échafaudage.' },
-    heroSubtitle: { ja: 'PDF / DXF / 画像、または手入力。くさび式・枠組の数量を確定的に計算。', en: 'PDF / DXF / images—or manual input. Exact quantities for kusabi & frame scaffold.', fr: 'PDF / DXF / images—ou saisie manuelle. Quantités exactes pour kusabi et échafaudage à cadres.' },
+    tagline: { ja: '', en: '', fr: '' },
+    heroTitle: {
+      ja: '図面から数分で、足場の全数量とコスト内訳まで',
+      en: 'FROM DRAWING TO FULL SCAFFOLD QUANTITY + COST BREAKDOWN IN MINUTES',
+      fr: 'DU PLAN AU DÉTAIL COMPLET DES QUANTITÉS ET COÛTS D’ÉCHAFAUDAGE EN QUELQUES MINUTES',
+    },
+    heroSubtitle: { ja: '', en: '', fr: '' },
     installTitle: { ja: 'アプリをインストール', en: 'Install the app', fr: 'Installer l’application' },
     languageTitle: { ja: '言語', en: 'Language', fr: 'Langue' },
     installSubtitle: { ja: 'PCにインストールすると、ブラウザを開かずにすぐ起動。オフラインでも基本機能が使えます。', en: 'Install on your PC to launch without opening a browser. Core features work offline.', fr: 'Installez sur votre PC pour lancer sans navigateur. Les fonctions principales fonctionnent hors ligne.' },
