@@ -14,6 +14,7 @@ import {
   X,
   RefreshCw,
   Settings,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export default function QuotationDetailPage() {
@@ -27,6 +28,7 @@ export default function QuotationDetailPage() {
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editingCostItemId, setEditingCostItemId] = useState<string | null>(null);
   const [editCostAmount, setEditCostAmount] = useState<number>(0);
+  const [excelExporting, setExcelExporting] = useState(false);
 
   const { data: quotation, isLoading } = useQuery({
     queryKey: ['quotation', quotationId],
@@ -76,6 +78,23 @@ export default function QuotationDetailPage() {
       alert(`Error: ${error.response?.data?.message || error.message}`);
     },
   });
+
+  const handleExportExcel = async () => {
+    setExcelExporting(true);
+    try {
+      const blob = await quotationsApi.exportExcel(quotationId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quotation_budget_${quotationId.slice(0, 8)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert(t('quotationDetail', 'exportExcelFailed'));
+    } finally {
+      setExcelExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -187,6 +206,19 @@ export default function QuotationDetailPage() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={excelExporting}
+              className="px-4 py-2 bg-white border border-gray-300 text-gray-800 rounded-md hover:bg-gray-50 disabled:opacity-50 flex items-center space-x-2"
+            >
+              {excelExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4 text-green-600" />
+              )}
+              <span>{t('quotationDetail', 'exportExcel')}</span>
+            </button>
             {!isFinalized && (
               <>
                 <button

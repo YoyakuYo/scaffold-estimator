@@ -6,15 +6,18 @@ import {
   Param,
   Body,
   Query,
+  Res,
   UseGuards,
   Logger,
   BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { QuotationService } from './quotation.service';
+import { QuotationExcelService } from './quotation-excel.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 
 @Controller('quotations')
@@ -22,7 +25,10 @@ import { CreateQuotationDto } from './dto/create-quotation.dto';
 export class QuotationController {
   private readonly logger = new Logger(QuotationController.name);
 
-  constructor(private readonly quotationService: QuotationService) {}
+  constructor(
+    private readonly quotationService: QuotationService,
+    private readonly quotationExcelService: QuotationExcelService,
+  ) {}
 
   @Post()
   @UseGuards(RolesGuard)
@@ -34,6 +40,26 @@ export class QuotationController {
   @Get()
   async list(@Query('projectId') projectId?: string) {
     return await this.quotationService.list(projectId);
+  }
+
+  /**
+   * GET /quotations/:id/export/excel
+   * Budget quotation: line items, rental costs, and totals.
+   */
+  @Get(':id/export/excel')
+  async exportExcel(@Param('id') id: string, @Res() res: Response) {
+    const quotation = await this.quotationService.get(id);
+    const buffer = await this.quotationExcelService.generateBudgetWorkbook(quotation as any);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="quotation_budget_${id.slice(0, 8)}.xlsx"`,
+    );
+    res.send(buffer);
   }
 
   @Get(':id')

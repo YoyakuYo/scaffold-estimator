@@ -778,6 +778,12 @@ export const translations = {
     repopulate: { ja: '単価を適用', en: 'Apply Prices', fr: 'Appliquer les prix' },
     repopulateTooltip: { ja: '単価マスタから最新の単価を取得して反映し、諸経費も再計算します', en: 'Fetch latest prices from Price Master and recalculate all costs', fr: 'Récupérer les derniers tarifs et recalculer tous les coûts' },
     goToSettings: { ja: '単価設定を開く', en: 'Open Price Settings', fr: 'Ouvrir les tarifs' },
+    exportExcel: { ja: 'Excel出力', en: 'Export Excel', fr: 'Exporter Excel' },
+    exportExcelFailed: {
+      ja: 'Excelの出力に失敗しました',
+      en: 'Excel export failed',
+      fr: "Échec de l'export Excel",
+    },
   },
 
   // ─── Quantities Page ───────────────────────────────────────────

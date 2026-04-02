@@ -84,6 +84,14 @@ export const quotationsApi = {
     return response.data;
   },
 
+  /** Excel workbook: line items, rental costs, subtotals and tax (same figures as detail page). */
+  exportExcel: async (id: string): Promise<Blob> => {
+    const response = await apiClient.get(`/quotations/${id}/export/excel`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
   updateItemPrice: async (itemId: string, unitPrice: number): Promise<QuotationItem> => {
     const response = await apiClient.patch<QuotationItem>(`/quotations/items/${itemId}/price`, { unitPrice });
     return response.data;
