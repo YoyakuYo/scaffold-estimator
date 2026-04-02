@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   MapPin,
+  FileSpreadsheet,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
@@ -110,6 +111,113 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
     total += Math.abs(segments[i].offsetMm - segments[i - 1].offsetMm);
   }
   return total;
+}
+
+const SCAFFOLD_WALLS_CSV_HEADER = 'side,length_mm,height_mm,stair_access,scaffold_width_mm,enabled';
+
+function escapeCsvCell(v: string): string {
+  if (/[",\r\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
+}
+
+function parseCsvRow(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      inQ = !inQ;
+    } else if (inQ) {
+      cur += c;
+    } else if (c === ',') {
+      out.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+/** Parse wall rows from CSV (UTF-8; strip BOM). Opens cleanly in Excel when saved as CSV. */
+function parseScaffoldWallsCsvText(text: string, defaultHeightMm: number): WallState[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^\uFEFF/, ''))
+    .filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+  const headers = parseCsvRow(lines[0]).map((h) =>
+    h.trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_'),
+  );
+  const idx = (name: string) => headers.indexOf(name);
+  const out: WallState[] = [];
+  for (let li = 1; li < lines.length; li++) {
+    const cells = parseCsvRow(lines[li]);
+    const get = (k: string) => {
+      const i = idx(k);
+      return i >= 0 ? (cells[i] ?? '').trim() : '';
+    };
+    const lengthMm = Number(get('length_mm'));
+    if (!Number.isFinite(lengthMm) || lengthMm < 600) continue;
+    let heightMm = Number(get('height_mm'));
+    if (!Number.isFinite(heightMm) || heightMm < 1000) heightMm = defaultHeightMm;
+    const stairRaw = Number(get('stair_access'));
+    const stairAccessCount = Number.isFinite(stairRaw)
+      ? Math.min(4, Math.max(0, Math.floor(stairRaw)))
+      : 0;
+    const swRaw = get('scaffold_width_mm');
+    const sw = Number(swRaw);
+    const scaffoldWidthMm =
+      swRaw !== '' && [600, 900, 1200].includes(sw) ? sw : undefined;
+    const en = get('enabled').toLowerCase();
+    const enabled = en === '' || en === '1' || en === 'true' || en === 'yes' || en === 'y';
+    let side = get('side');
+    if (!side) side = `E${out.length + 1}`;
+    out.push({
+      side,
+      enabled,
+      lengthMm,
+      heightMm,
+      scaffoldWidthMm,
+      stairAccessCount,
+      kaidanCount: 0,
+      kaidanOffsets: [],
+      isMultiSegment: false,
+      segments: [],
+    });
+  }
+  return out;
+}
+
+function buildWallsCsvFromState(walls: WallState[]): string {
+  const lines = [SCAFFOLD_WALLS_CSV_HEADER];
+  for (const w of walls) {
+    const len =
+      w.isMultiSegment && w.segments.length > 0 ? calcTotalFromSegments(w.segments) : w.lengthMm;
+    lines.push(
+      [
+        escapeCsvCell(w.side),
+        String(len),
+        String(w.heightMm),
+        String(w.stairAccessCount ?? 0),
+        w.scaffoldWidthMm != null ? String(w.scaffoldWidthMm) : '',
+        w.enabled ? 'true' : 'false',
+      ].join(','),
+    );
+  }
+  return `\uFEFF${lines.join('\r\n')}`;
+}
+
+function triggerDownloadTextFile(filename: string, body: string, mime: string) {
+  const blob = new Blob([body], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
@@ -933,6 +1041,7 @@ function ScaffoldPageContent() {
   const [prefilled, setPrefilled] = useState(false);
   const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
   const [aiBimHashiraRows, setAiBimHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
+  const wallsCsvFileRef = useRef<HTMLInputElement>(null);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -1189,6 +1298,53 @@ function ScaffoldPageContent() {
     [],
   );
 
+  const downloadWallsTemplateCsv = useCallback(() => {
+    const defaultH = buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
+    const body = `\uFEFF${SCAFFOLD_WALLS_CSV_HEADER}\r\nE1,10000,${defaultH},0,,true\r\nE2,12000,${defaultH},0,,true\r\n`;
+    triggerDownloadTextFile('scaffold-walls-template.csv', body, 'text/csv;charset=utf-8');
+  }, [buildingHeightMm]);
+
+  const downloadWallsCurrentCsv = useCallback(() => {
+    if (walls.length === 0) return;
+    triggerDownloadTextFile(
+      'scaffold-walls.csv',
+      buildWallsCsvFromState(walls),
+      'text/csv;charset=utf-8',
+    );
+  }, [walls]);
+
+  const handleWallsCsvImport = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const defaultH = buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
+        const parsed = parseScaffoldWallsCsvText(text, defaultH);
+        if (parsed.length === 0) {
+          alert(t('scaffold', 'wallsCsvInvalid'));
+          return;
+        }
+        if (
+          walls.length > 0 &&
+          typeof window !== 'undefined' &&
+          !window.confirm(t('scaffold', 'csvReplaceWallsConfirm'))
+        ) {
+          return;
+        }
+        setWalls(parsed);
+        setPrefilled(true);
+        setPolygonVertices([]);
+        const maxH = Math.max(...parsed.map((w) => w.heightMm));
+        if (maxH >= 1000) setBuildingHeightMm(maxH);
+      } catch {
+        alert(t('scaffold', 'wallsCsvInvalid'));
+      }
+    },
+    [buildingHeightMm, walls.length, t],
+  );
+
   // ─── Calculate handler ──────────────────────────────────
   const handleCalculate = () => {
     if (!perimeterModel.isClosed && !prefilled) {
@@ -1344,9 +1500,19 @@ function ScaffoldPageContent() {
   const showDrawingUpload =
     (manualSubTab === 'drawing' && !editConfigId) ||
     (!!editConfigId && savedUiInputPath !== 'quick' && savedUiInputPath !== 'ai_extract');
+  const showTopBuildingScaffoldPanel =
+    (!editConfigId && inputMode !== 'quick') || (!!editConfigId && walls.length > 0);
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
+      <input
+        ref={wallsCsvFileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        aria-hidden
+        onChange={handleWallsCsvImport}
+      />
         {/* Header */}
       <div className="max-w-[1600px] mx-auto px-4 pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -1402,6 +1568,298 @@ function ScaffoldPageContent() {
             </div>
           )}
         </div>
+
+      {showTopBuildingScaffoldPanel && (
+        <div className="max-w-[1600px] mx-auto px-4 mb-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-blue-600" />
+              {t('scaffold', 'buildingSettings')}
+            </h2>
+
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2 flex-wrap">
+                <MapPin className="h-4 w-4 text-emerald-600" />
+                {t('scaffold', 'siteInfoSection')}
+                <span className="text-xs font-normal text-gray-500">({t('scaffold', 'optional')})</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteName')}</label>
+                  <input
+                    type="text"
+                    value={siteName}
+                    onChange={(e) => setSiteName(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder={t('scaffold', 'siteNamePlaceholder')}
+                    autoComplete="organization"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteAddress')}</label>
+                  <input
+                    type="text"
+                    value={siteAddress}
+                    onChange={(e) => setSiteAddress(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder={t('scaffold', 'siteAddressPlaceholder')}
+                    autoComplete="street-address"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteEmail')}</label>
+                  <input
+                    type="email"
+                    value={siteEmail}
+                    onChange={(e) => setSiteEmail(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'sitePhone')}</label>
+                  <input
+                    type="tel"
+                    value={sitePhone}
+                    onChange={(e) => setSitePhone(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    autoComplete="tel"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteFax')}</label>
+                  <input
+                    type="tel"
+                    value={siteFax}
+                    onChange={(e) => setSiteFax(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {t('scaffold', 'defaultHeightForDrawingMm')}
+                  </label>
+                  <input
+                    type="number"
+                    min={1000}
+                    step={100}
+                    value={buildingHeightMm ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setBuildingHeightMm(null);
+                        return;
+                      }
+                      const n = Number(raw);
+                      setBuildingHeightMm(Number.isFinite(n) ? n : null);
+                    }}
+                    className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="3000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'defaultHeightDrawingHint')}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('scaffoldExtra', 'scaffoldType')}</label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setScaffoldType('kusabi')}
+                  className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
+                    scaffoldType === 'kusabi'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                      : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <div>{t('scaffold', 'kusabiType')}</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScaffoldType('wakugumi');
+                    const s = wakugumiSeriesFromScaffoldWidthMm(scaffoldWidthMm);
+                    setWakugumiFrameSeries(s);
+                    setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
+                    setFrameSizeMm(WAKUGUMI_FIXED_FRAME_HEIGHT_MM);
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
+                    scaffoldType === 'wakugumi'
+                      ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
+                      : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <div>{t('scaffold', 'wakugumiType')}</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffold', 'structureType')}</label>
+                <select
+                  value={structureType}
+                  onChange={(e) => setStructureType(e.target.value as '改修工事' | 'S造' | 'RC造')}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="改修工事">{t('scaffold', 'structureTypeRenovation')} (1.25x)</option>
+                  <option value="S造">{t('scaffold', 'structureTypeSteel')} (1.0x)</option>
+                  <option value="RC造">{t('scaffold', 'structureTypeConcrete')} (0.9x)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'structureTypeHint')}</p>
+              </div>
+
+              {scaffoldType === 'kusabi' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffold', 'scaffoldWidth')}</label>
+                  <select
+                    value={scaffoldWidthMm}
+                    onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {(rules?.scaffoldWidths || [
+                      { value: 600, label: '600mm' },
+                      { value: 900, label: '900mm' },
+                      { value: 1200, label: '1200mm' },
+                    ]).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {scaffoldType === 'wakugumi' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('scaffoldExtra', 'wakugumiFrameSeries')}
+                  </label>
+                  <select
+                    value={wakugumiFrameSeries}
+                    onChange={(e) => {
+                      const s = e.target.value as WakugumiFrameSeriesId;
+                      setWakugumiFrameSeries(s);
+                      setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
+                    }}
+                    className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
+                  >
+                    {(rules?.wakugumi?.frameSeriesOptions ?? [
+                      { value: 'FT617' as const, label: 'FT-617 (610mm)', labelJp: 'FT-617（幅610mm）' },
+                      { value: 'FT917' as const, label: 'FT-917 (914mm)', labelJp: 'FT-917（幅914mm）' },
+                      { value: 'FT1217' as const, label: 'FT-1217 (1219mm)', labelJp: 'FT-1217（幅1219mm）' },
+                    ]).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {locale === 'ja' ? opt.labelJp : opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {t('scaffold', 'scaffoldWidth')}: {scaffoldWidthMm}mm
+                  </p>
+                </div>
+              )}
+
+              {scaffoldType === 'kusabi' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffold', 'postSize')}</label>
+                  <select
+                    value={preferredMainTatejiMm}
+                    onChange={(e) => setPreferredMainTatejiMm(Number(e.target.value))}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {(rules?.mainTatejiOptions || [
+                      { value: 1800, label: '1800mm' },
+                      { value: 2700, label: '2700mm' },
+                      { value: 3600, label: '3600mm' },
+                    ]).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {scaffoldType === 'wakugumi' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffoldExtra', 'frameSize')}</label>
+                    <div className="w-full rounded-lg border border-orange-200 px-3 py-2 text-sm bg-orange-50/30 text-gray-800">
+                      {WAKUGUMI_FIXED_FRAME_HEIGHT_MM}mm (FT-17)
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'frameHeightFixed1700')}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffoldExtra', 'habakiCount')}</label>
+                    <select
+                      value={habakiCountPerSpan}
+                      onChange={(e) => setHabakiCountPerSpan(Number(e.target.value))}
+                      className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
+                    >
+                      {(rules?.wakugumi?.habakiCountOptions || [
+                        { value: 1, label: t('scaffold', 'habakiSingle') },
+                        { value: 2, label: t('scaffold', 'habakiDouble') },
+                      ]).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffoldExtra', 'endStopper')}</label>
+                    <select
+                      value={endStopperType}
+                      onChange={(e) => setEndStopperType(e.target.value as 'nuno' | 'frame')}
+                      className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
+                    >
+                      {(rules?.wakugumi?.endStopperTypeOptions || [
+                        { value: 'nuno', label: t('scaffold', 'endStopperNuno') },
+                        { value: 'frame', label: t('scaffold', 'endStopperFrame') },
+                      ]).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {walls.length === 0 && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                  {t('scaffold', 'wallsCsvTitle')}
+                </h3>
+                <p className="text-xs text-gray-600 mb-3">{t('scaffold', 'wallsCsvHint')}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={downloadWallsTemplateCsv}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    {t('scaffold', 'wallsCsvDownloadTemplate')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => wallsCsvFileRef.current?.click()}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {t('scaffold', 'wallsCsvImport')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════
           AI EXTRACTION / AI BIM/IFC MODES
@@ -2257,282 +2715,42 @@ function ScaffoldPageContent() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
-          SCAFFOLD SETTINGS + WALL CONFIG (shown when walls exist)
+          WALL CONFIG + CALCULATE (shown when walls exist)
          ═══════════════════════════════════════════════════════ */}
       {walls.length > 0 && (
         <div className="max-w-[1600px] mx-auto px-4 pb-8">
-
-        {/* Building & Scaffold Settings */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-blue-600" />
-            {t('scaffold', 'buildingSettings')}
-          </h2>
-
-          <div className="mb-6 pb-6 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2 flex-wrap">
-              <MapPin className="h-4 w-4 text-emerald-600" />
-              {t('scaffold', 'siteInfoSection')}
-              <span className="text-xs font-normal text-gray-500">
-                ({t('scaffold', 'optional')})
-              </span>
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteName')}</label>
-                <input
-                  type="text"
-                  value={siteName}
-                  onChange={(e) => setSiteName(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder={t('scaffold', 'siteNamePlaceholder')}
-                  autoComplete="organization"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteAddress')}</label>
-                <input
-                  type="text"
-                  value={siteAddress}
-                  onChange={(e) => setSiteAddress(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder={t('scaffold', 'siteAddressPlaceholder')}
-                  autoComplete="street-address"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteEmail')}</label>
-                <input
-                  type="email"
-                  value={siteEmail}
-                  onChange={(e) => setSiteEmail(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="name@example.com"
-                  autoComplete="email"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'sitePhone')}</label>
-                <input
-                  type="tel"
-                  value={sitePhone}
-                  onChange={(e) => setSitePhone(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  autoComplete="tel"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteFax')}</label>
-                <input
-                  type="tel"
-                  value={siteFax}
-                  onChange={(e) => setSiteFax(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-
-            {/* Scaffold Type Selector */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('scaffoldExtra', 'scaffoldType')}
-              </label>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScaffoldType('kusabi')}
-                  className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
-                    scaffoldType === 'kusabi'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                      : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  <div>{t('scaffold', 'kusabiType')}</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScaffoldType('wakugumi');
-                    const s = wakugumiSeriesFromScaffoldWidthMm(scaffoldWidthMm);
-                    setWakugumiFrameSeries(s);
-                    setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
-                    setFrameSizeMm(WAKUGUMI_FIXED_FRAME_HEIGHT_MM);
-                  }}
-                  className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
-                    scaffoldType === 'wakugumi'
-                      ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
-                      : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  <div>{t('scaffold', 'wakugumiType')}</div>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Structure Type */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('scaffold', 'structureType')}
-              </label>
-              <select
-                value={structureType}
-                onChange={(e) => setStructureType(e.target.value as '改修工事' | 'S造' | 'RC造')}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="改修工事">{t('scaffold', 'structureTypeRenovation')} (1.25x)</option>
-                <option value="S造">{t('scaffold', 'structureTypeSteel')} (1.0x)</option>
-                <option value="RC造">{t('scaffold', 'structureTypeConcrete')} (0.9x)</option>
-              </select>
-              <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'structureTypeHint')}</p>
-            </div>
-
-            {/* Scaffold width (kusabi) — wakugumi uses FT series below (sets layout width) */}
-            {scaffoldType === 'kusabi' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('scaffold', 'scaffoldWidth')}
-                </label>
-                <select
-                  value={scaffoldWidthMm}
-                  onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {(rules?.scaffoldWidths || [
-                    { value: 600, label: '600mm' },
-                    { value: 900, label: '900mm' },
-                    { value: 1200, label: '1200mm' },
-                  ]).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {scaffoldType === 'wakugumi' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('scaffoldExtra', 'wakugumiFrameSeries')}
-                </label>
-                <select
-                  value={wakugumiFrameSeries}
-                  onChange={(e) => {
-                    const s = e.target.value as WakugumiFrameSeriesId;
-                    setWakugumiFrameSeries(s);
-                    setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
-                  }}
-                  className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
-                >
-                  {(rules?.wakugumi?.frameSeriesOptions ?? [
-                    { value: 'FT617' as const, label: 'FT-617 (610mm)', labelJp: 'FT-617（幅610mm）' },
-                    { value: 'FT917' as const, label: 'FT-917 (914mm)', labelJp: 'FT-917（幅914mm）' },
-                    { value: 'FT1217' as const, label: 'FT-1217 (1219mm)', labelJp: 'FT-1217（幅1219mm）' },
-                  ]).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {locale === 'ja' ? opt.labelJp : opt.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {t('scaffold', 'scaffoldWidth')}: {scaffoldWidthMm}mm
-                </p>
-              </div>
-            )}
-
-            {/* ─── Kusabi-specific fields ─── */}
-            {scaffoldType === 'kusabi' && (
-              <>
-                {/* Main Tateji */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('scaffold', 'postSize')}
-                  </label>
-                  <select
-                    value={preferredMainTatejiMm}
-                    onChange={(e) => setPreferredMainTatejiMm(Number(e.target.value))}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {(rules?.mainTatejiOptions || [
-                      { value: 1800, label: '1800mm' },
-                      { value: 2700, label: '2700mm' },
-                      { value: 3600, label: '3600mm' },
-                    ]).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-
-            {/* ─── Wakugumi-specific fields ─── */}
-            {scaffoldType === 'wakugumi' && (
-              <>
-                {/* Level height fixed FT-17 / 1700mm */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('scaffoldExtra', 'frameSize')}
-                  </label>
-                  <div className="w-full rounded-lg border border-orange-200 px-3 py-2 text-sm bg-orange-50/30 text-gray-800">
-                    {WAKUGUMI_FIXED_FRAME_HEIGHT_MM}mm (FT-17)
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'frameHeightFixed1700')}</p>
-                </div>
-
-                {/* Habaki Count (巾木枚数) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('scaffoldExtra', 'habakiCount')}
-                  </label>
-                  <select
-                    value={habakiCountPerSpan}
-                    onChange={(e) => setHabakiCountPerSpan(Number(e.target.value))}
-                    className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
-                  >
-                    {(rules?.wakugumi?.habakiCountOptions || [
-                      { value: 1, label: t('scaffold', 'habakiSingle') },
-                      { value: 2, label: t('scaffold', 'habakiDouble') },
-                    ]).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* End Stopper Type (端部タイプ) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('scaffoldExtra', 'endStopper')}
-                  </label>
-                  <select
-                    value={endStopperType}
-                    onChange={(e) => setEndStopperType(e.target.value as 'nuno' | 'frame')}
-                    className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
-                  >
-                    {(rules?.wakugumi?.endStopperTypeOptions || [
-                      { value: 'nuno', label: t('scaffold', 'endStopperNuno') },
-                      { value: 'frame', label: t('scaffold', 'endStopperFrame') },
-                    ]).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
 
         {/* Wall Configuration */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
           <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('scaffold', 'wallConfig')}</h2>
           <p className="text-sm text-gray-600 mb-4">{t('scaffold', 'perWallHeightIntro')}</p>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-700 shrink-0" />
+            <span className="text-xs text-emerald-900 flex-1 min-w-[200px]">{t('scaffold', 'wallsCsvToolbarHint')}</span>
+            <button
+              type="button"
+              onClick={downloadWallsTemplateCsv}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-gray-300 bg-white text-xs font-medium text-gray-800 hover:bg-gray-50"
+            >
+              {t('scaffold', 'wallsCsvDownloadTemplate')}
+            </button>
+            <button
+              type="button"
+              onClick={downloadWallsCurrentCsv}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-gray-300 bg-white text-xs font-medium text-gray-800 hover:bg-gray-50"
+            >
+              {t('scaffold', 'wallsCsvDownloadCurrent')}
+            </button>
+            <button
+              type="button"
+              onClick={() => wallsCsvFileRef.current?.click()}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-emerald-400 bg-emerald-100 text-xs font-medium text-emerald-950 hover:bg-emerald-200"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {t('scaffold', 'wallsCsvImport')}
+            </button>
+          </div>
 
           {/* Quick Height Estimator */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
