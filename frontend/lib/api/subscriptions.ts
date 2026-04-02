@@ -12,12 +12,17 @@ export interface BankTransferInstructions {
   accountHolder: string;
   remittanceReference: string;
   amountNote?: string;
-  /** Optional; set BANK_TRANSFER_*_EN / NEXT_PUBLIC_BANK_TRANSFER_*_EN for non-Japanese readers. */
+  /** Optional; set *_EN / *_FR (or NEXT_PUBLIC_*) for en/fr UI. */
   bankNameEn?: string;
   branchEn?: string;
   accountTypeEn?: string;
   accountHolderEn?: string;
   amountNoteEn?: string;
+  bankNameFr?: string;
+  branchFr?: string;
+  accountTypeFr?: string;
+  accountHolderFr?: string;
+  amountNoteFr?: string;
 }
 
 export interface SubscriptionInfo {

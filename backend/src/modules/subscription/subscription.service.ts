@@ -45,6 +45,11 @@ export class SubscriptionService {
     accountTypeEn?: string;
     accountHolderEn?: string;
     amountNoteEn?: string;
+    bankNameFr?: string;
+    branchFr?: string;
+    accountTypeFr?: string;
+    accountHolderFr?: string;
+    amountNoteFr?: string;
   } | null {
     const flag = (this.configService.get<string>('BANK_TRANSFER_ENABLED') || '').toLowerCase();
     if (!['true', '1', 'yes'].includes(flag)) return null;
@@ -65,6 +70,11 @@ export class SubscriptionService {
     const accountTypeEn = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_TYPE_EN')?.trim();
     const accountHolderEn = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_HOLDER_EN')?.trim();
     const amountNoteEn = this.configService.get<string>('BANK_TRANSFER_AMOUNT_NOTE_EN')?.trim();
+    const bankNameFr = this.configService.get<string>('BANK_TRANSFER_BANK_NAME_FR')?.trim();
+    const branchFr = this.configService.get<string>('BANK_TRANSFER_BRANCH_FR')?.trim();
+    const accountTypeFr = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_TYPE_FR')?.trim();
+    const accountHolderFr = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_HOLDER_FR')?.trim();
+    const amountNoteFr = this.configService.get<string>('BANK_TRANSFER_AMOUNT_NOTE_FR')?.trim();
     return {
       bankName,
       branch,
@@ -78,6 +88,11 @@ export class SubscriptionService {
       ...(accountTypeEn ? { accountTypeEn } : {}),
       ...(accountHolderEn ? { accountHolderEn } : {}),
       ...(amountNoteEn ? { amountNoteEn } : {}),
+      ...(bankNameFr ? { bankNameFr } : {}),
+      ...(branchFr ? { branchFr } : {}),
+      ...(accountTypeFr ? { accountTypeFr } : {}),
+      ...(accountHolderFr ? { accountHolderFr } : {}),
+      ...(amountNoteFr ? { amountNoteFr } : {}),
     };
   }
 

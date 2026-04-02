@@ -2,24 +2,27 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
+import type { Locale } from '@/lib/i18n/translations';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
-import { bankFieldDisplay } from '@/lib/billing/bank-transfer-display';
+import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { usersApi } from '@/lib/api/users';
 import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark } from 'lucide-react';
 
 function BankDd({
-  japanese,
-  english,
+  ja,
+  en,
+  fr,
   locale,
   className,
 }: {
-  japanese: string;
-  english?: string;
-  locale: string;
+  ja: string;
+  en?: string;
+  fr?: string;
+  locale: Locale;
   className?: string;
 }) {
-  const { main, sub } = bankFieldDisplay(japanese, english, locale);
+  const { main, sub } = localizedBankField(locale, ja, en, fr);
   return (
     <dd className={className ?? 'text-gray-900'}>
       <span className="font-medium">{main}</span>
@@ -230,24 +233,27 @@ export default function BillingPage() {
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
                 <BankDd
-                  japanese={bankTransfer.bankName}
-                  english={bankTransfer.bankNameEn}
+                  ja={bankTransfer.bankName}
+                  en={bankTransfer.bankNameEn}
+                  fr={bankTransfer.bankNameFr}
                   locale={locale}
                 />
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
                 <BankDd
-                  japanese={bankTransfer.branch}
-                  english={bankTransfer.branchEn}
+                  ja={bankTransfer.branch}
+                  en={bankTransfer.branchEn}
+                  fr={bankTransfer.branchFr}
                   locale={locale}
                 />
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
                 <BankDd
-                  japanese={bankTransfer.accountType}
-                  english={bankTransfer.accountTypeEn}
+                  ja={bankTransfer.accountType}
+                  en={bankTransfer.accountTypeEn}
+                  fr={bankTransfer.accountTypeFr}
                   locale={locale}
                 />
               </div>
@@ -260,8 +266,9 @@ export default function BillingPage() {
               <div className="sm:col-span-2">
                 <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
                 <BankDd
-                  japanese={bankTransfer.accountHolder}
-                  english={bankTransfer.accountHolderEn}
+                  ja={bankTransfer.accountHolder}
+                  en={bankTransfer.accountHolderEn}
+                  fr={bankTransfer.accountHolderFr}
                   locale={locale}
                 />
               </div>
@@ -269,16 +276,15 @@ export default function BillingPage() {
                 <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
                 <dd className="font-medium text-gray-900 break-all">{bankTransfer.remittanceReference}</dd>
               </div>
-              {(bankTransfer.amountNote || bankTransfer.amountNoteEn) && (
+              {(bankTransfer.amountNote ||
+                bankTransfer.amountNoteEn ||
+                bankTransfer.amountNoteFr) && (
                 <div className="sm:col-span-2">
                   <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
                   <BankDd
-                    japanese={bankTransfer.amountNote || bankTransfer.amountNoteEn || ''}
-                    english={
-                      bankTransfer.amountNote && bankTransfer.amountNoteEn
-                        ? bankTransfer.amountNoteEn
-                        : undefined
-                    }
+                    ja={bankTransfer.amountNote || ''}
+                    en={bankTransfer.amountNoteEn}
+                    fr={bankTransfer.amountNoteFr}
                     locale={locale}
                   />
                 </div>

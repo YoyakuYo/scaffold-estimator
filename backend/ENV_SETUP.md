@@ -88,6 +88,12 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # BANK_TRANSFER_ACCOUNT_TYPE_EN=Ordinary deposit
 # BANK_TRANSFER_ACCOUNT_HOLDER_EN=SOU ALPHA OMAR
 # BANK_TRANSFER_AMOUNT_NOTE_EN=Bank code 0009
+# Optional French UI (fr locale):
+# BANK_TRANSFER_BANK_NAME_FR=Banque Sumitomo Mitsui
+# BANK_TRANSFER_BRANCH_FR=Agence de Fussa (code guichet 697)
+# BANK_TRANSFER_ACCOUNT_TYPE_FR=Compte courant
+# BANK_TRANSFER_ACCOUNT_HOLDER_FR=SOU ALPHA OMAR
+# BANK_TRANSFER_AMOUNT_NOTE_FR=Code banque 0009
 #
 # If production API is not redeployed yet, you can set the same fields on the
 # frontend host as NEXT_PUBLIC_BANK_TRANSFER_* (see frontend/.env.example) and
