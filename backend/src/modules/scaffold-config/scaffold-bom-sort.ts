@@ -30,6 +30,9 @@ export function bomTypePhase(type: string): number {
     case 'end_stopper_frame':
       return 5;
     case 'habaki':
+    case 'sokan_bracket':
+    case 'sokan_netto':
+    case 'mesh_shito':
       return 6;
     case 'stair_set':
       return 7;
@@ -62,6 +65,14 @@ export function bomTypeSubOrder(type: string): number {
     case 'end_stopper_nuno':
       return 2;
     case 'end_stopper_frame':
+      return 3;
+    case 'habaki':
+      return 0;
+    case 'sokan_bracket':
+      return 1;
+    case 'sokan_netto':
+      return 2;
+    case 'mesh_shito':
       return 3;
     default:
       return 0;

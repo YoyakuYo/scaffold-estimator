@@ -223,6 +223,7 @@ export class ScaffoldCalculatorWakugumiService {
       habaki:      { jp: '巾木',       en: 'Toe Board' },
       stopper:     { jp: '端部',       en: 'End Stopper' },
       access:      { jp: '階段',       en: 'Stair' },
+      safety:      { jp: '防護',       en: 'Safety' },
     };
 
     // ─── 1. ジャッキベース ────────────────────────────────
@@ -402,6 +403,55 @@ export class ScaffoldCalculatorWakugumiService {
         quantity: Number(count) * Ltot * input.habakiCountPerSpan,
         sortOrder,
         materialCode: `WAKU-HABAKI-${spanSizeMm}`,
+      });
+    }
+
+    // ─── 相間ブラゲット / 装間ネット / メッシュシート（内列・スパン長ベース、段=L）──
+    const innerPostStationsW = Math.max(0, postPositions - Math.floor(cornerPostDeduction / 2));
+    const wallRunMmW = spans.reduce((sum, s) => sum + s, 0);
+    const sokanNettoSheetsW = wallRunMmW > 0 ? Math.ceil(wallRunMmW / 6000) : 0;
+
+    sortOrder++;
+    components.push({
+      type: 'sokan_bracket',
+      category: CAT.safety.jp,
+      categoryEn: CAT.safety.en,
+      name: 'Sokan bracket',
+      nameJp: '相間ブラゲット',
+      sizeSpec: 'Inner post mount',
+      unit: '本',
+      quantity: innerPostStationsW * L,
+      sortOrder,
+      materialCode: 'SOKAN-BRACKET',
+    });
+
+    sortOrder++;
+    components.push({
+      type: 'sokan_netto',
+      category: CAT.safety.jp,
+      categoryEn: CAT.safety.en,
+      name: 'Sokan net (6m)',
+      nameJp: '装間ネット',
+      sizeSpec: '6000mm',
+      unit: '枚',
+      quantity: sokanNettoSheetsW * L,
+      sortOrder,
+      materialCode: 'SOKAN-NETTO',
+    });
+
+    for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
+      sortOrder++;
+      components.push({
+        type: 'mesh_shito',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Mesh sheet',
+        nameJp: 'メッシュシート',
+        sizeSpec: `${spanSizeMm}mm`,
+        unit: '枚',
+        quantity: Number(count) * L,
+        sortOrder,
+        materialCode: `MESH-SHITO-${spanSizeMm}`,
       });
     }
 
