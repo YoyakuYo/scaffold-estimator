@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import type { Locale } from '@/lib/i18n/translations';
@@ -113,6 +114,21 @@ export default function BillingPage() {
     subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
   const hasAnyPaymentPath = subscription.isStripeConfigured || !!bankTransfer;
 
+  const [payTab, setPayTab] = useState<'stripe' | 'bank'>('stripe');
+  const payTabDefaultedRef = useRef(false);
+  useEffect(() => {
+    if (!subscription || payTabDefaultedRef.current) return;
+    if (!subscription.isStripeConfigured && bankTransfer) setPayTab('bank');
+    payTabDefaultedRef.current = true;
+  }, [subscription, bankTransfer]);
+
+  const tabBtnClass = (active: boolean) =>
+    `flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium border border-b-0 transition-colors ${
+      active
+        ? 'bg-white text-blue-700 border-gray-200 relative z-10 mb-[-1px] pb-[11px]'
+        : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900 hover:bg-gray-100/80'
+    }`;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -174,122 +190,218 @@ export default function BillingPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            {t('billing', 'manageSubscription')}
-          </h2>
-          <div className="flex gap-3 flex-wrap">
-            <button
-              onClick={() => checkoutMutation.mutate()}
-              disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {checkoutMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="h-4 w-4" />
-              )}
-              {t('billing', 'startPaidPlan')}
-            </button>
-            {isActive && (
-              <button
-                onClick={() => portalMutation.mutate()}
-                disabled={portalMutation.isPending || !subscription.isStripeConfigured}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+        {bankTransfer ? (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="border-b border-gray-200 bg-gray-50 px-4 pt-4 pb-0">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                {t('billing', 'payWithTitle')}
+              </h2>
+              <div
+                className="flex flex-wrap gap-1"
+                role="tablist"
+                aria-label={t('billing', 'payWithTitle')}
               >
-                {portalMutation.isPending ? (
+                <button
+                  type="button"
+                  role="tab"
+                  id="billing-tab-stripe"
+                  aria-controls="billing-panel-stripe"
+                  aria-selected={payTab === 'stripe'}
+                  className={tabBtnClass(payTab === 'stripe')}
+                  onClick={() => setPayTab('stripe')}
+                >
+                  <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
+                  {t('billing', 'tabStripe')}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="billing-tab-bank"
+                  aria-controls="billing-panel-bank"
+                  aria-selected={payTab === 'bank'}
+                  className={tabBtnClass(payTab === 'bank')}
+                  onClick={() => setPayTab('bank')}
+                >
+                  <Landmark className="h-4 w-4 shrink-0" aria-hidden />
+                  {t('billing', 'tabBankTransfer')}
+                </button>
+              </div>
+            </div>
+
+            {payTab === 'stripe' ? (
+              <div
+                id="billing-panel-stripe"
+                role="tabpanel"
+                aria-labelledby="billing-tab-stripe"
+                className="p-6"
+              >
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  {t('billing', 'stripeSectionTitle')}
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
+                <div className="flex gap-3 flex-wrap">
+                  <button
+                    onClick={() => checkoutMutation.mutate()}
+                    disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {checkoutMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4" />
+                    )}
+                    {t('billing', 'startPaidPlan')}
+                  </button>
+                  {isActive && (
+                    <button
+                      onClick={() => portalMutation.mutate()}
+                      disabled={portalMutation.isPending || !subscription.isStripeConfigured}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {portalMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CreditCard className="h-4 w-4" />
+                      )}
+                      {t('billing', 'openBillingPortal')}
+                    </button>
+                  )}
+                </div>
+                {!subscription.isStripeConfigured && (
+                  <p className="text-sm text-amber-700 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100">
+                    {t('billing', 'stripeNotConfigured')}
+                  </p>
+                )}
+                {!hasAnyPaymentPath && (
+                  <p className="text-sm text-gray-600 mt-4 border-t border-gray-100 pt-4">
+                    {t('billing', 'noPaymentConfigured')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div
+                id="billing-panel-bank"
+                role="tabpanel"
+                aria-labelledby="billing-tab-bank"
+                className="p-6"
+              >
+                <div className="flex items-start gap-3 mb-5">
+                  <Landmark className="h-6 w-6 text-blue-700 shrink-0 mt-0.5" aria-hidden />
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {t('billing', 'bankTransferTitle')}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">{t('billing', 'bankTransferIntro')}</p>
+                  </div>
+                </div>
+                <dl className="grid gap-4 sm:grid-cols-2 text-sm border-t border-gray-100 pt-5">
+                  <div>
+                    <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
+                    <BankDd
+                      ja={bankTransfer.bankName}
+                      en={bankTransfer.bankNameEn}
+                      fr={bankTransfer.bankNameFr}
+                      locale={locale}
+                    />
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
+                    <BankDd
+                      ja={bankTransfer.branch}
+                      en={bankTransfer.branchEn}
+                      fr={bankTransfer.branchFr}
+                      locale={locale}
+                    />
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
+                    <BankDd
+                      ja={bankTransfer.accountType}
+                      en={bankTransfer.accountTypeEn}
+                      fr={bankTransfer.accountTypeFr}
+                      locale={locale}
+                    />
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">{t('billing', 'bankAccountNumber')}</dt>
+                    <dd className="font-medium text-gray-900 tabular-nums">
+                      {bankTransfer.accountNumber}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
+                    <BankDd
+                      ja={bankTransfer.accountHolder}
+                      en={bankTransfer.accountHolderEn}
+                      fr={bankTransfer.accountHolderFr}
+                      locale={locale}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
+                    <dd className="font-medium text-gray-900 break-all">{bankTransfer.remittanceReference}</dd>
+                  </div>
+                  {(bankTransfer.amountNote ||
+                    bankTransfer.amountNoteEn ||
+                    bankTransfer.amountNoteFr) && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
+                      <BankDd
+                        ja={bankTransfer.amountNote || ''}
+                        en={bankTransfer.amountNoteEn}
+                        fr={bankTransfer.amountNoteFr}
+                        locale={locale}
+                      />
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">
+              {t('billing', 'stripeSectionTitle')}
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={() => checkoutMutation.mutate()}
+                disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {checkoutMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <CreditCard className="h-4 w-4" />
                 )}
-                {t('billing', 'openBillingPortal')}
+                {t('billing', 'startPaidPlan')}
               </button>
-            )}
-          </div>
-          {!subscription.isStripeConfigured && (
-            <p className="text-sm text-amber-700 mt-3">
-              {t('billing', 'stripeNotConfigured')}
-            </p>
-          )}
-          {!hasAnyPaymentPath && (
-            <p className="text-sm text-gray-600 mt-3 border-t border-gray-100 pt-3">
-              {t('billing', 'noPaymentConfigured')}
-            </p>
-          )}
-        </div>
-
-        {bankTransfer && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
-            <div className="flex items-start gap-3 mb-4">
-              <Landmark className="h-6 w-6 text-gray-700 shrink-0 mt-0.5" />
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {t('billing', 'bankTransferTitle')}
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">{t('billing', 'bankTransferIntro')}</p>
-              </div>
-            </div>
-            <dl className="grid gap-3 sm:grid-cols-2 text-sm">
-              <div>
-                <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
-                <BankDd
-                  ja={bankTransfer.bankName}
-                  en={bankTransfer.bankNameEn}
-                  fr={bankTransfer.bankNameFr}
-                  locale={locale}
-                />
-              </div>
-              <div>
-                <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
-                <BankDd
-                  ja={bankTransfer.branch}
-                  en={bankTransfer.branchEn}
-                  fr={bankTransfer.branchFr}
-                  locale={locale}
-                />
-              </div>
-              <div>
-                <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
-                <BankDd
-                  ja={bankTransfer.accountType}
-                  en={bankTransfer.accountTypeEn}
-                  fr={bankTransfer.accountTypeFr}
-                  locale={locale}
-                />
-              </div>
-              <div>
-                <dt className="text-gray-500">{t('billing', 'bankAccountNumber')}</dt>
-                <dd className="font-medium text-gray-900 tabular-nums">
-                  {bankTransfer.accountNumber}
-                </dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
-                <BankDd
-                  ja={bankTransfer.accountHolder}
-                  en={bankTransfer.accountHolderEn}
-                  fr={bankTransfer.accountHolderFr}
-                  locale={locale}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
-                <dd className="font-medium text-gray-900 break-all">{bankTransfer.remittanceReference}</dd>
-              </div>
-              {(bankTransfer.amountNote ||
-                bankTransfer.amountNoteEn ||
-                bankTransfer.amountNoteFr) && (
-                <div className="sm:col-span-2">
-                  <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
-                  <BankDd
-                    ja={bankTransfer.amountNote || ''}
-                    en={bankTransfer.amountNoteEn}
-                    fr={bankTransfer.amountNoteFr}
-                    locale={locale}
-                  />
-                </div>
+              {isActive && (
+                <button
+                  onClick={() => portalMutation.mutate()}
+                  disabled={portalMutation.isPending || !subscription.isStripeConfigured}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {portalMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CreditCard className="h-4 w-4" />
+                  )}
+                  {t('billing', 'openBillingPortal')}
+                </button>
               )}
-            </dl>
+            </div>
+            {!subscription.isStripeConfigured && (
+              <p className="text-sm text-amber-700 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100">
+                {t('billing', 'stripeNotConfigured')}
+              </p>
+            )}
+            {!hasAnyPaymentPath && (
+              <p className="text-sm text-gray-600 mt-4 border-t border-gray-100 pt-4">
+                {t('billing', 'noPaymentConfigured')}
+              </p>
+            )}
           </div>
         )}
       </div>
