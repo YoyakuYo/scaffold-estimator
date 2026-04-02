@@ -394,7 +394,8 @@ export class ScaffoldCalculatorService {
     const extraPostsPerKaidan = needsExtendedBay ? 3 : 0; // 3 posts: O, P, Q
     const totalExtraPosts = extraPostsPerKaidan * kaidanSpanIndices.length;
 
-    // ─── 1. ジャッキベース ────────────────────────────────
+    // ─── 1. ジャッキベース + エコプレート（1:1、3Dの下敷板） ───
+    const jackBaseQty = Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction);
     sortOrder++;
     components.push({
       type: 'jack_base',
@@ -404,9 +405,22 @@ export class ScaffoldCalculatorService {
       nameJp: 'ジャッキベース',
       sizeSpec: '調整式',
       unit: '本',
-      quantity: Math.max(0, postPositions * 2 + totalExtraPosts - cornerPostDeduction),
+      quantity: jackBaseQty,
       sortOrder,
       materialCode: 'KUSABI-JB',
+    });
+    sortOrder++;
+    components.push({
+      type: 'eco_plate',
+      category: CAT.foundation.jp,
+      categoryEn: CAT.foundation.en,
+      name: 'Eco Plate',
+      nameJp: 'エコプレート',
+      sizeSpec: 'ジャッキ下敷',
+      unit: '枚',
+      quantity: jackBaseQty,
+      sortOrder,
+      materialCode: 'SHARED-ECO-PLATE',
     });
 
     // ─── 2. 支柱 (メイン) — 上部支柱(トップガード)本数を同じ支柱行に合算（別行は出さない）

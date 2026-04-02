@@ -9,10 +9,11 @@ export type BomSortable = {
   sizeSpec: string;
 };
 
-/** Primary sequence: 1=jack, 2=posts/frames, 3=plank, 4=brace, 5=bars, 6=habaki, 7=stair, 8=hariwaku, 99=other */
+/** Primary sequence: 1=jack+eco plate, 2=posts/frames, 3=plank, 4=brace, 5=bars, 6=habaki, 7=stair, 8=hariwaku, 99=other */
 export function bomTypePhase(type: string): number {
   switch (type) {
     case 'jack_base':
+    case 'eco_plate':
       return 1;
     case 'post_main':
     case 'post_top':
@@ -46,6 +47,10 @@ export function bomTypePhase(type: string): number {
 /** Tie-break within same phase */
 export function bomTypeSubOrder(type: string): number {
   switch (type) {
+    case 'jack_base':
+      return 0;
+    case 'eco_plate':
+      return 1;
     case 'post_main':
       return 0;
     case 'post_top':

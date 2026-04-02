@@ -11,6 +11,7 @@ export type BomSortable = {
 export function bomTypePhase(type: string): number {
   switch (type) {
     case 'jack_base':
+    case 'eco_plate':
       return 1;
     case 'post_main':
     case 'post_top':
@@ -43,6 +44,10 @@ export function bomTypePhase(type: string): number {
 
 export function bomTypeSubOrder(type: string): number {
   switch (type) {
+    case 'jack_base':
+      return 0;
+    case 'eco_plate':
+      return 1;
     case 'post_main':
       return 0;
     case 'post_top':

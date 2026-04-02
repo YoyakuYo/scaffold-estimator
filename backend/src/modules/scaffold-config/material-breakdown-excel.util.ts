@@ -16,7 +16,7 @@ export function distributeByScaffoldLevel(
   const qty = Math.max(0, Math.round(comp.quantity || 0));
   if (qty <= 0) return rows;
 
-  if (comp.type === 'jack_base') {
+  if (comp.type === 'jack_base' || comp.type === 'eco_plate') {
     rows[0] = qty;
     return rows;
   }

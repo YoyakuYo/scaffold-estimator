@@ -853,6 +853,26 @@ export class ScaffoldConfigService {
 
     // ─── Foundation ──────────────────────────────
     add('KUSABI-JB', 'ジャッキベース', 'Jack Base', 'jack_base', '調整式', '本', null, null, 2.5, 20);
+    sortOrder++;
+    materials.push({
+      code: 'SHARED-ECO-PLATE',
+      nameJp: 'エコプレート',
+      nameEn: 'Eco Plate',
+      category: 'foundation',
+      scaffoldType: 'all',
+      sizeSpec: 'ジャッキ下敷',
+      unit: '枚',
+      standardLengthMm: null,
+      standardWidthMm: null,
+      weightKg: 3,
+      rentalPriceMonthly: 15,
+      purchasePrice: null,
+      bundleQuantity: null,
+      pipeDiameterMm: null,
+      isCombined: false,
+      isActive: true,
+      sortOrder,
+    });
 
     // ─── Posts ────────────────────────────────────
     add('KUSABI-MA-18', '支柱 MA-18', 'Post MA-18', 'post', '1800mm', '本', 1800, null, 6.9, 40);
