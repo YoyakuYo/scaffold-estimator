@@ -34,6 +34,75 @@ const LANDING_HERO_3D_SLIDES = [
 
 const LANDING_HERO_3D_INTERVAL_MS = 5000;
 
+/** First four marketing stills: pairs for DWG-01 / DWG-02 input panels (crossfade every 5s). */
+const LANDING_VALUE_PROP_DWG01_SLIDES = [
+  '/landing/value-prop-dwg01-a.png',
+  '/landing/value-prop-dwg01-b.png',
+] as const;
+
+const LANDING_VALUE_PROP_DWG02_SLIDES = [
+  '/landing/value-prop-dwg02-a.png',
+  '/landing/value-prop-dwg02-b.png',
+] as const;
+
+const LANDING_VALUE_PROP_INTERVAL_MS = 5000;
+
+function LandingValuePropCrossfade({
+  slides,
+  alt,
+  sizes,
+  imageClassName,
+  priorityFirstSlide,
+}: {
+  slides: readonly string[];
+  alt: string;
+  sizes: string;
+  imageClassName: string;
+  priorityFirstSlide?: boolean;
+}) {
+  const [active, setActive] = useState(0);
+  const [motionOk, setMotionOk] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => setMotionOk(!mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  useEffect(() => {
+    if (!motionOk || slides.length < 2) return;
+    const id = window.setInterval(
+      () => setActive((i) => (i + 1) % slides.length),
+      LANDING_VALUE_PROP_INTERVAL_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [motionOk, slides]);
+
+  return (
+    <>
+      {slides.map((src, i) => (
+        <Image
+          key={src}
+          src={src}
+          alt={alt}
+          fill
+          priority={Boolean(priorityFirstSlide) && i === 0}
+          sizes={sizes}
+          className={`${imageClassName} transition-opacity duration-1000 ease-in-out motion-reduce:transition-none ${
+            i === active ? 'z-[1] opacity-100' : 'z-0 opacity-0'
+          }`}
+        />
+      ))}
+      <span className="sr-only" aria-live="polite">
+        {active + 1} / {slides.length}
+      </span>
+    </>
+  );
+}
+
 function LandingHero3DVisual({
   alt,
   badgeLabel,
@@ -394,15 +463,15 @@ export default function LandingPage() {
                         <div className="relative p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)] ring-1 ring-zinc-700">
                           <div className="border border-zinc-600 bg-zinc-800">
                             <div className="relative aspect-[4/3] w-full bg-zinc-900">
-                              <Image
-                                src="/landing/input-drawing-workstation.png"
+                              <LandingValuePropCrossfade
+                                slides={LANDING_VALUE_PROP_DWG01_SLIDES}
                                 alt={t('landing', 'inputWorkstationAlt')}
-                                fill
-                                className="object-cover object-center transition duration-700 ease-out group-hover:scale-[1.015]"
                                 sizes="(max-width: 1024px) 100vw, 42vw"
+                                imageClassName="object-cover object-center"
+                                priorityFirstSlide
                               />
                               <div
-                                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950/40 via-transparent to-zinc-100/10"
+                                className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-zinc-950/40 via-transparent to-zinc-100/10"
                                 aria-hidden
                               />
                             </div>
@@ -477,16 +546,17 @@ export default function LandingPage() {
               </div>
               <div className="grid items-stretch lg:grid-cols-2">
                 <figure className="relative order-1 min-h-[220px] border-b-2 border-zinc-800 sm:min-h-[280px] lg:order-2 lg:min-h-[min(100%,440px)] lg:border-b-0 lg:border-l-2 lg:border-zinc-800">
+                  <div className="absolute inset-0">
+                    <LandingValuePropCrossfade
+                      slides={LANDING_VALUE_PROP_DWG02_SLIDES}
+                      alt={t('landing', 'inputBlueprintAlt')}
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      imageClassName="object-cover object-[center_40%] lg:object-center"
+                    />
+                  </div>
                   <div
-                    className="absolute inset-0 z-[1] bg-gradient-to-b from-zinc-950/25 via-transparent to-zinc-950/15 lg:bg-gradient-to-l lg:from-transparent lg:via-zinc-950/10 lg:to-zinc-950/30"
+                    className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-b from-zinc-950/25 via-transparent to-zinc-950/15 lg:bg-gradient-to-l lg:from-transparent lg:via-zinc-950/10 lg:to-zinc-950/30"
                     aria-hidden
-                  />
-                  <Image
-                    src="/landing/input-blueprint-3d.png"
-                    alt={t('landing', 'inputBlueprintAlt')}
-                    fill
-                    className="object-cover object-[center_40%] lg:object-center"
-                    sizes="(max-width: 1024px) 100vw, 50vw"
                   />
                   <figcaption className="sr-only">{t('landing', 'inputBlueprintCaption')}</figcaption>
                 </figure>
