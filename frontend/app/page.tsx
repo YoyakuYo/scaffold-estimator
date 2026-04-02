@@ -18,10 +18,12 @@ import {
   LogIn,
   UserPlus,
   Ruler,
+  Download,
 } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
+import { usePwaInstall } from '@/lib/pwa-install-context';
 
 const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
 
@@ -111,12 +113,26 @@ function LandingHero3DVisual({
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
+  const { canInstall, triggerInstall } = usePwaInstall();
   const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const localeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(display-mode: standalone)');
+    const apply = () => {
+      const nav = window.navigator as Navigator & { standalone?: boolean };
+      setIsStandalone(mq.matches || nav.standalone === true);
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, []);
 
   const hasToken = mounted && !!authApi.getToken();
@@ -249,6 +265,25 @@ export default function LandingPage() {
                   >
                     {t('landing', 'logIn')}
                   </Link>
+                  {!isStandalone && (
+                    <span
+                      className="inline-flex"
+                      title={canInstall ? t('landing', 'installSubtitle') : t('landing', 'installCtaUnavailable')}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (canInstall) void triggerInstall();
+                        }}
+                        disabled={!canInstall}
+                        aria-label={canInstall ? t('landing', 'installCta') : t('landing', 'installCtaUnavailable')}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
+                      >
+                        <Download className="h-4 w-4 shrink-0" aria-hidden />
+                        {t('landing', 'installCta')}
+                      </button>
+                    </span>
+                  )}
                 </div>
                 <p className="mt-6 text-center text-[11px] leading-snug text-slate-500 lg:text-left">
                   {t('landing', 'heroAppVisualCredit')}
