@@ -517,64 +517,63 @@ function UserDashboard() {
     subStatus === 'expired';
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <div
-        className="h-1.5 w-full bg-[repeating-linear-gradient(-45deg,#09090b,#09090b_8px,#f59e0b_8px,#f59e0b_16px)]"
+        className="h-1 w-full bg-gradient-to-r from-slate-300 via-blue-500 to-slate-300 opacity-90"
         aria-hidden
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10 space-y-8">
-        {/* Hero — blueprint grid + site lighting */}
-        <section className="relative overflow-hidden rounded-3xl border border-zinc-700/70 bg-zinc-900 shadow-2xl shadow-black/50">
+        <section className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-sm shadow-slate-200/60">
           <div
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[length:32px_32px]"
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.12)_1px,transparent_1px)] bg-[length:40px_40px]"
             aria-hidden
           />
           <div
-            className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-amber-500/[0.12] blur-3xl"
+            className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-blue-400/10 blur-3xl"
             aria-hidden
           />
           <div className="relative p-8 lg:p-10 lg:flex lg:items-start lg:justify-between lg:gap-12">
             <div className="max-w-xl">
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/45 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">
-                <HardHat className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                <HardHat className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
                 {t('dashboard', 'siteHubBadge')}
               </span>
-              <h1 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              <h1 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
                 {t('dashboard', 'title')}
               </h1>
-              <p className="mt-4 text-base text-zinc-400 leading-relaxed">
+              <p className="mt-4 text-base text-slate-600 leading-relaxed">
                 {t('dashboard', 'dashboardIntro')}
               </p>
               <div className="mt-6 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600/80 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-300">
-                  <Box className="h-3.5 w-3.5 text-violet-400" aria-hidden />
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                  <Box className="h-3.5 w-3.5 text-violet-600" aria-hidden />
                   2D / 3D
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600/80 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-300">
-                  <Receipt className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                  <Receipt className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
                   {t('nav', 'quotations')}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600/80 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-300">
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-sky-400" aria-hidden />
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-sky-600" aria-hidden />
                   Excel
                 </span>
               </div>
             </div>
 
             <div className="mt-10 w-full lg:mt-0 lg:max-w-md shrink-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500 mb-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400 mb-4">
                 {t('dashboard', 'workflow')}
               </p>
               <ol className="space-y-4">
                 {workflowSteps.map((step) => (
                   <li key={step.n} className="flex gap-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-sm font-black text-zinc-950 shadow-lg shadow-amber-500/25">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-white shadow-md">
                       {step.n}
                     </span>
-                    <div className="min-w-0 pt-0.5 flex-1 border-l border-zinc-700/80 pl-4">
-                      <p className="text-sm font-semibold text-zinc-100 leading-snug">{step.title}</p>
-                      <p className="mt-1 text-xs text-zinc-500 leading-relaxed line-clamp-2">{step.hint}</p>
+                    <div className="min-w-0 pt-0.5 flex-1 border-l border-slate-200 pl-4">
+                      <p className="text-sm font-semibold text-slate-800 leading-snug">{step.title}</p>
+                      <p className="mt-1 text-xs text-slate-500 leading-relaxed line-clamp-2">{step.hint}</p>
                     </div>
                   </li>
                 ))}
@@ -585,33 +584,31 @@ function UserDashboard() {
 
         {subscription && (
           <div
-            className={`rounded-2xl border p-5 sm:p-6 backdrop-blur-sm ${
-              subAlert
-                ? 'border-red-500/40 bg-red-950/40'
-                : 'border-emerald-500/35 bg-emerald-950/30'
+            className={`rounded-2xl border p-5 sm:p-6 ${
+              subAlert ? 'border-red-200 bg-red-50/90' : 'border-emerald-200 bg-emerald-50/80'
             }`}
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-start gap-4">
                 <div
                   className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
-                    subAlert ? 'border-red-400/40 bg-red-500/10' : 'border-emerald-400/40 bg-emerald-500/10'
+                    subAlert ? 'border-red-200 bg-white' : 'border-emerald-200 bg-white'
                   }`}
                 >
                   <CreditCard
-                    className={`h-6 w-6 ${subAlert ? 'text-red-300' : 'text-emerald-300'}`}
+                    className={`h-6 w-6 ${subAlert ? 'text-red-600' : 'text-emerald-600'}`}
                     aria-hidden
                   />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     {t('dashboard', 'subscription')}
                   </p>
-                  <p className="mt-1 font-mono text-sm font-semibold text-white">
-                    {subscription.plan} <span className="text-zinc-500">/</span> {subscription.status}
+                  <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
+                    {subscription.plan} <span className="text-slate-400">/</span> {subscription.status}
                   </p>
                   {subscription.status === 'trialing' && subscription.trialDaysRemaining != null && (
-                    <p className="mt-2 text-sm text-amber-300/90">
+                    <p className="mt-2 text-sm text-slate-700">
                       {t('dashboard', 'trialRemaining').replace('{days}', String(subscription.trialDaysRemaining))}
                     </p>
                   )}
@@ -620,14 +617,14 @@ function UserDashboard() {
               <button
                 type="button"
                 onClick={() => router.push('/billing')}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-600 bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-100 shadow-sm transition hover:border-amber-500/50 hover:bg-zinc-800"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-blue-300 hover:bg-slate-50"
               >
-                <CreditCard className="h-4 w-4 text-amber-400" />
+                <CreditCard className="h-4 w-4 text-blue-600" />
                 {t('dashboard', 'manageBilling')}
               </button>
             </div>
             {!hasBillingAccess && (
-              <p className="mt-4 text-sm text-red-300 border-t border-red-500/20 pt-4">
+              <p className="mt-4 text-sm text-red-700 border-t border-red-200 pt-4">
                 {t('dashboard', 'trialEnded')}
               </p>
             )}
@@ -635,152 +632,149 @@ function UserDashboard() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          {/* Primary CTA */}
-          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl border border-amber-500/25 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 p-8 sm:p-10 shadow-xl shadow-amber-950/20 ring-1 ring-amber-500/10">
+          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-8 sm:p-10 shadow-sm">
             <div
-              className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.08),transparent_70%)]"
+              className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.06),transparent_65%)]"
               aria-hidden
             />
             <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8">
               <div>
-                <div className="inline-flex items-center gap-2 text-amber-400/90 mb-3">
+                <div className="inline-flex items-center gap-2 text-blue-600 mb-3">
                   <Sparkles className="h-4 w-4" aria-hidden />
                   <span className="text-xs font-bold uppercase tracking-widest">{t('dashboard', 'quickStartTitle')}</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
                   {t('nav', 'scaffold')}
                 </h2>
-                <p className="mt-3 text-zinc-400 max-w-lg leading-relaxed">{t('dashboard', 'quickStartDesc')}</p>
+                <p className="mt-3 text-slate-600 max-w-lg leading-relaxed">{t('dashboard', 'quickStartDesc')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => router.push('/scaffold')}
                 disabled={!hasBillingAccess}
-                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-amber-500 px-8 py-4 text-base font-bold text-zinc-950 shadow-lg shadow-amber-500/30 transition hover:bg-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-blue-600 px-8 py-4 text-base font-semibold text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 <Calculator className="h-6 w-6" aria-hidden />
                 {t('dashboard', 'quickStartButton')}
-                <ArrowRight className="h-5 w-5 opacity-80" aria-hidden />
+                <ArrowRight className="h-5 w-5 opacity-90" aria-hidden />
               </button>
             </div>
           </div>
 
-          {/* Quick access tiles */}
           <div className="space-y-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500 px-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400 px-1">
               {t('dashboard', 'quickAccess')}
             </p>
             <Link
               href="/quotations"
-              className="group flex items-center gap-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-4 transition hover:border-amber-500/40 hover:bg-zinc-800/90"
+              className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                 <Receipt className="h-5 w-5" aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-white group-hover:text-amber-100 transition-colors">
+                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">
                   {t('nav', 'quotations')}
                 </p>
-                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutQuotationsDesc')}</p>
+                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutQuotationsDesc')}</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-amber-400 shrink-0 transition-colors" />
+              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
             </Link>
             <Link
               href="/scaffold"
-              className="group flex items-center gap-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-4 transition hover:border-amber-500/40 hover:bg-zinc-800/90"
+              className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-100">
                 <Calculator className="h-5 w-5" aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-white group-hover:text-amber-100 transition-colors">
+                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">
                   {t('nav', 'scaffold')}
                 </p>
-                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t('dashboard', 'quickStartDesc')}</p>
+                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'quickStartDesc')}</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-amber-400 shrink-0 transition-colors" />
+              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
             </Link>
             <button
               type="button"
               onClick={() => router.push('/billing')}
-              className="group flex w-full items-center gap-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-4 text-left transition hover:border-amber-500/40 hover:bg-zinc-800/90"
+              className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/25">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
                 <CreditCard className="h-5 w-5" aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-white group-hover:text-amber-100 transition-colors">
+                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">
                   {t('dashboard', 'manageBilling')}
                 </p>
-                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutBillingDesc')}</p>
+                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutBillingDesc')}</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-amber-400 shrink-0 transition-colors" />
+              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
             </button>
           </div>
         </div>
 
-        {/* History */}
-        <div className="overflow-hidden rounded-3xl border border-zinc-700/80 bg-zinc-900/60 shadow-xl shadow-black/30">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <button
             type="button"
             onClick={() => setHistoryOpen(!historyOpen)}
-            className="w-full px-6 py-5 sm:px-8 sm:py-6 flex items-center justify-between gap-4 bg-[repeating-linear-gradient(90deg,transparent,transparent_12px,rgba(245,158,11,0.07)_12px,rgba(245,158,11,0.07)_24px)] hover:bg-zinc-800/80 transition-colors text-left border-b border-zinc-700/60"
+            className="w-full px-6 py-5 sm:px-8 sm:py-6 flex items-center justify-between gap-4 bg-slate-50/90 hover:bg-slate-100/90 transition-colors text-left border-b border-slate-100"
           >
             <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-600">
-                  <History className="h-5 w-5 text-amber-400" aria-hidden />
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 border border-blue-100">
+                  <History className="h-5 w-5 text-blue-600" aria-hidden />
                 </span>
                 <span>
                   {t('dashboard', 'historyPanelTitle')}
                   {configs && configs.length > 0 && (
-                    <span className="text-zinc-500 font-normal ml-2">({configs.length})</span>
+                    <span className="text-slate-500 font-normal ml-2">({configs.length})</span>
                   )}
                 </span>
               </h2>
-              <p className="mt-1.5 text-sm text-zinc-500 pl-[3.25rem]">{t('dashboard', 'shortcutJobsDesc')}</p>
+              <p className="mt-1.5 text-sm text-slate-500 pl-[3.25rem]">{t('dashboard', 'shortcutJobsDesc')}</p>
             </div>
             {historyOpen ? (
-              <ChevronUp className="h-5 w-5 text-zinc-500 shrink-0" aria-hidden />
+              <ChevronUp className="h-5 w-5 text-slate-400 shrink-0" aria-hidden />
             ) : (
-              <ChevronDown className="h-5 w-5 text-zinc-500 shrink-0" aria-hidden />
+              <ChevronDown className="h-5 w-5 text-slate-400 shrink-0" aria-hidden />
             )}
           </button>
 
           {historyOpen && (
-            <div className="border-t border-zinc-700/60 p-6 sm:p-8 bg-zinc-950/40">
+            <div className="border-t border-slate-100 p-6 sm:p-8 bg-slate-50/40">
               {isLoading ? (
                 <div className="flex justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-amber-500" aria-hidden />
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-hidden />
                 </div>
               ) : isError ? (
                 <div className="text-center py-12">
-                  <Calculator className="h-14 w-14 text-zinc-700 mx-auto mb-4" aria-hidden />
-                  <p className="text-zinc-500 mb-2">{t('dashboard', 'backendDown')}</p>
+                  <Calculator className="h-14 w-14 text-slate-300 mx-auto mb-4" aria-hidden />
+                  <p className="text-slate-500 mb-2">{t('dashboard', 'backendDown')}</p>
                 </div>
               ) : configs && configs.length > 0 ? (
                 <div className="space-y-3" ref={menuRef}>
-                  <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-zinc-800">
-                    <label className="inline-flex items-center gap-2 text-sm text-zinc-300 cursor-pointer select-none">
+                  <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-slate-200">
+                    <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
                       <input
                         ref={selectAllRef}
                         type="checkbox"
                         checked={configs.length > 0 && selectedIds.size === configs.length}
                         onChange={(e) => (e.target.checked ? selectAll() : clearSelection())}
                         disabled={bulkDeleting || deleteMutation.isPending}
-                        className="rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-950"
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-50"
                       />
                       <span>{t('dashboard', 'historySelectAll')}</span>
                     </label>
                     {selectedIds.size > 0 && (
                       <>
-                        <span className="text-sm text-zinc-500">
+                        <span className="text-sm text-slate-500">
                           {(t('dashboard', 'historySelected') || '{n} selected').replace('{n}', String(selectedIds.size))}
                         </span>
                         <button
                           type="button"
                           onClick={clearSelection}
-                          className="text-sm text-amber-400 hover:text-amber-300 hover:underline"
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {t('dashboard', 'historyClearSelection')}
                         </button>
@@ -805,11 +799,11 @@ function UserDashboard() {
                     return (
                       <div
                         key={cfg.id}
-                        className={`relative border rounded-xl transition-all ${
+                        className={`relative border rounded-xl transition-all bg-white ${
                           hasResult
-                            ? 'border-zinc-700 hover:border-amber-500/35 hover:shadow-lg hover:shadow-black/20 bg-zinc-900/50'
-                            : 'border-zinc-800 hover:bg-zinc-900/80'
-                        } ${isSelected ? 'ring-2 ring-amber-500/60 ring-offset-2 ring-offset-zinc-950' : ''}`}
+                            ? 'border-slate-200 hover:border-blue-200 hover:shadow-md'
+                            : 'border-slate-100 hover:bg-slate-50'
+                        } ${isSelected ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-50' : ''}`}
                       >
                         <div className="flex items-stretch">
                           <div
@@ -821,7 +815,7 @@ function UserDashboard() {
                               checked={isSelected}
                               onChange={() => toggleSelect(cfg.id)}
                               disabled={bulkDeleting || deleteMutation.isPending}
-                              className="rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-950"
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-white"
                               aria-label={t('dashboard', 'historySelectRow')}
                             />
                           </div>
@@ -833,10 +827,10 @@ function UserDashboard() {
                               <div
                                 className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${
                                   cfg.status === 'calculated'
-                                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                                     : cfg.status === 'reviewed'
-                                      ? 'bg-sky-500/15 text-sky-300 border border-sky-500/25'
-                                      : 'bg-zinc-700/80 text-zinc-400 border border-zinc-600'
+                                      ? 'bg-sky-50 text-sky-800 border border-sky-200'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
                                 }`}
                               >
                                 {cfg.status === 'calculated'
@@ -846,11 +840,11 @@ function UserDashboard() {
                                     : t('dashboard', 'statusConfigured')}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium text-zinc-100 truncate">
+                                <div className="font-medium text-slate-800 truncate">
                                   {t('dashboard', 'buildingHeight')}: {cfg.buildingHeightMm.toLocaleString()}mm |{' '}
                                   {t('dashboard', 'scaffoldWidth')}: {cfg.scaffoldWidthMm}mm
                                 </div>
-                                <div className="text-sm text-zinc-500 truncate">
+                                <div className="text-sm text-slate-500 truncate">
                                   {wallNames || '—'} |{' '}
                                   {new Date(cfg.createdAt).toLocaleDateString(
                                     locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US',
@@ -863,7 +857,7 @@ function UserDashboard() {
                                 <button
                                   type="button"
                                   onClick={() => router.push(`/scaffold/${cfg.id}`)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-zinc-950 text-sm font-semibold rounded-lg hover:bg-amber-400 transition-colors"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
                                 >
                                   <Eye className="h-3.5 w-3.5" aria-hidden />
                                   {t('dashboard', 'viewResult')}
@@ -873,12 +867,12 @@ function UserDashboard() {
                                 <button
                                   type="button"
                                   onClick={() => setOpenMenuId(isMenuOpen ? null : cfg.id)}
-                                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-zinc-600 bg-zinc-800 hover:bg-zinc-700 transition-colors text-zinc-400"
+                                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-500"
                                 >
                                   <MoreHorizontal className="h-4 w-4" />
                                 </button>
                                 {isMenuOpen && (
-                                  <div className="absolute right-0 top-full mt-1 w-52 bg-zinc-900 rounded-xl shadow-xl border border-zinc-600 py-1 z-50">
+                                  <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50">
                                     {hasResult && (
                                       <>
                                         <button
@@ -887,9 +881,9 @@ function UserDashboard() {
                                             setOpenMenuId(null);
                                             router.push(`/scaffold/${cfg.id}`);
                                           }}
-                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                                         >
-                                          <ExternalLink className="h-4 w-4 text-sky-400" aria-hidden />
+                                          <ExternalLink className="h-4 w-4 text-blue-500" aria-hidden />
                                           {t('dashboard', 'openResult')}
                                         </button>
                                         <button
@@ -898,9 +892,9 @@ function UserDashboard() {
                                             setOpenMenuId(null);
                                             router.push(`/scaffold/${cfg.id}?tab=3d`);
                                           }}
-                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                                         >
-                                          <Box className="h-4 w-4 text-violet-400" aria-hidden />
+                                          <Box className="h-4 w-4 text-violet-500" aria-hidden />
                                           {t('dashboard', 'view3D')}
                                         </button>
                                         <button
@@ -909,12 +903,12 @@ function UserDashboard() {
                                             setOpenMenuId(null);
                                             router.push(`/scaffold/${cfg.id}?tab=2d`);
                                           }}
-                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                                         >
-                                          <Layers className="h-4 w-4 text-indigo-400" aria-hidden />
+                                          <Layers className="h-4 w-4 text-indigo-500" aria-hidden />
                                           {t('dashboard', 'view2D')}
                                         </button>
-                                        <div className="border-t border-zinc-700 my-1" />
+                                        <div className="border-t border-slate-100 my-1" />
                                         <button
                                           type="button"
                                           onClick={() => {
@@ -923,9 +917,9 @@ function UserDashboard() {
                                               `/scaffold/${cfg.id}/quote?step=1&projectId=${encodeURIComponent(cfg.projectId)}`,
                                             );
                                           }}
-                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                                         >
-                                          <Receipt className="h-4 w-4 text-emerald-400" aria-hidden />
+                                          <Receipt className="h-4 w-4 text-emerald-600" aria-hidden />
                                           {t('dashboard', 'createQuotation')}
                                         </button>
                                         <button
@@ -944,26 +938,26 @@ function UserDashboard() {
                                               alert(t('result', 'excelFailed') || 'Excel export failed');
                                             }
                                           }}
-                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                                         >
-                                          <FileSpreadsheet className="h-4 w-4 text-green-400" aria-hidden />
+                                          <FileSpreadsheet className="h-4 w-4 text-green-600" aria-hidden />
                                           {t('dashboard', 'exportExcel')}
                                         </button>
                                       </>
                                     )}
-                                    <div className="border-t border-zinc-700 my-1" />
+                                    <div className="border-t border-slate-100 my-1" />
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setOpenMenuId(null);
                                         router.push('/scaffold');
                                       }}
-                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
                                     >
-                                      <Copy className="h-4 w-4 text-zinc-500" aria-hidden />
+                                      <Copy className="h-4 w-4 text-slate-400" aria-hidden />
                                       {t('dashboard', 'newCalculation')}
                                     </button>
-                                    <div className="border-t border-zinc-700 my-1" />
+                                    <div className="border-t border-slate-100 my-1" />
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -971,7 +965,7 @@ function UserDashboard() {
                                         handleDelete(cfg.id, e);
                                       }}
                                       disabled={deleteMutation.isPending}
-                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-950/50"
+                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
                                     >
                                       <Trash2 className="h-4 w-4" aria-hidden />
                                       {t('dashboard', 'delete')}
@@ -988,12 +982,12 @@ function UserDashboard() {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <Calculator className="h-14 w-14 text-zinc-700 mx-auto mb-4" aria-hidden />
-                  <p className="text-zinc-500 mb-3">{t('dashboard', 'noResults')}</p>
+                  <Calculator className="h-14 w-14 text-slate-300 mx-auto mb-4" aria-hidden />
+                  <p className="text-slate-500 mb-3">{t('dashboard', 'noResults')}</p>
                   <button
                     type="button"
                     onClick={() => router.push('/scaffold')}
-                    className="text-amber-400 font-semibold hover:text-amber-300 hover:underline inline-flex items-center gap-1.5"
+                    className="text-blue-600 font-semibold hover:text-blue-800 hover:underline inline-flex items-center gap-1.5"
                   >
                     {t('dashboard', 'firstCalc')} <ArrowRight className="h-4 w-4" aria-hidden />
                   </button>
