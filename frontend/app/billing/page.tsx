@@ -9,10 +9,10 @@ type BillingT = <S extends TranslationSection>(section: S, key: keyof Translatio
 import {
   subscriptionsApi,
   type SubscriptionInfo,
-  type SubscriptionPlan,
   type CheckoutPlanTier,
 } from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
+import { subscriptionPlanLabel, subscriptionStatusLabel } from '@/lib/billing/subscription-labels';
 import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { usersApi } from '@/lib/api/users';
 import {
@@ -27,19 +27,6 @@ import {
 } from 'lucide-react';
 
 const CHECKOUT_TIER_ORDER: CheckoutPlanTier[] = ['basic', 'medium', 'premium', 'standard'];
-
-function subscriptionPlanLabel(plan: SubscriptionPlan, t: BillingT): string {
-  switch (plan) {
-    case 'basic':
-      return t('billing', 'planTierBasic');
-    case 'medium':
-      return t('billing', 'planTierMedium');
-    case 'premium':
-      return t('billing', 'planTierPremium');
-    default:
-      return plan;
-  }
-}
 
 function PlanTierPricingGrid({
   subscription,
@@ -324,7 +311,9 @@ export default function BillingPage() {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <p className="text-sm text-gray-500">{t('billing', 'currentStatus')}</p>
-              <p className="text-xl font-semibold text-gray-900">{subscription.status}</p>
+              <p className="text-xl font-semibold text-gray-900">
+                {subscriptionStatusLabel(subscription.status, t)}
+              </p>
             </div>
             <div>
               <p className="text-sm text-gray-500">{t('billing', 'currentPlan')}</p>
@@ -347,7 +336,17 @@ export default function BillingPage() {
             </div>
           </div>
 
-          {isTrial && (
+          {!subscription.hasAccess &&
+            (subscription.status === 'expired' ||
+              subscription.status === 'canceled' ||
+              subscription.status === 'past_due') && (
+              <div className="mt-5 p-4 rounded-lg border border-red-200 bg-red-50 flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-red-900">{t('billing', 'accessEndedHint')}</p>
+              </div>
+            )}
+
+          {isTrial && subscription.hasAccess && (
             <div className="mt-5 p-4 rounded-lg border border-amber-200 bg-amber-50 flex items-start gap-3">
               <CalendarDays className="h-5 w-5 text-amber-700 mt-0.5" />
               <div>
@@ -355,9 +354,11 @@ export default function BillingPage() {
                   {t('billing', 'freeTrialInProgress')}
                 </p>
                 <p className="text-amber-800 text-sm">
-                  {t('billing', 'trialRemaining')
-                    .replace('{remaining}', String(subscription.trialDaysRemaining))
-                    .replace('{total}', String(subscription.trialLengthDays))}
+                  {subscription.trialDaysRemaining < 1
+                    ? t('billing', 'trialFinalDay').replace('{total}', String(subscription.trialLengthDays))
+                    : t('billing', 'trialRemaining')
+                        .replace('{remaining}', String(subscription.trialDaysRemaining))
+                        .replace('{total}', String(subscription.trialLengthDays))}
                 </p>
                 {subscription.trialFileUploads && (
                   <p className="text-amber-900 text-sm mt-2">

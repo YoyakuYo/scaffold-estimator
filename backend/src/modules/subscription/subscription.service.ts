@@ -246,20 +246,29 @@ export class SubscriptionService {
     if (role === 'superadmin') return true;
     const user = await this.getUserOrFail(userId);
     const companyId = user.companyId;
-    if (!companyId) return false;
-    let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-    let subs = mapRowsToCamel<Subscription>(rows || []);
-    if (subs.length === 0) {
-      await this.ensureSubscriptionForUser(userId);
-      const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-      subs = mapRowsToCamel<Subscription>(res.data || []);
-    }
     const now = new Date();
-    for (const sub of subs) {
-      const s = await this.expireTrialIfNeeded(sub);
-      if (s.status === 'active') return true;
-      if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) return true;
+
+    if (companyId) {
+      let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+      let subs = mapRowsToCamel<Subscription>(rows || []);
+      if (subs.length === 0) {
+        await this.ensureSubscriptionForUser(userId);
+        const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+        subs = mapRowsToCamel<Subscription>(res.data || []);
+      }
+      for (const sub of subs) {
+        const s = await this.expireTrialIfNeeded(sub);
+        if (s.status === 'active') return true;
+        if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) return true;
+      }
+      return false;
     }
+
+    // No company: only this user's subscription row applies (company_id may be null on the row).
+    let sub = await this.ensureSubscriptionForUser(userId);
+    sub = await this.expireTrialIfNeeded(sub);
+    if (sub.status === 'active') return true;
+    if (sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) return true;
     return false;
   }
 
@@ -297,15 +306,28 @@ export class SubscriptionService {
     if (role === 'superadmin') return SUPERADMIN_CAPABILITIES;
     const user = await this.getUserOrFail(userId);
     const companyId = user.companyId;
-    if (!companyId) return NO_ACCESS_CAPABILITIES;
-    let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-    let subs = mapRowsToCamel<Subscription>(rows || []);
-    if (subs.length === 0) {
-      await this.ensureSubscriptionForUser(userId);
-      const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-      subs = mapRowsToCamel<Subscription>(res.data || []);
+
+    if (companyId) {
+      let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+      let subs = mapRowsToCamel<Subscription>(rows || []);
+      if (subs.length === 0) {
+        await this.ensureSubscriptionForUser(userId);
+        const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
+        subs = mapRowsToCamel<Subscription>(res.data || []);
+      }
+      return this.aggregateCompanyCapabilities(subs);
     }
-    return this.aggregateCompanyCapabilities(subs);
+
+    let sub = await this.ensureSubscriptionForUser(userId);
+    sub = await this.expireTrialIfNeeded(sub);
+    const now = new Date();
+    if (sub.status === 'active' && sub.plan && sub.plan !== 'free_trial') {
+      return capabilitiesForPlan(sub.plan);
+    }
+    if (sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) {
+      return capabilitiesForTrial();
+    }
+    return NO_ACCESS_CAPABILITIES;
   }
 
   async countCompanySeats(companyId: string): Promise<number> {
