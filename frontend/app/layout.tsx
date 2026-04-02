@@ -55,28 +55,34 @@ export default function RootLayout({
         <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
       </head>
       <body className={`${notoSansJP.variable} font-sans antialiased`}>
-        <Providers>
-          <LayoutClient>{children}</LayoutClient>
-        </Providers>
-        {/* Service Worker Registration */}
+        {/* Run before React hydrates: Chrome may fire beforeinstallprompt only once, very early */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('SW registered: ', registration.scope);
-                    },
-                    function(err) {
-                      console.log('SW registration failed: ', err);
-                    }
-                  );
-                });
-              }
+(function () {
+  try {
+    window.__ZOOMEN_DEFERRED_INSTALL__ = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__ZOOMEN_DEFERRED_INSTALL__ = e;
+      window.dispatchEvent(new Event('zoomen-pwa-install-ready'));
+    });
+  } catch (err) { console.warn('PWA install bootstrap:', err); }
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').then(
+        function (registration) { console.log('SW registered: ', registration.scope); },
+        function (err) { console.log('SW registration failed: ', err); }
+      );
+    });
+  }
+})();
             `,
           }}
         />
+        <Providers>
+          <LayoutClient>{children}</LayoutClient>
+        </Providers>
       </body>
     </html>
   );

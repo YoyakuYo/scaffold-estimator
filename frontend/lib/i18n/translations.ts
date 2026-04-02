@@ -1019,6 +1019,12 @@ export const translations = {
     installSubtitle: { ja: 'PCにインストールすると、ブラウザを開かずにすぐ起動。オフラインでも基本機能が使えます。', en: 'Install on your PC to launch without opening a browser. Core features work offline.', fr: 'Installez sur votre PC pour lancer sans navigateur. Les fonctions principales fonctionnent hors ligne.' },
     installCta: { ja: 'インストールする', en: 'Install', fr: 'Installer' },
     installCtaUnavailable: { ja: 'このブラウザではインストールに「⋮」メニュー → アプリをインストール をご利用ください', en: 'Use browser menu (⋮) → Install app to add to your device', fr: 'Utilisez le menu du navigateur (⋮) → Installer l’application pour l’ajouter à votre appareil.' },
+    iosAddToHome: {
+      ja: 'iPhone / iPad の Safari：画面下の「共有」→「ホーム画面に追加」',
+      en: 'On iPhone or iPad (Safari): tap Share, then “Add to Home Screen”.',
+      fr: 'Sur iPhone ou iPad (Safari) : Partager, puis « Sur l’écran d’accueil ».',
+    },
+    installHelpTitle: { ja: 'アプリをインストールするには', en: 'How to install the app', fr: 'Comment installer l’application' },
     afterInstall: { ja: 'インストール後はログインまたは新規登録で利用開始', en: 'After installing, log in or create an account to get started', fr: 'Après l’installation, connectez-vous ou créez un compte pour commencer.' },
     logIn: { ja: 'ログイン', en: 'Log in', fr: 'Connexion' },
     register: { ja: '新規登録', en: 'Create account', fr: 'Créer un compte' },

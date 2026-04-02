@@ -182,10 +182,11 @@ function LandingHero3DVisual({
 export default function LandingPage() {
   const router = useRouter();
   const { locale, setLocale, t } = useI18n();
-  const { canInstall, triggerInstall } = usePwaInstall();
+  const { triggerInstall } = usePwaInstall();
   const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const localeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -335,23 +336,60 @@ export default function LandingPage() {
                     {t('landing', 'logIn')}
                   </Link>
                   {!isStandalone && (
-                    <span
-                      className="inline-flex"
-                      title={canInstall ? t('landing', 'installSubtitle') : t('landing', 'installCtaUnavailable')}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (canInstall) void triggerInstall();
-                        }}
-                        disabled={!canInstall}
-                        aria-label={canInstall ? t('landing', 'installCta') : t('landing', 'installCtaUnavailable')}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
-                      >
-                        <Download className="h-4 w-4 shrink-0" aria-hidden />
-                        {t('landing', 'installCta')}
-                      </button>
-                    </span>
+                    <>
+                      <span className="inline-flex" title={t('landing', 'installSubtitle')}>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const prompted = await triggerInstall();
+                            if (!prompted) setInstallHelpOpen(true);
+                          }}
+                          aria-label={t('landing', 'installCta')}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/5 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/10"
+                        >
+                          <Download className="h-4 w-4 shrink-0" aria-hidden />
+                          {t('landing', 'installCta')}
+                        </button>
+                      </span>
+                      {installHelpOpen && (
+                        <div
+                          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+                          role="dialog"
+                          aria-modal="true"
+                          aria-labelledby="install-help-title"
+                          onClick={() => setInstallHelpOpen(false)}
+                          onKeyDown={(e) => e.key === 'Escape' && setInstallHelpOpen(false)}
+                        >
+                          <div
+                            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-slate-900 p-6 text-left text-slate-100 shadow-2xl ring-1 ring-cyan-500/20"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <h2 id="install-help-title" className="text-lg font-semibold text-white">
+                              {t('landing', 'installHelpTitle')}
+                            </h2>
+                            <p className="mt-3 text-sm text-slate-300 leading-relaxed">
+                              {t('landing', 'installCtaUnavailable')}
+                            </p>
+                            {typeof navigator !== 'undefined' &&
+                              /iPad|iPhone|iPod/.test(navigator.userAgent) && (
+                                <p className="mt-3 text-sm text-cyan-200/90 leading-relaxed">
+                                  {t('landing', 'iosAddToHome')}
+                                </p>
+                              )}
+                            <p className="mt-3 text-sm text-slate-400 leading-relaxed">
+                              {t('landing', 'afterInstall')}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setInstallHelpOpen(false)}
+                              className="mt-6 w-full rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+                            >
+                              {t('common', 'close')}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 <p className="mt-6 text-center text-[11px] leading-snug text-slate-500 lg:text-left">
