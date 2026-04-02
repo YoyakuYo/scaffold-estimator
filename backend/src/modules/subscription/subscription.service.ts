@@ -285,6 +285,27 @@ export class SubscriptionService {
     const priceId = this.getStripePriceIdForTier(tier);
     if (!priceId) throw new BadRequestException(`No Stripe price ID configured for plan "${tier}".`);
 
+    if (!priceId.startsWith('price_')) {
+      throw new BadRequestException(
+        `Invalid Stripe price ID for plan "${tier}": use a Price id (price_...), not a Product id (prod_...).`,
+      );
+    }
+
+    let price: Stripe.Price;
+    try {
+      price = await stripe.prices.retrieve(priceId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new BadRequestException(
+        `Could not load Stripe price "${priceId}" for plan "${tier}". Check the id and that the key matches the same Stripe mode (test vs live). ${msg}`,
+      );
+    }
+    if (price.type !== 'recurring' || !price.recurring) {
+      throw new BadRequestException(
+        `Stripe price "${priceId}" is not a recurring subscription price. In Stripe Dashboard → Products, edit the price and set billing to recurring (e.g. monthly), or create a new recurring price and update your STRIPE_PRICE_ID_* env var.`,
+      );
+    }
+
     const frontendUrl = this.getFrontendUrl();
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
