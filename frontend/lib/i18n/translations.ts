@@ -924,8 +924,8 @@ export const translations = {
     tagline: { ja: '', en: '', fr: '' },
     heroTitle: {
       ja: '図面から数分で、足場の全数量とコスト内訳まで',
-      en: 'FROM DRAWING TO FULL SCAFFOLD QUANTITY + COST BREAKDOWN IN MINUTES',
-      fr: 'DU PLAN AU DÉTAIL COMPLET DES QUANTITÉS ET COÛTS D’ÉCHAFAUDAGE EN QUELQUES MINUTES',
+      en: 'From drawing to full scaffold quantity + cost breakdown in minutes',
+      fr: 'Du plan au détail complet des quantités et coûts d’échafaudage en quelques minutes',
     },
     heroSubtitle: { ja: '', en: '', fr: '' },
     installTitle: { ja: 'アプリをインストール', en: 'Install the app', fr: 'Installer l’application' },
