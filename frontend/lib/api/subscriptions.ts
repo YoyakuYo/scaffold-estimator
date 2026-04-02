@@ -1,6 +1,16 @@
 import apiClient from './client';
 
-export type SubscriptionPlan = 'free_trial' | 'starter' | 'professional' | 'enterprise';
+export type SubscriptionPlan =
+  | 'free_trial'
+  | 'starter'
+  | 'professional'
+  | 'enterprise'
+  | 'basic'
+  | 'medium'
+  | 'premium';
+
+/** Stripe checkout tier; `standard` = legacy STRIPE_PRICE_ID only. */
+export type CheckoutPlanTier = 'basic' | 'medium' | 'premium' | 'standard';
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
 
 /** Shown on /billing when backend BANK_TRANSFER_* env is set (manual wire / 銀行振込). */
@@ -44,6 +54,8 @@ export interface SubscriptionInfo {
   trialDaysRemaining: number;
   trialLengthDays: number;
   isStripeConfigured: boolean;
+  /** Tiers with a configured Stripe price (from STRIPE_PRICE_ID_* or legacy STRIPE_PRICE_ID). */
+  checkoutPlans?: CheckoutPlanTier[];
   /** Present when backend BANK_TRANSFER_* is set; may be absent on older APIs. */
   bankTransfer?: BankTransferInstructions | null;
 }
@@ -72,8 +84,8 @@ export const subscriptionsApi = {
     return res.data;
   },
 
-  createCheckoutSession: async (): Promise<{ url: string }> => {
-    const res = await apiClient.post<{ url: string }>('/subscriptions/checkout-session', {});
+  createCheckoutSession: async (plan?: CheckoutPlanTier): Promise<{ url: string }> => {
+    const res = await apiClient.post<{ url: string }>('/subscriptions/checkout-session', plan ? { plan } : {});
     return res.data;
   },
 

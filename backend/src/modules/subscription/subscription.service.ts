@@ -11,6 +11,7 @@ import { Subscription, SubscriptionStatus } from './subscription.entity';
 import { User } from '../auth/user.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+import { CheckoutPlanTier, CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 
 const TRIAL_DAYS = 14;
 
@@ -23,7 +24,14 @@ export class SubscriptionService {
     private readonly supabase: SupabaseService,
     private readonly configService: ConfigService,
   ) {
-    const key = this.configService.get<string>('STRIPE_SECRET_KEY');
+    const secret = this.configService.get<string>('STRIPE_SECRET_KEY')?.trim();
+    const restricted = this.configService.get<string>('STRIPE_RESTRICTED_KEY')?.trim();
+    const key = secret || restricted;
+    if (restricted && !secret) {
+      this.logger.warn(
+        'Using STRIPE_RESTRICTED_KEY (no STRIPE_SECRET_KEY). Ensure Stripe key permissions include Customers, Checkout Sessions, Subscriptions, and Webhooks.',
+      );
+    }
     this.stripe = key ? new Stripe(key) : null;
   }
 
@@ -98,9 +106,62 @@ export class SubscriptionService {
 
   private requireStripe(): Stripe {
     if (!this.stripe) {
-      throw new BadRequestException('Stripe is not configured. Set STRIPE_SECRET_KEY.');
+      throw new BadRequestException('Stripe is not configured. Set STRIPE_SECRET_KEY or STRIPE_RESTRICTED_KEY.');
     }
     return this.stripe;
+  }
+
+  private getLegacyStripePriceId(): string | undefined {
+    return this.configService.get<string>('STRIPE_PRICE_ID')?.trim() || undefined;
+  }
+
+  private getStripePriceIdForTier(tier: CheckoutPlanTier): string | undefined {
+    if (tier === 'standard') return this.getLegacyStripePriceId();
+    const key =
+      tier === 'basic'
+        ? 'STRIPE_PRICE_ID_BASIC'
+        : tier === 'medium'
+          ? 'STRIPE_PRICE_ID_MEDIUM'
+          : 'STRIPE_PRICE_ID_PREMIUM';
+    return this.configService.get<string>(key)?.trim() || undefined;
+  }
+
+  /** Tiers that have a price id configured (plus legacy `standard` if STRIPE_PRICE_ID only). */
+  getAvailableCheckoutTiers(): CheckoutPlanTier[] {
+    const tiers: CheckoutPlanTier[] = [];
+    if (this.getStripePriceIdForTier('basic')) tiers.push('basic');
+    if (this.getStripePriceIdForTier('medium')) tiers.push('medium');
+    if (this.getStripePriceIdForTier('premium')) tiers.push('premium');
+    if (tiers.length === 0 && this.getLegacyStripePriceId()) tiers.push('standard');
+    return tiers;
+  }
+
+  private resolveCheckoutTier(dto: CreateCheckoutSessionDto): CheckoutPlanTier {
+    const available = this.getAvailableCheckoutTiers();
+    if (available.length === 0) {
+      throw new BadRequestException(
+        'No Stripe prices configured. Set STRIPE_PRICE_ID_BASIC, STRIPE_PRICE_ID_MEDIUM, STRIPE_PRICE_ID_PREMIUM, or STRIPE_PRICE_ID.',
+      );
+    }
+    if (dto.plan) {
+      if (!available.includes(dto.plan)) {
+        throw new BadRequestException(
+          `Plan "${dto.plan}" is not available. Configured: ${available.join(', ')}.`,
+        );
+      }
+      return dto.plan;
+    }
+    if (available.length === 1) return available[0];
+    throw new BadRequestException(`Select a plan: ${available.join(', ')}.`);
+  }
+
+  private planFromStripePriceId(priceId: string | null): import('./subscription.entity').PlanTier {
+    if (!priceId) return 'free_trial';
+    if (priceId === this.getStripePriceIdForTier('basic')) return 'basic';
+    if (priceId === this.getStripePriceIdForTier('medium')) return 'medium';
+    if (priceId === this.getStripePriceIdForTier('premium')) return 'premium';
+    if (priceId === this.getLegacyStripePriceId()) return 'professional';
+    return 'professional';
   }
 
   private mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
@@ -187,17 +248,19 @@ export class SubscriptionService {
         ? Math.max(0, Math.ceil((new Date(sub.trialEnd).getTime() - now) / (1000 * 60 * 60 * 24)))
         : 0;
     const hasAccess = await this.hasActiveAccess(userId, user.role);
+    const checkoutTiers = this.getAvailableCheckoutTiers();
     return {
       ...sub,
       hasAccess,
       trialDaysRemaining,
       trialLengthDays: TRIAL_DAYS,
-      isStripeConfigured: !!this.stripe,
+      isStripeConfigured: !!this.stripe && checkoutTiers.length > 0,
+      checkoutPlans: checkoutTiers,
       bankTransfer: this.getBankTransferInstructions(user.email),
     };
   }
 
-  async createCheckoutSession(userId: string): Promise<{ url: string }> {
+  async createCheckoutSession(userId: string, dto: CreateCheckoutSessionDto): Promise<{ url: string }> {
     const stripe = this.requireStripe();
     const user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
@@ -218,8 +281,9 @@ export class SubscriptionService {
       sub = { ...sub, stripeCustomerId: customer.id };
     }
 
-    const priceId = this.configService.get<string>('STRIPE_PRICE_ID');
-    if (!priceId) throw new BadRequestException('STRIPE_PRICE_ID is not configured.');
+    const tier = this.resolveCheckoutTier(dto);
+    const priceId = this.getStripePriceIdForTier(tier);
+    if (!priceId) throw new BadRequestException(`No Stripe price ID configured for plan "${tier}".`);
 
     const frontendUrl = this.getFrontendUrl();
     const session = await stripe.checkout.sessions.create({
@@ -229,7 +293,7 @@ export class SubscriptionService {
       success_url: `${frontendUrl}/billing?checkout=success`,
       cancel_url: `${frontendUrl}/billing?checkout=cancel`,
       allow_promotion_codes: true,
-      metadata: { userId: user.id },
+      metadata: { userId: user.id, checkoutTier: tier },
     });
 
     if (!session.url) throw new BadRequestException('Could not create Stripe checkout session URL.');
@@ -266,11 +330,12 @@ export class SubscriptionService {
     const priceId = stripeSub.items.data[0]?.price?.id || null;
     const periodStart = (stripeSub as any).current_period_start as number | undefined;
     const periodEnd = (stripeSub as any).current_period_end as number | undefined;
+    const mappedPlan = this.planFromStripePriceId(priceId);
     const updates = mapPayloadToSnake({
       stripeSubscriptionId: stripeSub.id,
       stripePriceId: priceId,
       status: this.mapStripeStatus(stripeSub.status),
-      plan: (sub as any).plan === 'active' ? 'professional' : sub.plan,
+      plan: mappedPlan,
       currentPeriodStart: periodStart ? new Date(periodStart * 1000) : null,
       currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       cancelAt: stripeSub.cancel_at ? new Date(stripeSub.cancel_at * 1000) : null,

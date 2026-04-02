@@ -8,7 +8,14 @@ import {
 } from 'typeorm';
 
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
-export type PlanTier = 'free_trial' | 'starter' | 'professional' | 'enterprise';
+export type PlanTier =
+  | 'free_trial'
+  | 'starter'
+  | 'professional'
+  | 'enterprise'
+  | 'basic'
+  | 'medium'
+  | 'premium';
 
 @Entity('subscriptions')
 @Index(['userId'], { unique: true })

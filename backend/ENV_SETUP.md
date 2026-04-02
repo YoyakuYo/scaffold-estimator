@@ -98,6 +98,27 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # If production API is not redeployed yet, you can set the same fields on the
 # frontend host as NEXT_PUBLIC_BANK_TRANSFER_* (see frontend/.env.example) and
 # redeploy the Next.js app; /billing will show 銀行振込 from the client env.
+
+# ============================================
+# STRIPE (optional — card checkout + webhooks)
+# ============================================
+# Use either STRIPE_SECRET_KEY (full secret) or STRIPE_RESTRICTED_KEY if your host
+# only allows restricted keys. Checkout needs permission to create sessions; the
+# webhook handler may need a key with broader permissions if the restricted key
+# cannot read subscription events — test in Stripe test mode first.
+#
+# STRIPE_SECRET_KEY=sk_live_...
+# STRIPE_RESTRICTED_KEY=rk_live_...
+# STRIPE_WEBHOOK_SECRET=whsec_...
+#
+# Multi-plan: set one price ID per tier (recurring price_... IDs).
+# STRIPE_PRICE_ID_BASIC=price_...
+# STRIPE_PRICE_ID_MEDIUM=price_...
+# STRIPE_PRICE_ID_PREMIUM=price_...
+#
+# Legacy single price (still supported): if none of the three above are set,
+# STRIPE_PRICE_ID=price_... is used as tier "standard".
+# STRIPE_PRICE_ID=price_...
 ```
 
 ## Quick Setup Steps

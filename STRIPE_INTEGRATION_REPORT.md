@@ -33,17 +33,20 @@ Both create the `subscriptions` table and backfill existing users:
 
 Set these in backend environment:
 
-- `STRIPE_SECRET_KEY=sk_live_...` (or test key)
+- `STRIPE_SECRET_KEY=sk_live_...` (or test key), **or** `STRIPE_RESTRICTED_KEY=...` if you use a restricted key (checkout still needs session-creation permission; webhooks may need a sufficiently capable key).
 - `STRIPE_WEBHOOK_SECRET=whsec_...`
-- `STRIPE_PRICE_ID=price_...` (recurring price ID)
+- **Multi-plan (recommended):** `STRIPE_PRICE_ID_BASIC`, `STRIPE_PRICE_ID_MEDIUM`, `STRIPE_PRICE_ID_PREMIUM` — each a recurring `price_...` ID.
+- **Legacy single price:** `STRIPE_PRICE_ID=price_...` — used when the three tier vars above are unset (exposed as checkout tier `standard`).
 - `FRONTEND_URL=https://your-frontend-domain`
 
 Existing variables (`JWT_SECRET`, DB vars, etc.) remain required.
 
+`POST /api/v1/subscriptions/checkout-session` accepts an optional JSON body `{ "plan": "basic" | "medium" | "premium" | "standard" }`. When multiple prices are configured, the client must send `plan`. `GET /api/v1/subscriptions/me` includes `checkoutPlans` listing which tiers are configured.
+
 ## Stripe Dashboard Setup
 
-1. Create a recurring product/price in Stripe.
-2. Copy the `price_...` ID into `STRIPE_PRICE_ID`.
+1. Create recurring products/prices in Stripe (e.g. Basic / Medium / Premium).
+2. Copy each `price_...` ID into `STRIPE_PRICE_ID_BASIC`, `STRIPE_PRICE_ID_MEDIUM`, and `STRIPE_PRICE_ID_PREMIUM` as needed. For a single legacy price, use `STRIPE_PRICE_ID` only.
 3. Create a webhook endpoint:
    - URL: `https://your-backend-domain/api/v1/subscriptions/webhook`
 4. Subscribe webhook events:

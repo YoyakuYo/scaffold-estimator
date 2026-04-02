@@ -3,12 +3,125 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
-import type { Locale } from '@/lib/i18n/translations';
-import { subscriptionsApi } from '@/lib/api/subscriptions';
+import type { Locale, TranslationKeys, TranslationSection } from '@/lib/i18n/translations';
+
+type BillingT = <S extends TranslationSection>(section: S, key: keyof TranslationKeys[S]) => string;
+import {
+  subscriptionsApi,
+  type SubscriptionInfo,
+  type SubscriptionPlan,
+  type CheckoutPlanTier,
+} from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
 import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { usersApi } from '@/lib/api/users';
 import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark } from 'lucide-react';
+
+const CHECKOUT_TIER_ORDER: CheckoutPlanTier[] = ['basic', 'medium', 'premium', 'standard'];
+
+function subscriptionPlanLabel(plan: SubscriptionPlan, t: BillingT): string {
+  switch (plan) {
+    case 'basic':
+      return t('billing', 'planTierBasic');
+    case 'medium':
+      return t('billing', 'planTierMedium');
+    case 'premium':
+      return t('billing', 'planTierPremium');
+    default:
+      return plan;
+  }
+}
+
+function checkoutTierButtonLabel(tier: CheckoutPlanTier, t: BillingT): string {
+  switch (tier) {
+    case 'basic':
+      return t('billing', 'planTierBasic');
+    case 'medium':
+      return t('billing', 'planTierMedium');
+    case 'premium':
+      return t('billing', 'planTierPremium');
+    case 'standard':
+      return t('billing', 'planTierStandard');
+  }
+}
+
+function StripeCheckoutActions({
+  subscription,
+  checkoutMutation,
+  portalMutation,
+  isActive,
+  t,
+}: {
+  subscription: SubscriptionInfo;
+  checkoutMutation: {
+    mutate: (plan?: CheckoutPlanTier) => void;
+    isPending: boolean;
+  };
+  portalMutation: { mutate: () => void; isPending: boolean };
+  isActive: boolean;
+  t: BillingT;
+}) {
+  const plans = (subscription.checkoutPlans ?? [])
+    .slice()
+    .sort((a, b) => CHECKOUT_TIER_ORDER.indexOf(a) - CHECKOUT_TIER_ORDER.indexOf(b));
+
+  return (
+    <>
+      {plans.length > 1 && (
+        <p className="text-sm text-gray-600 mb-3">{t('billing', 'choosePlanStripe')}</p>
+      )}
+      <div className="flex gap-3 flex-wrap">
+        {plans.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => checkoutMutation.mutate()}
+            disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {checkoutMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CreditCard className="h-4 w-4" />
+            )}
+            {t('billing', 'startPaidPlan')}
+          </button>
+        ) : (
+          plans.map((tier) => (
+            <button
+              key={tier}
+              type="button"
+              onClick={() => checkoutMutation.mutate(tier)}
+              disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {checkoutMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CreditCard className="h-4 w-4" />
+              )}
+              {plans.length === 1 ? t('billing', 'startPaidPlan') : checkoutTierButtonLabel(tier, t)}
+            </button>
+          ))
+        )}
+        {isActive && (
+          <button
+            type="button"
+            onClick={() => portalMutation.mutate()}
+            disabled={portalMutation.isPending || !subscription.isStripeConfigured}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            {portalMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CreditCard className="h-4 w-4" />
+            )}
+            {t('billing', 'openBillingPortal')}
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
 
 function BankDd({
   ja,
@@ -150,7 +263,9 @@ export default function BillingPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">{t('billing', 'currentPlan')}</p>
-              <p className="text-xl font-semibold text-gray-900">{subscription.plan}</p>
+              <p className="text-xl font-semibold text-gray-900">
+                {subscriptionPlanLabel(subscription.plan, t)}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {subscription.hasAccess ? (
@@ -242,34 +357,13 @@ export default function BillingPage() {
                   {t('billing', 'stripeSectionTitle')}
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
-                <div className="flex gap-3 flex-wrap">
-                  <button
-                    onClick={() => checkoutMutation.mutate()}
-                    disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {checkoutMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CreditCard className="h-4 w-4" />
-                    )}
-                    {t('billing', 'startPaidPlan')}
-                  </button>
-                  {isActive && (
-                    <button
-                      onClick={() => portalMutation.mutate()}
-                      disabled={portalMutation.isPending || !subscription.isStripeConfigured}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      {portalMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4" />
-                      )}
-                      {t('billing', 'openBillingPortal')}
-                    </button>
-                  )}
-                </div>
+                <StripeCheckoutActions
+                  subscription={subscription}
+                  checkoutMutation={checkoutMutation}
+                  portalMutation={portalMutation}
+                  isActive={isActive}
+                  t={t}
+                />
                 {!subscription.isStripeConfigured && (
                   <p className="text-sm text-amber-700 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100">
                     {t('billing', 'stripeNotConfigured')}
@@ -367,34 +461,13 @@ export default function BillingPage() {
               {t('billing', 'stripeSectionTitle')}
             </h2>
             <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
-            <div className="flex gap-3 flex-wrap">
-              <button
-                onClick={() => checkoutMutation.mutate()}
-                disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {checkoutMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CreditCard className="h-4 w-4" />
-                )}
-                {t('billing', 'startPaidPlan')}
-              </button>
-              {isActive && (
-                <button
-                  onClick={() => portalMutation.mutate()}
-                  disabled={portalMutation.isPending || !subscription.isStripeConfigured}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {portalMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CreditCard className="h-4 w-4" />
-                  )}
-                  {t('billing', 'openBillingPortal')}
-                </button>
-              )}
-            </div>
+            <StripeCheckoutActions
+              subscription={subscription}
+              checkoutMutation={checkoutMutation}
+              portalMutation={portalMutation}
+              isActive={isActive}
+              t={t}
+            />
             {!subscription.isStripeConfigured && (
               <p className="text-sm text-amber-700 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100">
                 {t('billing', 'stripeNotConfigured')}

@@ -9,6 +9,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -28,8 +29,8 @@ export class SubscriptionController {
 
   @UseGuards(JwtAuthGuard)
   @Post('checkout-session')
-  async createCheckoutSession(@CurrentUser() user: any) {
-    return this.subscriptionService.createCheckoutSession(user.id);
+  async createCheckoutSession(@CurrentUser() user: any, @Body() body: CreateCheckoutSessionDto) {
+    return this.subscriptionService.createCheckoutSession(user.id, body);
   }
 
   @UseGuards(JwtAuthGuard)
