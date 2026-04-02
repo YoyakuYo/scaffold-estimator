@@ -1682,19 +1682,19 @@ export const translations = {
       fr: 'Votre essai ou abonnement n’est pas actif. Souscrivez ci-dessous ou contactez votre administrateur.',
     },
     subscriptionLineExpiredTrial: {
-      ja: '無料トライアルは終了しました。続けるには請求でプランをお選びください。',
-      en: 'Your free trial has ended. To keep using the app, choose a plan on Billing.',
-      fr: 'Votre essai gratuit est terminé. Pour continuer, choisissez une offre dans Facturation.',
+      ja: '無料トライアルは終了しました。',
+      en: 'Free trial ended.',
+      fr: 'Essai gratuit terminé.',
     },
     subscriptionLineCanceledTrial: {
-      ja: 'サブスクリプションは解約されています。再開する場合は請求ページをご確認ください。',
-      en: 'Your subscription was canceled. Open Billing if you want to subscribe again.',
-      fr: 'Votre abonnement a été annulé. Ouvrez Facturation pour vous réabonner.',
+      ja: '解約済みです。',
+      en: 'Subscription canceled.',
+      fr: 'Abonnement annulé.',
     },
     planColumnAfterTrial: {
-      ja: '有料プランなし（トライアル終了・解約後）',
-      en: 'No paid plan (trial ended or canceled)',
-      fr: 'Aucun forfait payant (essai terminé ou annulé)',
+      ja: 'なし',
+      en: 'None',
+      fr: 'Aucun',
     },
     trialFileUploadsRemaining: {
       ja: 'トライアル中の図面アップロード: {used} / {max} 件（クイックビルダーは無制限）',
