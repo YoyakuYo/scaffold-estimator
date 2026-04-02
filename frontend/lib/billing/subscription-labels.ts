@@ -41,3 +41,32 @@ export function subscriptionStatusLabel(status: SubscriptionStatus, t: BillingT)
       return status;
   }
 }
+
+/**
+ * Single coherent line for dashboard/profile when DB still has plan=free_trial but status=expired|canceled.
+ */
+export function subscriptionCombinedSummary(
+  plan: SubscriptionPlan,
+  status: SubscriptionStatus,
+  t: BillingT,
+): string {
+  if (status === 'expired' && plan === 'free_trial') {
+    return t('billing', 'subscriptionLineExpiredTrial');
+  }
+  if (status === 'canceled' && plan === 'free_trial') {
+    return t('billing', 'subscriptionLineCanceledTrial');
+  }
+  return `${subscriptionPlanLabel(plan, t)} · ${subscriptionStatusLabel(status, t)}`;
+}
+
+/** "Current plan" column on Billing: avoid showing "Free trial" next to expired status. */
+export function subscriptionPlanForBillingCard(
+  plan: SubscriptionPlan,
+  status: SubscriptionStatus,
+  t: BillingT,
+): string {
+  if ((status === 'expired' || status === 'canceled') && plan === 'free_trial') {
+    return t('billing', 'planColumnAfterTrial');
+  }
+  return subscriptionPlanLabel(plan, t);
+}

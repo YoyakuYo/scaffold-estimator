@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, UserProfile } from '@/lib/api/users';
+import { subscriptionsApi } from '@/lib/api/subscriptions';
+import { subscriptionCombinedSummary } from '@/lib/billing/subscription-labels';
 import { useI18n } from '@/lib/i18n';
 import {
   User,
@@ -13,6 +16,7 @@ import {
   Loader2,
   Check,
   AlertTriangle,
+  CreditCard,
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -38,6 +42,13 @@ export default function ProfilePage() {
     queryKey: ['profile'],
     queryFn: usersApi.getProfile,
     retry: false,
+  });
+
+  const { data: subscription, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-subscription'],
+    queryFn: subscriptionsApi.getMine,
+    retry: false,
+    enabled: !!profile && profile.role !== 'superadmin',
   });
 
   // Initialize form once profile loads
@@ -101,6 +112,43 @@ export default function ProfilePage() {
             {t('profile', 'subtitle')}
           </p>
         </div>
+
+        {profile?.role !== 'superadmin' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-gray-400" />
+              {t('profile', 'subscriptionTitle')}
+            </h2>
+            {subscriptionLoading ? (
+              <p className="text-sm text-gray-500 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                {t('profile', 'subscriptionLoading')}
+              </p>
+            ) : subscription ? (
+              <>
+                <p className="text-sm font-medium text-gray-900 leading-snug">
+                  {subscriptionCombinedSummary(subscription.plan, subscription.status, t)}
+                </p>
+                <p
+                  className={`text-xs font-medium mt-2 ${
+                    subscription.hasAccess ? 'text-green-700' : 'text-amber-800'
+                  }`}
+                >
+                  {subscription.hasAccess ? t('billing', 'accessEnabled') : t('billing', 'accessDisabled')}
+                </p>
+                <Link
+                  href="/billing"
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  {t('dashboard', 'manageBilling')}
+                </Link>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">{t('billing', 'unavailable')}</p>
+            )}
+          </div>
+        )}
 
         {/* Profile Info Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">

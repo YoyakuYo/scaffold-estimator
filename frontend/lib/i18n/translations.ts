@@ -1359,6 +1359,8 @@ export const translations = {
     passwordMismatch: { ja: 'パスワードが一致しません', en: 'Passwords do not match', fr: 'Passwords do not match' },
     passwordChanged: { ja: 'パスワードを変更しました', en: 'Password changed successfully', fr: 'Password changed successfully' },
     passwordChangeFailed: { ja: 'パスワード変更に失敗しました', en: 'Password change failed', fr: 'Password change failed' },
+    subscriptionTitle: { ja: 'サブスクリプション', en: 'Subscription', fr: 'Abonnement' },
+    subscriptionLoading: { ja: '読み込み中…', en: 'Loading…', fr: 'Chargement…' },
   },
 
   // ─── Navigation Extras ──────────────────────────────────────
@@ -1678,6 +1680,21 @@ export const translations = {
       ja: 'このプランでは利用できません。有料プランへ切り替えるか、管理者にお問い合わせください。',
       en: 'Your trial or subscription is not active. Start a paid plan below or contact your administrator.',
       fr: 'Votre essai ou abonnement n’est pas actif. Souscrivez ci-dessous ou contactez votre administrateur.',
+    },
+    subscriptionLineExpiredTrial: {
+      ja: '無料トライアルは終了しました。続けるには請求でプランをお選びください。',
+      en: 'Your free trial has ended. To keep using the app, choose a plan on Billing.',
+      fr: 'Votre essai gratuit est terminé. Pour continuer, choisissez une offre dans Facturation.',
+    },
+    subscriptionLineCanceledTrial: {
+      ja: 'サブスクリプションは解約されています。再開する場合は請求ページをご確認ください。',
+      en: 'Your subscription was canceled. Open Billing if you want to subscribe again.',
+      fr: 'Votre abonnement a été annulé. Ouvrez Facturation pour vous réabonner.',
+    },
+    planColumnAfterTrial: {
+      ja: '有料プランなし（トライアル終了・解約後）',
+      en: 'No paid plan (trial ended or canceled)',
+      fr: 'Aucun forfait payant (essai terminé ou annulé)',
     },
     trialFileUploadsRemaining: {
       ja: 'トライアル中の図面アップロード: {used} / {max} 件（クイックビルダーは無制限）',

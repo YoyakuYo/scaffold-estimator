@@ -12,7 +12,7 @@ import {
   type CheckoutPlanTier,
 } from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
-import { subscriptionPlanLabel, subscriptionStatusLabel } from '@/lib/billing/subscription-labels';
+import { subscriptionPlanForBillingCard, subscriptionStatusLabel } from '@/lib/billing/subscription-labels';
 import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { usersApi } from '@/lib/api/users';
 import {
@@ -318,7 +318,7 @@ export default function BillingPage() {
             <div>
               <p className="text-sm text-gray-500">{t('billing', 'currentPlan')}</p>
               <p className="text-xl font-semibold text-gray-900">
-                {subscriptionPlanLabel(subscription.plan, t)}
+                {subscriptionPlanForBillingCard(subscription.plan, subscription.status, t)}
               </p>
             </div>
             <div className="flex items-center gap-2">

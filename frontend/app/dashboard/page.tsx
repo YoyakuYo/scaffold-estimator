@@ -6,7 +6,7 @@ import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-co
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { messagesApi, ConversationWithUser } from '@/lib/api/messages';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
-import { subscriptionPlanLabel, subscriptionStatusLabel } from '@/lib/billing/subscription-labels';
+import { subscriptionCombinedSummary } from '@/lib/billing/subscription-labels';
 import { useI18n } from '@/lib/i18n';
 import Link from 'next/link';
 import {
@@ -605,10 +605,8 @@ function UserDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     {t('dashboard', 'subscription')}
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {subscriptionPlanLabel(subscription.plan, t)}{' '}
-                    <span className="text-slate-400 font-normal">·</span>{' '}
-                    {subscriptionStatusLabel(subscription.status, t)}
+                  <p className="mt-1 text-sm font-semibold text-slate-900 leading-snug">
+                    {subscriptionCombinedSummary(subscription.plan, subscription.status, t)}
                   </p>
                   {subscription.status === 'trialing' && subscription.trialDaysRemaining != null && (
                     <p className="mt-2 text-sm text-slate-700">
