@@ -496,7 +496,7 @@ function ScaffoldResultPage() {
 
         {/* Summary Cards */}
         <div
-          className={`grid grid-cols-2 ${result.scaffoldType === 'wakugumi' ? 'md:grid-cols-6' : 'md:grid-cols-5'} gap-3 mb-4 print:break-inside-avoid`}
+          className={`grid grid-cols-2 ${result.scaffoldType === 'wakugumi' ? 'md:grid-cols-6' : 'md:grid-cols-4'} gap-3 mb-4 print:break-inside-avoid`}
         >
           <SummaryCard
             icon={<Building2 className="h-5 w-5" />}
@@ -536,18 +536,11 @@ function ScaffoldResultPage() {
               />
             </>
           ) : (
-            <>
-              <SummaryCard
-                icon={<Ruler className="h-5 w-5" />}
-                label={t('result', 'postSize')}
-                value={`${result.preferredMainTatejiMm}mm`}
-              />
-              <SummaryCard
-                icon={<Ruler className="h-5 w-5" />}
-                label={t('result', 'topGuard')}
-                value={`${result.topGuardHeightMm}mm`}
-              />
-            </>
+            <SummaryCard
+              icon={<Ruler className="h-5 w-5" />}
+              label={t('result', 'postSize')}
+              value={`${result.preferredMainTatejiMm}mm`}
+            />
           )}
         </div>
 

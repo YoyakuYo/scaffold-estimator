@@ -199,7 +199,8 @@ export class ScaffoldExcelService {
         `${str.specHabakiPerSpan} ${result.habakiCountPerSpan || 2}/span`,
       );
     } else {
-      parts.push(`${str.specPost} ${result.preferredMainTatejiMm}mm`, `${str.specTop} ${result.topGuardHeightMm}mm`);
+      // くさび: 最上帯の本数は支柱 MA 行に既に合算済み（別「上部支柱」行は出さない）
+      parts.push(`${str.specPost} ${result.preferredMainTatejiMm}mm`);
     }
     const r = sheet.addRow([parts.join('  |  ')]);
     r.font = { size: 10 };

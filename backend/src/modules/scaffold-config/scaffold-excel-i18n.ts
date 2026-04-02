@@ -27,7 +27,6 @@ export interface ScaffoldExcelStrings {
   specFrame: string;
   specHabakiPerSpan: string;
   specPost: string;
-  specTop: string;
   specScaffoldTypeKusabi: string;
   specScaffoldTypeWakugumi: string;
   sectionSpans: string;
@@ -74,7 +73,6 @@ const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
     specFrame: '建枠',
     specHabakiPerSpan: '巾木',
     specPost: '支柱',
-    specTop: '上部',
     specScaffoldTypeKusabi: 'くさび式足場',
     specScaffoldTypeWakugumi: '枠組足場',
     sectionSpans: '各辺スパン',
@@ -120,7 +118,6 @@ const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
     specFrame: 'Frame',
     specHabakiPerSpan: 'Toe boards / span',
     specPost: 'Main post',
-    specTop: 'Top guard',
     specScaffoldTypeKusabi: 'Kusabi scaffold',
     specScaffoldTypeWakugumi: 'Frame scaffold',
     sectionSpans: 'Spans per edge',
@@ -166,7 +163,6 @@ const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
     specFrame: 'Cadre',
     specHabakiPerSpan: 'Plinthes / travée',
     specPost: 'Montant',
-    specTop: 'Garde-corps haut',
     specScaffoldTypeKusabi: 'Échafaudage Kusabi',
     specScaffoldTypeWakugumi: 'Échafaudage à cadres',
     sectionSpans: 'Travées par côté',
