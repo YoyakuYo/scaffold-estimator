@@ -1634,6 +1634,15 @@ export const translations = {
     startPaidPlan: { ja: '有料プランを開始', en: 'Start Paid Plan', fr: 'Démarrer un forfait payant' },
     openBillingPortal: { ja: '請求ポータルを開く', en: 'Open Billing Portal', fr: 'Ouvrir le portail de facturation' },
     stripeNotConfigured: { ja: 'Stripeが未設定です。管理者に環境変数の設定を依頼してください。', en: 'Stripe is not configured yet. Ask the platform admin to set Stripe environment variables.', fr: "Stripe n'est pas encore configuré. Demandez à l'administrateur de définir les variables d'environnement Stripe." },
+    bankTransferTitle: { ja: '銀行振込でお支払い', en: 'Pay by bank transfer', fr: 'Payer par virement bancaire' },
+    bankTransferIntro: { ja: '登録メールを振込依頼人名義などにご記載ください。入金確認後、管理者が利用権限を有効にします。', en: 'Include your registered email in the transfer details so we can match your payment. An admin will enable access after confirming the deposit.', fr: 'Indiquez votre e-mail d’inscription pour que nous puissions associer le virement. Un administrateur activera l’accès après réception.' },
+    bankName: { ja: '銀行名', en: 'Bank', fr: 'Banque' },
+    bankBranch: { ja: '支店名', en: 'Branch', fr: 'Agence' },
+    bankAccountType: { ja: '口座種別', en: 'Account type', fr: 'Type de compte' },
+    bankAccountNumber: { ja: '口座番号', en: 'Account number', fr: 'Numéro de compte' },
+    bankAccountHolder: { ja: '口座名義', en: 'Account holder', fr: 'Titulaire' },
+    bankRemittanceReference: { ja: '通信欄・依頼人名（目安）', en: 'Reference / remitter note', fr: 'Référence / libellé' },
+    bankAmountNote: { ja: '振込金額・備考', en: 'Amount / notes', fr: 'Montant / notes' },
   },
 
   // ─── Support Page ───────────────────────────────────────────

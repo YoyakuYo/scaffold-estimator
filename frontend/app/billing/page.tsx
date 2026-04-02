@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { usersApi } from '@/lib/api/users';
-import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield } from 'lucide-react';
+import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark } from 'lucide-react';
 
 export default function BillingPage() {
   const { locale, t } = useI18n();
@@ -183,6 +183,54 @@ export default function BillingPage() {
             </p>
           )}
         </div>
+
+        {subscription.bankTransfer && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+            <div className="flex items-start gap-3 mb-4">
+              <Landmark className="h-6 w-6 text-gray-700 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {t('billing', 'bankTransferTitle')}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">{t('billing', 'bankTransferIntro')}</p>
+              </div>
+            </div>
+            <dl className="grid gap-3 sm:grid-cols-2 text-sm">
+              <div>
+                <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
+                <dd className="font-medium text-gray-900">{subscription.bankTransfer.bankName}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
+                <dd className="font-medium text-gray-900">{subscription.bankTransfer.branch}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
+                <dd className="font-medium text-gray-900">{subscription.bankTransfer.accountType}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500">{t('billing', 'bankAccountNumber')}</dt>
+                <dd className="font-medium text-gray-900 tabular-nums">
+                  {subscription.bankTransfer.accountNumber}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
+                <dd className="font-medium text-gray-900">{subscription.bankTransfer.accountHolder}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
+                <dd className="font-medium text-gray-900 break-all">{subscription.bankTransfer.remittanceReference}</dd>
+              </div>
+              {subscription.bankTransfer.amountNote && (
+                <div className="sm:col-span-2">
+                  <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
+                  <dd className="font-medium text-gray-900">{subscription.bankTransfer.amountNote}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
       </div>
     </div>
   );

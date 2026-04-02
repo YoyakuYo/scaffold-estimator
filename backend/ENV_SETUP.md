@@ -68,6 +68,20 @@ FRONTEND_URL=http://localhost:3001
 # File Upload Limits
 MAX_FILE_SIZE=524288000
 ALLOWED_FILE_TYPES=pdf,dxf,dwg
+
+# ============================================
+# BILLING: MANUAL BANK TRANSFER (optional)
+# ============================================
+# When set, /billing shows 銀行振込 details after login. Users should put their
+# registered email in the transfer memo; you confirm at the bank and set access
+# in Superadmin → Subscribers if not using Stripe alone.
+# BANK_TRANSFER_ENABLED=true
+# BANK_TRANSFER_BANK_NAME=みずほ銀行
+# BANK_TRANSFER_BRANCH=〇〇支店
+# BANK_TRANSFER_ACCOUNT_TYPE=普通
+# BANK_TRANSFER_ACCOUNT_NUMBER=1234567
+# BANK_TRANSFER_ACCOUNT_HOLDER=カ）サンプル
+# BANK_TRANSFER_AMOUNT_NOTE=月額 〇〇円（例）
 ```
 
 ## Quick Setup Steps

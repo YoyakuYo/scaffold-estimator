@@ -31,6 +31,41 @@ export class SubscriptionService {
     return this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
   }
 
+  /** Public bank-transfer details for /billing (manual 銀行振込, e.g. Japan). */
+  private getBankTransferInstructions(userEmail: string): {
+    bankName: string;
+    branch: string;
+    accountType: string;
+    accountNumber: string;
+    accountHolder: string;
+    remittanceReference: string;
+    amountNote?: string;
+  } | null {
+    const flag = (this.configService.get<string>('BANK_TRANSFER_ENABLED') || '').toLowerCase();
+    if (!['true', '1', 'yes'].includes(flag)) return null;
+    const bankName = this.configService.get<string>('BANK_TRANSFER_BANK_NAME')?.trim();
+    const branch = this.configService.get<string>('BANK_TRANSFER_BRANCH')?.trim();
+    const accountType = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_TYPE')?.trim();
+    const accountNumber = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_NUMBER')?.trim();
+    const accountHolder = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_HOLDER')?.trim();
+    if (!bankName || !branch || !accountType || !accountNumber || !accountHolder) {
+      this.logger.warn(
+        'BANK_TRANSFER_ENABLED is set but one or more BANK_TRANSFER_* fields are missing; bank transfer block omitted.',
+      );
+      return null;
+    }
+    const amountNote = this.configService.get<string>('BANK_TRANSFER_AMOUNT_NOTE')?.trim();
+    return {
+      bankName,
+      branch,
+      accountType,
+      accountNumber,
+      accountHolder,
+      remittanceReference: userEmail,
+      ...(amountNote ? { amountNote } : {}),
+    };
+  }
+
   private requireStripe(): Stripe {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not configured. Set STRIPE_SECRET_KEY.');
@@ -128,6 +163,7 @@ export class SubscriptionService {
       trialDaysRemaining,
       trialLengthDays: TRIAL_DAYS,
       isStripeConfigured: !!this.stripe,
+      bankTransfer: this.getBankTransferInstructions(user.email),
     };
   }
 

@@ -3,6 +3,17 @@ import apiClient from './client';
 export type SubscriptionPlan = 'free_trial' | 'starter' | 'professional' | 'enterprise';
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
 
+/** Shown on /billing when backend BANK_TRANSFER_* env is set (manual wire / 銀行振込). */
+export interface BankTransferInstructions {
+  bankName: string;
+  branch: string;
+  accountType: string;
+  accountNumber: string;
+  accountHolder: string;
+  remittanceReference: string;
+  amountNote?: string;
+}
+
 export interface SubscriptionInfo {
   id: string;
   userId: string;
@@ -22,6 +33,7 @@ export interface SubscriptionInfo {
   trialDaysRemaining: number;
   trialLengthDays: number;
   isStripeConfigured: boolean;
+  bankTransfer: BankTransferInstructions | null;
 }
 
 export interface SubscriberRow {
