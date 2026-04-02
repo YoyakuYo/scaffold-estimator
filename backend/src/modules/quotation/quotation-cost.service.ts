@@ -22,6 +22,7 @@ export class QuotationCostService {
     totalComponents: number,
     totalArea: number,
     companyId: string,
+    costAmountOverrides?: Record<string, number> | null,
   ): Promise<QuotationCostItem[]> {
     try {
       if (!quotation?.id) throw new Error('Quotation is required and must have an id');
@@ -52,7 +53,13 @@ export class QuotationCostService {
       const costItems = await this.createCostItems(quotation.id, costConfigs, context);
 
       for (const item of costItems) {
-        if (item.isLocked && item.userEditedValue != null) {
+        const override =
+          costAmountOverrides && Object.prototype.hasOwnProperty.call(costAmountOverrides, item.code)
+            ? Number(costAmountOverrides[item.code])
+            : undefined;
+        if (override !== undefined && Number.isFinite(override)) {
+          item.calculatedValue = override;
+        } else if (item.isLocked && item.userEditedValue != null) {
           item.calculatedValue = item.userEditedValue;
         } else {
           try {

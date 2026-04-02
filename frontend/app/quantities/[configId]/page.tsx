@@ -56,7 +56,9 @@ export default function QuantitiesPage() {
     mutationFn: () => scaffoldConfigsApi.markReviewed(configId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['scaffold-config', configId] });
-      router.push(`/scaffold/${configId}`);
+      router.push(
+        `/scaffold/${configId}/quote?step=1&projectId=${encodeURIComponent(config?.projectId || 'default-project')}`,
+      );
     },
   });
 

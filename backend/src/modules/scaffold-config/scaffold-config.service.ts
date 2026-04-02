@@ -339,23 +339,8 @@ export class ScaffoldConfigService {
     savedConfig.status = 'calculated';
     this.hydrateSiteContactFromCalculationResult(savedConfig);
 
-    const priceMap = await this.buildPriceMap(scaffoldType);
     const quantityInserts: Record<string, unknown>[] = [];
     for (const comp of result.summary) {
-      let price = 0;
-      if (comp.category === '布材' && comp.sizeSpec) {
-        const size = comp.sizeSpec;
-        const nunoCodes = [
-          `KUSABI-TESURI-${size}`,
-          `KUSABI-STOPPER-${size}`,
-          `KUSABI-NEGR-${size}`,
-          `KUSABI-BEARER-${size}`,
-        ];
-        const prices = nunoCodes.map(code => priceMap.get(code)).filter((p): p is number => p !== undefined && p > 0);
-        if (prices.length > 0) price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-      } else if (comp.materialCode) {
-        price = priceMap.get(comp.materialCode) || 0;
-      }
       quantityInserts.push(
         mapPayloadToSnake({
           configId: savedConfig.id,
@@ -365,14 +350,10 @@ export class ScaffoldConfigService {
           unit: comp.unit,
           calculatedQuantity: comp.quantity,
           adjustedQuantity: null,
-          unitPrice: price,
+          unitPrice: 0,
           sortOrder: comp.sortOrder,
         }),
       );
-    }
-    if (priceMap.size > 0) {
-      const pricedCount = quantityInserts.filter(q => Number((q as any).unit_price) > 0).length;
-      this.logger.log(`Auto-populated prices: ${pricedCount}/${quantityInserts.length} components from materials master`);
     }
     let savedQuantities: CalculatedQuantity[] = [];
     if (quantityInserts.length > 0) {
@@ -627,18 +608,8 @@ export class ScaffoldConfigService {
     config.calculationResult = calculationResult;
     config.status = 'calculated';
 
-    const priceMap = await this.buildPriceMap(scaffoldType);
     const quantityInserts: Record<string, unknown>[] = [];
     for (const comp of result.summary) {
-      let price = 0;
-      if (comp.category === '布材' && comp.sizeSpec) {
-        const size = comp.sizeSpec;
-        const nunoCodes = [`KUSABI-TESURI-${size}`, `KUSABI-STOPPER-${size}`, `KUSABI-NEGR-${size}`, `KUSABI-BEARER-${size}`];
-        const prices = nunoCodes.map((code) => priceMap.get(code)).filter((p): p is number => p !== undefined && p > 0);
-        if (prices.length > 0) price = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
-      } else if (comp.materialCode) {
-        price = priceMap.get(comp.materialCode) || 0;
-      }
       quantityInserts.push(
         mapPayloadToSnake({
           configId,
@@ -648,7 +619,7 @@ export class ScaffoldConfigService {
           unit: comp.unit,
           calculatedQuantity: comp.quantity,
           adjustedQuantity: null,
-          unitPrice: price,
+          unitPrice: 0,
           sortOrder: comp.sortOrder,
         }),
       );
@@ -729,6 +700,43 @@ export class ScaffoldConfigService {
     return mapRowToCamel<CalculatedQuantity>(saved as Record<string, unknown>)!;
   }
 
+  async updateQuantityUnitPrice(quantityId: string, unitPrice: number): Promise<CalculatedQuantity> {
+    if (typeof unitPrice !== 'number' || Number.isNaN(unitPrice) || unitPrice < 0) {
+      throw new BadRequestException('unitPrice must be a non-negative number');
+    }
+    const { data: row } = await this.supabase.getClient().from('calculated_quantities').select('*').eq('id', quantityId).maybeSingle();
+    if (!row) throw new NotFoundException('Quantity record not found');
+    const rounded = Math.round(unitPrice);
+    const { data: saved, error } = await this.supabase
+      .getClient()
+      .from('calculated_quantities')
+      .update(mapPayloadToSnake({ unitPrice: rounded }))
+      .eq('id', quantityId)
+      .select()
+      .single();
+    if (error || !saved) throw new BadRequestException('Update failed.');
+    return mapRowToCamel<CalculatedQuantity>(saved as Record<string, unknown>)!;
+  }
+
+  async bulkUpdateQuantityUnitPrices(
+    configId: string,
+    updates: Array<{ quantityId: string; unitPrice: number }>,
+  ): Promise<CalculatedQuantity[]> {
+    await this.getConfig(configId);
+    const results: CalculatedQuantity[] = [];
+    for (const u of updates) {
+      const { data: row } = await this.supabase.getClient().from('calculated_quantities').select('*').eq('id', u.quantityId).maybeSingle();
+      if (!row) throw new NotFoundException(`Quantity ${u.quantityId} not found`);
+      const q = mapRowToCamel<CalculatedQuantity>(row as Record<string, unknown>)!;
+      if (q.configId !== configId) {
+        throw new BadRequestException(`Quantity ${u.quantityId} does not belong to this configuration`);
+      }
+      const saved = await this.updateQuantityUnitPrice(u.quantityId, Number(u.unitPrice));
+      results.push(saved);
+    }
+    return results;
+  }
+
   async markReviewed(configId: string): Promise<ScaffoldConfiguration> {
     const config = await this.getConfig(configId);
     if (config.status !== 'calculated') {
@@ -776,25 +784,7 @@ export class ScaffoldConfigService {
     this.logger.log(`Deleted scaffold config ${configId}`);
   }
 
-  // ─── Materials Price Master ──────────────────────────────────
-
-  /**
-   * Build a Map of materialCode → rentalPriceMonthly from scaffold_materials.
-   */
-  private async buildPriceMap(scaffoldType: 'kusabi' | 'wakugumi' = 'kusabi'): Promise<Map<string, number>> {
-    const { data: rows } = await this.supabase
-      .getClient()
-      .from('scaffold_materials')
-      .select('code, rental_price_monthly')
-      .eq('is_active', true)
-      .eq('scaffold_type', scaffoldType);
-    const materials = mapRowsToCamel<{ code: string; rentalPriceMonthly: number }>(rows || []);
-    const map = new Map<string, number>();
-    for (const m of materials) {
-      if (m.code && Number(m.rentalPriceMonthly) > 0) map.set(m.code, Number(m.rentalPriceMonthly));
-    }
-    return map;
-  }
+  // ─── Materials catalog (codes/specs for seeding; unit prices are set per job in the quote wizard) ──
 
   async listMaterials(scaffoldType?: 'kusabi' | 'wakugumi'): Promise<ScaffoldMaterial[]> {
     let q = this.supabase
@@ -807,38 +797,6 @@ export class ScaffoldConfigService {
     if (scaffoldType) q = q.eq('scaffold_type', scaffoldType);
     const { data: rows } = await q;
     return mapRowsToCamel<ScaffoldMaterial>(rows || []);
-  }
-
-  async updateMaterialPrice(
-    materialId: string,
-    updates: { rentalPriceMonthly?: number; purchasePrice?: number; isActive?: boolean },
-  ): Promise<ScaffoldMaterial> {
-    const { data: row } = await this.supabase.getClient().from('scaffold_materials').select('*').eq('id', materialId).maybeSingle();
-    if (!row) throw new NotFoundException('Material not found');
-    const payload: Record<string, unknown> = {};
-    if (updates.rentalPriceMonthly !== undefined) payload.rentalPriceMonthly = updates.rentalPriceMonthly;
-    if (updates.purchasePrice !== undefined) payload.purchasePrice = updates.purchasePrice;
-    if (updates.isActive !== undefined) payload.isActive = updates.isActive;
-    if (Object.keys(payload).length === 0) return mapRowToCamel<ScaffoldMaterial>(row as Record<string, unknown>)!;
-    const { data: saved, error } = await this.supabase.getClient().from('scaffold_materials').update(mapPayloadToSnake(payload)).eq('id', materialId).select().single();
-    if (error || !saved) throw new BadRequestException('Update failed.');
-    return mapRowToCamel<ScaffoldMaterial>(saved as Record<string, unknown>)!;
-  }
-
-  async bulkUpdatePrices(updates: Array<{ id: string; rentalPriceMonthly: number }>): Promise<ScaffoldMaterial[]> {
-    const results: ScaffoldMaterial[] = [];
-    for (const update of updates) {
-      const { data: saved } = await this.supabase
-        .getClient()
-        .from('scaffold_materials')
-        .update(mapPayloadToSnake({ rentalPriceMonthly: update.rentalPriceMonthly }))
-        .eq('id', update.id)
-        .select()
-        .single();
-      if (saved) results.push(mapRowToCamel<ScaffoldMaterial>(saved as Record<string, unknown>)!);
-    }
-    this.logger.log(`Bulk updated ${results.length} material prices`);
-    return results;
   }
 
   async seedMaterials(): Promise<{ created: number; existing: number }> {

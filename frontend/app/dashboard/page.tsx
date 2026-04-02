@@ -684,7 +684,9 @@ function UserDashboard() {
                                       <button onClick={() => { setOpenMenuId(null); router.push(`/scaffold/${cfg.id}?tab=3d`); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Box className="h-4 w-4 text-purple-500" />{t('dashboard', 'view3D')}</button>
                                       <button onClick={() => { setOpenMenuId(null); router.push(`/scaffold/${cfg.id}?tab=2d`); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Layers className="h-4 w-4 text-indigo-500" />{t('dashboard', 'view2D')}</button>
                                       <div className="border-t border-gray-100 my-1" />
-                                      <button onClick={() => { setOpenMenuId(null); router.push(`/quotations/create?configId=${cfg.id}&projectId=${cfg.projectId}`); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Receipt className="h-4 w-4 text-emerald-500" />{t('dashboard', 'createQuotation')}</button>
+                                      <button onClick={() => { setOpenMenuId(null); router.push(
+                                        `/scaffold/${cfg.id}/quote?step=1&projectId=${encodeURIComponent(cfg.projectId)}`,
+                                      ); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Receipt className="h-4 w-4 text-emerald-500" />{t('dashboard', 'createQuotation')}</button>
                                       <button
                                         onClick={async () => {
                                           setOpenMenuId(null);

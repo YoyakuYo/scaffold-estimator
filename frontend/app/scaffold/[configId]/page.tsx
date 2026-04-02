@@ -300,7 +300,9 @@ function ScaffoldResultPage() {
   const handleApproveAndCreate = async () => {
     try {
       await reviewMutation.mutateAsync();
-      router.push(`/quotations/create?configId=${configId}&projectId=${config?.projectId || 'default-project'}`);
+      router.push(
+        `/scaffold/${configId}/quote?step=1&projectId=${encodeURIComponent(config?.projectId || 'default-project')}`,
+      );
     } catch {
       // Error is handled by mutation
     }
@@ -431,7 +433,11 @@ function ScaffoldResultPage() {
             </button>
             {config?.status === 'reviewed' && (
               <button
-                onClick={() => router.push(`/quotations/create?configId=${configId}&projectId=${config?.projectId || 'default-project'}`)}
+                onClick={() =>
+                  router.push(
+                    `/scaffold/${configId}/quote?step=1&projectId=${encodeURIComponent(config?.projectId || 'default-project')}`,
+                  )
+                }
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow"
               >
                 <FileText className="h-4 w-4" />
@@ -744,7 +750,11 @@ function ScaffoldResultPage() {
                       {t('result', 'approved')}
                     </div>
                     <button
-                      onClick={() => router.push(`/quotations/create?configId=${configId}&projectId=${config?.projectId || 'default-project'}`)}
+                      onClick={() =>
+                  router.push(
+                    `/scaffold/${configId}/quote?step=1&projectId=${encodeURIComponent(config?.projectId || 'default-project')}`,
+                  )
+                }
                       className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors shadow-sm font-medium"
                     >
                       <FileText className="h-5 w-5" />

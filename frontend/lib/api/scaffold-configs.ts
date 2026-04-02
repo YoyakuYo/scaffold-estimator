@@ -466,82 +466,27 @@ export const scaffoldConfigsApi = {
     await apiClient.delete(`/scaffold-configs/${configId}`);
   },
 
-  // ─── Materials Price Master ──────────────────────────────────
+  // ─── Materials catalog (optional seed for codes; unit prices are per job in quote wizard) ──
 
-  /** List all scaffold materials with prices */
   listMaterials: async (): Promise<ScaffoldMaterial[]> => {
     const response = await apiClient.get<ScaffoldMaterial[]>('/scaffold-configs/materials');
     return response.data;
   },
 
-  /** Seed default materials if table is empty */
   seedMaterials: async (): Promise<{ created: number; existing: number }> => {
     const response = await apiClient.post<{ created: number; existing: number }>('/scaffold-configs/materials/seed');
     return response.data;
   },
 
-  /** Update a single material's price */
-  updateMaterialPrice: async (
-    materialId: string,
-    updates: { rentalPriceMonthly?: number; purchasePrice?: number; isActive?: boolean },
-  ): Promise<ScaffoldMaterial> => {
-    const response = await apiClient.patch<ScaffoldMaterial>(
-      `/scaffold-configs/materials/${materialId}`,
-      updates,
-    );
-    return response.data;
-  },
-
-  /** Bulk update material prices */
-  bulkUpdatePrices: async (
-    updates: Array<{ id: string; rentalPriceMonthly: number }>,
-  ): Promise<ScaffoldMaterial[]> => {
-    const response = await apiClient.patch<ScaffoldMaterial[]>(
-      '/scaffold-configs/materials/bulk',
+  /** Quote wizard step 1: persist monthly rental unit prices on quantity rows */
+  bulkSaveQuantityUnitPrices: async (
+    configId: string,
+    updates: Array<{ quantityId: string; unitPrice: number }>,
+  ): Promise<CalculatedQuantity[]> => {
+    const response = await apiClient.patch<CalculatedQuantity[]>(
+      `/scaffold-configs/${configId}/quantity-unit-prices`,
       { updates },
     );
-    return response.data;
-  },
-
-  /** Upload price table (Excel) and get matched prices preview */
-  uploadPriceTable: async (file: File): Promise<{
-    success: boolean;
-    totalRows: number;
-    matched: number;
-    unmatched: number;
-    matches: Array<{
-      materialId: string;
-      materialCode: string;
-      materialName: string;
-      sizeSpec: string;
-      oldPrice: number;
-      newPrice: number;
-      confidence: 'exact' | 'high' | 'medium' | 'low';
-      matchReason: string;
-    }>;
-  }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const response = await apiClient.post(
-      '/scaffold-configs/materials/upload-price-table',
-      formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000, // 60 seconds for parsing
-      },
-    );
-    return response.data;
-  },
-
-  /** Apply matched prices from uploaded price table */
-  applyPriceTable: async (matches: Array<{ materialId: string; newPrice: number }>): Promise<{
-    success: boolean;
-    updated: number;
-    message: string;
-  }> => {
-    const response = await apiClient.post('/scaffold-configs/materials/apply-price-table', {
-      matches,
-    });
     return response.data;
   },
 };

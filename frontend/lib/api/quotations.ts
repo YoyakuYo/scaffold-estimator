@@ -63,6 +63,10 @@ export interface CreateQuotationDto {
   rentalStartDate: string;
   rentalEndDate: string;
   rentalType: string;
+  /** Per-line rental cost amounts (yen); keys: basic_material, material_wear, transportation, disposal, surface_prep, repair_reserve */
+  rentalCostAmounts?: Record<string, number>;
+  /** Consumption tax rate on subtotal (default 10) */
+  taxRatePercent?: number;
 }
 
 // ─── API ────────────────────────────────────────────────────────
@@ -105,7 +109,7 @@ export const quotationsApi = {
     return response.data;
   },
 
-  /** Re-populate prices from materials master and recalculate costs */
+  /** Re-sync line unit prices from job quantity table and recalculate fee formulas */
   repopulatePrices: async (id: string): Promise<Quotation> => {
     const response = await apiClient.post<Quotation>(`/quotations/${id}/repopulate-prices`, {}, { timeout: 120000 });
     return response.data;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { scaffoldConfigsApi } from '@/lib/api/scaffold-configs';
@@ -26,6 +26,13 @@ function CreateQuotationContent() {
     queryFn: () => scaffoldConfigsApi.get(configId),
     enabled: !!configId,
   });
+
+  useEffect(() => {
+    if (!configId || !config || config.status !== 'reviewed') return;
+    router.replace(
+      `/scaffold/${configId}/quote?step=1&projectId=${encodeURIComponent(projectId)}`,
+    );
+  }, [configId, config, projectId, router]);
 
   // Fetch quantities for preview
   const { data: quantities } = useQuery({

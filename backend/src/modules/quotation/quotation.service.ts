@@ -78,10 +78,18 @@ export class QuotationService {
         return sum + wallLengthM * scaffoldHeightM;
       }, 0);
 
-      const costItems = await this.costService.calculateCosts(savedQuotation, materialSubtotal, totalComponents, totalArea, userId);
+      const costItems = await this.costService.calculateCosts(
+        savedQuotation,
+        materialSubtotal,
+        totalComponents,
+        totalArea,
+        userId,
+        dto.rentalCostAmounts ?? null,
+      );
       const costSubtotal = costItems.reduce((sum, item) => sum + effectiveCostLineAmount(item), 0);
       const subtotal = materialSubtotal + costSubtotal;
-      const taxAmount = Math.floor(subtotal * 0.1);
+      const taxRate = dto.taxRatePercent != null ? Math.min(100, Math.max(0, Number(dto.taxRatePercent))) : 10;
+      const taxAmount = Math.floor((subtotal * taxRate) / 100);
       const totalAmount = subtotal + taxAmount;
 
       await client.from('quotations').update(mapPayloadToSnake({ costSubtotal, subtotal, taxAmount, totalAmount })).eq('id', savedQuotation.id);
@@ -150,52 +158,30 @@ export class QuotationService {
     return mapRowToCamel<QuotationCostItem>(saved as Record<string, unknown>)!;
   }
 
+  /** Re-sync line unit prices from calculated_quantities and re-run rental cost formulas (no global price master). */
   async repopulatePrices(quotationId: string, userId: string): Promise<Quotation> {
     const quotation = await this.get(quotationId);
     if (quotation.status === 'finalized') throw new BadRequestException('Cannot update prices on a finalized quotation.');
     const config = await this.configService.getConfig(quotation.configId);
     const quantities = await this.configService.getQuantities(quotation.configId);
-    const materials = await this.configService.listMaterials();
-    const priceMap = new Map<string, number>();
-    for (const m of materials) {
-      if (m.code && Number(m.rentalPriceMonthly) > 0) priceMap.set(m.code, Number(m.rentalPriceMonthly));
-    }
-    if (priceMap.size === 0) throw new BadRequestException('No material prices found. Please set up prices in the Price Settings first.');
-
-    const calcResult = config.calculationResult;
-    const codeMap = new Map<string, string>();
-    if (calcResult?.summary) {
-      for (const comp of calcResult.summary) {
-        if (comp.materialCode) codeMap.set(`${comp.type}|${comp.sizeSpec}`, comp.materialCode);
-      }
-    }
+    const keyOf = (componentType: string, sizeSpec: string) => `${componentType}|${sizeSpec}`;
+    const unitPriceByKey = new Map<string, number>();
     for (const q of quantities) {
-      if (!codeMap.has(`${q.componentType}|${q.sizeSpec}`)) {
-        for (const [code] of priceMap) {
-          if (code.toLowerCase().includes(q.componentType.toLowerCase())) {
-            codeMap.set(`${q.componentType}|${q.sizeSpec}`, code);
-            break;
-          }
-        }
-      }
+      unitPriceByKey.set(keyOf(q.componentType, q.sizeSpec), Number(q.unitPrice) || 0);
     }
 
     const client = this.supabase.getClient();
     let materialSubtotal = 0;
     for (const item of quotation.items) {
-      const key = `${item.componentType}|${item.sizeSpec}`;
-      const materialCode = codeMap.get(key);
-      if (materialCode && priceMap.has(materialCode)) {
-        const newPrice = priceMap.get(materialCode)!;
-        const lineTotal = item.quantity * newPrice;
-        materialSubtotal += lineTotal;
-        await client.from('quotation_items').update(mapPayloadToSnake({ unitPrice: newPrice, lineTotal })).eq('id', item.id);
-      } else {
-        materialSubtotal += Number(item.lineTotal) || 0;
-      }
+      const key = keyOf(item.componentType, item.sizeSpec);
+      const newPrice = unitPriceByKey.has(key) ? unitPriceByKey.get(key)! : Number(item.unitPrice) || 0;
+      const lineTotal = item.quantity * newPrice;
+      materialSubtotal += lineTotal;
+      await client.from('quotation_items').update(mapPayloadToSnake({ unitPrice: newPrice, lineTotal })).eq('id', item.id);
     }
 
     await client.from('quotation_cost_items').delete().eq('quotation_id', quotationId);
+    const calcResult = config.calculationResult;
     const totalComponents = quotation.items.reduce((sum, i) => sum + i.quantity, 0);
     const totalArea = (calcResult?.walls || []).reduce((sum: number, wall: any) => {
       const wallLengthM = (wall.wallLengthMm || 0) / 1000;
@@ -203,8 +189,8 @@ export class QuotationService {
       return sum + wallLengthM * scaffoldHeightM;
     }, 0);
 
-    const costItems = await this.costService.calculateCosts(quotation, materialSubtotal, totalComponents, totalArea, userId);
-    const costSubtotal = costItems.reduce((sum, item) => sum + Number(item.calculatedValue || 0), 0);
+    const costItems = await this.costService.calculateCosts(quotation, materialSubtotal, totalComponents, totalArea, userId, null);
+    const costSubtotal = costItems.reduce((sum, item) => sum + effectiveCostLineAmount(item), 0);
     const subtotal = materialSubtotal + costSubtotal;
     const taxAmount = Math.floor(subtotal * 0.1);
     const totalAmount = subtotal + taxAmount;

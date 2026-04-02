@@ -25,12 +25,23 @@ export const translations = {
     confirm: { ja: '確認', en: 'Confirm', fr: 'Confirmer' },
   },
 
+  // ─── Settings redirect (global price master removed) ────────────
+  settingsRedirect: {
+    title: { ja: '単価は案件ごとに入力', en: 'Prices are entered per job', fr: 'Prix par chantier' },
+    body: {
+      ja: '部材のレンタル単価と諸費用は、数量確認後の「見積ウィザード」で入力します。ダッシュボードから該当案件を開いてください。',
+      en: 'Material rental unit prices and fees are entered in the quotation wizard after quantity review. Open the job from the dashboard.',
+      fr: 'Les prix et frais se saisissent dans l’assistant devis après la revue des quantités. Ouvrez le chantier depuis le tableau de bord.',
+    },
+    cta: { ja: 'ダッシュボードへ', en: 'Go to dashboard', fr: 'Tableau de bord' },
+  },
+
   // ─── Navigation ────────────────────────────────────────────────
   nav: {
     dashboard: { ja: 'ダッシュボード', en: 'Dashboard', fr: 'Tableau de bord' },
     scaffold: { ja: '足場積算', en: 'Scaffold Calc', fr: 'Calcul échafaudage' },
     quotations: { ja: '見積一覧', en: 'Quotations', fr: 'Devis' },
-    settings: { ja: '単価設定', en: 'Price Settings', fr: 'Tarifs' },
+    settings: { ja: '単価について', en: 'Pricing info', fr: 'Infos tarifs' },
     company: { ja: '会社情報', en: 'Company', fr: 'Société' },
   },
 
@@ -677,7 +688,11 @@ export const translations = {
     title: { ja: '見積一覧', en: 'Quotations', fr: 'Quotations' },
     subtitle: { ja: 'すべての見積を表示・管理', en: 'View and manage all quotations', fr: 'View and manage all quotations' },
     noQuotations: { ja: 'まだ見積がありません', en: 'No Quotations Yet', fr: 'No Quotations Yet' },
-    noQuotationsHint: { ja: '図面アップロード→足場設定→数量確認→見積作成のフローで見積を作成してください。', en: 'Upload a drawing, configure scaffolding, review quantities, then create a quotation.', fr: 'Upload a drawing, configure scaffolding, review quantities, then create a quotation.' },
+    noQuotationsHint: {
+      ja: '図面アップロード→足場設定→数量確認→見積ウィザードで単価・諸費用を入力し、確定してください。',
+      en: 'Upload a drawing, configure scaffolding, review quantities, then complete the quotation wizard (unit prices and fees) and finalize.',
+      fr: 'Téléversez un plan, configurez l’échafaudage, validez les quantités, puis complétez l’assistant devis et finalisez.',
+    },
     goToDashboard: { ja: 'ダッシュボードへ', en: 'Go to Dashboard', fr: 'Go to Dashboard' },
     colId: { ja: '見積ID', en: 'Quotation ID', fr: 'Quotation ID' },
     colStructure: { ja: '構造 / 足場', en: 'Structure / Scaffold', fr: 'Structure / Scaffold' },
@@ -732,6 +747,54 @@ export const translations = {
     wallsUnit: { ja: '面', en: 'walls', fr: 'walls' },
   },
 
+  // ─── Quote wizard (per-job unit prices → fees → review → finalize) ───
+  quoteWizard: {
+    title: { ja: '見積ウィザード', en: 'Quotation wizard', fr: 'Assistant devis' },
+    step1Title: { ja: 'Step 1: 部材レンタル単価', en: 'Step 1: Material rental unit prices', fr: 'Étape 1 : Prix unitaires location' },
+    step1Desc: {
+      ja: '各品目の月額レンタル単価（円）を入力してください。',
+      en: 'Enter the monthly rental unit price (¥) for each line.',
+      fr: 'Saisissez le prix unitaire de location mensuel (¥) pour chaque ligne.',
+    },
+    step2Title: { ja: 'Step 2: レンタル期間・諸費用・税率', en: 'Step 2: Rental period, fees & tax', fr: 'Étape 2 : Période, frais et TVA' },
+    step2Desc: {
+      ja: 'レンタル期間と、運搬・諸費用などの金額（円）、消費税率を入力してください。',
+      en: 'Set the rental period, enter fee amounts (¥), and the consumption tax rate.',
+      fr: 'Indiquez la période, les montants des frais (¥) et le taux de TVA.',
+    },
+    step3Title: { ja: 'Step 3: 内訳確認', en: 'Step 3: Review breakdown', fr: 'Étape 3 : Vérification' },
+    step3Desc: {
+      ja: '部材小計・諸費用・税込合計を確認し、確定してください。確定後にExcelを出力できます。',
+      en: 'Review material subtotal, fees, and tax-inclusive total, then finalize. Export Excel after finalize.',
+      fr: 'Vérifiez les sous-totaux et le total TTC, puis finalisez. Export Excel ensuite.',
+    },
+    colComponent: { ja: '部材', en: 'Component', fr: 'Composant' },
+    colSpec: { ja: '規格', en: 'Spec', fr: 'Spéc.' },
+    colQty: { ja: '数量', en: 'Qty', fr: 'Qté' },
+    colUnit: { ja: '単位', en: 'Unit', fr: 'Unité' },
+    colUnitPrice: { ja: '単価(¥/月)', en: 'Unit (¥/mo)', fr: 'PU (¥/mois)' },
+    colLineTotal: { ja: '金額', en: 'Amount', fr: 'Montant' },
+    taxRate: { ja: '消費税率 (%)', en: 'Tax rate (%)', fr: 'TVA (%)' },
+    proceed: { ja: '次へ', en: 'Continue', fr: 'Continuer' },
+    back: { ja: '戻る', en: 'Back', fr: 'Retour' },
+    finalize: { ja: '見積を確定', en: 'Finalize quotation', fr: 'Finaliser le devis' },
+    exportExcel: { ja: 'Excel出力', en: 'Export Excel', fr: 'Exporter Excel' },
+    goToQuotations: { ja: '見積詳細へ', en: 'Open quotation', fr: 'Ouvrir le devis' },
+    savingPrices: { ja: '単価を保存中...', en: 'Saving unit prices...', fr: 'Enregistrement…' },
+    zeroPriceWarn: {
+      ja: '単価が0の行があります。意図した場合はそのまま次へ進めます。',
+      en: 'Some lines still have ¥0 unit price. You can continue if that is intentional.',
+      fr: 'Certaines lignes sont à 0 ¥. Vous pouvez continuer si c’est voulu.',
+    },
+    notReviewed: { ja: '数量確認が完了していません。', en: 'Quantity review is not complete.', fr: 'La revue des quantités n’est pas terminée.' },
+    basic_material: { ja: '仮設材基本料', en: 'Basic material charge', fr: 'Charge matériau de base' },
+    material_wear: { ja: '仮設材損料', en: 'Wear / damage charge', fr: 'Usure' },
+    transportation: { ja: '運搬費', en: 'Transportation', fr: 'Transport' },
+    disposal: { ja: '滅失費', en: 'Loss / disposal', fr: 'Perte' },
+    surface_prep: { ja: 'ケレン費', en: 'Surface prep (cleaning)', fr: 'Préparation surface' },
+    repair_reserve: { ja: '修理代金', en: 'Repair reserve', fr: 'Réserve réparation' },
+  },
+
   // ─── Quotation Detail Page ──────────────────────────────────────
   quotationDetail: {
     notFound: { ja: '見積が見つかりません', en: 'Quotation not found', fr: 'Devis introuvable' },
@@ -772,12 +835,20 @@ export const translations = {
     subtotal: { ja: '小計', en: 'Subtotal', fr: 'Sous-total' },
     tax: { ja: '消費税 (10%)', en: 'Tax (10%)', fr: 'TVA (10 %)' },
     total: { ja: '合計', en: 'Total', fr: 'Total' },
-    priceNote: { ja: '一部の項目の単価が¥0です（赤表示）。単価設定ページで料金を設定後「単価を適用」ボタンで自動反映できます。', en: 'Some items have ¥0 unit price (shown in red). Set prices in Price Settings, then click "Apply Prices" to auto-fill.', fr: 'Certains postes ont un prix unitaire à 0 € (en rouge). Définissez les tarifs dans Paramètres, puis cliquez sur « Appliquer les prix ».' },
+    priceNote: {
+      ja: '一部の項目の単価が¥0です。見積ウィザードで単価を入力するか、下のボタンで数量テーブルの単価を再取り込みしてください。',
+      en: 'Some items have ¥0 unit price. Enter prices in the quotation wizard or re-sync from saved quantity unit prices below.',
+      fr: 'Certains postes sont à 0 ¥. Saisissez les prix dans l’assistant ou resynchronisez depuis les quantités.',
+    },
     note: { ja: '注意', en: 'Note', fr: 'Note' },
     clickToEditPrice: { ja: '単価をクリックして編集', en: 'Click to edit price', fr: 'Cliquer pour modifier le prix' },
-    repopulate: { ja: '単価を適用', en: 'Apply Prices', fr: 'Appliquer les prix' },
-    repopulateTooltip: { ja: '単価マスタから最新の単価を取得して反映し、諸経費も再計算します', en: 'Fetch latest prices from Price Master and recalculate all costs', fr: 'Récupérer les derniers tarifs et recalculer tous les coûts' },
-    goToSettings: { ja: '単価設定を開く', en: 'Open Price Settings', fr: 'Ouvrir les tarifs' },
+    repopulate: { ja: '数量の単価を反映', en: 'Sync unit prices', fr: 'Synchroniser les PU' },
+    repopulateTooltip: {
+      ja: '足場設定に保存した数量テーブルの単価で見積行を更新し、諸経費を式どおり再計算します',
+      en: 'Refresh line unit prices from the job quantity table and recalculate fee formulas',
+      fr: 'Mettre à jour les PU depuis les quantités du chantier et recalculer les frais',
+    },
+    goToSettings: { ja: '見積ウィザードを開く', en: 'Open quotation wizard', fr: 'Ouvrir l’assistant devis' },
     exportExcel: { ja: 'Excel出力', en: 'Export Excel', fr: 'Exporter Excel' },
     exportExcelFailed: {
       ja: 'Excelの出力に失敗しました',

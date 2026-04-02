@@ -93,7 +93,7 @@ export class QuotationController {
 
   /**
    * POST /quotations/:id/repopulate-prices
-   * Re-populate unit prices from the materials master and recalculate costs.
+   * Re-sync line prices from saved quantity unit prices and recalculate formula-based rental costs.
    */
   @Post(':id/repopulate-prices')
   @UseGuards(RolesGuard)

@@ -505,7 +505,7 @@ export default function QuotationDetailPage() {
               </p>
               <div className="flex items-center space-x-3 ml-4 flex-shrink-0">
                 <button
-                  onClick={() => router.push('/settings')}
+                  onClick={() => router.push(`/scaffold/${quotation.configId}/quote?step=1`)}
                   className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
                 >
                   <Settings className="h-3.5 w-3.5" />

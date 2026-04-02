@@ -10,14 +10,9 @@ import {
   Res,
   UseGuards,
   Logger,
-  UseInterceptors,
-  UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -29,7 +24,6 @@ import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
 import { ScaffoldExcelService } from './scaffold-excel.service';
 import { ScaffoldPdfService } from './scaffold-pdf.service';
 import { ScaffoldCadService } from './scaffold-cad.service';
-import { PriceTableParserService } from './price-table-parser.service';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 
 @Controller('scaffold-configs')
@@ -42,7 +36,6 @@ export class ScaffoldConfigController {
     private readonly excelService: ScaffoldExcelService,
     private readonly pdfService: ScaffoldPdfService,
     private readonly cadService: ScaffoldCadService,
-    private readonly priceParserService: PriceTableParserService,
   ) {}
 
   /**
@@ -102,156 +95,18 @@ export class ScaffoldConfigController {
     return await this.configService.listConfigs(projectId);
   }
 
-  // ─── Materials Price Master ──────────────────────────────────
-  // These must be BEFORE :id routes to avoid param conflicts
+  // ─── Materials catalog (optional seed) — must be BEFORE :id routes ───────
 
-  /**
-   * GET /scaffold-configs/materials
-   * List all scaffold materials with prices.
-   */
   @Get('materials')
   async listMaterials() {
     return await this.configService.listMaterials();
   }
 
-  /**
-   * POST /scaffold-configs/materials/seed
-   * Seed default materials if table is empty.
-   */
   @Post('materials/seed')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'estimator')
   async seedMaterials() {
     return await this.configService.seedMaterials();
-  }
-
-  /**
-   * PATCH /scaffold-configs/materials/bulk
-   * Bulk update material prices.
-   */
-  @Patch('materials/bulk')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
-  async bulkUpdatePrices(
-    @Body() body: { updates: Array<{ id: string; rentalPriceMonthly: number }> },
-  ) {
-    return await this.configService.bulkUpdatePrices(body.updates);
-  }
-
-  /**
-   * PATCH /scaffold-configs/materials/:materialId
-   * Update a material's price.
-   */
-  @Patch('materials/:materialId')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
-  async updateMaterialPrice(
-    @Param('materialId') materialId: string,
-    @Body() body: { rentalPriceMonthly?: number; purchasePrice?: number; isActive?: boolean },
-  ) {
-    return await this.configService.updateMaterialPrice(materialId, body);
-  }
-
-  /**
-   * POST /scaffold-configs/materials/upload-price-table
-   * Upload Excel price table and get matched prices preview.
-   */
-  @Post('materials/upload-price-table')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          cb(null, `price-table-${randomName}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (req, file, cb) => {
-        const allowedMimes = [
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-          'application/vnd.ms-excel', // .xls
-          'application/vnd.ms-excel.sheet.macroEnabled.12', // .xlsm
-        ];
-        const ext = extname(file.originalname).toLowerCase();
-        const allowedExts = ['.xlsx', '.xls', '.xlsm'];
-        
-        if (!allowedMimes.includes(file.mimetype) && !allowedExts.includes(ext)) {
-          cb(new BadRequestException('Invalid file format. Only Excel files (.xlsx, .xls, .xlsm) are supported.'), false);
-        } else {
-          cb(null, true);
-        }
-      },
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-    }),
-  )
-  async uploadPriceTable(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-
-    try {
-      // Parse Excel file
-      const mappings = await this.priceParserService.parseExcel(file);
-      
-      // Match to materials
-      const matched = await this.priceParserService.matchToMaterials(mappings);
-      
-      return {
-        success: true,
-        totalRows: mappings.length,
-        matched: matched.length,
-        unmatched: mappings.length - matched.length,
-        matches: matched.map((m) => ({
-          materialId: m.material.id,
-          materialCode: m.material.code,
-          materialName: m.material.nameJp,
-          sizeSpec: m.material.sizeSpec,
-          oldPrice: m.oldPrice,
-          newPrice: m.newPrice,
-          confidence: m.confidence,
-          matchReason: m.matchReason,
-        })),
-      };
-    } catch (error) {
-      this.logger.error(`Price table upload failed: ${error.message}`, error.stack);
-      throw new BadRequestException(`Failed to process price table: ${error.message}`);
-    }
-  }
-
-  /**
-   * POST /scaffold-configs/materials/apply-price-table
-   * Apply matched prices from uploaded price table.
-   */
-  @Post('materials/apply-price-table')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin', 'estimator')
-  async applyPriceTable(@Body() body: { matches: Array<{ materialId: string; newPrice: number }> }) {
-    if (!body.matches || body.matches.length === 0) {
-      throw new BadRequestException('No price matches provided');
-    }
-
-    try {
-      const updates = body.matches.map((m) => ({
-        id: m.materialId,
-        rentalPriceMonthly: m.newPrice,
-      }));
-
-      const result = await this.configService.bulkUpdatePrices(updates);
-      
-      return {
-        success: true,
-        updated: result.length,
-        message: `Successfully updated ${result.length} material prices`,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to apply price table: ${error.message}`, error.stack);
-      throw new BadRequestException(`Failed to apply prices: ${error.message}`);
-    }
   }
 
   // ─── Config CRUD ────────────────────────────────────────────
@@ -281,6 +136,22 @@ export class ScaffoldConfigController {
   }
 
   /**
+   * PATCH /scaffold-configs/quantities/:quantityId/unit-price
+   */
+  @Patch('quantities/:quantityId/unit-price')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'estimator', 'viewer')
+  async patchQuantityUnitPrice(
+    @Param('quantityId') quantityId: string,
+    @Body('unitPrice') unitPrice: number,
+  ) {
+    if (typeof unitPrice !== 'number' || Number.isNaN(unitPrice)) {
+      throw new BadRequestException('unitPrice is required');
+    }
+    return await this.configService.updateQuantityUnitPrice(quantityId, unitPrice);
+  }
+
+  /**
    * PATCH /scaffold-configs/quantities/:quantityId
    */
   @Patch('quantities/:quantityId')
@@ -295,6 +166,23 @@ export class ScaffoldConfigController {
       dto.adjustedQuantity,
       dto.adjustmentReason,
     );
+  }
+
+  /**
+   * PATCH /scaffold-configs/:id/quantity-unit-prices
+   * Bulk save monthly rental unit prices (quote wizard step 1).
+   */
+  @Patch(':id/quantity-unit-prices')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'estimator', 'viewer')
+  async bulkQuantityUnitPrices(
+    @Param('id') configId: string,
+    @Body() body: { updates: Array<{ quantityId: string; unitPrice: number }> },
+  ) {
+    if (!body?.updates?.length) {
+      throw new BadRequestException('updates[] is required');
+    }
+    return await this.configService.bulkUpdateQuantityUnitPrices(configId, body.updates);
   }
 
   /**
