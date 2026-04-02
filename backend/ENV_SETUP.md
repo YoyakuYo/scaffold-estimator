@@ -82,6 +82,12 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # BANK_TRANSFER_ACCOUNT_NUMBER=1234567
 # BANK_TRANSFER_ACCOUNT_HOLDER=カ）サンプル
 # BANK_TRANSFER_AMOUNT_NOTE=月額 〇〇円（例）
+# Optional English (shown to en/fr users, or under Japanese for ja):
+# BANK_TRANSFER_BANK_NAME_EN=Sumitomo Mitsui Banking Corporation
+# BANK_TRANSFER_BRANCH_EN=Fussa Branch (branch code 697)
+# BANK_TRANSFER_ACCOUNT_TYPE_EN=Ordinary deposit
+# BANK_TRANSFER_ACCOUNT_HOLDER_EN=SOU ALPHA OMAR
+# BANK_TRANSFER_AMOUNT_NOTE_EN=Bank code 0009
 #
 # If production API is not redeployed yet, you can set the same fields on the
 # frontend host as NEXT_PUBLIC_BANK_TRANSFER_* (see frontend/.env.example) and

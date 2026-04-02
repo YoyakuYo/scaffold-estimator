@@ -4,8 +4,29 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
+import { bankFieldDisplay } from '@/lib/billing/bank-transfer-display';
 import { usersApi } from '@/lib/api/users';
 import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark } from 'lucide-react';
+
+function BankDd({
+  japanese,
+  english,
+  locale,
+  className,
+}: {
+  japanese: string;
+  english?: string;
+  locale: string;
+  className?: string;
+}) {
+  const { main, sub } = bankFieldDisplay(japanese, english, locale);
+  return (
+    <dd className={className ?? 'text-gray-900'}>
+      <span className="font-medium">{main}</span>
+      {sub && <span className="block text-gray-500 text-xs font-normal mt-0.5">{sub}</span>}
+    </dd>
+  );
+}
 
 export default function BillingPage() {
   const { locale, t } = useI18n();
@@ -208,15 +229,27 @@ export default function BillingPage() {
             <dl className="grid gap-3 sm:grid-cols-2 text-sm">
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
-                <dd className="font-medium text-gray-900">{bankTransfer.bankName}</dd>
+                <BankDd
+                  japanese={bankTransfer.bankName}
+                  english={bankTransfer.bankNameEn}
+                  locale={locale}
+                />
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
-                <dd className="font-medium text-gray-900">{bankTransfer.branch}</dd>
+                <BankDd
+                  japanese={bankTransfer.branch}
+                  english={bankTransfer.branchEn}
+                  locale={locale}
+                />
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
-                <dd className="font-medium text-gray-900">{bankTransfer.accountType}</dd>
+                <BankDd
+                  japanese={bankTransfer.accountType}
+                  english={bankTransfer.accountTypeEn}
+                  locale={locale}
+                />
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankAccountNumber')}</dt>
@@ -226,16 +259,28 @@ export default function BillingPage() {
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
-                <dd className="font-medium text-gray-900">{bankTransfer.accountHolder}</dd>
+                <BankDd
+                  japanese={bankTransfer.accountHolder}
+                  english={bankTransfer.accountHolderEn}
+                  locale={locale}
+                />
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
                 <dd className="font-medium text-gray-900 break-all">{bankTransfer.remittanceReference}</dd>
               </div>
-              {bankTransfer.amountNote && (
+              {(bankTransfer.amountNote || bankTransfer.amountNoteEn) && (
                 <div className="sm:col-span-2">
                   <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
-                  <dd className="font-medium text-gray-900">{bankTransfer.amountNote}</dd>
+                  <BankDd
+                    japanese={bankTransfer.amountNote || bankTransfer.amountNoteEn || ''}
+                    english={
+                      bankTransfer.amountNote && bankTransfer.amountNoteEn
+                        ? bankTransfer.amountNoteEn
+                        : undefined
+                    }
+                    locale={locale}
+                  />
                 </div>
               )}
             </dl>

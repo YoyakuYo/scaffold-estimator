@@ -40,6 +40,11 @@ export class SubscriptionService {
     accountHolder: string;
     remittanceReference: string;
     amountNote?: string;
+    bankNameEn?: string;
+    branchEn?: string;
+    accountTypeEn?: string;
+    accountHolderEn?: string;
+    amountNoteEn?: string;
   } | null {
     const flag = (this.configService.get<string>('BANK_TRANSFER_ENABLED') || '').toLowerCase();
     if (!['true', '1', 'yes'].includes(flag)) return null;
@@ -55,6 +60,11 @@ export class SubscriptionService {
       return null;
     }
     const amountNote = this.configService.get<string>('BANK_TRANSFER_AMOUNT_NOTE')?.trim();
+    const bankNameEn = this.configService.get<string>('BANK_TRANSFER_BANK_NAME_EN')?.trim();
+    const branchEn = this.configService.get<string>('BANK_TRANSFER_BRANCH_EN')?.trim();
+    const accountTypeEn = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_TYPE_EN')?.trim();
+    const accountHolderEn = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_HOLDER_EN')?.trim();
+    const amountNoteEn = this.configService.get<string>('BANK_TRANSFER_AMOUNT_NOTE_EN')?.trim();
     return {
       bankName,
       branch,
@@ -63,6 +73,11 @@ export class SubscriptionService {
       accountHolder,
       remittanceReference: userEmail,
       ...(amountNote ? { amountNote } : {}),
+      ...(bankNameEn ? { bankNameEn } : {}),
+      ...(branchEn ? { branchEn } : {}),
+      ...(accountTypeEn ? { accountTypeEn } : {}),
+      ...(accountHolderEn ? { accountHolderEn } : {}),
+      ...(amountNoteEn ? { amountNoteEn } : {}),
     };
   }
 

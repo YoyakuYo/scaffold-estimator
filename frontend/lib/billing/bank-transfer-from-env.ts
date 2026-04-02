@@ -15,6 +15,11 @@ export function bankTransferFromPublicEnv(remittanceReference: string): BankTran
   const accountHolder = process.env.NEXT_PUBLIC_BANK_TRANSFER_ACCOUNT_HOLDER?.trim();
   if (!bankName || !branch || !accountType || !accountNumber || !accountHolder) return null;
   const amountNote = process.env.NEXT_PUBLIC_BANK_TRANSFER_AMOUNT_NOTE?.trim();
+  const bankNameEn = process.env.NEXT_PUBLIC_BANK_TRANSFER_BANK_NAME_EN?.trim();
+  const branchEn = process.env.NEXT_PUBLIC_BANK_TRANSFER_BRANCH_EN?.trim();
+  const accountTypeEn = process.env.NEXT_PUBLIC_BANK_TRANSFER_ACCOUNT_TYPE_EN?.trim();
+  const accountHolderEn = process.env.NEXT_PUBLIC_BANK_TRANSFER_ACCOUNT_HOLDER_EN?.trim();
+  const amountNoteEn = process.env.NEXT_PUBLIC_BANK_TRANSFER_AMOUNT_NOTE_EN?.trim();
   return {
     bankName,
     branch,
@@ -23,5 +28,10 @@ export function bankTransferFromPublicEnv(remittanceReference: string): BankTran
     accountHolder,
     remittanceReference: remittanceReference || '—',
     ...(amountNote ? { amountNote } : {}),
+    ...(bankNameEn ? { bankNameEn } : {}),
+    ...(branchEn ? { branchEn } : {}),
+    ...(accountTypeEn ? { accountTypeEn } : {}),
+    ...(accountHolderEn ? { accountHolderEn } : {}),
+    ...(amountNoteEn ? { amountNoteEn } : {}),
   };
 }
