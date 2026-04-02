@@ -7,8 +7,6 @@ import {
   Pentagon,
   Plus,
   Trash2,
-  ChevronRight,
-  ChevronLeft,
   Calculator,
   Building2,
   Ruler,
@@ -41,7 +39,7 @@ export interface QuickShapeConfig {
   shapeType: ShapeType;
   sides: SideDefinition[];
   buildingHeightMm: number;
-  /** Level height is fixed 1800mm (kusabi) or = frame size (wakugumi, set in Step 3). Not duplicated here. */
+  /** Level height is fixed 1800mm (kusabi) or = frame size (wakugumi, set in quick builder). Not duplicated here. */
   scaffoldType: 'kusabi' | 'wakugumi';
   scaffoldWidthMm: number;
   /** Per-side scaffold width (mm). Overrides scaffoldWidthMm when set. */
@@ -65,7 +63,6 @@ interface Props {
 
 export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
   const { t } = useI18n();
-  const [step, setStep] = useState(1);
   const [shapeType, setShapeType] = useState<ShapeType>('rectangle');
 
   // Rectangle inputs
@@ -92,10 +89,10 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
     { label: 'DA', lengthMm: 8000 },
   ]);
 
-  // Step 2 — building height only; level height is 1800 (kusabi) or frame size (wakugumi, Step 3)
+  // Building height; level height is 1800 (kusabi) or frame size (wakugumi) per scaffold type
   const [buildingHeightMm, setBuildingHeightMm] = useState(9900);
 
-  // Step 3
+  // Scaffold options (same page as shape & height)
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
   const [scaffoldWidthMm, setScaffoldWidthMm] = useState(600);
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
@@ -131,8 +128,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
     setHashiraRows((prev) => formRowsFromWallCount(prev, sideCount));
   }, [sideCount]);
 
-  // Kusabi: 1800mm per level (fixed). Wakugumi: level = frame size (set in Step 3); use 1800 for preview.
-  const levelHeightPreviewMm = 1800;
+  const levelHeightPreviewMm = scaffoldType === 'wakugumi' ? frameSizeMm : 1800;
   const calculatedLevels = Math.max(1, Math.floor(buildingHeightMm / levelHeightPreviewMm));
 
   const addCustomSegment = () => {
@@ -203,263 +199,224 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
     }));
   };
 
+  const sectionTitleClass =
+    'flex items-center gap-2 text-base font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4';
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Step Indicator */}
       <div className="bg-slate-50 border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center gap-4">
-          {[
-            { n: 1, label: t('quickBuilder', 'stepShape'), icon: Square },
-            { n: 2, label: t('quickBuilder', 'stepHeight'), icon: Building2 },
-            { n: 3, label: t('quickBuilder', 'stepConfig'), icon: Ruler },
-          ].map((s, i) => (
-            <button
-              key={s.n}
-              onClick={() => setStep(s.n)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                step === s.n
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : step > s.n
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-              }`}
-            >
-              <s.icon className="h-4 w-4" />
-              <span>Step {s.n}: {s.label}</span>
-            </button>
-          ))}
-        </div>
+        <p className="text-sm text-gray-600 leading-relaxed max-w-3xl">{t('quickBuilder', 'singlePageBlurb')}</p>
       </div>
 
-      <div className="p-6">
-        {/* ═══ STEP 1: Shape Selection ═══ */}
-        {step === 1 && (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'selectShape')}</h3>
+      <div className="p-6 space-y-10">
+        {/* Shape + dimensions */}
+        <section aria-labelledby="qb-section-shape">
+          <h3 id="qb-section-shape" className={sectionTitleClass}>
+            <Square className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
+            {t('quickBuilder', 'stepShape')}
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">{t('quickBuilder', 'selectShape')}</p>
 
-            {/* Shape Type Selector */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+            {[
+              { type: 'rectangle' as ShapeType, label: t('quickBuilder', 'rectangle'), icon: Square },
+              { type: 'l-shape' as ShapeType, label: t('quickBuilder', 'lShape'), icon: CornerDownRight },
+              { type: 'custom' as ShapeType, label: t('quickBuilder', 'custom'), icon: Pentagon },
+            ].map((s) => (
+              <button
+                key={s.type}
+                type="button"
+                onClick={() => setShapeType(s.type)}
+                className={`p-4 rounded-xl border-2 text-center transition-all ${
+                  shapeType === s.type
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                <s.icon className="h-8 w-8 mx-auto mb-2" />
+                <span className="text-sm font-medium">{s.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {shapeType === 'rectangle' && (
+            <div className="grid grid-cols-2 gap-4">
               {[
-                { type: 'rectangle' as ShapeType, label: t('quickBuilder', 'rectangle'), icon: Square },
-                { type: 'l-shape' as ShapeType, label: t('quickBuilder', 'lShape'), icon: CornerDownRight },
-                { type: 'custom' as ShapeType, label: t('quickBuilder', 'custom'), icon: Pentagon },
-              ].map((s) => (
+                { label: 'AB', value: rectNorth, setter: setRectNorth },
+                { label: 'BC', value: rectEast, setter: setRectEast },
+                { label: 'CD', value: rectSouth, setter: setRectSouth },
+                { label: 'DA', value: rectWest, setter: setRectWest },
+              ].map((input) => (
+                <div key={input.label}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{input.label}</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={input.value || ''}
+                      onChange={(e) => input.setter(Number(e.target.value) || 0)}
+                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      min={600}
+                      step={100}
+                    />
+                    <span className="text-sm text-gray-500 w-8">mm</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {shapeType === 'l-shape' && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'lShapeHint')}</p>
+              {lSegments.map((seg, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
+                  <input
+                    type="number"
+                    value={seg.lengthMm || ''}
+                    onChange={(e) => updateLSegment(i, Number(e.target.value) || 0)}
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    min={600}
+                    step={100}
+                  />
+                  <span className="text-sm text-gray-500">mm</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {shapeType === 'custom' && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'customHint')}</p>
+              {customSegments.map((seg, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
+                  <input
+                    type="number"
+                    value={seg.lengthMm || ''}
+                    onChange={(e) => updateCustomSegment(i, Number(e.target.value) || 0)}
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                    min={600}
+                    step={100}
+                  />
+                  <span className="text-sm text-gray-500">mm</span>
+                  {customSegments.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => removeCustomSegment(i)}
+                      className="p-1.5 text-red-400 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addCustomSegment}
+                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg border border-dashed border-blue-300 hover:bg-blue-50"
+              >
+                <Plus className="h-4 w-4" />
+                {t('quickBuilder', 'addSegment')}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Building height */}
+        <section aria-labelledby="qb-section-height">
+          <h3 id="qb-section-height" className={sectionTitleClass}>
+            <Building2 className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
+            {t('quickBuilder', 'stepHeight')}
+          </h3>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
+            <input
+              type="number"
+              value={buildingHeightMm || ''}
+              onChange={(e) => setBuildingHeightMm(Number(e.target.value) || 0)}
+              className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              min={1000}
+              step={100}
+              placeholder="9900"
+            />
+            <p className="text-xs text-gray-500 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-xs font-medium text-blue-800 mb-2">{t('quickBuilder', 'floorPresets')}</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: '1F (3,900mm)', value: 3900 },
+                { label: '2F (6,900mm)', value: 6900 },
+                { label: '3F (9,900mm)', value: 9900 },
+                { label: '4F (12,900mm)', value: 12900 },
+                { label: '5F (15,900mm)', value: 15900 },
+              ].map((p) => (
                 <button
-                  key={s.type}
-                  onClick={() => setShapeType(s.type)}
-                  className={`p-4 rounded-xl border-2 text-center transition-all ${
-                    shapeType === s.type
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                  key={p.label}
+                  type="button"
+                  onClick={() => setBuildingHeightMm(p.value)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                    buildingHeightMm === p.value
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white border-blue-300 text-blue-700 hover:bg-blue-100'
                   }`}
                 >
-                  <s.icon className="h-8 w-8 mx-auto mb-2" />
-                  <span className="text-sm font-medium">{s.label}</span>
+                  {p.label}
                 </button>
               ))}
             </div>
+          </div>
 
-            {/* Shape-specific Inputs */}
-            {shapeType === 'rectangle' && (
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'AB', value: rectNorth, setter: setRectNorth },
-                  { label: 'BC', value: rectEast, setter: setRectEast },
-                  { label: 'CD', value: rectSouth, setter: setRectSouth },
-                  { label: 'DA', value: rectWest, setter: setRectWest },
-                ].map((input) => (
-                  <div key={input.label}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{input.label}</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={input.value || ''}
-                        onChange={(e) => input.setter(Number(e.target.value) || 0)}
-                        className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                        min={600}
-                        step={100}
-                      />
-                      <span className="text-sm text-gray-500 w-8">mm</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">{t('quickBuilder', 'calculatedLevels')}:</span>
+              <span className="text-lg font-bold text-gray-900">
+                {calculatedLevels} {t('quickBuilder', 'levelsUnit')}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{t('quickBuilder', 'levelHeightNote')}</p>
+          </div>
+        </section>
 
-            {shapeType === 'l-shape' && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'lShapeHint')}</p>
-                {lSegments.map((seg, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
-                    <input
-                      type="number"
-                      value={seg.lengthMm || ''}
-                      onChange={(e) => updateLSegment(i, Number(e.target.value) || 0)}
-                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      min={600}
-                      step={100}
-                    />
-                    <span className="text-sm text-gray-500">mm</span>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Scaffold configuration */}
+        <section aria-labelledby="qb-section-config">
+          <h3 id="qb-section-config" className={sectionTitleClass}>
+            <Ruler className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
+            {t('quickBuilder', 'stepConfig')}
+          </h3>
 
-            {shapeType === 'custom' && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'customHint')}</p>
-                {customSegments.map((seg, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
-                    <input
-                      type="number"
-                      value={seg.lengthMm || ''}
-                      onChange={(e) => updateCustomSegment(i, Number(e.target.value) || 0)}
-                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      min={600}
-                      step={100}
-                    />
-                    <span className="text-sm text-gray-500">mm</span>
-                    {customSegments.length > 3 && (
-                      <button
-                        onClick={() => removeCustomSegment(i)}
-                        className="p-1.5 text-red-400 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  onClick={addCustomSegment}
-                  className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg border border-dashed border-blue-300 hover:bg-blue-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  {t('quickBuilder', 'addSegment')}
-                </button>
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('quickBuilder', 'scaffoldType')}</label>
+            <div className="flex gap-3">
               <button
-                onClick={() => setStep(2)}
-                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
+                type="button"
+                onClick={() => setScaffoldType('kusabi')}
+                className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  scaffoldType === 'kusabi'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
               >
-                {t('common', 'next')}
-                <ChevronRight className="h-4 w-4" />
+                <div>{t('quickBuilder', 'kusabiLabel')}</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScaffoldType('wakugumi')}
+                className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
+                  scaffoldType === 'wakugumi'
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <div>{t('quickBuilder', 'wakugumiLabel')}</div>
               </button>
             </div>
           </div>
-        )}
 
-        {/* ═══ STEP 2: Building Height ═══ */}
-        {step === 2 && (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'stepHeight')}</h3>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
-              <input
-                type="number"
-                value={buildingHeightMm || ''}
-                onChange={(e) => setBuildingHeightMm(Number(e.target.value) || 0)}
-                className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                min={1000}
-                step={100}
-                placeholder="9900"
-              />
-              <p className="text-xs text-gray-500 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
-            </div>
-
-            {/* Quick height presets */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-xs font-medium text-blue-800 mb-2">{t('quickBuilder', 'floorPresets')}</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { label: '1F (3,900mm)', value: 3900 },
-                  { label: '2F (6,900mm)', value: 6900 },
-                  { label: '3F (9,900mm)', value: 9900 },
-                  { label: '4F (12,900mm)', value: 12900 },
-                  { label: '5F (15,900mm)', value: 15900 },
-                ].map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setBuildingHeightMm(p.value)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                      buildingHeightMm === p.value
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white border-blue-300 text-blue-700 hover:bg-blue-100'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Calculated levels (preview: 1800mm per level for くさび; 枠組 uses frame size in Step 3) */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">{t('quickBuilder', 'calculatedLevels')}:</span>
-                <span className="text-lg font-bold text-gray-900">{calculatedLevels} {t('quickBuilder', 'levelsUnit')}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{t('quickBuilder', 'levelHeightNote')}</p>
-            </div>
-
-            <div className="mt-6 flex justify-between">
-              <button
-                onClick={() => setStep(1)}
-                className="flex items-center gap-2 px-6 py-2.5 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                {t('common', 'back')}
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
-              >
-                {t('common', 'next')}
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ═══ STEP 3: Scaffold Configuration ═══ */}
-        {step === 3 && (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('quickBuilder', 'stepConfig')}</h3>
-
-            {/* Scaffold Type */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('quickBuilder', 'scaffoldType')}</label>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setScaffoldType('kusabi')}
-                  className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
-                    scaffoldType === 'kusabi'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  <div>{t('quickBuilder', 'kusabiLabel')}</div>
-                </button>
-                <button
-                  onClick={() => setScaffoldType('wakugumi')}
-                  className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
-                    scaffoldType === 'wakugumi'
-                      ? 'border-orange-500 bg-orange-50 text-orange-700'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  <div>{t('quickBuilder', 'wakugumiLabel')}</div>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
               {/* Scaffold Width */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'scaffoldWidth')}</label>
@@ -649,26 +606,19 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
               </div>
             </div>
 
-            <div className="flex justify-between">
+            <div className="flex flex-col items-stretch gap-3 border-t border-gray-200 pt-6 sm:flex-row sm:items-center sm:justify-end">
               <button
-                onClick={() => setStep(2)}
-                className="flex items-center gap-2 px-6 py-2.5 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                {t('common', 'back')}
-              </button>
-              <button
+                type="button"
                 onClick={handleSubmit}
                 disabled={isCalculating}
-                className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-base shadow-lg disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold text-base shadow-lg disabled:opacity-50"
               >
-                <Calculator className="h-5 w-5" />
+                <Calculator className="h-5 w-5 shrink-0" />
                 {t('quickBuilder', 'execute')}
-                <ArrowRight className="h-5 w-5" />
+                <ArrowRight className="h-5 w-5 shrink-0" />
               </button>
             </div>
-          </div>
-        )}
+        </section>
       </div>
     </div>
   );

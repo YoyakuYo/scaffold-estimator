@@ -1099,7 +1099,12 @@ export const translations = {
     floorPresets: { ja: '階数から高さを設定', en: 'Set height from floors', fr: 'Set height from floors' },
     calculatedLevels: { ja: '計算段数', en: 'Calculated Levels', fr: 'Calculated Levels' },
     levelsUnit: { ja: '段', en: 'levels', fr: 'levels' },
-    levelHeightNote: { ja: '※ くさび式は 1800mm/段。枠組は Step 3 の建枠サイズで段高が決まります。', en: 'Kusabi: 1800mm per level. Wakugumi: level height = frame size in Step 3.', fr: 'Kusabi: 1800mm per level. Wakugumi: level height = frame size in Step 3.' },
+    levelHeightNote: { ja: '※ くさび式は 1800mm/段。枠組はこの画面の建枠サイズで段高が決まります。', en: 'Kusabi: 1800mm per level. Wakugumi: level height follows the frame size set below.', fr: 'Kusabi : 1800 mm par niveau. Wakugumi : hauteur de niveau = taille de cadre ci-dessous.' },
+    singlePageBlurb: {
+      ja: '矩形・L字・カスタムのいずれかを選び、寸法・建物高さ・階段・足場をこの1画面で入力してから積算を実行してください。',
+      en: 'Choose rectangle, L-shape, or custom, enter dimensions, building height, stairs, and scaffold on this page, then run the calculation.',
+      fr: 'Choisissez rectangle, L ou personnalisé, saisissez cotes, hauteur, escaliers et échafaudage sur cette page, puis lancez le calcul.',
+    },
     scaffoldType: { ja: '足場タイプ', en: 'Scaffold Type', fr: 'Scaffold Type' },
     kusabiLabel: { ja: 'くさび式足場', en: 'Kusabi (Wedge)', fr: 'Kusabi (Wedge)' },
     kusabiSub: { ja: 'くさび式', en: 'Wedge type', fr: 'Wedge type' },
