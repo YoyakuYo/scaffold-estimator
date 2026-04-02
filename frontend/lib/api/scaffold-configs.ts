@@ -114,6 +114,8 @@ export interface CreateScaffoldConfigDto {
   siteEmail?: string;
   sitePhone?: string;
   siteFax?: string;
+  /** Persisted on calculationResult.uiInputPath — restores scaffold page tab after Recalculate. */
+  inputUiPath?: 'quick' | 'drawing' | 'ai_extract' | 'cad_draw';
 }
 
 export interface ScaffoldConfiguration {

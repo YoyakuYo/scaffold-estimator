@@ -176,6 +176,16 @@ export const translations = {
     title: { ja: '足場積算', en: 'Scaffold Calculator', fr: 'Calculateur d\'échafaudage' },
     subtitle: { ja: '壁の長さと建物の高さを入力して、材料数量を自動計算します', en: 'Enter wall lengths and building height to auto-calculate material quantities', fr: 'Saisissez longueurs des murs et hauteur du bâtiment pour calculer les quantités' },
     loadingConfig: { ja: '設定を読み込み中…', en: 'Loading configuration…', fr: 'Chargement de la configuration…' },
+    editFromQuickHint: {
+      ja: 'この案件はクイックシェイプビルダーで作成されました。下の壁・設定を変更して再計算できます。',
+      en: 'This job was created with Quick Shape Builder. Edit walls and settings below, then recalculate.',
+      fr: 'Ce dossier vient du créateur de forme rapide. Modifiez murs et réglages ci-dessous, puis recalculez.',
+    },
+    editFromAiHint: {
+      ja: 'この案件はAI抽出で作成されました。下の壁・設定を変更して再計算できます。',
+      en: 'This job was created with AI extraction. Edit walls and settings below, then recalculate.',
+      fr: "Ce dossier vient de l'extraction IA. Modifiez murs et réglages ci-dessous, puis recalculez.",
+    },
     cadCanvasLoading: { ja: 'CADキャンバスを読み込み中…', en: 'Loading CAD canvas…', fr: 'Chargement du canevas CAO…' },
     drawingUploadLoading: { ja: '図面アップロードを読み込み中…', en: 'Loading drawing upload…', fr: 'Chargement du téléversement du plan…' },
     closePolygonFirst: { ja: 'ポリゴンを閉じてください。', en: 'Please close the polygon first.', fr: 'Veuillez fermer le polygone.' },

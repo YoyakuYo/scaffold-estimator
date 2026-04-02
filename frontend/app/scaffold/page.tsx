@@ -824,6 +824,8 @@ function ScaffoldPageContent() {
   // ─── Input Mode ────────────────────────────────────────
   const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>('drawing');
   const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>('drawing');
+  /** First calculate after CAD complete — tag config as cad_draw until saved */
+  const [pendingInputUiPath, setPendingInputUiPath] = useState<CreateScaffoldConfigDto['inputUiPath'] | null>(null);
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
   /** After AI extract: show for double-check before creating config. */
@@ -1003,6 +1005,11 @@ function ScaffoldPageContent() {
         })),
       );
     }
+    const uiPath = (editConfig.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
+      ?.uiInputPath;
+    if (uiPath === 'quick') setManualSubTab('quick');
+    else setManualSubTab('drawing');
+    setInputMode('drawing');
   }, [editConfigId, editConfig]);
 
   useEffect(() => {
@@ -1126,6 +1133,7 @@ function ScaffoldPageContent() {
         ? scaffoldConfigsApi.updateAndRecalculate(configId, dto)
         : scaffoldConfigsApi.createAndCalculate(dto),
     onSuccess: (data) => {
+      setPendingInputUiPath(null);
       router.push(`/scaffold/${data.config.id}`);
     },
   });
@@ -1269,22 +1277,17 @@ function ScaffoldPageContent() {
         buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
         pattankoCornerCount: countPattankoCorners(polygonVertices),
       }),
+      inputUiPath: (() => {
+        const stored = (editConfig?.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
+          ?.uiInputPath;
+        if (editConfigId && stored) return stored;
+        if (pendingInputUiPath) return pendingInputUiPath;
+        if (manualSubTab === 'quick') return 'quick';
+        return 'drawing';
+      })(),
     };
     calculateMutation.mutate({ dto, configId: editConfigId });
   };
-
-  // ═══════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════
-
-  if (editConfigId && editConfigLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-600">{t('scaffold', 'loadingConfig')}</span>
-      </div>
-    );
-  }
 
   const handleQuickShapeSubmit = (qConfig: QuickShapeConfig) => {
     // 1) Build a single closed footprint from manual dimensions (manual path only; upload/CAD unchanged).
@@ -1316,11 +1319,31 @@ function ScaffoldPageContent() {
         endStopperType: qConfig.endStopperType,
       }),
       ...(qConfig.edgeHashiraLabeling ? { edgeHashiraLabeling: qConfig.edgeHashiraLabeling } : {}),
+      inputUiPath: 'quick',
     };
     calculateMutation.mutate({ dto, configId: null });
   };
 
   const aiUploadAccept = '.dxf,.ifc,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,model/ifc,application/octet-stream';
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
+
+  if (editConfigId && editConfigLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-600">{t('scaffold', 'loadingConfig')}</span>
+      </div>
+    );
+  }
+
+  const savedUiInputPath = (editConfig?.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
+    ?.uiInputPath;
+  const showDrawingUpload =
+    (manualSubTab === 'drawing' && !editConfigId) ||
+    (!!editConfigId && savedUiInputPath !== 'quick' && savedUiInputPath !== 'ai_extract');
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
@@ -1532,6 +1555,7 @@ function ScaffoldPageContent() {
                       ...(effectiveMassingTiers && effectiveMassingTiers.length > 0 && { massingTiers: effectiveMassingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
+                      inputUiPath: 'ai_extract',
                     };
                     const isStepped = Array.isArray(wallHeightsMm) && wallHeightsMm.length > 0
                       && new Set(walls.map((w) => w.wallHeightMm)).size > 1;
@@ -2137,6 +2161,7 @@ function ScaffoldPageContent() {
                 );
                 setPrefilled(true);
                 setInputMode('drawing');
+                setPendingInputUiPath('cad_draw');
               }}
               className="w-full"
             />
@@ -2148,35 +2173,45 @@ function ScaffoldPageContent() {
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
       {(inputMode !== 'ai_extract' && inputMode !== 'cad_draw' || editConfigId) && (<>
-      {/* Sub-tab selector */}
-      {!editConfigId && (
-        <div className="max-w-[1600px] mx-auto px-4 mb-4">
-          <div className="inline-flex rounded-lg bg-gray-100 p-1">
-            <button
-              onClick={() => { setManualSubTab('drawing'); setInputMode('drawing'); }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                manualSubTab === 'drawing'
-                  ? 'bg-white text-blue-700 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <PenTool className="h-3.5 w-3.5" />
-              {t('scaffoldExtra', 'drawingUpload')}
-            </button>
-            <button
-              onClick={() => { setManualSubTab('quick'); setInputMode('quick'); }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                manualSubTab === 'quick'
-                  ? 'bg-white text-green-700 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {t('scaffoldExtra', 'quickBuilder')}
-            </button>
-          </div>
+      {/* Sub-tab selector (disabled while editing an existing config) */}
+      <div className="max-w-[1600px] mx-auto px-4 mb-4">
+        <div className="inline-flex rounded-lg bg-gray-100 p-1">
+          <button
+            type="button"
+            disabled={!!editConfigId}
+            onClick={() => {
+              if (editConfigId) return;
+              setManualSubTab('drawing');
+              setInputMode('drawing');
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
+              manualSubTab === 'drawing'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <PenTool className="h-3.5 w-3.5" />
+            {t('scaffoldExtra', 'drawingUpload')}
+          </button>
+          <button
+            type="button"
+            disabled={!!editConfigId}
+            onClick={() => {
+              if (editConfigId) return;
+              setManualSubTab('quick');
+              setInputMode('quick');
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
+              manualSubTab === 'quick'
+                ? 'bg-white text-green-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {t('scaffoldExtra', 'quickBuilder')}
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Quick Shape Builder */}
       {manualSubTab === 'quick' && !editConfigId && (
@@ -2194,20 +2229,32 @@ function ScaffoldPageContent() {
         </div>
       )}
 
-      {/* Drawing Upload */}
+      {/* Drawing Upload (+ edit hints when upload UI is skipped) */}
       {(manualSubTab === 'drawing' || editConfigId) && (<>
-      <div className="max-w-[1600px] mx-auto px-4 mb-6">
-        <DrawingUpload
-          perimeterModel={perimeterModel}
-          onWallsDetected={handleWallsDetected}
-          onSegmentEdit={handleSegmentEdit}
-          externalWallLengths={walls.map(w => w.lengthMm)}
-          buildingHeightMm={buildingHeightMm}
-          onBuildingHeightChange={setBuildingHeightMm}
-          buildingHeightLabel={t('scaffold', 'defaultHeightForDrawingMm')}
-          buildingHeightHint={t('scaffold', 'defaultHeightDrawingHint')}
-        />
-      </div>
+      {editConfigId && savedUiInputPath === 'quick' && (
+        <div className="max-w-[1600px] mx-auto px-4 mb-4 rounded-lg border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950">
+          {t('scaffold', 'editFromQuickHint')}
+        </div>
+      )}
+      {editConfigId && savedUiInputPath === 'ai_extract' && (
+        <div className="max-w-[1600px] mx-auto px-4 mb-4 rounded-lg border border-violet-200 bg-violet-50/90 p-4 text-sm text-violet-950">
+          {t('scaffold', 'editFromAiHint')}
+        </div>
+      )}
+      {showDrawingUpload && (
+        <div className="max-w-[1600px] mx-auto px-4 mb-6">
+          <DrawingUpload
+            perimeterModel={perimeterModel}
+            onWallsDetected={handleWallsDetected}
+            onSegmentEdit={handleSegmentEdit}
+            externalWallLengths={walls.map(w => w.lengthMm)}
+            buildingHeightMm={buildingHeightMm}
+            onBuildingHeightChange={setBuildingHeightMm}
+            buildingHeightLabel={t('scaffold', 'defaultHeightForDrawingMm')}
+            buildingHeightHint={t('scaffold', 'defaultHeightDrawingHint')}
+          />
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════
           SCAFFOLD SETTINGS + WALL CONFIG (shown when walls exist)

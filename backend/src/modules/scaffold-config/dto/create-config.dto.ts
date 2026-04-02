@@ -11,6 +11,7 @@ import {
   IsDateString,
   ValidateIf,
   IsEmail,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { EdgeHashiraLabelingDto } from './patch-result-labels.dto';
@@ -294,4 +295,9 @@ export class CreateScaffoldConfigDto {
   @IsString()
   @MaxLength(100)
   siteFax?: string;
+
+  /** Which scaffold page UI created this config (stored on calculationResult for recalculate routing). */
+  @IsOptional()
+  @IsIn(['quick', 'drawing', 'ai_extract', 'cad_draw'])
+  inputUiPath?: 'quick' | 'drawing' | 'ai_extract' | 'cad_draw';
 }

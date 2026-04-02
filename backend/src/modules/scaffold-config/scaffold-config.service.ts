@@ -328,6 +328,7 @@ export class ScaffoldConfigService {
       ...(dto.bimFacadeColors && { bimFacadeColors: dto.bimFacadeColors }),
       ...(dto.edgeHashiraLabeling && { edgeHashiraLabeling: dto.edgeHashiraLabeling }),
       ...(siteContactFallback ? { siteContact: siteContactFallback } : {}),
+      ...(dto.inputUiPath ? { uiInputPath: dto.inputUiPath } : {}),
     };
     await client
       .from('scaffold_configurations')
@@ -559,9 +560,13 @@ export class ScaffoldConfigService {
     const keepMassingTiers =
       Array.isArray(massingForResult) && massingForResult.length > 0;
 
+    const prevUiPath = (config.calculationResult as Record<string, unknown> | null)?.uiInputPath;
+    const uiInputPath = dto.inputUiPath ?? prevUiPath;
+
     let calculationResult: Record<string, unknown> = {
       ...result,
       wallStandoffMm: wallStandoffMm,
+      ...(uiInputPath ? { uiInputPath } : {}),
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 ? { polygonVertices: dto.buildingOutline } : {}),
       ...(keepMassingTiers ? { massingTiers: massingForResult } : {}),
       ...(dto.obstacles && dto.obstacles.length > 0 ? { obstacles: dto.obstacles } : {}),
