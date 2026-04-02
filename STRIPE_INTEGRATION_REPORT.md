@@ -35,8 +35,9 @@ Set these in backend environment:
 
 - `STRIPE_SECRET_KEY=sk_live_...` (or test key), **or** `STRIPE_RESTRICTED_KEY=...` if you use a restricted key (checkout still needs session-creation permission; webhooks may need a sufficiently capable key).
 - `STRIPE_WEBHOOK_SECRET=whsec_...`
-- **Multi-plan (recommended):** `STRIPE_PRICE_ID_BASIC`, `STRIPE_PRICE_ID_MEDIUM`, `STRIPE_PRICE_ID_PREMIUM` — each a recurring `price_...` ID.
-- **Legacy single price:** `STRIPE_PRICE_ID=price_...` — used when the three tier vars above are unset (exposed as checkout tier `standard`).
+- **Multi-plan (recommended):** `STRIPE_PRICE_ID_BASIC`, `STRIPE_PRICE_ID_MEDIUM`, `STRIPE_PRICE_ID_PREMIUM` — each a **recurring** `price_...` ID (e.g. yearly updates).
+- **Optional one-time per tier** (e.g. license, charged once on first invoice): `STRIPE_PRICE_ID_BASIC_ONETIME`, `STRIPE_PRICE_ID_MEDIUM_ONETIME`, `STRIPE_PRICE_ID_PREMIUM_ONETIME` — each a **one-time** `price_...` ID in Stripe.
+- **Legacy single price:** `STRIPE_PRICE_ID=price_...` — used when the three tier vars above are unset (checkout tier `standard`). Optional `STRIPE_PRICE_ID_ONETIME` for a one-time line on that path.
 - `FRONTEND_URL=https://your-frontend-domain`
 
 Existing variables (`JWT_SECRET`, DB vars, etc.) remain required.

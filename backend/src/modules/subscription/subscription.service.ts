@@ -126,6 +126,20 @@ export class SubscriptionService {
     return this.configService.get<string>(key)?.trim() || undefined;
   }
 
+  /** Optional one-time (e.g. license) charged on the first Checkout invoice alongside recurring updates. */
+  private getStripeOnetimePriceIdForTier(tier: CheckoutPlanTier): string | undefined {
+    if (tier === 'standard') {
+      return this.configService.get<string>('STRIPE_PRICE_ID_ONETIME')?.trim() || undefined;
+    }
+    const key =
+      tier === 'basic'
+        ? 'STRIPE_PRICE_ID_BASIC_ONETIME'
+        : tier === 'medium'
+          ? 'STRIPE_PRICE_ID_MEDIUM_ONETIME'
+          : 'STRIPE_PRICE_ID_PREMIUM_ONETIME';
+    return this.configService.get<string>(key)?.trim() || undefined;
+  }
+
   /** Tiers that have a price id configured (plus legacy `standard` if STRIPE_PRICE_ID only). */
   getAvailableCheckoutTiers(): CheckoutPlanTier[] {
     const tiers: CheckoutPlanTier[] = [];
@@ -306,11 +320,37 @@ export class SubscriptionService {
       );
     }
 
+    const onetimePriceId = this.getStripeOnetimePriceIdForTier(tier);
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+    if (onetimePriceId) {
+      if (!onetimePriceId.startsWith('price_')) {
+        throw new BadRequestException(
+          `Invalid Stripe one-time price ID for plan "${tier}": use a Price id (price_...), not prod_....`,
+        );
+      }
+      let oneTime: Stripe.Price;
+      try {
+        oneTime = await stripe.prices.retrieve(onetimePriceId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new BadRequestException(
+          `Could not load Stripe one-time price "${onetimePriceId}" for plan "${tier}". ${msg}`,
+        );
+      }
+      if (oneTime.type !== 'one_time') {
+        throw new BadRequestException(
+          `Stripe price "${onetimePriceId}" must be a one-time price (license/fee). Set STRIPE_PRICE_ID_*_ONETIME to a Dashboard price with type "one time".`,
+        );
+      }
+      lineItems.push({ price: onetimePriceId, quantity: 1 });
+    }
+    lineItems.push({ price: priceId, quantity: 1 });
+
     const frontendUrl = this.getFrontendUrl();
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: lineItems,
       success_url: `${frontendUrl}/billing?checkout=success`,
       cancel_url: `${frontendUrl}/billing?checkout=cancel`,
       allow_promotion_codes: true,
