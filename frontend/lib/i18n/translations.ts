@@ -1643,6 +1643,11 @@ export const translations = {
     bankAccountHolder: { ja: '口座名義', en: 'Account holder', fr: 'Titulaire' },
     bankRemittanceReference: { ja: '通信欄・依頼人名（目安）', en: 'Reference / remitter note', fr: 'Référence / libellé' },
     bankAmountNote: { ja: '振込金額・備考', en: 'Amount / notes', fr: 'Montant / notes' },
+    noPaymentConfigured: {
+      ja: 'カード決済（Stripe）も銀行振込の表示も未設定です。管理者に Stripe または振込先（バックエンドの BANK_TRANSFER_* またはフロントの NEXT_PUBLIC_BANK_TRANSFER_*）の設定を依頼してください。',
+      en: 'Neither card checkout nor bank transfer details are configured. Ask your administrator to set Stripe or bank transfer environment variables (backend BANK_TRANSFER_* or frontend NEXT_PUBLIC_BANK_TRANSFER_*).',
+      fr: 'Aucun paiement par carte ni virement n’est configuré. Demandez à l’administrateur de configurer Stripe ou les variables d’environnement de virement (BANK_TRANSFER_* côté API ou NEXT_PUBLIC_BANK_TRANSFER_* côté site).',
+    },
   },
 
   // ─── Support Page ───────────────────────────────────────────

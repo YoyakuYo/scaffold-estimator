@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
+import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
 import { usersApi } from '@/lib/api/users';
 import { Loader2, CreditCard, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark } from 'lucide-react';
 
@@ -83,6 +84,10 @@ export default function BillingPage() {
 
   const isTrial = subscription.status === 'trialing';
   const isActive = subscription.status === 'active' || subscription.plan === 'enterprise';
+
+  const bankTransfer =
+    subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
+  const hasAnyPaymentPath = subscription.isStripeConfigured || !!bankTransfer;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -182,9 +187,14 @@ export default function BillingPage() {
               {t('billing', 'stripeNotConfigured')}
             </p>
           )}
+          {!hasAnyPaymentPath && (
+            <p className="text-sm text-gray-600 mt-3 border-t border-gray-100 pt-3">
+              {t('billing', 'noPaymentConfigured')}
+            </p>
+          )}
         </div>
 
-        {subscription.bankTransfer && (
+        {bankTransfer && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
             <div className="flex items-start gap-3 mb-4">
               <Landmark className="h-6 w-6 text-gray-700 shrink-0 mt-0.5" />
@@ -198,34 +208,34 @@ export default function BillingPage() {
             <dl className="grid gap-3 sm:grid-cols-2 text-sm">
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
-                <dd className="font-medium text-gray-900">{subscription.bankTransfer.bankName}</dd>
+                <dd className="font-medium text-gray-900">{bankTransfer.bankName}</dd>
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
-                <dd className="font-medium text-gray-900">{subscription.bankTransfer.branch}</dd>
+                <dd className="font-medium text-gray-900">{bankTransfer.branch}</dd>
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
-                <dd className="font-medium text-gray-900">{subscription.bankTransfer.accountType}</dd>
+                <dd className="font-medium text-gray-900">{bankTransfer.accountType}</dd>
               </div>
               <div>
                 <dt className="text-gray-500">{t('billing', 'bankAccountNumber')}</dt>
                 <dd className="font-medium text-gray-900 tabular-nums">
-                  {subscription.bankTransfer.accountNumber}
+                  {bankTransfer.accountNumber}
                 </dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
-                <dd className="font-medium text-gray-900">{subscription.bankTransfer.accountHolder}</dd>
+                <dd className="font-medium text-gray-900">{bankTransfer.accountHolder}</dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
-                <dd className="font-medium text-gray-900 break-all">{subscription.bankTransfer.remittanceReference}</dd>
+                <dd className="font-medium text-gray-900 break-all">{bankTransfer.remittanceReference}</dd>
               </div>
-              {subscription.bankTransfer.amountNote && (
+              {bankTransfer.amountNote && (
                 <div className="sm:col-span-2">
                   <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
-                  <dd className="font-medium text-gray-900">{subscription.bankTransfer.amountNote}</dd>
+                  <dd className="font-medium text-gray-900">{bankTransfer.amountNote}</dd>
                 </div>
               )}
             </dl>

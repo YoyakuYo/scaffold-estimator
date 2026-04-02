@@ -33,7 +33,8 @@ export interface SubscriptionInfo {
   trialDaysRemaining: number;
   trialLengthDays: number;
   isStripeConfigured: boolean;
-  bankTransfer: BankTransferInstructions | null;
+  /** Present when backend BANK_TRANSFER_* is set; may be absent on older APIs. */
+  bankTransfer?: BankTransferInstructions | null;
 }
 
 export interface SubscriberRow {

@@ -82,6 +82,10 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # BANK_TRANSFER_ACCOUNT_NUMBER=1234567
 # BANK_TRANSFER_ACCOUNT_HOLDER=カ）サンプル
 # BANK_TRANSFER_AMOUNT_NOTE=月額 〇〇円（例）
+#
+# If production API is not redeployed yet, you can set the same fields on the
+# frontend host as NEXT_PUBLIC_BANK_TRANSFER_* (see frontend/.env.example) and
+# redeploy the Next.js app; /billing will show 銀行振込 from the client env.
 ```
 
 ## Quick Setup Steps
