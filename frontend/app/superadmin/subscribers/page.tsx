@@ -27,7 +27,18 @@ export default function SuperadminSubscribersPage() {
   const extendTrialMutation = useMutation({
     mutationFn: ({ userId, days }: { userId: string; days: number }) =>
       subscriptionsApi.extendTrial(userId, days),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['subscribers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscribers'] });
+      queryClient.invalidateQueries({ queryKey: ['my-subscription'] });
+    },
+  });
+
+  const restartFreshTrialMutation = useMutation({
+    mutationFn: (userId: string) => subscriptionsApi.restartFreshTrialAdmin(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscribers'] });
+      queryClient.invalidateQueries({ queryKey: ['my-subscription'] });
+    },
   });
 
   const setAccessMutation = useMutation({
@@ -119,6 +130,13 @@ export default function SuperadminSubscribersPage() {
                           className="px-2.5 py-1.5 text-xs bg-amber-50 border border-amber-300 text-amber-700 rounded hover:bg-amber-100"
                         >
                           {t('subscribersAdmin', 'extendTrial7')}
+                        </button>
+                        <button
+                          onClick={() => restartFreshTrialMutation.mutate(sub.userId)}
+                          disabled={restartFreshTrialMutation.isPending}
+                          className="px-2.5 py-1.5 text-xs bg-sky-50 border border-sky-300 text-sky-800 rounded hover:bg-sky-100 disabled:opacity-50"
+                        >
+                          {t('subscribersAdmin', 'restartFreshTrial')}
                         </button>
                         <button
                           onClick={() => setAccessMutation.mutate({ userId: sub.userId, access: 'active' })}

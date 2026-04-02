@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import type { Locale, TranslationKeys, TranslationSection } from '@/lib/i18n/translations';
 
@@ -199,6 +199,15 @@ function BankDd({
 
 export default function BillingPage() {
   const { locale, t } = useI18n();
+  const queryClient = useQueryClient();
+  const [isLocalhost, setIsLocalhost] = useState(false);
+
+  useEffect(() => {
+    setIsLocalhost(
+      typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'),
+    );
+  }, []);
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -224,6 +233,13 @@ export default function BillingPage() {
     mutationFn: subscriptionsApi.createPortalSession,
     onSuccess: ({ url }) => {
       window.location.href = url;
+    },
+  });
+
+  const restartFreshTrialMutation = useMutation({
+    mutationFn: () => subscriptionsApi.restartFreshTrialSelf(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-subscription'] });
     },
   });
 
@@ -345,6 +361,34 @@ export default function BillingPage() {
                 <p className="text-sm text-red-900">{t('billing', 'accessEndedHint')}</p>
               </div>
             )}
+
+          {isLocalhost && !subscription.hasAccess && (
+            <div className="mt-5 p-4 rounded-lg border border-amber-300 bg-amber-50">
+              <p className="text-sm font-semibold text-amber-900">{t('billing', 'devRestartTrialTitle')}</p>
+              <p className="text-xs text-amber-900/90 mt-2 leading-relaxed">{t('billing', 'devRestartTrialHint')}</p>
+              <button
+                type="button"
+                disabled={restartFreshTrialMutation.isPending}
+                onClick={() => restartFreshTrialMutation.mutate()}
+                className="mt-3 px-4 py-2 text-sm font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {restartFreshTrialMutation.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('billing', 'devRestartTrialLoading')}
+                  </span>
+                ) : (
+                  t('billing', 'devRestartTrialButton')
+                )}
+              </button>
+              {restartFreshTrialMutation.isSuccess && (
+                <p className="text-xs text-green-700 mt-2">{t('billing', 'devRestartTrialSuccess')}</p>
+              )}
+              {restartFreshTrialMutation.isError && (
+                <p className="text-xs text-red-700 mt-2">{t('billing', 'devRestartTrialFailed')}</p>
+              )}
+            </div>
+          )}
 
           {isTrial && subscription.hasAccess && (
             <div className="mt-5 p-4 rounded-lg border border-amber-200 bg-amber-50 flex items-start gap-3">

@@ -124,4 +124,17 @@ export const subscriptionsApi = {
     const res = await apiClient.post(`/subscriptions/admin/${userId}/set-access`, { access });
     return res.data;
   },
+
+  /** Local dev: backend ALLOW_DEV_TRIAL_RESTART=true. Staging/script: set TRIAL_RESTART_SECRET and pass { secret }. */
+  restartFreshTrialSelf: async (opts?: { secret?: string }): Promise<unknown> => {
+    const headers: Record<string, string> = {};
+    if (opts?.secret) headers['x-trial-restart-secret'] = opts.secret;
+    const res = await apiClient.post('/subscriptions/me/restart-fresh-trial', {}, { headers });
+    return res.data;
+  },
+
+  restartFreshTrialAdmin: async (userId: string): Promise<unknown> => {
+    const res = await apiClient.post(`/subscriptions/admin/${userId}/restart-fresh-trial`, {});
+    return res.data;
+  },
 };

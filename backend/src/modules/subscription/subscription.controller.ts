@@ -28,6 +28,15 @@ export class SubscriptionController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('me/restart-fresh-trial')
+  async restartFreshTrialSelfService(
+    @CurrentUser() user: any,
+    @Headers('x-trial-restart-secret') secret?: string,
+  ) {
+    return this.subscriptionService.selfServiceRestartFreshTrial(user.id, secret);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('checkout-session')
   async createCheckoutSession(@CurrentUser() user: any, @Body() body: CreateCheckoutSessionDto) {
     return this.subscriptionService.createCheckoutSession(user.id, body);
@@ -62,6 +71,13 @@ export class SubscriptionController {
     @Param('days', ParseIntPipe) days: number,
   ) {
     return this.subscriptionService.adminExtendTrial(userId, days);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('admin/:userId/restart-fresh-trial')
+  async restartFreshTrialAdmin(@Param('userId') userId: string) {
+    return this.subscriptionService.applyFreshTrialWindow(userId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

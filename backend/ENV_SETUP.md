@@ -126,6 +126,20 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # STRIPE_PRICE_ID=price_... is used as tier "standard". Optional one-time for that path:
 # STRIPE_PRICE_ID_ONETIME=price_...
 # STRIPE_PRICE_ID=price_...
+
+# ============================================
+# FREE TRIAL RESTART (self-service, gated)
+# ============================================
+# POST /api/v1/subscriptions/me/restart-fresh-trial (JWT) resets trial to a fresh
+# window from now (same TRIAL_DAYS as signup, e.g. 7) and clears trial document count.
+# Allowed only if EITHER:
+#   (1) NODE_ENV=development AND ALLOW_DEV_TRIAL_RESTART=true
+#       → Billing page on localhost shows a "Start fresh 7-day trial" button.
+#   (2) TRIAL_RESTART_SECRET is set → client sends header x-trial-restart-secret: <same>
+# Superadmins can also POST .../subscriptions/admin/:userId/restart-fresh-trial (no secret).
+#
+# ALLOW_DEV_TRIAL_RESTART=true
+# TRIAL_RESTART_SECRET=openssl-rand-hex-or-similar
 ```
 
 ## Quick Setup Steps

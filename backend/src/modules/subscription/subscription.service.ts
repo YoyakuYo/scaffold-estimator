@@ -616,6 +616,52 @@ export class SubscriptionService {
     return mapRowToCamel<Subscription>(saved as Record<string, unknown>)!;
   }
 
+  /**
+   * New trial window from now: TRIAL_DAYS, trialing, free_trial, upload quota reset.
+   * Used by superadmin or self-service (dev / secret) when a user was blocked after expiry.
+   */
+  async applyFreshTrialWindow(userId: string): Promise<Subscription> {
+    const user = await this.getUserOrFail(userId);
+    if (user.role === 'superadmin') throw new BadRequestException('Superadmin account does not use trials.');
+    const sub = await this.ensureSubscriptionForUser(userId);
+    const now = new Date();
+    const trialEnd = this.buildTrialEnd(now);
+    const updates = mapPayloadToSnake({
+      trialStart: now,
+      trialEnd,
+      status: 'trialing',
+      plan: 'free_trial',
+      trialDocumentsUsed: 0,
+    });
+    const { data: saved, error } = await this.supabase.getClient().from('subscriptions').update(updates).eq('id', sub.id).select().single();
+    if (error || !saved) throw new BadRequestException('Failed to restart trial.');
+    this.logger.log(`Fresh trial applied for user ${userId} until ${trialEnd.toISOString()}`);
+    return mapRowToCamel<Subscription>(saved as Record<string, unknown>)!;
+  }
+
+  /**
+   * Logged-in user restarts own trial when:
+   * - NODE_ENV=development and ALLOW_DEV_TRIAL_RESTART=true, or
+   * - TRIAL_RESTART_SECRET is set and x-trial-restart-secret header matches.
+   */
+  async selfServiceRestartFreshTrial(userId: string, secretHeader?: string): Promise<Subscription> {
+    const nodeEnv = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
+    const devRestart = ['true', '1', 'yes'].includes(
+      (this.configService.get<string>('ALLOW_DEV_TRIAL_RESTART') || '').toLowerCase(),
+    );
+    const devOk = nodeEnv === 'development' && devRestart;
+    const expected = this.configService.get<string>('TRIAL_RESTART_SECRET')?.trim();
+    if (devOk) {
+      return this.applyFreshTrialWindow(userId);
+    }
+    if (expected && secretHeader === expected) {
+      return this.applyFreshTrialWindow(userId);
+    }
+    throw new ForbiddenException(
+      'Fresh trial restart is not enabled. For local dev set NODE_ENV=development and ALLOW_DEV_TRIAL_RESTART=true in backend .env. For scripted reset, set TRIAL_RESTART_SECRET and send header x-trial-restart-secret.',
+    );
+  }
+
   async adminSetAccess(userId: string, access: 'active' | 'canceled' | 'expired'): Promise<Subscription> {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') throw new BadRequestException('Superadmin account should remain active.');
