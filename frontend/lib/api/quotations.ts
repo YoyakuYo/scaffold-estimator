@@ -89,6 +89,14 @@ export const quotationsApi = {
     return response.data;
   },
 
+  /** Set rental cost line amount manually, or pass null to use the formula result again. */
+  updateCostItemAmount: async (costItemId: string, amount: number | null): Promise<QuotationCostItem> => {
+    const response = await apiClient.patch<QuotationCostItem>(`/quotations/cost-items/${costItemId}/amount`, {
+      amount,
+    });
+    return response.data;
+  },
+
   /** Re-populate prices from materials master and recalculate costs */
   repopulatePrices: async (id: string): Promise<Quotation> => {
     const response = await apiClient.post<Quotation>(`/quotations/${id}/repopulate-prices`, {}, { timeout: 120000 });

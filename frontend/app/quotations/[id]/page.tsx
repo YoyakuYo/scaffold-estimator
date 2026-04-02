@@ -25,6 +25,8 @@ export default function QuotationDetailPage() {
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<number>(0);
+  const [editingCostItemId, setEditingCostItemId] = useState<string | null>(null);
+  const [editCostAmount, setEditCostAmount] = useState<number>(0);
 
   const { data: quotation, isLoading } = useQuery({
     queryKey: ['quotation', quotationId],
@@ -37,6 +39,18 @@ export default function QuotationDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotation', quotationId] });
       setEditingItemId(null);
+    },
+    onError: (error: any) => {
+      alert(`Error: ${error.response?.data?.message || error.message}`);
+    },
+  });
+
+  const updateCostAmountMutation = useMutation({
+    mutationFn: ({ costItemId, amount }: { costItemId: string; amount: number | null }) =>
+      quotationsApi.updateCostItemAmount(costItemId, amount),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotation', quotationId] });
+      setEditingCostItemId(null);
     },
     onError: (error: any) => {
       alert(`Error: ${error.response?.data?.message || error.message}`);
@@ -82,6 +96,22 @@ export default function QuotationDetailPage() {
   const startEditPrice = (itemId: string, currentPrice: number) => {
     setEditingItemId(itemId);
     setEditPrice(currentPrice);
+  };
+
+  const startEditCostAmount = (costItemId: string, effectiveAmount: number) => {
+    setEditingCostItemId(costItemId);
+    setEditCostAmount(Math.round(effectiveAmount));
+  };
+
+  const saveCostAmount = () => {
+    if (!editingCostItemId) return;
+    const n = Number(editCostAmount);
+    if (Number.isNaN(n) || n < 0) return;
+    updateCostAmountMutation.mutate({ costItemId: editingCostItemId, amount: Math.round(n) });
+  };
+
+  const clearCostManualOverride = (costItemId: string) => {
+    updateCostAmountMutation.mutate({ costItemId, amount: null });
   };
 
   const savePrice = () => {
@@ -307,6 +337,9 @@ export default function QuotationDetailPage() {
             <div className="px-6 py-4 border-b bg-gray-50">
               <h2 className="text-lg font-semibold">{t('quotationDetail', 'costItems')}</h2>
               <p className="text-sm text-gray-500">{t('quotationDetail', 'costItemsDesc')}</p>
+              {!isFinalized && (
+                <p className="text-sm text-gray-500 mt-0.5">{t('quotationDetail', 'costClickToEditAmount')}</p>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -319,16 +352,86 @@ export default function QuotationDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {[...(quotation.costItems || [])].sort((a, b) => a.sortOrder - b.sortOrder).map((cost, idx) => (
-                    <tr key={cost.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{cost.name}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 font-mono">{cost.formulaExpression || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-right font-mono font-medium">
-                        {formatCurrency(Number(cost.userEditedValue ?? cost.calculatedValue))}
-                      </td>
-                    </tr>
-                  ))}
+                  {[...(quotation.costItems || [])].sort((a, b) => a.sortOrder - b.sortOrder).map((cost, idx) => {
+                    const effectiveCost = Number(cost.userEditedValue ?? cost.calculatedValue);
+                    const calcOnly = Number(cost.calculatedValue);
+                    return (
+                      <tr key={cost.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{cost.name}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 font-mono">{cost.formulaExpression || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-right align-top">
+                          {editingCostItemId === cost.id ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex items-center justify-end space-x-1">
+                                <input
+                                  type="number"
+                                  value={editCostAmount}
+                                  onChange={(e) => setEditCostAmount(Number(e.target.value))}
+                                  min={0}
+                                  step={1}
+                                  className="w-32 px-2 py-1 border rounded text-right text-sm font-mono"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveCostAmount();
+                                    if (e.key === 'Escape') setEditingCostItemId(null);
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={saveCostAmount}
+                                  disabled={updateCostAmountMutation.isPending}
+                                  className="p-1 text-green-600 hover:text-green-700"
+                                >
+                                  <Save className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCostItemId(null)}
+                                  className="p-1 text-gray-400 hover:text-gray-600"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => clearCostManualOverride(cost.id)}
+                                disabled={updateCostAmountMutation.isPending}
+                                className="text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                {t('quotationDetail', 'costUseFormula')}
+                              </button>
+                              <span className="text-xs text-gray-400">
+                                {t('quotationDetail', 'costFormulaValue')}: {formatCurrency(calcOnly)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span
+                                className={`font-mono font-medium ${!isFinalized ? 'cursor-pointer hover:text-blue-600 underline decoration-dashed' : ''}`}
+                                onClick={() =>
+                                  !isFinalized && startEditCostAmount(cost.id, effectiveCost)
+                                }
+                                title={!isFinalized ? t('quotationDetail', 'costClickToEditAmount') : undefined}
+                              >
+                                {formatCurrency(effectiveCost)}
+                              </span>
+                              {cost.userEditedValue != null && !isFinalized && (
+                                <button
+                                  type="button"
+                                  onClick={() => clearCostManualOverride(cost.id)}
+                                  disabled={updateCostAmountMutation.isPending}
+                                  className="text-xs text-blue-600 hover:text-blue-800"
+                                >
+                                  {t('quotationDetail', 'costUseFormula')}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

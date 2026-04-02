@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -48,6 +49,20 @@ export class QuotationController {
     @Body('unitPrice') unitPrice: number,
   ) {
     return await this.quotationService.updateItemPrice(itemId, unitPrice);
+  }
+
+  /** Override a rental cost line amount, or pass amount: null to use the formula value again. */
+  @Patch('cost-items/:costItemId/amount')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin', 'estimator', 'viewer')
+  async updateCostItemAmount(
+    @Param('costItemId') costItemId: string,
+    @Body() body: { amount?: number | null },
+  ) {
+    if (!Object.prototype.hasOwnProperty.call(body, 'amount')) {
+      throw new BadRequestException('amount is required (use null to clear manual override)');
+    }
+    return await this.quotationService.updateCostItemAmount(costItemId, body.amount ?? null);
   }
 
   /**

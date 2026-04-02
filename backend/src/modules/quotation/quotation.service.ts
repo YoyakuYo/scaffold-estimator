@@ -1,11 +1,18 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { Quotation } from './quotation.entity';
 import { QuotationItem } from './quotation-item.entity';
+import { QuotationCostItem } from './quotation-cost-item.entity';
 import { ScaffoldConfigService } from '../scaffold-config/scaffold-config.service';
 import { QuotationCostService } from './quotation-cost.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+
+function effectiveCostLineAmount(item: { userEditedValue?: number | null; calculatedValue?: number | null }): number {
+  const v = item.userEditedValue ?? item.calculatedValue;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
 @Injectable()
 export class QuotationService {
@@ -72,7 +79,7 @@ export class QuotationService {
       }, 0);
 
       const costItems = await this.costService.calculateCosts(savedQuotation, materialSubtotal, totalComponents, totalArea, userId);
-      const costSubtotal = costItems.reduce((sum, item) => sum + Number(item.calculatedValue || item.userEditedValue || 0), 0);
+      const costSubtotal = costItems.reduce((sum, item) => sum + effectiveCostLineAmount(item), 0);
       const subtotal = materialSubtotal + costSubtotal;
       const taxAmount = Math.floor(subtotal * 0.1);
       const totalAmount = subtotal + taxAmount;
@@ -120,6 +127,27 @@ export class QuotationService {
     if (!saved) throw new Error('Update failed');
     await this.recalculateTotals(item.quotationId);
     return mapRowToCamel<QuotationItem>(saved as Record<string, unknown>)!;
+  }
+
+  async updateCostItemAmount(costItemId: string, amount: number | null): Promise<QuotationCostItem> {
+    const client = this.supabase.getClient();
+    const { data: costRow, error: cErr } = await client.from('quotation_cost_items').select('*').eq('id', costItemId).maybeSingle();
+    if (cErr || !costRow) throw new NotFoundException('Cost item not found');
+    const costItem = mapRowToCamel<QuotationCostItem>(costRow as Record<string, unknown>)!;
+    const { data: qRow } = await client.from('quotations').select('status').eq('id', costItem.quotationId).maybeSingle();
+    if (!qRow) throw new NotFoundException('Quotation not found');
+    if (qRow.status === 'finalized') throw new BadRequestException('Cannot edit rental costs on a finalized quotation.');
+    if (amount !== null && (typeof amount !== 'number' || Number.isNaN(amount) || amount < 0)) {
+      throw new BadRequestException('amount must be a non-negative number or null to use the formula value');
+    }
+    const updatePayload = mapPayloadToSnake({
+      userEditedValue: amount,
+      isLocked: amount !== null,
+    });
+    const { data: saved, error: uErr } = await client.from('quotation_cost_items').update(updatePayload).eq('id', costItemId).select().single();
+    if (uErr || !saved) throw new InternalServerErrorException(uErr?.message || 'Failed to update cost item');
+    await this.recalculateTotals(costItem.quotationId);
+    return mapRowToCamel<QuotationCostItem>(saved as Record<string, unknown>)!;
   }
 
   async repopulatePrices(quotationId: string, userId: string): Promise<Quotation> {
@@ -195,7 +223,7 @@ export class QuotationService {
   private async recalculateTotals(quotationId: string): Promise<void> {
     const quotation = await this.get(quotationId);
     const materialSubtotal = quotation.items.reduce((sum, i) => sum + Number(i.lineTotal), 0);
-    const costSubtotal = quotation.costItems.reduce((sum, i) => sum + Number(i.calculatedValue || i.userEditedValue || 0), 0);
+    const costSubtotal = quotation.costItems.reduce((sum, i) => sum + effectiveCostLineAmount(i), 0);
     const subtotal = materialSubtotal + costSubtotal;
     const taxAmount = Math.floor(subtotal * 0.1);
     const totalAmount = subtotal + taxAmount;
