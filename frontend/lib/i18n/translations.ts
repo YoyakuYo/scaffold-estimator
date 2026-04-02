@@ -180,6 +180,16 @@ export const translations = {
     manageBilling: { ja: '請求を管理', en: 'Manage Billing', fr: 'Gérer la facturation' },
     trialRemaining: { ja: '無料トライアル残り {days} 日', en: 'Free trial: {days} day(s) remaining', fr: 'Essai gratuit : {days} jour(s) restant(s)' },
     trialEnded: { ja: 'トライアル期間が終了しました。請求ページで有料プランを開始してください。', en: 'Your trial has ended. Start a paid plan from Billing to continue using core features.', fr: "Votre essai est terminé. Démarrez une offre payante depuis la facturation pour continuer à utiliser les fonctions principales." },
+    siteHubBadge: { ja: '足場積算ワークスペース', en: 'Scaffold workspace', fr: 'Espace échafaudage' },
+    quickAccess: { ja: 'クイックアクセス', en: 'Quick access', fr: 'Accès rapide' },
+    shortcutQuotationsDesc: { ja: '保存した見積の一覧・管理', en: 'View and manage saved quotations', fr: 'Voir et gérer les devis enregistrés' },
+    shortcutBillingDesc: { ja: 'プラン・お支払い方法', en: 'Plan and payment method', fr: 'Offre et moyen de paiement' },
+    historyPanelTitle: { ja: '案件履歴', en: 'Job history', fr: 'Historique des dossiers' },
+    shortcutJobsDesc: {
+      ja: '保存した案件から見積・2D/3D・Excelへ',
+      en: 'Open saved jobs for quotations, 2D/3D views, and Excel',
+      fr: 'Ouvrez un dossier enregistré pour devis, vues 2D/3D et Excel',
+    },
   },
 
   // ─── Scaffold Input Page ───────────────────────────────────────

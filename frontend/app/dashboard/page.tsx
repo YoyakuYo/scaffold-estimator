@@ -38,6 +38,8 @@ import {
   CheckCircle,
   XCircle,
   CreditCard,
+  HardHat,
+  Sparkles,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -501,113 +503,284 @@ function UserDashboard() {
   // Subscription check disabled until work is complete — always allow access
   const hasBillingAccess = true;
 
+  const workflowSteps = [
+    { n: 1, title: t('dashboard', 'quickStep1Title'), hint: t('dashboard', 'quickStep1Desc') },
+    { n: 2, title: t('dashboard', 'quickStep2Title'), hint: t('dashboard', 'quickStep2Desc') },
+    { n: 3, title: t('dashboard', 'quickStep3Title'), hint: t('dashboard', 'quickStep3Desc') },
+  ];
+
+  const subStatus = subscription?.status ?? '';
+  const subAlert =
+    !hasBillingAccess ||
+    subStatus === 'past_due' ||
+    subStatus === 'canceled' ||
+    subStatus === 'expired';
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <p className="text-gray-600 mb-6">{t('dashboard', 'dashboardIntro')}</p>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div
+        className="h-1.5 w-full bg-[repeating-linear-gradient(-45deg,#09090b,#09090b_8px,#f59e0b_8px,#f59e0b_16px)]"
+        aria-hidden
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10 space-y-8">
+        {/* Hero — blueprint grid + site lighting */}
+        <section className="relative overflow-hidden rounded-3xl border border-zinc-700/70 bg-zinc-900 shadow-2xl shadow-black/50">
+          <div
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[length:32px_32px]"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-amber-500/[0.12] blur-3xl"
+            aria-hidden
+          />
+          <div className="relative p-8 lg:p-10 lg:flex lg:items-start lg:justify-between lg:gap-12">
+            <div className="max-w-xl">
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/45 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">
+                <HardHat className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+                {t('dashboard', 'siteHubBadge')}
+              </span>
+              <h1 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                {t('dashboard', 'title')}
+              </h1>
+              <p className="mt-4 text-base text-zinc-400 leading-relaxed">
+                {t('dashboard', 'dashboardIntro')}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600/80 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-300">
+                  <Box className="h-3.5 w-3.5 text-violet-400" aria-hidden />
+                  2D / 3D
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600/80 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-300">
+                  <Receipt className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+                  {t('nav', 'quotations')}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-600/80 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-300">
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-sky-400" aria-hidden />
+                  Excel
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-10 w-full lg:mt-0 lg:max-w-md shrink-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500 mb-4">
+                {t('dashboard', 'workflow')}
+              </p>
+              <ol className="space-y-4">
+                {workflowSteps.map((step) => (
+                  <li key={step.n} className="flex gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-sm font-black text-zinc-950 shadow-lg shadow-amber-500/25">
+                      {step.n}
+                    </span>
+                    <div className="min-w-0 pt-0.5 flex-1 border-l border-zinc-700/80 pl-4">
+                      <p className="text-sm font-semibold text-zinc-100 leading-snug">{step.title}</p>
+                      <p className="mt-1 text-xs text-zinc-500 leading-relaxed line-clamp-2">{step.hint}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </section>
 
         {subscription && (
           <div
-            className={`rounded-xl border p-5 mb-6 ${
-              hasBillingAccess ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+            className={`rounded-2xl border p-5 sm:p-6 backdrop-blur-sm ${
+              subAlert
+                ? 'border-red-500/40 bg-red-950/40'
+                : 'border-emerald-500/35 bg-emerald-950/30'
             }`}
           >
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <p className="text-sm text-gray-600">
-                  {t('dashboard', 'subscription')}
-                </p>
-                <p className="font-semibold text-gray-900">
-                  {subscription.plan} / {subscription.status}
-                </p>
-                {subscription.status === 'trialing' && (
-                  <p className="text-sm text-amber-700 mt-1">
-                    {t('dashboard', 'trialRemaining').replace('{days}', String(subscription.trialDaysRemaining))}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+                    subAlert ? 'border-red-400/40 bg-red-500/10' : 'border-emerald-400/40 bg-emerald-500/10'
+                  }`}
+                >
+                  <CreditCard
+                    className={`h-6 w-6 ${subAlert ? 'text-red-300' : 'text-emerald-300'}`}
+                    aria-hidden
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    {t('dashboard', 'subscription')}
                   </p>
-                )}
+                  <p className="mt-1 font-mono text-sm font-semibold text-white">
+                    {subscription.plan} <span className="text-zinc-500">/</span> {subscription.status}
+                  </p>
+                  {subscription.status === 'trialing' && subscription.trialDaysRemaining != null && (
+                    <p className="mt-2 text-sm text-amber-300/90">
+                      {t('dashboard', 'trialRemaining').replace('{days}', String(subscription.trialDaysRemaining))}
+                    </p>
+                  )}
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => router.push('/billing')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-600 bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-zinc-100 shadow-sm transition hover:border-amber-500/50 hover:bg-zinc-800"
               >
-                <CreditCard className="h-4 w-4" />
+                <CreditCard className="h-4 w-4 text-amber-400" />
                 {t('dashboard', 'manageBilling')}
               </button>
             </div>
             {!hasBillingAccess && (
-              <p className="text-sm text-red-700 mt-3">
+              <p className="mt-4 text-sm text-red-300 border-t border-red-500/20 pt-4">
                 {t('dashboard', 'trialEnded')}
               </p>
             )}
           </div>
         )}
 
-        {/* Quick Start */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('dashboard', 'quickStartTitle')}</h2>
-              <p className="text-gray-600">{t('dashboard', 'quickStartDesc')}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          {/* Primary CTA */}
+          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl border border-amber-500/25 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-950 p-8 sm:p-10 shadow-xl shadow-amber-950/20 ring-1 ring-amber-500/10">
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.08),transparent_70%)]"
+              aria-hidden
+            />
+            <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8">
+              <div>
+                <div className="inline-flex items-center gap-2 text-amber-400/90 mb-3">
+                  <Sparkles className="h-4 w-4" aria-hidden />
+                  <span className="text-xs font-bold uppercase tracking-widest">{t('dashboard', 'quickStartTitle')}</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                  {t('nav', 'scaffold')}
+                </h2>
+                <p className="mt-3 text-zinc-400 max-w-lg leading-relaxed">{t('dashboard', 'quickStartDesc')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push('/scaffold')}
+                disabled={!hasBillingAccess}
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-amber-500 px-8 py-4 text-base font-bold text-zinc-950 shadow-lg shadow-amber-500/30 transition hover:bg-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                <Calculator className="h-6 w-6" aria-hidden />
+                {t('dashboard', 'quickStartButton')}
+                <ArrowRight className="h-5 w-5 opacity-80" aria-hidden />
+              </button>
             </div>
-            <button
-              onClick={() => router.push('/scaffold')}
-              disabled={!hasBillingAccess}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          </div>
+
+          {/* Quick access tiles */}
+          <div className="space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500 px-1">
+              {t('dashboard', 'quickAccess')}
+            </p>
+            <Link
+              href="/quotations"
+              className="group flex items-center gap-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-4 transition hover:border-amber-500/40 hover:bg-zinc-800/90"
             >
-              <Calculator className="h-5 w-5" />
-              {t('dashboard', 'quickStartButton')}
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25">
+                <Receipt className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-white group-hover:text-amber-100 transition-colors">
+                  {t('nav', 'quotations')}
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutQuotationsDesc')}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-amber-400 shrink-0 transition-colors" />
+            </Link>
+            <Link
+              href="/scaffold"
+              className="group flex items-center gap-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-4 transition hover:border-amber-500/40 hover:bg-zinc-800/90"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25">
+                <Calculator className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-white group-hover:text-amber-100 transition-colors">
+                  {t('nav', 'scaffold')}
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t('dashboard', 'quickStartDesc')}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-amber-400 shrink-0 transition-colors" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => router.push('/billing')}
+              className="group flex w-full items-center gap-4 rounded-2xl border border-zinc-700/80 bg-zinc-900/90 p-4 text-left transition hover:border-amber-500/40 hover:bg-zinc-800/90"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/25">
+                <CreditCard className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-white group-hover:text-amber-100 transition-colors">
+                  {t('dashboard', 'manageBilling')}
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutBillingDesc')}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-zinc-600 group-hover:text-amber-400 shrink-0 transition-colors" />
             </button>
           </div>
         </div>
 
         {/* History */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-hidden rounded-3xl border border-zinc-700/80 bg-zinc-900/60 shadow-xl shadow-black/30">
           <button
+            type="button"
             onClick={() => setHistoryOpen(!historyOpen)}
-            className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            className="w-full px-6 py-5 sm:px-8 sm:py-6 flex items-center justify-between gap-4 bg-[repeating-linear-gradient(90deg,transparent,transparent_12px,rgba(245,158,11,0.07)_12px,rgba(245,158,11,0.07)_24px)] hover:bg-zinc-800/80 transition-colors text-left border-b border-zinc-700/60"
           >
-            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <History className="h-5 w-5 text-gray-400" />
-              {t('dashboard', 'history')}
-              {configs && configs.length > 0 && (
-                <span className="text-sm font-normal text-gray-500 ml-2">({configs.length})</span>
-              )}
-            </h2>
-            {historyOpen ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-600">
+                  <History className="h-5 w-5 text-amber-400" aria-hidden />
+                </span>
+                <span>
+                  {t('dashboard', 'historyPanelTitle')}
+                  {configs && configs.length > 0 && (
+                    <span className="text-zinc-500 font-normal ml-2">({configs.length})</span>
+                  )}
+                </span>
+              </h2>
+              <p className="mt-1.5 text-sm text-zinc-500 pl-[3.25rem]">{t('dashboard', 'shortcutJobsDesc')}</p>
+            </div>
+            {historyOpen ? (
+              <ChevronUp className="h-5 w-5 text-zinc-500 shrink-0" aria-hidden />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-zinc-500 shrink-0" aria-hidden />
+            )}
           </button>
 
           {historyOpen && (
-            <div className="border-t border-gray-200 p-6">
+            <div className="border-t border-zinc-700/60 p-6 sm:p-8 bg-zinc-950/40">
               {isLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-amber-500" aria-hidden />
+                </div>
               ) : isError ? (
-                <div className="text-center py-8">
-                  <Calculator className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-400 mb-2">{t('dashboard', 'backendDown')}</p>
+                <div className="text-center py-12">
+                  <Calculator className="h-14 w-14 text-zinc-700 mx-auto mb-4" aria-hidden />
+                  <p className="text-zinc-500 mb-2">{t('dashboard', 'backendDown')}</p>
                 </div>
               ) : configs && configs.length > 0 ? (
                 <div className="space-y-3" ref={menuRef}>
-                  <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-gray-100">
-                    <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                  <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-zinc-800">
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-300 cursor-pointer select-none">
                       <input
                         ref={selectAllRef}
                         type="checkbox"
                         checked={configs.length > 0 && selectedIds.size === configs.length}
                         onChange={(e) => (e.target.checked ? selectAll() : clearSelection())}
                         disabled={bulkDeleting || deleteMutation.isPending}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-950"
                       />
                       <span>{t('dashboard', 'historySelectAll')}</span>
                     </label>
                     {selectedIds.size > 0 && (
                       <>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-zinc-500">
                           {(t('dashboard', 'historySelected') || '{n} selected').replace('{n}', String(selectedIds.size))}
                         </span>
                         <button
                           type="button"
                           onClick={clearSelection}
-                          className="text-sm text-blue-600 hover:underline"
+                          className="text-sm text-amber-400 hover:text-amber-300 hover:underline"
                         >
                           {t('dashboard', 'historyClearSelection')}
                         </button>
@@ -615,7 +788,7 @@ function UserDashboard() {
                           type="button"
                           onClick={handleBulkDelete}
                           disabled={bulkDeleting || deleteMutation.isPending}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-500 disabled:opacity-50"
                         >
                           {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           {t('dashboard', 'historyDeleteSelected')}
@@ -632,7 +805,11 @@ function UserDashboard() {
                     return (
                       <div
                         key={cfg.id}
-                        className={`relative border rounded-lg transition-all ${hasResult ? 'border-gray-200 hover:border-blue-300 hover:shadow-md' : 'border-gray-100 hover:bg-gray-50'} ${isSelected ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
+                        className={`relative border rounded-xl transition-all ${
+                          hasResult
+                            ? 'border-zinc-700 hover:border-amber-500/35 hover:shadow-lg hover:shadow-black/20 bg-zinc-900/50'
+                            : 'border-zinc-800 hover:bg-zinc-900/80'
+                        } ${isSelected ? 'ring-2 ring-amber-500/60 ring-offset-2 ring-offset-zinc-950' : ''}`}
                       >
                         <div className="flex items-stretch">
                           <div
@@ -644,7 +821,7 @@ function UserDashboard() {
                               checked={isSelected}
                               onChange={() => toggleSelect(cfg.id)}
                               disabled={bulkDeleting || deleteMutation.isPending}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              className="rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-950"
                               aria-label={t('dashboard', 'historySelectRow')}
                             />
                           </div>
@@ -652,76 +829,173 @@ function UserDashboard() {
                             onClick={() => hasResult && router.push(`/scaffold/${cfg.id}`)}
                             className={`flex flex-1 items-center justify-between p-4 pl-2 min-w-0 ${hasResult ? 'cursor-pointer' : ''}`}
                           >
-                          <div className="flex items-center gap-4 flex-1 min-w-0">
-                            <div className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${cfg.status === 'calculated' ? 'bg-green-100 text-green-700' : cfg.status === 'reviewed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                              {cfg.status === 'calculated' ? t('dashboard', 'statusCalculated') : cfg.status === 'reviewed' ? t('dashboard', 'statusReviewed') : t('dashboard', 'statusConfigured')}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-800 truncate">
-                                {t('dashboard', 'buildingHeight')}: {cfg.buildingHeightMm.toLocaleString()}mm | {t('dashboard', 'scaffoldWidth')}: {cfg.scaffoldWidthMm}mm
+                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                              <div
+                                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap ${
+                                  cfg.status === 'calculated'
+                                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                                    : cfg.status === 'reviewed'
+                                      ? 'bg-sky-500/15 text-sky-300 border border-sky-500/25'
+                                      : 'bg-zinc-700/80 text-zinc-400 border border-zinc-600'
+                                }`}
+                              >
+                                {cfg.status === 'calculated'
+                                  ? t('dashboard', 'statusCalculated')
+                                  : cfg.status === 'reviewed'
+                                    ? t('dashboard', 'statusReviewed')
+                                    : t('dashboard', 'statusConfigured')}
                               </div>
-                              <div className="text-sm text-gray-500 truncate">
-                                {wallNames || '—'} | {new Date(cfg.createdAt).toLocaleDateString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US')}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 ml-3 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {hasResult && (
-                              <button onClick={() => router.push(`/scaffold/${cfg.id}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
-                                <Eye className="h-3.5 w-3.5" />
-                                {t('dashboard', 'viewResult')}
-                              </button>
-                            )}
-                            <div className="relative">
-                              <button onClick={() => setOpenMenuId(isMenuOpen ? null : cfg.id)} className="flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors text-gray-500">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
-                              {isMenuOpen && (
-                                <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                                  {hasResult && (
-                                    <>
-                                      <button onClick={() => { setOpenMenuId(null); router.push(`/scaffold/${cfg.id}`); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><ExternalLink className="h-4 w-4 text-blue-500" />{t('dashboard', 'openResult')}</button>
-                                      <button onClick={() => { setOpenMenuId(null); router.push(`/scaffold/${cfg.id}?tab=3d`); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Box className="h-4 w-4 text-purple-500" />{t('dashboard', 'view3D')}</button>
-                                      <button onClick={() => { setOpenMenuId(null); router.push(`/scaffold/${cfg.id}?tab=2d`); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Layers className="h-4 w-4 text-indigo-500" />{t('dashboard', 'view2D')}</button>
-                                      <div className="border-t border-gray-100 my-1" />
-                                      <button onClick={() => { setOpenMenuId(null); router.push(
-                                        `/scaffold/${cfg.id}/quote?step=1&projectId=${encodeURIComponent(cfg.projectId)}`,
-                                      ); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Receipt className="h-4 w-4 text-emerald-500" />{t('dashboard', 'createQuotation')}</button>
-                                      <button
-                                        onClick={async () => {
-                                          setOpenMenuId(null);
-                                          try {
-                                            const blob = await scaffoldConfigsApi.exportExcel(cfg.id, locale);
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href = url; a.download = `scaffold_${cfg.id.slice(0, 8)}.xlsx`; a.click();
-                                            URL.revokeObjectURL(url);
-                                          } catch { alert(t('result', 'excelFailed') || 'Excel export failed'); }
-                                        }}
-                                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                                      ><FileSpreadsheet className="h-4 w-4 text-green-500" />{t('dashboard', 'exportExcel')}</button>
-                                    </>
-                                  )}
-                                  <div className="border-t border-gray-100 my-1" />
-                                  <button onClick={() => { setOpenMenuId(null); router.push('/scaffold'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Copy className="h-4 w-4 text-gray-400" />{t('dashboard', 'newCalculation')}</button>
-                                  <div className="border-t border-gray-100 my-1" />
-                                  <button onClick={(e) => { setOpenMenuId(null); handleDelete(cfg.id, e); }} disabled={deleteMutation.isPending} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" />{t('dashboard', 'delete')}</button>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-zinc-100 truncate">
+                                  {t('dashboard', 'buildingHeight')}: {cfg.buildingHeightMm.toLocaleString()}mm |{' '}
+                                  {t('dashboard', 'scaffoldWidth')}: {cfg.scaffoldWidthMm}mm
                                 </div>
+                                <div className="text-sm text-zinc-500 truncate">
+                                  {wallNames || '—'} |{' '}
+                                  {new Date(cfg.createdAt).toLocaleDateString(
+                                    locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US',
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 ml-3 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                              {hasResult && (
+                                <button
+                                  type="button"
+                                  onClick={() => router.push(`/scaffold/${cfg.id}`)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-zinc-950 text-sm font-semibold rounded-lg hover:bg-amber-400 transition-colors"
+                                >
+                                  <Eye className="h-3.5 w-3.5" aria-hidden />
+                                  {t('dashboard', 'viewResult')}
+                                </button>
                               )}
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenMenuId(isMenuOpen ? null : cfg.id)}
+                                  className="flex items-center justify-center w-8 h-8 rounded-lg border border-zinc-600 bg-zinc-800 hover:bg-zinc-700 transition-colors text-zinc-400"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </button>
+                                {isMenuOpen && (
+                                  <div className="absolute right-0 top-full mt-1 w-52 bg-zinc-900 rounded-xl shadow-xl border border-zinc-600 py-1 z-50">
+                                    {hasResult && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            router.push(`/scaffold/${cfg.id}`);
+                                          }}
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                        >
+                                          <ExternalLink className="h-4 w-4 text-sky-400" aria-hidden />
+                                          {t('dashboard', 'openResult')}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            router.push(`/scaffold/${cfg.id}?tab=3d`);
+                                          }}
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                        >
+                                          <Box className="h-4 w-4 text-violet-400" aria-hidden />
+                                          {t('dashboard', 'view3D')}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            router.push(`/scaffold/${cfg.id}?tab=2d`);
+                                          }}
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                        >
+                                          <Layers className="h-4 w-4 text-indigo-400" aria-hidden />
+                                          {t('dashboard', 'view2D')}
+                                        </button>
+                                        <div className="border-t border-zinc-700 my-1" />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            router.push(
+                                              `/scaffold/${cfg.id}/quote?step=1&projectId=${encodeURIComponent(cfg.projectId)}`,
+                                            );
+                                          }}
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                        >
+                                          <Receipt className="h-4 w-4 text-emerald-400" aria-hidden />
+                                          {t('dashboard', 'createQuotation')}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            setOpenMenuId(null);
+                                            try {
+                                              const blob = await scaffoldConfigsApi.exportExcel(cfg.id, locale);
+                                              const url = URL.createObjectURL(blob);
+                                              const a = document.createElement('a');
+                                              a.href = url;
+                                              a.download = `scaffold_${cfg.id.slice(0, 8)}.xlsx`;
+                                              a.click();
+                                              URL.revokeObjectURL(url);
+                                            } catch {
+                                              alert(t('result', 'excelFailed') || 'Excel export failed');
+                                            }
+                                          }}
+                                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                        >
+                                          <FileSpreadsheet className="h-4 w-4 text-green-400" aria-hidden />
+                                          {t('dashboard', 'exportExcel')}
+                                        </button>
+                                      </>
+                                    )}
+                                    <div className="border-t border-zinc-700 my-1" />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        router.push('/scaffold');
+                                      }}
+                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-800"
+                                    >
+                                      <Copy className="h-4 w-4 text-zinc-500" aria-hidden />
+                                      {t('dashboard', 'newCalculation')}
+                                    </button>
+                                    <div className="border-t border-zinc-700 my-1" />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        setOpenMenuId(null);
+                                        handleDelete(cfg.id, e);
+                                      }}
+                                      disabled={deleteMutation.isPending}
+                                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-950/50"
+                                    >
+                                      <Trash2 className="h-4 w-4" aria-hidden />
+                                      {t('dashboard', 'delete')}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <Calculator className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-2">{t('dashboard', 'noResults')}</p>
-                  <button onClick={() => router.push('/scaffold')} className="text-blue-600 font-semibold hover:underline flex items-center gap-1 mx-auto">
-                    {t('dashboard', 'firstCalc')} <ArrowRight className="h-4 w-4" />
+                <div className="text-center py-12">
+                  <Calculator className="h-14 w-14 text-zinc-700 mx-auto mb-4" aria-hidden />
+                  <p className="text-zinc-500 mb-3">{t('dashboard', 'noResults')}</p>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/scaffold')}
+                    className="text-amber-400 font-semibold hover:text-amber-300 hover:underline inline-flex items-center gap-1.5"
+                  >
+                    {t('dashboard', 'firstCalc')} <ArrowRight className="h-4 w-4" aria-hidden />
                   </button>
                 </div>
               )}
