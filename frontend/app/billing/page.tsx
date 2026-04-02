@@ -359,6 +359,13 @@ export default function BillingPage() {
                     .replace('{remaining}', String(subscription.trialDaysRemaining))
                     .replace('{total}', String(subscription.trialLengthDays))}
                 </p>
+                {subscription.trialFileUploads && (
+                  <p className="text-amber-900 text-sm mt-2">
+                    {t('billing', 'trialFileUploadsRemaining')
+                      .replace('{used}', String(subscription.trialFileUploads.used))
+                      .replace('{max}', String(subscription.trialFileUploads.max))}
+                  </p>
+                )}
               </div>
             </div>
           )}

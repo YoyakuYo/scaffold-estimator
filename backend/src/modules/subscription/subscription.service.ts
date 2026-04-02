@@ -21,7 +21,10 @@ import {
   type EffectivePlanCapabilities,
 } from './plan-capabilities';
 
-const TRIAL_DAYS = 14;
+/** New trials: trial_end = now + TRIAL_DAYS */
+export const TRIAL_DAYS = 7;
+/** Max drawing file uploads via POST /drawings/upload while status = trialing */
+export const TRIAL_MAX_DRAWING_UPLOADS = 2;
 
 @Injectable()
 export class SubscriptionService {
@@ -317,6 +320,40 @@ export class SubscriptionService {
     return count ?? 0;
   }
 
+  /** Blocks POST /drawings/upload when trialing and upload quota exhausted. */
+  async assertTrialDrawingUploadAllowed(userId: string): Promise<void> {
+    const user = await this.getUserOrFail(userId);
+    if (user.role === 'superadmin') return;
+    const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    if (!row) return;
+    let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
+    sub = await this.expireTrialIfNeeded(sub);
+    if (sub.status !== 'trialing') return;
+    const used = sub.trialDocumentsUsed ?? 0;
+    if (used >= TRIAL_MAX_DRAWING_UPLOADS) {
+      throw new BadRequestException(
+        `Free trial allows ${TRIAL_MAX_DRAWING_UPLOADS} drawing file uploads (Quick Shape is unlimited). Subscribe in Billing to upload more files.`,
+      );
+    }
+  }
+
+  /** Call after a drawing row is created successfully for the uploader. */
+  async recordTrialDrawingUploadIfTrialing(userId: string): Promise<void> {
+    const user = await this.getUserOrFail(userId);
+    if (user.role === 'superadmin') return;
+    const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    if (!row) return;
+    let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
+    sub = await this.expireTrialIfNeeded(sub);
+    if (sub.status !== 'trialing') return;
+    const used = sub.trialDocumentsUsed ?? 0;
+    await this.supabase
+      .getClient()
+      .from('subscriptions')
+      .update(mapPayloadToSnake({ trialDocumentsUsed: used + 1 }))
+      .eq('id', sub.id);
+  }
+
   async getMySubscription(userId: string): Promise<any> {
     const user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
@@ -338,6 +375,13 @@ export class SubscriptionService {
       hasAccess,
       trialDaysRemaining,
       trialLengthDays: TRIAL_DAYS,
+      trialFileUploads:
+        sub.status === 'trialing'
+          ? {
+              used: sub.trialDocumentsUsed ?? 0,
+              max: TRIAL_MAX_DRAWING_UPLOADS,
+            }
+          : undefined,
       isStripeConfigured: !!this.stripe && checkoutTiers.length > 0,
       checkoutPlans: checkoutTiers,
       bankTransfer: this.getBankTransferInstructions(user.email),

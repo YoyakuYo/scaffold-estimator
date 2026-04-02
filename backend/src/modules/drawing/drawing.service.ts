@@ -8,6 +8,7 @@ import { ImageDimensionExtractorService, ExtractedDimensions, ExtractionWarning 
 import { CadProcessingPipelineService } from './parsers/cad-processing-pipeline.service';
 import { DrawingParsingService } from './parsers/drawing-parsing.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class DrawingService {
 
   constructor(
     private readonly supabase: SupabaseService,
+    private readonly subscriptionService: SubscriptionService,
     @InjectQueue('drawing-processing')
     @Optional()
     private drawingQueue: Queue | null,
@@ -34,6 +36,8 @@ export class DrawingService {
     uploadedBy: string,
   ) {
     try {
+      await this.subscriptionService.assertTrialDrawingUploadAllowed(uploadedBy);
+
       const format = this.getFormat(file.originalname);
       this.logger.log(`Processing drawing: ${file.originalname}, format: ${format}`);
       
@@ -51,6 +55,8 @@ export class DrawingService {
       if (error || !savedRow) throw new Error(error?.message || 'Failed to save drawing');
       const savedDrawing = mapRowToCamel<Drawing>(savedRow as Record<string, unknown>)!;
       this.logger.log(`Drawing saved with ID: ${savedDrawing.id}`);
+
+      await this.subscriptionService.recordTrialDrawingUploadIfTrialing(uploadedBy);
 
       // ── CAD files: Process through the professional CAD pipeline ──
       const isCad = ['dxf', 'dwg', 'jww'].includes(format);

@@ -53,6 +53,9 @@ export class Subscription {
   @Column({ name: 'trial_end', type: 'timestamptz', nullable: true })
   trialEnd: Date | null;
 
+  @Column({ name: 'trial_documents_used', type: 'int', default: 0 })
+  trialDocumentsUsed: number;
+
   @Column({ name: 'current_period_start', type: 'timestamptz', nullable: true })
   currentPeriodStart: Date | null;
 

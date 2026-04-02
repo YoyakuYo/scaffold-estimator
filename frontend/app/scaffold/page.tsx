@@ -2518,6 +2518,17 @@ function ScaffoldPageContent() {
           {t('scaffold', 'editFromAiHint')}
         </div>
       )}
+      {showDrawingUpload &&
+        subscriptionInfo?.status === 'trialing' &&
+        subscriptionInfo.trialFileUploads && (
+          <div className="max-w-[1600px] mx-auto px-4 mb-3">
+            <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {t('billing', 'trialFileUploadsRemaining')
+                .replace('{used}', String(subscriptionInfo.trialFileUploads.used))
+                .replace('{max}', String(subscriptionInfo.trialFileUploads.max))}
+            </p>
+          </div>
+        )}
       {showDrawingUpload && (
         <div className="max-w-[1600px] mx-auto px-4 mb-6">
           <DrawingUpload

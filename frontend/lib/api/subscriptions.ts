@@ -53,6 +53,8 @@ export interface SubscriptionInfo {
   hasAccess: boolean;
   trialDaysRemaining: number;
   trialLengthDays: number;
+  /** While trialing: drawing file uploads used vs max (Quick Shape does not count). */
+  trialFileUploads?: { used: number; max: number };
   isStripeConfigured: boolean;
   /** Tiers with a configured Stripe price (from STRIPE_PRICE_ID_* or legacy STRIPE_PRICE_ID). */
   checkoutPlans?: CheckoutPlanTier[];

@@ -115,10 +115,10 @@ export default function SuperadminSubscribersPage() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <button
-                          onClick={() => extendTrialMutation.mutate({ userId: sub.userId, days: 14 })}
+                          onClick={() => extendTrialMutation.mutate({ userId: sub.userId, days: 7 })}
                           className="px-2.5 py-1.5 text-xs bg-amber-50 border border-amber-300 text-amber-700 rounded hover:bg-amber-100"
                         >
-                          {t('subscribersAdmin', 'extendTrial14')}
+                          {t('subscribersAdmin', 'extendTrial7')}
                         </button>
                         <button
                           onClick={() => setAccessMutation.mutate({ userId: sub.userId, access: 'active' })}

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
+import { SubscriptionModule } from '../subscription/subscription.module';
 import { DrawingController } from './drawing.controller';
 import { DrawingService } from './drawing.service';
 import { DrawingParsingService } from './parsers/drawing-parsing.service';
@@ -19,6 +20,7 @@ import { CadProcessingPipelineService } from './parsers/cad-processing-pipeline.
 
 @Module({
   imports: [
+    SubscriptionModule,
     BullModule.registerQueue({
       name: 'drawing-processing',
     }),

@@ -1,4 +1,4 @@
-# Stripe Integration Report (14-Day Trial + Superadmin Control)
+# Stripe Integration Report (7-Day Trial + Superadmin Control)
 
 ## What Was Implemented
 
@@ -10,7 +10,7 @@
   - `GET /api/v1/subscriptions/admin/subscribers` (superadmin only)
   - `POST /api/v1/subscriptions/admin/:userId/extend-trial/:days` (superadmin only)
   - `POST /api/v1/subscriptions/admin/:userId/set-access` (superadmin only)
-- Added 14-day free trial defaults for all non-superadmin users.
+- Added 7-day free trial defaults for all non-superadmin users (trial: Quick + file upload only, max 2 drawing uploads via API).
 - Added subscriber management UI for superadmin at `/superadmin/subscribers`.
 - Added billing UI for users at `/billing`.
 - Added billing visibility on user dashboard (`/dashboard`).
@@ -26,7 +26,7 @@ Two migration options were added:
    - `supabase-migrations/108_stripe_subscriptions.sql`
 
 Both create the `subscriptions` table and backfill existing users:
-- non-superadmin -> `plan=free_trial`, `status=trialing`, `trial_end=now()+14d`
+- non-superadmin -> `plan=free_trial`, `status=trialing`, `trial_end=now()+7d`
 - superadmin -> `plan=enterprise`, `status=active`
 
 ## Environment Variables Required

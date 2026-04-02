@@ -62,13 +62,13 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
   }
 }
 
-/** Active trial: file + quick + CAD, no AI (Premium upsell); 5 seats */
+/** Active trial: Quick + file upload only (no CAD, no AI); 2 seats; max 2 drawing uploads enforced separately */
 export function capabilitiesForTrial(): EffectivePlanCapabilities {
   return {
-    maxSeats: 5,
+    maxSeats: 2,
     fileUpload: true,
     quickShape: true,
-    cadDraw: true,
+    cadDraw: false,
     aiExtract: false,
   };
 }
