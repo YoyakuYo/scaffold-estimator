@@ -62,6 +62,17 @@ export default function BillingPage() {
     },
   });
 
+  const [payTab, setPayTab] = useState<'stripe' | 'bank'>('stripe');
+  const payTabDefaultedRef = useRef(false);
+  useEffect(() => {
+    if (!profile || profile.role === 'superadmin') return;
+    if (!subscription || payTabDefaultedRef.current) return;
+    const bt =
+      subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
+    if (!subscription.isStripeConfigured && bt) setPayTab('bank');
+    payTabDefaultedRef.current = true;
+  }, [profile, subscription]);
+
   if (!profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -113,14 +124,6 @@ export default function BillingPage() {
   const bankTransfer =
     subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
   const hasAnyPaymentPath = subscription.isStripeConfigured || !!bankTransfer;
-
-  const [payTab, setPayTab] = useState<'stripe' | 'bank'>('stripe');
-  const payTabDefaultedRef = useRef(false);
-  useEffect(() => {
-    if (!subscription || payTabDefaultedRef.current) return;
-    if (!subscription.isStripeConfigured && bankTransfer) setPayTab('bank');
-    payTabDefaultedRef.current = true;
-  }, [subscription, bankTransfer]);
 
   const tabBtnClass = (active: boolean) =>
     `flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium border border-b-0 transition-colors ${
