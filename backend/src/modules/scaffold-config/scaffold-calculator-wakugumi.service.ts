@@ -411,35 +411,43 @@ export class ScaffoldCalculatorWakugumiService {
     const wallRunMmW = spans.reduce((sum, s) => sum + s, 0);
     const sokanNettoSheetsW = wallRunMmW > 0 ? Math.ceil(wallRunMmW / 6000) : 0;
 
-    sortOrder++;
-    components.push({
-      type: 'sokan_bracket',
-      category: CAT.safety.jp,
-      categoryEn: CAT.safety.en,
-      name: 'Sokan bracket',
-      nameJp: '相間ブラゲット',
-      sizeSpec: 'Inner post mount',
-      unit: '本',
-      quantity: innerPostStationsW * L,
-      sortOrder,
-      materialCode: 'SOKAN-BRACKET',
-    });
+    const sokanBracketQtyW = innerPostStationsW * L;
+    if (sokanBracketQtyW > 0) {
+      sortOrder++;
+      components.push({
+        type: 'sokan_bracket',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Sokan bracket',
+        nameJp: '相間ブラゲット',
+        sizeSpec: 'Inner post mount',
+        unit: '本',
+        quantity: sokanBracketQtyW,
+        sortOrder,
+        materialCode: 'SOKAN-BRACKET',
+      });
+    }
 
-    sortOrder++;
-    components.push({
-      type: 'sokan_netto',
-      category: CAT.safety.jp,
-      categoryEn: CAT.safety.en,
-      name: 'Sokan net (6m)',
-      nameJp: '装間ネット',
-      sizeSpec: '6000mm',
-      unit: '枚',
-      quantity: sokanNettoSheetsW * L,
-      sortOrder,
-      materialCode: 'SOKAN-NETTO',
-    });
+    const sokanNettoQtyW = sokanNettoSheetsW * L;
+    if (sokanNettoQtyW > 0) {
+      sortOrder++;
+      components.push({
+        type: 'sokan_netto',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Sokan net (6m)',
+        nameJp: '装間ネット',
+        sizeSpec: '6000mm',
+        unit: '枚',
+        quantity: sokanNettoQtyW,
+        sortOrder,
+        materialCode: 'SOKAN-NETTO',
+      });
+    }
 
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
+      const meshQtyW = Number(count) * L;
+      if (meshQtyW <= 0) continue;
       sortOrder++;
       components.push({
         type: 'mesh_shito',
@@ -449,7 +457,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: 'メッシュシート',
         sizeSpec: `${spanSizeMm}mm`,
         unit: '枚',
-        quantity: Number(count) * L,
+        quantity: meshQtyW,
         sortOrder,
         materialCode: `MESH-SHITO-${spanSizeMm}`,
       });

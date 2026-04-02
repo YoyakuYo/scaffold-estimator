@@ -620,35 +620,43 @@ export class ScaffoldCalculatorService {
     const wallRunMm = spans.reduce((sum, s) => sum + s, 0);
     const sokanNettoSheets = wallRunMm > 0 ? Math.ceil(wallRunMm / 6000) : 0;
 
-    sortOrder++;
-    components.push({
-      type: 'sokan_bracket',
-      category: CAT.safety.jp,
-      categoryEn: CAT.safety.en,
-      name: 'Sokan bracket',
-      nameJp: '相間ブラゲット',
-      sizeSpec: 'Inner post mount',
-      unit: '本',
-      quantity: innerPostStations * L,
-      sortOrder,
-      materialCode: 'SOKAN-BRACKET',
-    });
+    const sokanBracketQty = innerPostStations * L;
+    if (sokanBracketQty > 0) {
+      sortOrder++;
+      components.push({
+        type: 'sokan_bracket',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Sokan bracket',
+        nameJp: '相間ブラゲット',
+        sizeSpec: 'Inner post mount',
+        unit: '本',
+        quantity: sokanBracketQty,
+        sortOrder,
+        materialCode: 'SOKAN-BRACKET',
+      });
+    }
 
-    sortOrder++;
-    components.push({
-      type: 'sokan_netto',
-      category: CAT.safety.jp,
-      categoryEn: CAT.safety.en,
-      name: 'Sokan net (6m)',
-      nameJp: '装間ネット',
-      sizeSpec: '6000mm',
-      unit: '枚',
-      quantity: sokanNettoSheets * L,
-      sortOrder,
-      materialCode: 'SOKAN-NETTO',
-    });
+    const sokanNettoQty = sokanNettoSheets * L;
+    if (sokanNettoQty > 0) {
+      sortOrder++;
+      components.push({
+        type: 'sokan_netto',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Sokan net (6m)',
+        nameJp: '装間ネット',
+        sizeSpec: '6000mm',
+        unit: '枚',
+        quantity: sokanNettoQty,
+        sortOrder,
+        materialCode: 'SOKAN-NETTO',
+      });
+    }
 
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
+      const meshQty = Number(count) * L;
+      if (meshQty <= 0) continue;
       sortOrder++;
       components.push({
         type: 'mesh_shito',
@@ -658,7 +666,7 @@ export class ScaffoldCalculatorService {
         nameJp: 'メッシュシート',
         sizeSpec: `${spanSizeMm}mm`,
         unit: '枚',
-        quantity: Number(count) * L,
+        quantity: meshQty,
         sortOrder,
         materialCode: `MESH-SHITO-${spanSizeMm}`,
       });
