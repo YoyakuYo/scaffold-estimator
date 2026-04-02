@@ -41,6 +41,12 @@ export class QuotationService {
         }
       }
 
+      const startDay = dto.rentalStartDate.slice(0, 10);
+      const endDay = dto.rentalEndDate.slice(0, 10);
+      if (endDay < startDay) {
+        throw new BadRequestException('Rental end date must be on or after the start date.');
+      }
+
       const items: Partial<QuotationItem>[] = quantities.map((q) => {
         const qty = q.adjustedQuantity ?? q.calculatedQuantity;
         const price = Number(q.unitPrice) || 0;

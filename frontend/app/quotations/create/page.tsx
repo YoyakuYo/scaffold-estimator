@@ -62,6 +62,10 @@ function CreateQuotationContent() {
       alert(t('quotationCreate', 'setDates'));
       return;
     }
+    if (rentalEndDate.slice(0, 10) < rentalStartDate.slice(0, 10)) {
+      alert(t('quoteWizard', 'rentalDatesInvalid'));
+      return;
+    }
     createMutation.mutate({
       configId,
       projectId,

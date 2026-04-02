@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { QuotationCostItem, CostCategory } from './quotation-cost-item.entity';
 import { Quotation } from './quotation.entity';
 import { FormulaEvaluationService } from '../cost/formula-evaluation.service';
@@ -36,7 +36,9 @@ export class QuotationCostService {
       const rentalEnd = new Date(quotation.rentalEndDate);
       if (isNaN(rentalStart.getTime()) || isNaN(rentalEnd.getTime())) throw new Error('Invalid rental dates');
       const rentalDays = Math.ceil((rentalEnd.getTime() - rentalStart.getTime()) / (1000 * 60 * 60 * 24));
-      if (rentalDays < 0) throw new Error('Rental end date must be after start date');
+      if (rentalDays < 0) {
+        throw new BadRequestException('Rental end date must be on or after the start date.');
+      }
       const rentalWeeks = Math.ceil(rentalDays / 7);
       const rentalMonths = Math.ceil(rentalDays / 30);
 

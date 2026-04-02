@@ -20,6 +20,13 @@ const RENTAL_COST_CODES = [
 
 type RentalCostCode = (typeof RENTAL_COST_CODES)[number];
 
+function isRentalRangeValid(start: string, end: string): boolean {
+  const a = start.slice(0, 10);
+  const b = end.slice(0, 10);
+  if (!a || !b) return false;
+  return b >= a;
+}
+
 function wizardStorageKey(configId: string) {
   return `quoteWizard:${configId}`;
 }
@@ -144,6 +151,14 @@ function QuoteWizardInner() {
       queryClient.invalidateQueries({ queryKey: ['quotation', q.id] });
       queryClient.invalidateQueries({ queryKey: ['quotations'] });
     },
+    onError: (error: any) => {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        'Request failed';
+      alert(String(msg));
+    },
   });
 
   const materialSubtotalPreview = useMemo(() => {
@@ -187,6 +202,10 @@ function QuoteWizardInner() {
       alert(t('quotationCreate', 'setDates'));
       return;
     }
+    if (!isRentalRangeValid(rentalStartDate, rentalEndDate)) {
+      alert(t('quoteWizard', 'rentalDatesInvalid'));
+      return;
+    }
     persistStep2();
     setStep(3);
   };
@@ -194,6 +213,10 @@ function QuoteWizardInner() {
   const handleFinalize = () => {
     if (!rentalStartDate || !rentalEndDate) {
       alert(t('quotationCreate', 'setDates'));
+      return;
+    }
+    if (!isRentalRangeValid(rentalStartDate, rentalEndDate)) {
+      alert(t('quoteWizard', 'rentalDatesInvalid'));
       return;
     }
     if (!confirm(t('quotationDetail', 'finalizeConfirm'))) return;
@@ -408,7 +431,13 @@ function QuoteWizardInner() {
                 <input
                   type="date"
                   value={rentalStartDate}
-                  onChange={(e) => setRentalStartDate(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRentalStartDate(v);
+                    if (rentalEndDate && rentalEndDate.slice(0, 10) < v) {
+                      setRentalEndDate(v);
+                    }
+                  }}
                   className="w-full px-3 py-2 border rounded-md"
                 />
               </div>
@@ -419,6 +448,7 @@ function QuoteWizardInner() {
                 <input
                   type="date"
                   value={rentalEndDate}
+                  min={rentalStartDate ? rentalStartDate.slice(0, 10) : undefined}
                   onChange={(e) => setRentalEndDate(e.target.value)}
                   className="w-full px-3 py-2 border rounded-md"
                 />

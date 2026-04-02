@@ -787,6 +787,11 @@ export const translations = {
       fr: 'Certaines lignes sont à 0 ¥. Vous pouvez continuer si c’est voulu.',
     },
     notReviewed: { ja: '数量確認が完了していません。', en: 'Quantity review is not complete.', fr: 'La revue des quantités n’est pas terminée.' },
+    rentalDatesInvalid: {
+      ja: '終了日は開始日以降にしてください。',
+      en: 'The rental end date must be on or after the start date.',
+      fr: 'La date de fin doit être postérieure ou égale à la date de début.',
+    },
     basic_material: { ja: '仮設材基本料', en: 'Basic material charge', fr: 'Charge matériau de base' },
     material_wear: { ja: '仮設材損料', en: 'Wear / damage charge', fr: 'Usure' },
     transportation: { ja: '運搬費', en: 'Transportation', fr: 'Transport' },
