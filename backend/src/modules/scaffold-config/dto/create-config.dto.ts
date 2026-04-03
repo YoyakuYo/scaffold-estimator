@@ -225,6 +225,16 @@ export class CreateScaffoldConfigDto {
   @IsArray()
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
 
+  /**
+   * Optional: manual per-vertex corner kinds for a closed footprint (length = wall count).
+   * Vertex i is the junction after wall i−1 and before wall i (wall i runs vertex i → i+1).
+   * When omitted or wrong length, reflex/convex is inferred from buildingOutline winding.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsIn(['convex', 'reflex'], { each: true })
+  vertexCornerKinds?: Array<'convex' | 'reflex'>;
+
   /** Optional: stacked building mass tiers for stepped/setback 3D preview. */
   @IsOptional()
   @IsArray()

@@ -67,6 +67,11 @@ export interface CreateScaffoldConfigDto {
   pattankoCornerCount?: number;
   /** Optional: Building outline polygon (for complex shapes) */
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
+  /**
+   * Optional: manual corner type per footprint vertex (length = closed wall count).
+   * convex = outer corner; reflex = inner / re-entrant. Omitted → infer from outline.
+   */
+  vertexCornerKinds?: Array<'convex' | 'reflex'>;
   /** Optional: stacked building volumes for stepped/setback massing preview. */
   massingTiers?: BuildingMassingTier[];
   /** Optional: Detected balconies / AC areas / pillars from vision (for Buragetto / clearance) */
@@ -186,6 +191,9 @@ export interface WallCalculationResult {
   components: CalculatedComponent[];
   /** Façade length used for span layout after −300mm per reflex corner (inner); omit if both ends convex. */
   scaffoldFacadeBasisMm?: number;
+  /** Echo of calculation input: corner kind at start/end vertex of this wall edge. */
+  startCornerKind?: 'convex' | 'reflex';
+  endCornerKind?: 'convex' | 'reflex';
   /** Per-wall scaffold width used (from parametric or global). */
   scaffoldWidthMm?: number;
   /** Buragetto layout: bracket = single-pole when obstacle too close. */

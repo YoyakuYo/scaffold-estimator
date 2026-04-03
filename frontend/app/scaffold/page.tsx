@@ -56,6 +56,8 @@ import {
   labelingForEnabledWallIndices,
   type EdgeHashiraFormRow,
 } from '@/lib/edge-hashira-labels';
+import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
+import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 
 function ScaffoldCadCanvasLoading() {
   const { t } = useI18n();
@@ -1044,6 +1046,8 @@ function ScaffoldPageContent() {
   const [selectedWallIdx, setSelectedWallIdx] = useState<number | null>(null);
   const [prefilled, setPrefilled] = useState(false);
   const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
+  const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
+  const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
   const [aiBimHashiraRows, setAiBimHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
   const wallsCsvFileRef = useRef<HTMLInputElement>(null);
 
@@ -1108,6 +1112,22 @@ function ScaffoldPageContent() {
       setPrefilled(true);
       const eh = editConfig.calculationResult?.edgeHashiraLabeling as EdgeHashiraLabeling | undefined;
       setHashiraRows(formRowsFromStoredLabeling(eh, wallList.length));
+      const vck = (editConfig.calculationResult as { vertexCornerKinds?: unknown } | undefined)
+        ?.vertexCornerKinds;
+      if (
+        Array.isArray(vck) &&
+        vck.length === wallList.length &&
+        vck.every((k) => k === 'convex' || k === 'reflex')
+      ) {
+        setCornerKindsUseManual(true);
+        setVertexCornerKinds(vck as Array<'convex' | 'reflex'>);
+      } else {
+        setCornerKindsUseManual(false);
+        setVertexCornerKinds([]);
+      }
+    } else {
+      setCornerKindsUseManual(false);
+      setVertexCornerKinds([]);
     }
     const poly = editConfig.calculationResult?.polygonVertices;
     if (Array.isArray(poly) && poly.length >= 3) {
@@ -1156,6 +1176,17 @@ function ScaffoldPageContent() {
     }
     return polygonVertices;
   }, [polygonVertices, walls.length]);
+
+  useEffect(() => {
+    if (!cornerKindsUseManual || walls.length < 3) return;
+    setVertexCornerKinds((prev) => {
+      const n = walls.length;
+      if (prev.length === n) return prev;
+      const next = prev.slice(0, n);
+      while (next.length < n) next.push('convex');
+      return next;
+    });
+  }, [walls.length, cornerKindsUseManual]);
 
   const FootprintMiniPreview = useCallback((props: {
     vertices: Array<{ x: number; y: number }>;
@@ -1473,6 +1504,13 @@ function ScaffoldPageContent() {
         buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
         pattankoCornerCount: countPattankoCorners(polygonVertices),
       }),
+      ...(cornerKindsUseManual &&
+        walls.length > 0 &&
+        walls.every((w) => w.enabled) &&
+        vertexCornerKinds.length === enabledWalls.length &&
+        polygonVertices.length === enabledWalls.length && {
+          vertexCornerKinds: [...vertexCornerKinds],
+        }),
       inputUiPath: (() => {
         const stored = (editConfig?.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
           ?.uiInputPath;
@@ -3150,6 +3188,40 @@ function ScaffoldPageContent() {
           setSiteFax={setSiteFax}
         />
 
+        <VertexCornerKindsPanel
+          wallCount={walls.length}
+          closedFootprint={closedFootprintChords}
+          useManual={cornerKindsUseManual}
+          onUseManualChange={(v) => {
+            setCornerKindsUseManual(v);
+            if (v) {
+              if (footprintForPreview && footprintForPreview.length === walls.length) {
+                setVertexCornerKinds(inferVertexCornerKindsFromPolygonMm(footprintForPreview));
+              } else {
+                setVertexCornerKinds((prev) => {
+                  const n = walls.length;
+                  const next = prev.slice(0, n);
+                  while (next.length < n) next.push('convex');
+                  return next;
+                });
+              }
+            }
+          }}
+          kinds={vertexCornerKinds}
+          onKindChange={(vi, k) => {
+            setVertexCornerKinds((prev) => {
+              const n = walls.length;
+              const next = prev.length === n ? [...prev] : Array.from({ length: n }, (_, i) => prev[i] ?? 'convex');
+              next[vi] = k;
+              return next;
+            });
+          }}
+          onInferFromShape={() => {
+            if (footprintForPreview && footprintForPreview.length === walls.length) {
+              setVertexCornerKinds(inferVertexCornerKindsFromPolygonMm(footprintForPreview));
+            }
+          }}
+        />
         {walls.length > 0 && (
           <EdgeHashiraPlanningPanel
             wallCount={walls.length}

@@ -129,6 +129,10 @@ export interface WallCalculationResult {
    * Omitted when both ends are convex.
    */
   scaffoldFacadeBasisMm?: number;
+  /** Corner kind at start vertex of this wall (outer convex vs inner / reflex); echoed from calculation input. */
+  startCornerKind?: 'convex' | 'reflex';
+  /** Corner kind at end vertex of this wall. */
+  endCornerKind?: 'convex' | 'reflex';
 }
 
 export interface ScaffoldCalculationResult {
@@ -783,6 +787,8 @@ export class ScaffoldCalculatorService {
       tierGroup: wall.tierGroup,
       tierIndex: wall.tierIndex,
       ...(scaffoldFacadeBasisMm != null ? { scaffoldFacadeBasisMm } : {}),
+      startCornerKind: wall.startCornerKind ?? 'convex',
+      endCornerKind: wall.endCornerKind ?? 'convex',
     };
   }
 

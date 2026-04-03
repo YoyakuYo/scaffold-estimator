@@ -544,11 +544,17 @@ export class ScaffoldConfigService {
     const prevUiPath = (config.calculationResult as Record<string, unknown> | null)?.uiInputPath;
     const uiInputPath = dto.inputUiPath ?? prevUiPath;
 
+    const persistVertexKindsUpd =
+      Array.isArray(dto.vertexCornerKinds) &&
+      dto.vertexCornerKinds.length === result.walls.length &&
+      dto.vertexCornerKinds.every((k) => k === 'convex' || k === 'reflex');
+
     let calculationResult: Record<string, unknown> = {
       ...result,
       wallStandoffMm: wallStandoffMm,
       ...(uiInputPath ? { uiInputPath } : {}),
       ...(dto.buildingOutline && dto.buildingOutline.length >= 3 ? { polygonVertices: dto.buildingOutline } : {}),
+      ...(persistVertexKindsUpd ? { vertexCornerKinds: dto.vertexCornerKinds } : {}),
       ...(keepMassingTiers ? { massingTiers: massingForResult } : {}),
       ...(dto.obstacles && dto.obstacles.length > 0 ? { obstacles: dto.obstacles } : {}),
       ...(parametricTransitions && parametricTransitions.length > 0 ? { parametricTransitions } : {}),

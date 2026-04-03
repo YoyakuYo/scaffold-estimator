@@ -2114,13 +2114,15 @@ export default function Scaffold3DView({
         const useCornerSpanLayout = walls.length >= 2;
         const closedLoopCorners =
           useCornerSpanLayout && !tierIsOpen && (tierV?.length ?? 0) >= 3;
+        const startKind = wall.startCornerKind ?? 'convex';
+        const endKind = wall.endCornerKind ?? 'convex';
         const isStartCorner = closedLoopCorners
-          ? true
+          ? startKind !== 'reflex'
           : useCornerSpanLayout
             ? localIdx > 0 && (tHCS[localIdx] ?? false)
             : (tHCS[localIdx] ?? false);
         const isEndCorner = closedLoopCorners
-          ? true
+          ? endKind !== 'reflex'
           : useCornerSpanLayout
             ? localIdx < nWLoop - 1 && (tHCE[localIdx] ?? false)
             : (tHCE[localIdx] ?? false);
@@ -2406,6 +2408,8 @@ export default function Scaffold3DView({
           const infoB = wallRenderInfos[globalNext];
           if (!infoA || !infoB) continue;
           if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
+          // Inner (reflex) corners: no outer-corner L-deck patch (matches span rules).
+          if (walls[globalNext]?.startCornerKind === 'reflex') continue;
 
           const isLShaped = tierLEnd[localWi] ?? false;
 

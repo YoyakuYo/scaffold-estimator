@@ -586,6 +586,8 @@ export class ScaffoldCalculatorWakugumiService {
       tierGroup: wall.tierGroup,
       tierIndex: wall.tierIndex,
       ...(scaffoldFacadeBasisMmW != null ? { scaffoldFacadeBasisMm: scaffoldFacadeBasisMmW } : {}),
+      startCornerKind: wall.startCornerKind ?? 'convex',
+      endCornerKind: wall.endCornerKind ?? 'convex',
     };
   }
 
