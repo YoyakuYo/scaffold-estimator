@@ -14,6 +14,21 @@ import {
   Pencil, Trash2, Building2, Ruler, MousePointer2,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { type TranslationKeys } from '@/lib/i18n/translations';
+import {
+  SCAFFOLD_WALL_CF_KEYS,
+  normalizeScaffoldWallCfKey,
+  type ScaffoldWallCfKey,
+} from '@/lib/scaffold-wall-cf-options';
+
+const SCAFFOLD_WALL_CF_LABEL_KEYS = {
+  '': 'wallCfUnspecified',
+  std: 'wallCfStd',
+  pattanko: 'wallCfPattanko',
+  opening: 'wallCfOpening',
+  stair: 'wallCfStair',
+  other: 'wallCfOther',
+} as const satisfies Record<ScaffoldWallCfKey, keyof TranslationKeys['scaffoldExtra']>;
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -36,9 +51,9 @@ interface DrawingUploadProps {
   /** Per-edge scaffold height (mm), same order as walls — editable as meters in the side panel. */
   wallHeightsMm?: number[];
   onWallHeightMmChange?: (edgeIndex: number, mm: number) => void;
-  /** Optional per-edge note (e.g. CF); UI-only unless parent persists it. */
+  /** Per-edge CF dropdown value (see scaffold-wall-cf-options); stored on wall as cfNote. */
   wallCfNotes?: string[];
-  onWallCfNoteChange?: (edgeIndex: number, note: string) => void;
+  onWallCfNoteChange?: (edgeIndex: number, value: ScaffoldWallCfKey) => void;
   /** Plan run: choose X or Y then signed run length (mm) — same order as walls. */
   edgePlanAxes?: Array<'X' | 'Y'>;
   edgePlanAxisMm?: number[];
@@ -1044,13 +1059,22 @@ export function DrawingUpload({
                         {onWallCfNoteChange ? (
                           <div className={fieldBox}>
                             <span className="text-[10px] text-gray-500 block mb-0.5">CF</span>
-                            <input
-                              type="text"
-                              value={wallCfNotes[i] ?? ''}
-                              onChange={(e) => onWallCfNoteChange(i, e.target.value)}
-                              className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px]"
-                              placeholder={t('scaffoldExtra', 'edgeNotePlaceholder') || '—'}
-                            />
+                            <select
+                              value={normalizeScaffoldWallCfKey(wallCfNotes[i])}
+                              onChange={(e) => {
+                                onWallCfNoteChange(
+                                  i,
+                                  normalizeScaffoldWallCfKey(e.target.value),
+                                );
+                              }}
+                              className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] bg-white"
+                            >
+                              {SCAFFOLD_WALL_CF_KEYS.map((cfKey) => (
+                                <option key={cfKey || '_none'} value={cfKey}>
+                                  {t('scaffoldExtra', SCAFFOLD_WALL_CF_LABEL_KEYS[cfKey]) || cfKey || '—'}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         ) : null}
                       </div>

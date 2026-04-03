@@ -95,7 +95,7 @@ interface WallState {
   kaidanOffsets: number[];
   isMultiSegment: boolean;
   segments: WallSegment[];
-  /** Optional per-edge note (drawing upload side panel); not sent to calculation API. */
+  /** Per-wall CF dropdown key (drawing panel); see scaffold-wall-cf-options; not sent to calculation API. */
   cfNote?: string;
   /** Plan run for this edge: axis (X or Y) and signed run in mm (drawing panel). */
   edgePlanAxis?: 'X' | 'Y';
