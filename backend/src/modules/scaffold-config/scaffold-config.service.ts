@@ -6,6 +6,7 @@ import { ScaffoldCalculatorService, ScaffoldCalculationResult, WallCalculationIn
 import { ScaffoldCalculatorWakugumiService } from './scaffold-calculator-wakugumi.service';
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
+import { PatchSiteContactDto } from './dto/patch-site-contact.dto';
 import { ALL_RULES, inferReflexVerticesFromOutline, KUSABI_TOP_GUARD_HEIGHT_MM } from './scaffold-rules';
 import {
   ALL_WAKUGUMI_RULES,
@@ -670,6 +671,38 @@ export class ScaffoldConfigService {
     if (error) throw new BadRequestException('Failed to save plan labels.');
     config.calculationResult = nextCr as any;
     return config;
+  }
+
+  async patchSiteContact(configId: string, dto: PatchSiteContactDto): Promise<ScaffoldConfiguration> {
+    const config = await this.getConfig(configId);
+    const siteName = (dto.siteName ?? '').trim() || null;
+    const siteAddress = (dto.siteAddress ?? '').trim() || null;
+    const siteEmail = (dto.siteEmail ?? '').trim() || null;
+    const sitePhone = (dto.sitePhone ?? '').trim() || null;
+    const siteFax = (dto.siteFax ?? '').trim() || null;
+    const payload = mapPayloadToSnake({
+      siteName,
+      siteAddress,
+      siteEmail,
+      sitePhone,
+      siteFax,
+    });
+    const client = this.supabase.getClient();
+    let { error } = await client.from('scaffold_configurations').update(payload).eq('id', configId);
+    if (error && isPostgrestMissingScaffoldSiteColumnError(error)) {
+      const prev = (config.calculationResult ?? {}) as Record<string, unknown>;
+      const siteContact = { siteName, siteAddress, siteEmail, sitePhone, siteFax };
+      const nextCr = { ...prev, siteContact };
+      ({ error } = await client
+        .from('scaffold_configurations')
+        .update(mapPayloadToSnake({ calculationResult: nextCr }))
+        .eq('id', configId));
+    }
+    if (error) {
+      this.logger.error('patchSiteContact failed', error);
+      throw new BadRequestException('Failed to save site contact.');
+    }
+    return this.getConfig(configId);
   }
 
   async getConfigByDrawing(drawingId: string): Promise<ScaffoldConfiguration | null> {

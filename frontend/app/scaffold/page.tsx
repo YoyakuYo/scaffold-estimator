@@ -6,7 +6,6 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   scaffoldConfigsApi,
   CreateScaffoldConfigDto,
-  type EdgeHashiraLabeling,
   ScaffoldRules,
   WallInput,
   WallSegment,
@@ -43,18 +42,8 @@ import {
 } from '@/lib/bim-facade-colors';
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
-import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
-import {
-  BuildingScaffoldSettingsPanel,
-  SiteContactFields,
-} from '@/components/scaffold/building-scaffold-settings-panel';
-import {
-  edgeChordName,
-  formRowsFromWallCount,
-  formRowsFromStoredLabeling,
-  labelingForEnabledWallIndices,
-  type EdgeHashiraFormRow,
-} from '@/lib/edge-hashira-labels';
+import { BuildingScaffoldSettingsPanel } from '@/components/scaffold/building-scaffold-settings-panel';
+import { edgeChordName } from '@/lib/edge-hashira-labels';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 
@@ -106,6 +95,8 @@ interface WallState {
   kaidanOffsets: number[];
   isMultiSegment: boolean;
   segments: WallSegment[];
+  /** Optional per-edge note (drawing upload side panel); not sent to calculation API. */
+  cfNote?: string;
 }
 
 function calcTotalFromSegments(segments: WallSegment[]): number {
@@ -929,18 +920,11 @@ function ScaffoldPageContent() {
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
   const [walls, setWalls] = useState<WallState[]>([]);
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(null);
-  const [siteName, setSiteName] = useState('');
-  const [siteAddress, setSiteAddress] = useState('');
-  const [siteEmail, setSiteEmail] = useState('');
-  const [sitePhone, setSitePhone] = useState('');
-  const [siteFax, setSiteFax] = useState('');
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
   const [selectedWallIdx, setSelectedWallIdx] = useState<number | null>(null);
   const [prefilled, setPrefilled] = useState(false);
-  const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
   const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
   const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
-  const [aiBimHashiraRows, setAiBimHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -974,11 +958,6 @@ function ScaffoldPageContent() {
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
     setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
     setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
-    setSiteName(editConfig.siteName ?? '');
-    setSiteAddress(editConfig.siteAddress ?? '');
-    setSiteEmail(editConfig.siteEmail ?? '');
-    setSitePhone(editConfig.sitePhone ?? '');
-    setSiteFax(editConfig.siteFax ?? '');
     const wallList = editConfig.walls ?? [];
     if (wallList.length > 0) {
       const buildingH = editConfig.buildingHeightMm ?? 3000;
@@ -997,12 +976,11 @@ function ScaffoldPageContent() {
           kaidanOffsets: [],
           isMultiSegment: isMulti,
           segments: segs.length > 0 ? segs : [{ lengthMm: w.wallLengthMm ?? 0, offsetMm: 0 }],
+          cfNote: '',
         };
       });
       setWalls(mapped);
       setPrefilled(true);
-      const eh = editConfig.calculationResult?.edgeHashiraLabeling as EdgeHashiraLabeling | undefined;
-      setHashiraRows(formRowsFromStoredLabeling(eh, wallList.length));
       const vck = (editConfig.calculationResult as { vertexCornerKinds?: unknown } | undefined)
         ?.vertexCornerKinds;
       if (
@@ -1037,22 +1015,12 @@ function ScaffoldPageContent() {
   }, [editConfigId, editConfig]);
 
   useEffect(() => {
-    setHashiraRows((prev) => formRowsFromWallCount(prev, walls.length));
     setSelectedWallIdx((prev) => {
       if (walls.length === 0) return null;
       if (prev == null) return 0;
       return Math.max(0, Math.min(prev, walls.length - 1));
     });
   }, [walls.length]);
-
-  useEffect(() => {
-    if (!aiBimPreview) {
-      setAiBimHashiraRows([]);
-      return;
-    }
-    const n = aiBimPreview.walls.length;
-    setAiBimHashiraRows((prev) => formRowsFromWallCount(prev, n));
-  }, [aiBimPreview, aiBimPreview?.walls.length]);
 
   const closedFootprintChords =
     walls.length >= 3 && (perimeterModel.isClosed || polygonVertices.length >= 3);
@@ -1235,14 +1203,15 @@ function ScaffoldPageContent() {
             buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
           return {
             side: w.side,
-        enabled: true,
+            enabled: true,
             lengthMm: w.lengthMm,
             heightMm: defaultH,
-        stairAccessCount: 0,
-        kaidanCount: 0,
-        kaidanOffsets: [],
-        isMultiSegment: false,
-        segments: [],
+            stairAccessCount: 0,
+            kaidanCount: 0,
+            kaidanOffsets: [],
+            isMultiSegment: false,
+            segments: [],
+            cfNote: '',
           };
         });
       });
@@ -1320,8 +1289,6 @@ function ScaffoldPageContent() {
       return;
     }
 
-    const edgeHashiraLabeling = labelingForEnabledWallIndices(enabledOriginalIndices, hashiraRows);
-
     const dto: CreateScaffoldConfigDto = {
       projectId: editConfig?.projectId ?? 'default-project',
       mode: 'manual',
@@ -1329,12 +1296,11 @@ function ScaffoldPageContent() {
       structureType,
       walls: enabledWalls,
       scaffoldWidthMm,
-      siteName: siteName.trim(),
-      siteAddress: siteAddress.trim(),
-      siteEmail: siteEmail.trim(),
-      sitePhone: sitePhone.trim(),
-      siteFax: siteFax.trim(),
-      ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
+      siteName: '',
+      siteAddress: '',
+      siteEmail: '',
+      sitePhone: '',
+      siteFax: '',
       ...(scaffoldType === 'kusabi' && {
         preferredMainTatejiMm,
       }),
@@ -1945,18 +1911,9 @@ function ScaffoldPageContent() {
                         <Building2 className="h-5 w-5 text-blue-600" />
                         {t('scaffold', 'buildingSettings')}
                       </h2>
-                      <SiteContactFields
-                        siteName={siteName}
-                        setSiteName={setSiteName}
-                        siteAddress={siteAddress}
-                        setSiteAddress={setSiteAddress}
-                        siteEmail={siteEmail}
-                        setSiteEmail={setSiteEmail}
-                        sitePhone={sitePhone}
-                        setSitePhone={setSitePhone}
-                        siteFax={siteFax}
-                        setSiteFax={setSiteFax}
-                      />
+                      <p className="text-xs text-gray-500">
+                        {(t('scaffold', 'siteContactOnResultPage') || 'Site name and address are entered on the results page before Excel export.')}
+                      </p>
                       <div className="rounded-lg border border-violet-200 bg-gray-50/50 p-3 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-violet-700">{t('scaffold', 'aiBimConditionsTitle')}</span>
@@ -2121,19 +2078,6 @@ function ScaffoldPageContent() {
                         </div>
                       </div>
                     </div>
-                    <EdgeHashiraPlanningPanel
-                      wallCount={aiBimPreview.walls.length}
-                      lengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                      rows={aiBimHashiraRows}
-                      onRowChange={(wi, patch) => {
-                        setAiBimHashiraRows((prev) => {
-                          const next = [...prev];
-                          const cur = next[wi] ?? { axis: '' as const, countStr: '' };
-                          next[wi] = { ...cur, ...patch };
-                          return next;
-                        });
-                      }}
-                    />
                   </div>
                   {aiBimPreview.obstacles && aiBimPreview.obstacles.length > 0 && (
                     <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
@@ -2233,23 +2177,15 @@ function ScaffoldPageContent() {
                         if (!wallsWereDecomposed) {
                           delete (dtoBase as any).massingTiers;
                         }
-                        const sameWallCountAsPreview = sanitizedWalls.length === aiBimPreview.walls.length;
-                        const aiEdgeLbl = sameWallCountAsPreview
-                          ? labelingForEnabledWallIndices(
-                              aiBimPreview.walls.map((_, idx) => idx),
-                              aiBimHashiraRows,
-                            )
-                          : undefined;
                         const dto = {
                           ...dtoBase,
                           walls: sanitizedWalls,
-                          siteName: siteName.trim(),
-                          siteAddress: siteAddress.trim(),
-                          siteEmail: siteEmail.trim(),
-                          sitePhone: sitePhone.trim(),
-                          siteFax: siteFax.trim(),
+                          siteName: '',
+                          siteAddress: '',
+                          siteEmail: '',
+                          sitePhone: '',
+                          siteFax: '',
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
-                          ...(aiEdgeLbl ? { edgeHashiraLabeling: aiEdgeLbl } : {}),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
@@ -2297,6 +2233,7 @@ function ScaffoldPageContent() {
                   kaidanOffsets: [],
                   isMultiSegment: false,
                   segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
+                  cfNote: '',
                 }));
                 setWalls(mapped);
                 setBuildingHeightMm(result.buildingHeightMm);
@@ -2414,6 +2351,10 @@ function ScaffoldPageContent() {
             onBuildingHeightChange={setBuildingHeightMm}
             buildingHeightLabel={t('scaffold', 'defaultHeightForDrawingMm')}
             buildingHeightHint={t('scaffold', 'defaultHeightDrawingHint')}
+            wallHeightsMm={walls.map((w) => w.heightMm)}
+            onWallHeightMmChange={(edgeIdx, mm) => updateWall(edgeIdx, { heightMm: mm })}
+            wallCfNotes={walls.map((w) => w.cfNote ?? '')}
+            onWallCfNoteChange={(edgeIdx, note) => updateWall(edgeIdx, { cfNote: note })}
             allowAiPoweredFileParsing={canAi}
           />
         </div>
@@ -2429,71 +2370,12 @@ function ScaffoldPageContent() {
 
         {/* Wall Configuration */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('scaffold', 'wallConfig')}</h2>
-          <p className="text-sm text-gray-600 mb-4">{t('scaffold', 'perWallHeightIntro')}</p>
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">{t('scaffold', 'wallConfig')}</h2>
+          <p className="text-sm text-gray-600 mb-3">
+            {t('scaffold', 'perWallConfigMetersHint') || 'Lengths and heights are in meters. Use the drawing panel for edge details.'}
+          </p>
 
-          {/* Quick Height Estimator */}
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs font-medium text-blue-800 mb-2">
-              📐 {t('scaffold', 'quickHeightEstimate')}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { label: '1F (3,900mm)', value: 3900 },
-                { label: '2F (6,900mm)', value: 6900 },
-                { label: '3F (9,900mm)', value: 9900 },
-                { label: '4F (12,900mm)', value: 12900 },
-                { label: '5F (15,900mm)', value: 15900 },
-                { label: '6F+', value: 0 },
-              ].map((preset) => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  onClick={() => {
-                    if (preset.value === 0) {
-                      const floors = prompt(t('scaffold', 'enterFloorCount') || 'Enter number of floors (6-20):', '6');
-                      if (floors) {
-                        const n = parseInt(floors, 10);
-                        if (n >= 1 && n <= 50) {
-                          const height = 3300 + (n - 1) * 3000 + 900;
-                            setBuildingHeightMm(height);
-                            setWalls((prev) => prev.map((w) => (w.enabled ? { ...w, heightMm: height } : w)));
-                        }
-                      }
-                    } else {
-                        setBuildingHeightMm(preset.value);
-                        setWalls((prev) => prev.map((w) => (w.enabled ? { ...w, heightMm: preset.value } : w)));
-                    }
-                  }}
-                  className="px-3 py-1.5 text-xs font-medium bg-white border border-blue-300 rounded-lg hover:bg-blue-100 text-blue-700 transition-colors"
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-blue-500 mt-1.5">
-              {t('scaffold', 'quickHeightNote')}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const h = buildingHeightMm;
-                  if (!h || h < 1000) {
-                    alert(t('scaffold', 'enterDefaultHeightForApply'));
-                    return;
-                  }
-                  setWalls((prev) => prev.map((w) => (w.enabled ? { ...w, heightMm: h } : w)));
-                }}
-                className="px-3 py-1.5 text-xs font-medium bg-white border border-blue-400 rounded-lg hover:bg-blue-100 text-blue-800 transition-colors"
-              >
-                {t('scaffold', 'applyDefaultHeightToAllWalls')}
-              </button>
-              <span className="text-xs text-blue-600/80">{t('scaffold', 'applyDefaultHeightHint')}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
             <div className="space-y-3">
               <p className="text-sm font-medium text-gray-700">
                 {t('scaffold', 'wallSettingsLabel')}
@@ -2502,7 +2384,7 @@ function ScaffoldPageContent() {
                 <div
                   key={wall.side}
                   onClick={() => setSelectedWallIdx(i)}
-                  className={`rounded-lg border p-4 transition-all cursor-pointer ${
+                  className={`rounded-lg border p-3 transition-all cursor-pointer ${
                     selectedWallIdx === i
                       ? 'ring-2 ring-orange-300 border-orange-200 bg-orange-50/40'
                       : wall.enabled
@@ -2510,22 +2392,19 @@ function ScaffoldPageContent() {
                         : 'border-gray-200 bg-gray-50 opacity-60'
                   }`}
                 >
-                <div className="flex items-center gap-4 flex-wrap">
-                  {/* Enable checkbox */}
-                  <label className="flex items-center gap-2 cursor-pointer min-w-[80px]">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
                     <input
                       type="checkbox"
                       checked={wall.enabled}
                       onChange={(e) => updateWall(i, { enabled: e.target.checked })}
-                      className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      className="h-3.5 w-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       onClick={(e) => e.stopPropagation()}
                     />
                     <span className="font-semibold text-gray-800">{wallChordAt(i)}</span>
                   </label>
-
-                  {/* Per side: scaffold width & stairs (足場幅・階段) */}
-                  <div className="flex items-center gap-2 min-w-[100px]">
-                    <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'scaffoldWidth') || '足場幅'}</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">{t('scaffold', 'scaffoldWidth')}</span>
                     <select
                       value={wall.scaffoldWidthMm ?? ''}
                       onChange={(e) => {
@@ -2533,7 +2412,7 @@ function ScaffoldPageContent() {
                         updateWall(i, { scaffoldWidthMm: v ? Number(v) : undefined });
                       }}
                       disabled={!wall.enabled}
-                      className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      className="w-[4.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <option value="">{scaffoldWidthMm}mm</option>
@@ -2542,13 +2421,27 @@ function ScaffoldPageContent() {
                       ))}
                     </select>
                   </div>
-                  <div className="flex items-center gap-2 min-w-[100px]">
-                    <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'stairsPerSide') || '階段'}</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-500 whitespace-nowrap">{t('scaffold', 'stairsPerSide')}</span>
                     <select
                       value={wall.stairAccessCount ?? 0}
-                      onChange={(e) => updateWall(i, { stairAccessCount: Number(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const n = Number(e.target.value) || 0;
+                        const effLen =
+                          wall.isMultiSegment && wall.segments.length > 0
+                            ? calcTotalFromSegments(wall.segments)
+                            : wall.lengthMm;
+                        const offsets =
+                          n <= 0 || effLen <= 0
+                            ? []
+                            : Array.from({ length: n }, (_, j) => {
+                                const p = Math.round((effLen / (n + 1)) * (j + 1));
+                                return Math.min(effLen, Math.round(p / 100) * 100);
+                              });
+                        updateWall(i, { stairAccessCount: n, kaidanCount: n, kaidanOffsets: offsets });
+                      }}
                       disabled={!wall.enabled}
-                      className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      className="w-14 rounded border border-gray-300 px-1 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {[0, 1, 2, 3, 4].map((n) => (
@@ -2556,66 +2449,58 @@ function ScaffoldPageContent() {
                       ))}
                     </select>
                   </div>
-
-                  {/* Wall Length */}
-                    <div className="flex-1 min-w-[180px]">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'wallLength')}</label>
-                      <input
-                        type="number"
-                        value={(wall.isMultiSegment && wall.segments.length > 0
-                          ? calcTotalFromSegments(wall.segments)
-                          : wall.lengthMm) || ''}
-                        onChange={(e) => {
-                          if (!wall.isMultiSegment) {
-                            updateWall(i, { lengthMm: Number(e.target.value) || 0 });
-                          }
-                        }}
-                        disabled={!wall.enabled || wall.isMultiSegment}
-                        readOnly={wall.isMultiSegment}
-                        placeholder="0"
-                        className={`w-32 rounded-lg border px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${
-                          wall.isMultiSegment ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-300'
-                        }`}
-                        min={600}
-                        step={100}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <span className="text-sm text-gray-500">mm</span>
-                        <span className="text-xs text-gray-400 min-w-[50px]">
-                          {wall.lengthMm > 0 ? `${(wall.lengthMm / 1000).toFixed(2)}m` : ''}
-                        </span>
-                      {wall.isMultiSegment && (
-                        <span className="text-xs text-orange-500" title="Auto-calculated from segments">⚡</span>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <label className="text-xs text-gray-500 whitespace-nowrap">{t('scaffold', 'wallLength')}</label>
+                    <input
+                      type="number"
+                      min={0.6}
+                      step={0.01}
+                      value={(() => {
+                        const mm =
+                          wall.isMultiSegment && wall.segments.length > 0
+                            ? calcTotalFromSegments(wall.segments)
+                            : wall.lengthMm;
+                        return mm > 0 ? Math.round(mm) / 1000 : '';
+                      })()}
+                      onChange={(e) => {
+                        if (wall.isMultiSegment) return;
+                        const v = parseFloat(e.target.value);
+                        if (!Number.isFinite(v) || v <= 0) return;
+                        updateWall(i, { lengthMm: Math.round(v * 1000) });
+                      }}
+                      disabled={!wall.enabled || wall.isMultiSegment}
+                      readOnly={wall.isMultiSegment}
+                      className={`w-[4.25rem] rounded border px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${
+                        wall.isMultiSegment ? 'border-orange-300 bg-orange-50 text-orange-800' : 'border-gray-300'
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="text-xs text-gray-400">m</span>
+                    {wall.isMultiSegment && (
+                      <span className="text-[10px] text-orange-600" title="From segments">Σ</span>
+                    )}
                   </div>
-
-                  {/* Wall Height */}
-                    <div className="flex-1 min-w-[180px]">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600 whitespace-nowrap">{t('scaffold', 'wallHeight')}</label>
-                      <input
-                        type="number"
-                        value={wall.heightMm || ''}
-                        onChange={(e) => updateWall(i, { heightMm: Number(e.target.value) || 0 })}
-                        disabled={!wall.enabled}
-                        placeholder="0"
-                        className="w-32 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                        min={1000}
-                        step={100}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <span className="text-sm text-gray-500">mm</span>
-                        <span className="text-xs text-gray-400 min-w-[50px]">
-                          {wall.heightMm > 0 ? `${(wall.heightMm / 1000).toFixed(1)}m` : ''}
-                        </span>
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <label className="text-xs text-gray-500 whitespace-nowrap">{t('scaffold', 'wallHeight')}</label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={0.01}
+                      value={wall.heightMm > 0 ? Math.round(wall.heightMm) / 1000 : ''}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!Number.isFinite(v) || v <= 0) return;
+                        updateWall(i, { heightMm: Math.round(v * 1000) });
+                      }}
+                      disabled={!wall.enabled}
+                      className="w-[4.25rem] rounded border border-gray-300 px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="text-xs text-gray-400">m</span>
                   </div>
-
-                  <span className="text-xs text-gray-400 self-center">
-                    {wall.scaffoldWidthMm ? '' : `${t('scaffold', 'defaultScaffoldWidthTag')}${scaffoldWidthMm}mm`}
-                  </span>
+                  {!wall.scaffoldWidthMm && (
+                    <span className="text-[10px] text-gray-400">{t('scaffold', 'defaultScaffoldWidthTag')}{scaffoldWidthMm}mm</span>
+                  )}
                 </div>
 
                 {/* Multi-Segment Wall Editor */}
@@ -2801,109 +2686,6 @@ function ScaffoldPageContent() {
                     )}
                   </div>
                 )}
-
-                {/* Kaidan Placement Section */}
-                  {wall.enabled &&
-                    (wall.isMultiSegment ? calcTotalFromSegments(wall.segments) : wall.lengthMm) > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 w-full">
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="text-sm font-medium text-gray-700">
-                        {t('scaffold', 'kaidanPlacement') || 'Kaidan Placement'}
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-600 whitespace-nowrap">
-                          {t('scaffold', 'kaidanCount') || 'Number of accesses:'}
-                        </label>
-                        <select
-                          value={wall.kaidanCount || 0}
-                          onChange={(e) => {
-                            const count = Number(e.target.value) || 0;
-                            const currentOffsets = wall.kaidanOffsets || [];
-                            let newOffsets: number[];
-                            if (count === 0) {
-                              newOffsets = [];
-                            } else if (count > currentOffsets.length) {
-                              newOffsets = [...currentOffsets];
-                              for (let j = currentOffsets.length; j < count; j++) {
-                                const position = Math.round((wall.lengthMm / (count + 1)) * (j + 1));
-                                newOffsets.push(Math.round(position / 100) * 100);
-                              }
-                            } else {
-                              newOffsets = currentOffsets.slice(0, count);
-                            }
-                            updateWall(i, {
-                              kaidanCount: count,
-                              kaidanOffsets: newOffsets,
-                              stairAccessCount: count,
-                            });
-                          }}
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
-                        >
-                          {[0, 1, 2, 3, 4].map((n) => (
-                                <option key={n} value={n}>
-                                  {n}
-                                </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                        {wall.kaidanCount > 0 &&
-                          (wall.kaidanOffsets || []).map((offset, kaidanIdx) => (
-                      <div key={kaidanIdx} className="mb-4 last:mb-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-medium text-gray-600">
-                            {t('scaffold', 'kaidan') || 'Kaidan'} {kaidanIdx + 1}:
-                          </label>
-                                <span className="text-xs text-gray-500">{offset.toLocaleString()}mm</span>
-                        </div>
-                        {(() => {
-                                const effectiveLength =
-                                  wall.isMultiSegment && wall.segments.length > 0
-                            ? calcTotalFromSegments(wall.segments)
-                            : wall.lengthMm;
-                          return (
-                            <>
-                              <div className="flex items-center justify-between text-[10px] text-gray-400 mb-1">
-                                <span>0mm</span>
-                                <span>{effectiveLength.toLocaleString()}mm</span>
-                              </div>
-                              <input
-                                type="range"
-                                min={0}
-                                max={effectiveLength}
-                                step={100}
-                                value={offset}
-                                onChange={(e) => {
-                                  const raw = Number(e.target.value) || 0;
-                                  const snapped = Math.round(raw / 100) * 100;
-                                  const newOffsets = [...(wall.kaidanOffsets || [])];
-                                  newOffsets[kaidanIdx] = snapped;
-                                  updateWall(i, { kaidanOffsets: newOffsets });
-                                }}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                style={{
-                                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(offset / effectiveLength) * 100}%, #e5e7eb ${(offset / effectiveLength) * 100}%, #e5e7eb 100%)`,
-                                }}
-                              />
-                            </>
-                          );
-                        })()}
-                        <div className="mt-1 text-[10px] text-gray-400 italic">
-                                {t('scaffold', 'kaidanPlacementHint') ||
-                                  'Drag to position - kaidan will be placed in 2 spans closest to this position'}
-                        </div>
-                      </div>
-                    ))}
-
-                    {wall.kaidanCount === 0 && (
-                      <p className="text-xs text-gray-400 italic">
-                            {t('scaffold', 'selectKaidanCount') ||
-                              'Select number of kaidan accesses above to position them'}
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
             ))}
             </div>
@@ -2938,6 +2720,7 @@ function ScaffoldPageContent() {
         </div>
 
         <BuildingScaffoldSettingsPanel
+          showSiteContact={false}
           rules={rules}
           buildingHeightMm={buildingHeightMm}
           setBuildingHeightMm={setBuildingHeightMm}
@@ -2956,16 +2739,6 @@ function ScaffoldPageContent() {
           endStopperType={endStopperType}
           setEndStopperType={setEndStopperType}
           setFrameSizeMm={setFrameSizeMm}
-          siteName={siteName}
-          setSiteName={setSiteName}
-          siteAddress={siteAddress}
-          setSiteAddress={setSiteAddress}
-          siteEmail={siteEmail}
-          setSiteEmail={setSiteEmail}
-          sitePhone={sitePhone}
-          setSitePhone={setSitePhone}
-          siteFax={siteFax}
-          setSiteFax={setSiteFax}
         />
 
         <VertexCornerKindsPanel
@@ -3002,25 +2775,6 @@ function ScaffoldPageContent() {
             }
           }}
         />
-        {walls.length > 0 && (
-          <EdgeHashiraPlanningPanel
-            wallCount={walls.length}
-            lengthsMm={walls.map((w) =>
-              w.isMultiSegment && w.segments.length > 0
-                ? calcTotalFromSegments(w.segments)
-                : w.lengthMm,
-            )}
-            rows={hashiraRows}
-            onRowChange={(wi, patch) => {
-              setHashiraRows((prev) => {
-                const next = [...prev];
-                const cur = next[wi] ?? { axis: '' as const, countStr: '' };
-                next[wi] = { ...cur, ...patch };
-                return next;
-              });
-            }}
-          />
-        )}
 
         {/* Error message */}
         {calculateMutation.isError && (() => {

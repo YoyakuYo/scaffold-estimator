@@ -112,7 +112,9 @@ export function SiteContactFields({
   );
 }
 
-export interface BuildingScaffoldSettingsPanelProps extends SiteContactFieldsProps {
+export interface BuildingScaffoldSettingsPanelProps extends Partial<SiteContactFieldsProps> {
+  /** When false, hides site/contact fields (collect on result page before Excel). Default true. */
+  showSiteContact?: boolean;
   rules: ScaffoldRules | undefined;
   buildingHeightMm: number | null;
   setBuildingHeightMm: (v: number | null) => void;
@@ -134,6 +136,17 @@ export interface BuildingScaffoldSettingsPanelProps extends SiteContactFieldsPro
 }
 
 export function BuildingScaffoldSettingsPanel({
+  showSiteContact = true,
+  siteName = '',
+  setSiteName = () => {},
+  siteAddress = '',
+  setSiteAddress = () => {},
+  siteEmail = '',
+  setSiteEmail = () => {},
+  sitePhone = '',
+  setSitePhone = () => {},
+  siteFax = '',
+  setSiteFax = () => {},
   rules,
   buildingHeightMm,
   setBuildingHeightMm,
@@ -152,7 +165,6 @@ export function BuildingScaffoldSettingsPanel({
   endStopperType,
   setEndStopperType,
   setFrameSizeMm,
-  ...siteProps
 }: BuildingScaffoldSettingsPanelProps) {
   const { t, locale } = useI18n();
 
@@ -164,30 +176,51 @@ export function BuildingScaffoldSettingsPanel({
           {t('scaffold', 'buildingSettings')}
         </h2>
 
-        <SiteContactFields {...siteProps} />
+        {showSiteContact ? (
+          <SiteContactFields
+            siteName={siteName}
+            setSiteName={setSiteName}
+            siteAddress={siteAddress}
+            setSiteAddress={setSiteAddress}
+            siteEmail={siteEmail}
+            setSiteEmail={setSiteEmail}
+            sitePhone={sitePhone}
+            setSitePhone={setSitePhone}
+            siteFax={siteFax}
+            setSiteFax={setSiteFax}
+          />
+        ) : null}
 
         <div className="mb-6 pb-6 border-b border-gray-200">
           <div className="md:col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               {t('scaffold', 'defaultHeightForDrawingMm')}
             </label>
-            <input
-              type="number"
-              min={1000}
-              step={100}
-              value={buildingHeightMm ?? ''}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === '') {
-                  setBuildingHeightMm(null);
-                  return;
+            <div className="flex items-center gap-2 max-w-xs">
+              <input
+                type="number"
+                min={1}
+                step={0.01}
+                value={
+                  buildingHeightMm != null && buildingHeightMm > 0
+                    ? Math.round((buildingHeightMm / 1000) * 1000) / 1000
+                    : ''
                 }
-                const n = Number(raw);
-                setBuildingHeightMm(Number.isFinite(n) ? n : null);
-              }}
-              className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              placeholder="3000"
-            />
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setBuildingHeightMm(null);
+                    return;
+                  }
+                  const m = Number(raw);
+                  if (!Number.isFinite(m) || m <= 0) return;
+                  setBuildingHeightMm(Math.round(m * 1000));
+                }}
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                placeholder="3"
+              />
+              <span className="text-sm text-gray-500 shrink-0">m</span>
+            </div>
             <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'defaultHeightDrawingHint')}</p>
           </div>
         </div>

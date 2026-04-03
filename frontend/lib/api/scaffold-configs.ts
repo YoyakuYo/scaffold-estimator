@@ -417,6 +417,24 @@ export const scaffoldConfigsApi = {
     return response.data;
   },
 
+  /** Persist site / contact for Excel header only (no recalculation). */
+  patchSiteContact: async (
+    configId: string,
+    dto: {
+      siteName?: string;
+      siteAddress?: string;
+      siteEmail?: string;
+      sitePhone?: string;
+      siteFax?: string;
+    },
+  ): Promise<ScaffoldConfiguration> => {
+    const response = await apiClient.patch<ScaffoldConfiguration>(
+      `/scaffold-configs/${configId}/site-contact`,
+      dto,
+    );
+    return response.data;
+  },
+
   /** Download Excel quotation (`lang`: ja | en | fr — matches UI locale) */
   exportExcel: async (configId: string, lang?: string): Promise<Blob> => {
     const response = await apiClient.get(`/scaffold-configs/${configId}/export/excel`, {

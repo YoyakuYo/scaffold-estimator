@@ -28,11 +28,17 @@ interface DrawingUploadProps {
   onSegmentEdit: (index: number, lengthMm: number) => void;
   externalWallLengths: number[];
   buildingHeightMm: number | null;
-  onBuildingHeightChange: (mm: number) => void;
+  onBuildingHeightChange: (mm: number | null) => void;
   /** Overrides the default label (e.g. default height for new edges, not a single building height). */
   buildingHeightLabel?: string;
   /** Short hint under the height field */
   buildingHeightHint?: string;
+  /** Per-edge scaffold height (mm), same order as walls — editable as meters in the side panel. */
+  wallHeightsMm?: number[];
+  onWallHeightMmChange?: (edgeIndex: number, mm: number) => void;
+  /** Optional per-edge note (e.g. CF); UI-only unless parent persists it. */
+  wallCfNotes?: string[];
+  onWallCfNoteChange?: (edgeIndex: number, note: string) => void;
   /**
    * When false, image/PDF skips Vision/AI API (Premium-only); DXF still uses client parser.
    * Default true.
@@ -68,10 +74,19 @@ function d(a: Vertex, b: Vertex): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
-function fmtMm(mm: number): string {
-  if (mm >= 10000) return `${(mm / 1000).toFixed(1)}m`;
-  if (mm >= 1000) return `${(mm / 1000).toFixed(2)}m`;
-  return `${Math.round(mm)}mm`;
+/** Minimum geometric edge length (mm) before we trust DXF/mm trace without a manual dimension prompt. */
+const TRACE_MIN_TRUST_MM = 600;
+
+function fmtMeters(mm: number): string {
+  if (mm <= 0) return '?';
+  const m = mm / 1000;
+  return `${m.toFixed(m >= 10 ? 2 : 2)}m`;
+}
+
+function parseMetersInputToMm(s: string): number | null {
+  const v = parseFloat(String(s).trim().replace(',', '.'));
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return Math.round(v * 1000);
 }
 
 function midPt(a: Vertex, b: Vertex): Vertex {
@@ -149,10 +164,14 @@ export function DrawingUpload({
   onBuildingHeightChange,
   buildingHeightLabel,
   buildingHeightHint,
+  wallHeightsMm = [],
+  onWallHeightMmChange,
+  wallCfNotes = [],
+  onWallCfNoteChange,
   allowAiPoweredFileParsing = true,
 }: DrawingUploadProps) {
   const { t } = useI18n();
-  const mmUnit = t('common', 'mm');
+  const mUnit = t('common', 'metersShort') || 'm';
   const [phase, setPhase] = useState<Phase>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState<FileKind>('image');
@@ -167,8 +186,6 @@ export function DrawingUpload({
 
   const [tracing, setTracing] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [editVal, setEditVal] = useState('');
 
   const svgRef = useRef<SVGSVGElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -265,16 +282,26 @@ export function DrawingUpload({
     setShape(prev => {
       const verts = [...prev.verts, pos];
       const wallMm = [...prev.wallMm];
+      let geoLen = 0;
       if (prev.verts.length > 0 && prev.coordsAreMm) {
-        wallMm.push(Math.round(d(prev.verts[prev.verts.length - 1], pos)));
+        geoLen = Math.round(d(prev.verts[prev.verts.length - 1], pos));
+        wallMm.push(geoLen);
+      } else if (prev.verts.length > 0) {
+        wallMm.push(0);
       } else {
         wallMm.push(0);
       }
-      // Prompt for dimension on the new edge (edge from prev last → new vertex)
       if (prev.verts.length >= 1) {
+        const newIdx = wallMm.length - 1;
+        const needManualDim = !prev.coordsAreMm || geoLen < TRACE_MIN_TRUST_MM;
         setTimeout(() => {
-          setPendingDimIdx(wallMm.length - 1);
-          setPendingDimVal('');
+          if (needManualDim) {
+            setPendingDimIdx(newIdx);
+            setPendingDimVal('');
+          } else {
+            setPendingDimIdx(null);
+            setPendingDimVal('');
+          }
         }, 50);
       }
       return { ...prev, verts, wallMm };
@@ -283,9 +310,9 @@ export function DrawingUpload({
 
   const applyPendingDim = useCallback(() => {
     if (pendingDimIdx === null) return;
-    const val = parseInt(pendingDimVal, 10);
-    if (!isNaN(val) && val > 0) {
-      editWallLength(pendingDimIdx, val);
+    const mm = parseMetersInputToMm(pendingDimVal);
+    if (mm != null && mm > 0) {
+      editWallLength(pendingDimIdx, mm);
     }
     setPendingDimIdx(null);
     setPendingDimVal('');
@@ -469,7 +496,6 @@ export function DrawingUpload({
     setErrMsg('');
     setTracing(false);
     setDragIdx(null);
-    setEditIdx(null);
     perimeterModel.clear();
   }, [previewUrl, perimeterModel]);
 
@@ -527,18 +553,6 @@ export function DrawingUpload({
   }, [shape.verts.length, shape.coordsAreMm, t]);
 
   // ── Wall edit ──
-  const startEdit = useCallback((i: number) => {
-    setEditIdx(i);
-    setEditVal(String(shape.wallMm[i] || ''));
-  }, [shape.wallMm]);
-
-  const commitEdit = useCallback(() => {
-    if (editIdx === null) return;
-    const val = parseInt(editVal, 10);
-    if (!isNaN(val) && val > 0) editWallLength(editIdx, val);
-    setEditIdx(null);
-  }, [editIdx, editVal, editWallLength]);
-
   // ════════════════════════════════════════════════════════════
   // RENDER
   // ════════════════════════════════════════════════════════════
@@ -711,10 +725,9 @@ export function DrawingUpload({
                       x={mid.x + norm.x} y={mid.y + norm.y}
                       textAnchor="middle" dominantBaseline="middle"
                       fontSize={fs} fontWeight="600" fill={isPending ? '#2563eb' : len > 0 ? '#1e40af' : '#f59e0b'}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      onClick={(e) => { e.stopPropagation(); startEdit(i); }}
+                      style={{ userSelect: 'none' }}
                     >
-                      {len > 0 ? fmtMm(len) : '?mm'}
+                      {len > 0 ? fmtMeters(len) : `?${mUnit}`}
                     </text>
 
                     {!tracing && (
@@ -772,11 +785,11 @@ export function DrawingUpload({
                       if (e.key === 'Enter') applyPendingDim();
                       if (e.key === 'Escape') skipPendingDim();
                     }}
-                    placeholder={t('scaffoldExtra', 'dimensionPlaceholder') || 'Dimension (mm)'}
+                    placeholder={t('scaffoldExtra', 'dimensionPlaceholderM') || 'Length (m)'}
                     autoFocus
                     className="w-28 px-2 py-1.5 border border-blue-300 rounded text-sm font-mono text-right focus:ring-2 focus:ring-blue-500 outline-none"
                   />
-                  <span className="text-xs text-blue-500">{mmUnit}</span>
+                  <span className="text-xs text-blue-500">{mUnit}</span>
                   <button onClick={applyPendingDim}
                     className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-700 flex items-center gap-1">
                     <Check className="h-3.5 w-3.5" /> {t('viewer', 'apply') || 'Apply'}
@@ -830,16 +843,28 @@ export function DrawingUpload({
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={buildingHeightMm || ''}
-                onChange={(e) => onBuildingHeightChange(parseInt(e.target.value, 10) || 0)}
-                placeholder={t('scaffoldExtra', 'heightPlaceholder') || 'e.g. 10000'}
+                min={1}
+                step={0.01}
+                value={
+                  buildingHeightMm != null && buildingHeightMm >= 1000
+                    ? Math.round((buildingHeightMm / 1000) * 1000) / 1000
+                    : ''
+                }
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    onBuildingHeightChange(null);
+                    return;
+                  }
+                  const m = Number(raw);
+                  if (!Number.isFinite(m) || m <= 0) return;
+                  onBuildingHeightChange(Math.round(m * 1000));
+                }}
+                placeholder={t('scaffoldExtra', 'heightPlaceholderM') || 'e.g. 3'}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
-              <span className="text-sm text-gray-500 w-8">{mmUnit}</span>
+              <span className="text-sm text-gray-500 w-8">{mUnit}</span>
             </div>
-            {buildingHeightMm != null && buildingHeightMm > 0 && (
-              <p className="text-xs text-gray-400 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
-            )}
             {buildingHeightHint ? (
               <p className="text-xs text-gray-500 mt-1.5">{buildingHeightHint}</p>
             ) : null}
@@ -854,7 +879,7 @@ export function DrawingUpload({
               </h3>
               {perimeter > 0 && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {(t('viewer', 'perimeterLabel') || 'Perimeter')}: {fmtMm(perimeter)}
+                  {(t('viewer', 'perimeterLabel') || 'Perimeter')}: {(perimeter / 1000).toFixed(2)}{mUnit}
                 </span>
               )}
             </div>
@@ -877,61 +902,104 @@ export function DrawingUpload({
                   const isLastOpenEdge = !isClosed && i === verts.length - 1;
                   if (isLastOpenEdge) return null;
 
-                  const isEd = editIdx === i;
                   const isPending = pendingDimIdx === i;
                   const lA = String.fromCharCode(65 + (i % 26));
                   const nextIdx = isClosed ? (i + 1) % verts.length : i + 1;
                   const lB = String.fromCharCode(65 + (nextIdx % 26));
+                  const dxM =
+                    shape.coordsAreMm && nextIdx < verts.length
+                      ? (verts[nextIdx].x - verts[i].x) / 1000
+                      : null;
+                  const dyM =
+                    shape.coordsAreMm && nextIdx < verts.length
+                      ? (verts[nextIdx].y - verts[i].y) / 1000
+                      : null;
+                  const hMm =
+                    (wallHeightsMm.length > i ? wallHeightsMm[i] : undefined) ??
+                    buildingHeightMm ??
+                    0;
 
                   return (
-                    <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                      isPending ? 'bg-blue-50 ring-2 ring-blue-300 animate-pulse' :
-                      isEd ? 'bg-blue-50 ring-1 ring-blue-200' :
-                      len > 0 ? 'bg-gray-50 hover:bg-gray-100' : 'bg-amber-50 border border-dashed border-amber-200'
-                    }`}>
-                      <div className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
-                        isPending ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {lA}
+                    <div
+                      key={i}
+                      className={`rounded-lg border px-2 py-2 transition-colors ${
+                        isPending
+                          ? 'bg-blue-50 ring-2 ring-blue-300 border-blue-200'
+                          : len > 0
+                            ? 'bg-gray-50 border-gray-200'
+                            : 'bg-amber-50/80 border border-dashed border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className="text-[11px] font-bold text-blue-800">
+                          {lA}→{lB}
+                        </span>
+                        {verts.length > 3 && !tracing && (
+                          <button
+                            type="button"
+                            onClick={() => deleteVertex(i)}
+                            className="p-0.5 text-gray-400 hover:text-red-500 rounded"
+                            title={t('scaffoldExtra', 'deleteVertex') || 'Delete vertex'}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <span className="text-xs text-gray-500 w-10 flex-shrink-0">{lA}→{lB}</span>
-
-                      {isEd ? (
-                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                        <div>
+                          <span className="text-[10px] text-gray-500 block">L ({mUnit})</span>
                           <input
                             type="number"
-                            value={editVal}
-                            onChange={(e) => setEditVal(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitEdit();
-                              if (e.key === 'Escape') setEditIdx(null);
+                            min={0.01}
+                            step={0.01}
+                            value={len > 0 ? Math.round((len / 1000) * 1000) / 1000 : ''}
+                            onChange={(e) => {
+                              const mm = parseMetersInputToMm(e.target.value);
+                              if (mm != null) editWallLength(i, mm);
                             }}
-                            autoFocus
-                            className="w-20 px-2 py-1 border border-blue-300 rounded text-sm text-right focus:ring-1 focus:ring-blue-500 outline-none"
+                            className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
                           />
-                          <span className="text-xs text-gray-500">{mmUnit}</span>
-                          <button onClick={commitEdit} className="p-0.5 text-green-600 hover:bg-green-50 rounded">
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
                         </div>
-                      ) : (
-                        <span
-                          className={`text-sm font-medium cursor-pointer flex-1 min-w-0 truncate ${
-                            len > 0 ? 'text-gray-800 hover:text-blue-600' : 'text-amber-600 italic'
-                          }`}
-                          onClick={() => startEdit(i)}
-                          title={t('scaffoldExtra', 'clickToInputDimension') || 'Click to input dimension'}
-                        >
-                          {len > 0 ? `${fmtMm(len)} (${Math.round(len)}${mmUnit})` : `- ${t('scaffoldExtra', 'clickToInput') || 'click to input'} -`}
-                        </span>
-                      )}
-
-                      {verts.length > 3 && !isEd && !tracing && (
-                        <button onClick={() => deleteVertex(i)}
-                          className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0" title={t('scaffoldExtra', 'deleteVertex') || 'Delete vertex'}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                        <div>
+                          <span className="text-[10px] text-gray-500 block">H ({mUnit})</span>
+                          {onWallHeightMmChange ? (
+                            <input
+                              type="number"
+                              min={1}
+                              step={0.01}
+                              value={hMm >= 1000 ? Math.round((hMm / 1000) * 1000) / 1000 : ''}
+                              onChange={(e) => {
+                                const mm = parseMetersInputToMm(e.target.value);
+                                if (mm != null && mm >= 1000) onWallHeightMmChange(i, mm);
+                              }}
+                              className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
+                            />
+                          ) : (
+                            <span className="text-[11px] text-gray-700 block py-0.5">
+                              {hMm >= 1000 ? `${(hMm / 1000).toFixed(2)}` : '—'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="col-span-2 text-[10px] text-gray-500 font-mono">
+                          ΔX{' '}
+                          {dxM != null && Number.isFinite(dxM) ? dxM.toFixed(2) : '—'}
+                          {mUnit} · ΔY{' '}
+                          {dyM != null && Number.isFinite(dyM) ? dyM.toFixed(2) : '—'}
+                          {mUnit}
+                        </div>
+                        {onWallCfNoteChange ? (
+                          <div className="col-span-2">
+                            <span className="text-[10px] text-gray-500 block">CF</span>
+                            <input
+                              type="text"
+                              value={wallCfNotes[i] ?? ''}
+                              onChange={(e) => onWallCfNoteChange(i, e.target.value)}
+                              className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-[11px]"
+                              placeholder={t('scaffoldExtra', 'edgeNotePlaceholder') || '—'}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })}

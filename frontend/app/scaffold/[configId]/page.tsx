@@ -40,6 +40,7 @@ import Scaffold2DView from './scaffold-2d-view';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { normalizeScaffoldResultForQuotation } from '@/lib/scaffold-quotation-normalize';
+import { SiteContactFields } from '@/components/scaffold/building-scaffold-settings-panel';
 import { buildWallMapsForScaffoldLevel, distributeByScaffoldLevel } from '@/lib/scaffold-per-level-distribute';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 
@@ -123,6 +124,14 @@ function ScaffoldResultPage() {
   const configId = params.configId as string;
   const isAiBimFromUrl = searchParams.get('aiBim') === '1';
   const [showScanModal, setShowScanModal] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
+  const [exportSite, setExportSite] = useState({
+    siteName: '',
+    siteAddress: '',
+    siteEmail: '',
+    sitePhone: '',
+    siteFax: '',
+  });
 
   // Support ?tab=3d, ?tab=2d from external links
   const rawTab = searchParams.get('tab');
@@ -138,6 +147,24 @@ function ScaffoldResultPage() {
     queryKey: ['scaffold-config', configId],
     queryFn: () => scaffoldConfigsApi.get(configId),
   });
+
+  useEffect(() => {
+    if (!config) return;
+    setExportSite({
+      siteName: config.siteName ?? '',
+      siteAddress: config.siteAddress ?? '',
+      siteEmail: config.siteEmail ?? '',
+      sitePhone: config.sitePhone ?? '',
+      siteFax: config.siteFax ?? '',
+    });
+  }, [
+    config?.id,
+    config?.siteName,
+    config?.siteAddress,
+    config?.siteEmail,
+    config?.sitePhone,
+    config?.siteFax,
+  ]);
 
   const rawResult = config?.calculationResult;
   const resultWalls = Array.isArray(rawResult?.walls)
@@ -350,6 +377,15 @@ function ScaffoldResultPage() {
   // ─── Excel Download ─────────────────────────────────────
   const handleExcelDownload = useCallback(async () => {
     try {
+      setExcelExporting(true);
+      await scaffoldConfigsApi.patchSiteContact(configId, {
+        siteName: exportSite.siteName.trim(),
+        siteAddress: exportSite.siteAddress.trim(),
+        siteEmail: exportSite.siteEmail.trim(),
+        sitePhone: exportSite.sitePhone.trim(),
+        siteFax: exportSite.siteFax.trim(),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['scaffold-config', configId] });
       const blob = await scaffoldConfigsApi.exportExcel(configId, locale);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -359,8 +395,10 @@ function ScaffoldResultPage() {
       URL.revokeObjectURL(url);
     } catch (e) {
       alert(t('result', 'excelFailed'));
+    } finally {
+      setExcelExporting(false);
     }
-  }, [configId, locale, t]);
+  }, [configId, locale, t, exportSite, queryClient]);
 
   if (isLoading) {
     return (
@@ -426,10 +464,15 @@ function ScaffoldResultPage() {
             </button>
             <button
               onClick={handleExcelDownload}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors shadow"
+              disabled={excelExporting}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg transition-colors shadow"
             >
-              <FileSpreadsheet className="h-4 w-4" />
-              {t('result', 'excelExport')}
+              {excelExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4" />
+              )}
+              {excelExporting ? t('result', 'excelSaving') : t('result', 'excelExport')}
             </button>
             {config?.status === 'reviewed' && (
               <button
@@ -447,58 +490,25 @@ function ScaffoldResultPage() {
           </div>
         </div>
 
-        {(config?.siteName ||
-          config?.siteAddress ||
-          config?.siteEmail ||
-          config?.sitePhone ||
-          config?.siteFax) && (
-          <div className="mb-4 p-4 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 print:break-inside-avoid">
-            <div className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-emerald-600" />
-              {t('scaffold', 'siteInfoSection')}
-            </div>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5">
-              {config?.siteName ? (
-                <>
-                  <dt className="text-gray-500">{t('scaffold', 'siteName')}</dt>
-                  <dd className="font-medium">{config.siteName}</dd>
-                </>
-              ) : null}
-              {config?.siteAddress ? (
-                <>
-                  <dt className="text-gray-500">{t('scaffold', 'siteAddress')}</dt>
-                  <dd className="font-medium sm:col-span-1">{config.siteAddress}</dd>
-                </>
-              ) : null}
-              {config?.siteEmail ? (
-                <>
-                  <dt className="text-gray-500">{t('scaffold', 'siteEmail')}</dt>
-                  <dd>
-                    <a href={`mailto:${config.siteEmail}`} className="text-blue-600 hover:underline">
-                      {config.siteEmail}
-                    </a>
-                  </dd>
-                </>
-              ) : null}
-              {config?.sitePhone ? (
-                <>
-                  <dt className="text-gray-500">{t('scaffold', 'sitePhone')}</dt>
-                  <dd>
-                    <a href={`tel:${config.sitePhone}`} className="text-blue-600 hover:underline">
-                      {config.sitePhone}
-                    </a>
-                  </dd>
-                </>
-              ) : null}
-              {config?.siteFax ? (
-                <>
-                  <dt className="text-gray-500">{t('scaffold', 'siteFax')}</dt>
-                  <dd className="font-medium">{config.siteFax}</dd>
-                </>
-              ) : null}
-            </dl>
+        <div className="mb-4 p-4 rounded-xl bg-white border border-gray-200 text-sm print:break-inside-avoid">
+          <div className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-emerald-600" />
+            {t('scaffold', 'siteInfoSection')}
           </div>
-        )}
+          <p className="text-xs text-gray-500 mb-3 print:hidden">{t('result', 'excelSiteHeaderHint')}</p>
+          <SiteContactFields
+            siteName={exportSite.siteName}
+            setSiteName={(v) => setExportSite((s) => ({ ...s, siteName: v }))}
+            siteAddress={exportSite.siteAddress}
+            setSiteAddress={(v) => setExportSite((s) => ({ ...s, siteAddress: v }))}
+            siteEmail={exportSite.siteEmail}
+            setSiteEmail={(v) => setExportSite((s) => ({ ...s, siteEmail: v }))}
+            sitePhone={exportSite.sitePhone}
+            setSitePhone={(v) => setExportSite((s) => ({ ...s, sitePhone: v }))}
+            siteFax={exportSite.siteFax}
+            setSiteFax={(v) => setExportSite((s) => ({ ...s, siteFax: v }))}
+          />
+        </div>
 
         {/* Summary Cards */}
         <div

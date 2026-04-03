@@ -21,6 +21,7 @@ import { ScaffoldConfigService } from './scaffold-config.service';
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { UpdateQuantityDto } from './dto/update-quantity.dto';
 import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
+import { PatchSiteContactDto } from './dto/patch-site-contact.dto';
 import { ScaffoldExcelService } from './scaffold-excel.service';
 import { ScaffoldPdfService } from './scaffold-pdf.service';
 import { ScaffoldCadService } from './scaffold-cad.service';
@@ -71,6 +72,15 @@ export class ScaffoldConfigController {
     @CurrentUser() user: any,
   ) {
     return await this.configService.patchEdgeHashiraLabeling(id, dto, user.id);
+  }
+
+  /**
+   * PATCH /scaffold-configs/:id/site-contact
+   * Update job site header fields only (Excel / print). No recalculation.
+   */
+  @Patch(':id/site-contact')
+  async patchSiteContact(@Param('id') id: string, @Body() dto: PatchSiteContactDto) {
+    return await this.configService.patchSiteContact(id, dto);
   }
 
   /**
