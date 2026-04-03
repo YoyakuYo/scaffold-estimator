@@ -54,7 +54,7 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && !isLoggingOut) {
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-      const publicPages = ['/', '/login', '/register', '/superadmin'];
+      const publicPages = ['/', '/login', '/register', '/superadmin', '/forgot-password', '/reset-password'];
       const isPublicPage = publicPages.includes(currentPath);
       const requestUrl = error.config?.url || '';
       const isAuthEndpoint = requestUrl.includes('/auth/login');

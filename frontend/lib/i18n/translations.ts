@@ -74,6 +74,52 @@ export const translations = {
     networkError: { ja: 'サーバーに接続できません。バックエンドが Render 等で動いている場合は、フロントの環境変数 NEXT_PUBLIC_BACKEND_URL をバックエンドのURL（例: https://xxx.onrender.com/api/v1）に設定して再ビルドしてください。', en: 'Cannot reach the server. If the backend is running on Render etc., set the frontend env NEXT_PUBLIC_BACKEND_URL to the backend URL (e.g. https://xxx.onrender.com/api/v1) and rebuild.', fr: "Impossible de joindre le serveur. Si le backend tourne sur Render etc., définissez NEXT_PUBLIC_BACKEND_URL sur l'URL du backend (ex. https://xxx.onrender.com/api/v1) et recompilez." },
     devMode: { ja: '🔧 開発モードで入る（バックエンド不要）', en: '🔧 Enter Dev Mode (no backend needed)', fr: '🔧 Mode développement (sans backend)' },
     devModeHint: { ja: 'バックエンド未接続時に画面を確認できます', en: 'Preview the UI without a backend connection', fr: "Aperçu de l'interface sans connexion au backend" },
+    forgotPasswordLink: { ja: 'パスワードをお忘れですか？', en: 'Forgot password?', fr: 'Mot de passe oublié ?' },
+  },
+
+  // ─── Forgot / reset password (email link) ──────────────────────
+  passwordReset: {
+    forgotTitle: { ja: 'パスワード再設定', en: 'Reset your password', fr: 'Réinitialiser le mot de passe' },
+    forgotSubtitle: {
+      ja: '登録したメールアドレスを入力してください。リセット用のリンクをお送りします。',
+      en: 'Enter the email you use for this app. We will send you a reset link if an account exists.',
+      fr: 'Saisissez l’e-mail de votre compte. Nous vous enverrons un lien si un compte existe.',
+    },
+    forgotSubmit: { ja: 'リンクを送信', en: 'Send reset link', fr: 'Envoyer le lien' },
+    forgotSending: { ja: '送信中…', en: 'Sending…', fr: 'Envoi…' },
+    forgotSent: {
+      ja: 'ご入力のメールにアカウントがある場合、パスワード再設定用のメールを送信しました。受信トレイと迷惑メールフォルダをご確認ください（リンクの有効期限は1時間です）。',
+      en: 'If an account exists for that email, we sent password reset instructions. Check your inbox and spam folder. The link expires in 1 hour.',
+      fr: 'Si un compte existe pour cet e-mail, nous avons envoyé les instructions. Vérifiez votre boîte de réception et les courriers indésirables. Le lien expire dans 1 heure.',
+    },
+    forgotError: {
+      ja: '送信に失敗しました。しばらくしてから再度お試しください。',
+      en: 'Something went wrong. Please try again later.',
+      fr: 'Une erreur s’est produite. Réessayez plus tard.',
+    },
+    backToLogin: { ja: 'ログインに戻る', en: 'Back to sign in', fr: 'Retour à la connexion' },
+    resetTitle: { ja: '新しいパスワードを設定', en: 'Choose a new password', fr: 'Choisissez un nouveau mot de passe' },
+    resetSubtitle: {
+      ja: '新しいパスワードを入力して保存してください。',
+      en: 'Enter and confirm your new password below.',
+      fr: 'Saisissez et confirmez votre nouveau mot de passe.',
+    },
+    resetNew: { ja: '新しいパスワード', en: 'New password', fr: 'Nouveau mot de passe' },
+    resetConfirm: { ja: '新しいパスワード（確認）', en: 'Confirm new password', fr: 'Confirmer le mot de passe' },
+    resetSubmit: { ja: 'パスワードを更新', en: 'Update password', fr: 'Mettre à jour le mot de passe' },
+    resetSaving: { ja: '保存中…', en: 'Saving…', fr: 'Enregistrement…' },
+    resetSuccess: {
+      ja: 'パスワードを更新しました。ログインしてください。',
+      en: 'Your password was updated. You can sign in now.',
+      fr: 'Mot de passe mis à jour. Vous pouvez vous connecter.',
+    },
+    resetInvalid: {
+      ja: 'リンクが無効か期限切れです。もう一度「パスワードを忘れた場合」からやり直してください。',
+      en: 'This link is invalid or has expired. Request a new reset from the login page.',
+      fr: 'Ce lien est invalide ou expiré. Demandez une nouvelle réinitialisation depuis la page de connexion.',
+    },
+    resetMismatch: { ja: 'パスワードが一致しません', en: 'Passwords do not match', fr: 'Les mots de passe ne correspondent pas' },
+    goToLogin: { ja: 'ログインへ', en: 'Go to sign in', fr: 'Aller à la connexion' },
   },
 
   // ─── Registration Page ─────────────────────────────────────────
@@ -1938,6 +1984,7 @@ export const translations = {
     helperSuffix: { ja: 'をご利用ください。', en: '.', fr: '.' },
     deniedAccount: { ja: 'このアカウントではスーパー管理者にアクセスできません。', en: 'This account is not allowed to access Super Admin.', fr: 'Ce compte ne peut pas accéder au mode Super Admin.' },
     fallbackError: { ja: 'ログインに失敗しました。バックエンドが起動しており、スーパー管理者ユーザーがデータベースに作成されていることを確認してください。', en: 'Login failed. Make sure the backend is running and the super admin user has been created in the database.', fr: "Échec de la connexion. Vérifiez que le backend est actif et que l'utilisateur Super Admin existe dans la base de données." },
+    forgotPasswordLink: { ja: 'パスワードをお忘れですか？', en: 'Forgot password?', fr: 'Mot de passe oublié ?' },
   },
 
   // ─── Admin / Messaging ──────────────────────────────────────

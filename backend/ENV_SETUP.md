@@ -65,6 +65,21 @@ NODE_ENV=development
 # For production, set: NODE_ENV=production
 FRONTEND_URL=http://localhost:3001
 
+# ============================================
+# SMTP (optional — approval/rejection + password reset emails)
+# ============================================
+# Without these, MailerService skips sending. Password reset still returns a
+# generic success message but no email is delivered until SMTP is set.
+# Apply supabase-migrations/118_password_reset_tokens.sql (or TypeORM migration
+# 1700000000006) for the password_reset_tokens table + get_user_id_by_email_ci.
+#
+# SMTP_HOST=smtp.example.com
+# SMTP_PORT=587
+# SMTP_SECURE=false
+# SMTP_USER=your-smtp-user
+# SMTP_PASS=your-smtp-password
+# SMTP_FROM="Scaffold App <noreply@example.com>"
+
 # File Upload Limits
 MAX_FILE_SIZE=524288000
 ALLOWED_FILE_TYPES=pdf,dxf,dwg

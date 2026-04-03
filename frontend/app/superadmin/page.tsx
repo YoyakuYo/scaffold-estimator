@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
@@ -107,6 +108,11 @@ export default function SuperAdminPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-gray-50"
               />
+            </div>
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-sm font-medium text-amber-700 hover:text-amber-900">
+                {t('superadminLogin', 'forgotPasswordLink')}
+              </Link>
             </div>
             <button
               type="submit"

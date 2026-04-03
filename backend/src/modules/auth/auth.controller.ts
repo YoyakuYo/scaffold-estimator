@@ -20,6 +20,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ChangePasswordDto, AdminResetPasswordDto } from './dto/update-user.dto';
+import { ForgotPasswordDto, ResetPasswordWithTokenDto } from './dto/forgot-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -61,6 +62,17 @@ export class AuthController {
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  /** Always returns the same shape (no email enumeration). Requires SMTP + migration 118. */
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.email);
+  }
+
+  @Post('reset-password')
+  async resetPasswordWithToken(@Body() dto: ResetPasswordWithTokenDto) {
+    return this.authService.resetPasswordWithToken(dto.token, dto.newPassword);
   }
 
   // ─── Current User Profile ─────────────────────────────────

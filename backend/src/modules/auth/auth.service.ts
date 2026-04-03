@@ -8,8 +8,10 @@ import {
   forwardRef,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomBytes } from 'crypto';
 import { User } from './user.entity';
 import { LoginHistory } from './login-history.entity';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -28,6 +30,7 @@ export class AuthService {
   constructor(
     private readonly supabase: SupabaseService,
     private jwtService: JwtService,
+    private readonly configService: ConfigService,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
     @Inject(forwardRef(() => SubscriptionService))
@@ -365,6 +368,119 @@ export class AuthService {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newPassword, salt);
     await this.supabase.getClient().from('users').update(mapPayloadToSnake({ passwordHash: hash })).eq('id', userId);
+    return { success: true };
+  }
+
+  private hashPasswordResetToken(token: string): string {
+    return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
+
+  private async resolveUserIdByEmail(email: string): Promise<string | null> {
+    const q = email.trim();
+    if (!q) return null;
+    const client = this.supabase.getClient();
+    const { data: rpcId, error: rpcErr } = await client.rpc('get_user_id_by_email_ci', { p_email: q });
+    if (rpcId != null && rpcId !== '') {
+      return rpcId as string;
+    }
+    if (rpcErr) {
+      this.logger.debug?.(`get_user_id_by_email_ci: ${rpcErr.message} (using email fallback)`);
+    }
+    const { data: row } = await client.from('users').select('id').eq('email', q).maybeSingle();
+    if (row) return (row as { id: string }).id;
+    const { data: row2 } = await client.from('users').select('id').eq('email', q.toLowerCase()).maybeSingle();
+    return row2 ? (row2 as { id: string }).id : null;
+  }
+
+  /**
+   * Sends reset email when SMTP is configured and user is approved + active.
+   * Response is always generic (no account enumeration).
+   */
+  async requestPasswordReset(emailRaw: string): Promise<{ ok: true; message: string }> {
+    const message =
+      'If an account exists for that email and can receive mail, we sent password reset instructions. The link expires in 1 hour.';
+    const email = emailRaw?.trim() ?? '';
+    if (!email) {
+      return { ok: true, message };
+    }
+
+    const userId = await this.resolveUserIdByEmail(email);
+    if (!userId) {
+      return { ok: true, message };
+    }
+
+    const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
+    const user = mapRowToCamel<User>(row as Record<string, unknown> | null);
+    if (!user || user.approvalStatus !== 'approved' || !user.isActive) {
+      return { ok: true, message };
+    }
+
+    const rawToken = randomBytes(32).toString('base64url');
+    const tokenHash = this.hashPasswordResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.supabase.getClient().from('password_reset_tokens').delete().eq('user_id', userId);
+
+    const ins = mapPayloadToSnake({
+      userId,
+      tokenHash,
+      expiresAt: expiresAt.toISOString(),
+    });
+    const { error: insErr } = await this.supabase.getClient().from('password_reset_tokens').insert(ins);
+    if (insErr) {
+      this.logger.error(`password_reset_tokens insert failed: ${insErr.message}`);
+      return { ok: true, message };
+    }
+
+    const frontendUrl = (this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001').replace(/\/$/, '');
+    const resetUrl = `${frontendUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+
+    try {
+      const sent = await this.mailerService.sendPasswordResetEmail(user.email, resetUrl);
+      if (!sent) {
+        await this.supabase.getClient().from('password_reset_tokens').delete().eq('user_id', userId);
+        this.logger.warn(
+          'Password reset: SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM). No email was sent.',
+        );
+      }
+    } catch (err) {
+      await this.supabase.getClient().from('password_reset_tokens').delete().eq('user_id', userId);
+      this.logger.error(`Password reset email failed: ${(err as Error).message}`);
+    }
+
+    return { ok: true, message };
+  }
+
+  async resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean }> {
+    const raw = token?.trim();
+    if (!raw) {
+      throw new BadRequestException('This reset link is invalid or has expired. Please request a new password reset.');
+    }
+    const tokenHash = this.hashPasswordResetToken(raw);
+    const { data: tokRow, error } = await this.supabase
+      .getClient()
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('token_hash', tokenHash)
+      .maybeSingle();
+
+    if (error || !tokRow) {
+      throw new BadRequestException('This reset link is invalid or has expired. Please request a new password reset.');
+    }
+
+    const expiresAt = new Date((tokRow as { expires_at: string }).expires_at);
+    const userId = (tokRow as { user_id: string }).user_id;
+    const tokenId = (tokRow as { id: string }).id;
+
+    if (expiresAt.getTime() <= Date.now()) {
+      await this.supabase.getClient().from('password_reset_tokens').delete().eq('id', tokenId);
+      throw new BadRequestException('This reset link is invalid or has expired. Please request a new password reset.');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(newPassword, salt);
+    await this.supabase.getClient().from('users').update(mapPayloadToSnake({ passwordHash: hash })).eq('id', userId);
+    await this.supabase.getClient().from('password_reset_tokens').delete().eq('user_id', userId);
     return { success: true };
   }
 

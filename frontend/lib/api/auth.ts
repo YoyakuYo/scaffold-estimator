@@ -43,6 +43,11 @@ export interface RegisterResponse {
   userId: string;
 }
 
+export interface ForgotPasswordResponse {
+  ok: true;
+  message: string;
+}
+
 export const authApi = {
   register: async (payload: RegisterPayload): Promise<RegisterResponse> => {
     const response = await apiClient.post<RegisterResponse>('/auth/register', payload);
@@ -79,6 +84,19 @@ export const authApi = {
 
   heartbeat: async (): Promise<{ ok: boolean }> => {
     const response = await apiClient.post<{ ok: boolean }>('/auth/heartbeat', {});
+    return response.data;
+  },
+
+  forgotPassword: async (email: string): Promise<ForgotPasswordResponse> => {
+    const response = await apiClient.post<ForgotPasswordResponse>('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPasswordWithToken: async (payload: {
+    token: string;
+    newPassword: string;
+  }): Promise<{ success: boolean }> => {
+    const response = await apiClient.post<{ success: boolean }>('/auth/reset-password', payload);
     return response.data;
   },
 };

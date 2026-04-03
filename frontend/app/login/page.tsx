@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
@@ -152,6 +153,15 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 suppressHydrationWarning
               />
+            </div>
+            <div className="text-right">
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                suppressHydrationWarning
+              >
+                {t('login', 'forgotPasswordLink')}
+              </Link>
             </div>
           </div>
 

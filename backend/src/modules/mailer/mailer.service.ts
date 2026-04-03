@@ -57,4 +57,33 @@ export class MailerService {
     const text = `You have a new message from support.\n\nPreview: ${preview.slice(0, 100)}...\n\nLog in to the platform to view and reply.`;
     await this.send(to, subject, text);
   }
+
+  /** Self-service password reset link (single use, expires in 1 hour). Returns false if SMTP is not configured. */
+  async sendPasswordResetEmail(to: string, resetUrl: string): Promise<boolean> {
+    if (!this.enabled || !this.transport) {
+      return false;
+    }
+    const subject = 'Password reset — 仮設材積算システム / Scaffold estimator';
+    const text = [
+      'パスワード再設定のリクエストを受け付けました。',
+      '次のリンクから新しいパスワードを設定してください（1時間有効・1回限り）:',
+      resetUrl,
+      '',
+      'We received a request to reset your password.',
+      'Open this link to choose a new password (valid for 1 hour, one-time use):',
+      resetUrl,
+      '',
+      'If you did not request this, you can ignore this email.',
+    ].join('\n');
+    const html = `
+      <p>パスワード再設定のリクエストを受け付けました。</p>
+      <p><a href="${resetUrl}">パスワードを再設定する</a>（1時間有効・1回限り）</p>
+      <hr style="border:none;border-top:1px solid #eee;margin:16px 0" />
+      <p>We received a request to reset your password.</p>
+      <p><a href="${resetUrl}">Set a new password</a> (valid for 1 hour, one-time use).</p>
+      <p style="color:#666;font-size:12px">If you did not request this, ignore this email.</p>
+    `;
+    await this.send(to, subject, text, html);
+    return true;
+  }
 }
