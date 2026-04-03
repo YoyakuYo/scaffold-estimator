@@ -20,6 +20,8 @@ import {
   normalizeScaffoldWallCfKey,
   type ScaffoldWallCfKey,
 } from '@/lib/scaffold-wall-cf-options';
+import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
+import type { EdgeHashiraFormRow } from '@/lib/edge-hashira-labels';
 
 const SCAFFOLD_WALL_CF_LABEL_KEYS = {
   '': 'wallCfUnspecified',
@@ -59,6 +61,9 @@ interface DrawingUploadProps {
   edgePlanAxisMm?: number[];
   onEdgePlanAxisChange?: (edgeIndex: number, axis: 'X' | 'Y') => void;
   onEdgePlanAxisMmChange?: (edgeIndex: number, mm: number) => void;
+  /** Per-wall X/Y + optional post count for plan labels (same order as walls / externalWallLengths). */
+  edgeHashiraRows?: EdgeHashiraFormRow[];
+  onEdgeHashiraRowChange?: (wallIndex: number, patch: Partial<EdgeHashiraFormRow>) => void;
   /**
    * When false, image/PDF skips Vision/AI API (Premium-only); DXF still uses client parser.
    * Default true.
@@ -200,6 +205,8 @@ export function DrawingUpload({
   edgePlanAxisMm = [],
   onEdgePlanAxisChange,
   onEdgePlanAxisMmChange,
+  edgeHashiraRows = [],
+  onEdgeHashiraRowChange,
   allowAiPoweredFileParsing = true,
 }: DrawingUploadProps) {
   const { t } = useI18n();
@@ -1090,6 +1097,20 @@ export function DrawingUpload({
               </div>
             )}
           </div>
+
+          {onEdgeHashiraRowChange &&
+            edgeHashiraRows.length > 0 &&
+            externalWallLengths.length === edgeHashiraRows.length && (
+              <div className="p-4 border-t border-gray-200 bg-slate-50/40 shrink-0">
+                <EdgeHashiraPlanningPanel
+                  wallCount={externalWallLengths.length}
+                  lengthsMm={externalWallLengths}
+                  rows={edgeHashiraRows}
+                  onRowChange={onEdgeHashiraRowChange}
+                  closedFootprint={!tracing && verts.length >= 3}
+                />
+              </div>
+            )}
 
           {/* Footer Actions */}
           <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center gap-2">

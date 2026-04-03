@@ -9,6 +9,7 @@ import {
   ScaffoldRules,
   WallInput,
   WallSegment,
+  type EdgeHashiraLabeling,
 } from '@/lib/api/scaffold-configs';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { useI18n } from '@/lib/i18n';
@@ -43,7 +44,13 @@ import {
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { synthesizeMassingTiersFromWallHeights } from '@/lib/synthesize-massing-tiers-from-wall-heights';
 import { BuildingScaffoldSettingsPanel } from '@/components/scaffold/building-scaffold-settings-panel';
-import { edgeChordName } from '@/lib/edge-hashira-labels';
+import {
+  edgeChordName,
+  formRowsFromWallCount,
+  formRowsFromStoredLabeling,
+  labelingForEnabledWallIndices,
+  type EdgeHashiraFormRow,
+} from '@/lib/edge-hashira-labels';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 
@@ -944,6 +951,7 @@ function ScaffoldPageContent() {
   const [prefilled, setPrefilled] = useState(false);
   const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
   const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
+  const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -1015,6 +1023,9 @@ function ScaffoldPageContent() {
         };
       });
       setWalls(mapped);
+      const storedEh = (editConfig.calculationResult as { edgeHashiraLabeling?: EdgeHashiraLabeling } | undefined)
+        ?.edgeHashiraLabeling;
+      setHashiraRows(formRowsFromStoredLabeling(storedEh, mapped.length));
       setPrefilled(true);
       const vck = (editConfig.calculationResult as { vertexCornerKinds?: unknown } | undefined)
         ?.vertexCornerKinds;
@@ -1032,6 +1043,7 @@ function ScaffoldPageContent() {
     } else {
       setCornerKindsUseManual(false);
       setVertexCornerKinds([]);
+      setHashiraRows([]);
     }
     if (editPolyMm) {
       setPolygonVertices(editPolyMm);
@@ -1274,6 +1286,7 @@ function ScaffoldPageContent() {
           };
         });
       });
+      setHashiraRows((prev) => formRowsFromWallCount(prev, detected.length));
     },
     [buildingHeightMm],
   );
@@ -1363,6 +1376,8 @@ function ScaffoldPageContent() {
       return;
     }
 
+    const edgeHashiraLabeling = labelingForEnabledWallIndices(enabledOriginalIndices, hashiraRows);
+
     const dto: CreateScaffoldConfigDto = {
       projectId: editConfig?.projectId ?? 'default-project',
       mode: 'manual',
@@ -1395,6 +1410,7 @@ function ScaffoldPageContent() {
         polygonVertices.length === enabledWalls.length && {
           vertexCornerKinds: [...vertexCornerKinds],
         }),
+      ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
       inputUiPath: (() => {
         const stored = (editConfig?.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
           ?.uiInputPath;
@@ -1436,7 +1452,6 @@ function ScaffoldPageContent() {
         habakiCountPerSpan: qConfig.habakiCountPerSpan,
         endStopperType: qConfig.endStopperType,
       }),
-      ...(qConfig.edgeHashiraLabeling ? { edgeHashiraLabeling: qConfig.edgeHashiraLabeling } : {}),
       inputUiPath: 'quick',
     };
     calculateMutation.mutate({ dto, configId: null });
@@ -2321,6 +2336,7 @@ function ScaffoldPageContent() {
                   };
                 });
                 setWalls(mapped);
+                setHashiraRows((prev) => formRowsFromWallCount(prev, mapped.length));
                 setBuildingHeightMm(result.buildingHeightMm);
                 setPolygonVertices(verts);
                 setPrefilled(true);
@@ -2450,6 +2466,15 @@ function ScaffoldPageContent() {
             onEdgePlanAxisMmChange={(edgeIdx, mm) =>
               updateWall(edgeIdx, { edgePlanAxisMm: mm })
             }
+            edgeHashiraRows={hashiraRows}
+            onEdgeHashiraRowChange={(wi, patch) => {
+              setHashiraRows((prev) => {
+                const next = [...prev];
+                const cur = next[wi] ?? { axis: '' as const, countStr: '' };
+                next[wi] = { ...cur, ...patch };
+                return next;
+              });
+            }}
             allowAiPoweredFileParsing={canAi}
           />
         </div>

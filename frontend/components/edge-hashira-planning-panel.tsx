@@ -18,6 +18,11 @@ export interface EdgeHashiraPlanningPanelProps {
   onRowChange: (wallIndex: number, patch: Partial<Row>) => void;
   /** When false, panel still renders summaries but editors can be read-only (optional). */
   disabled?: boolean;
+  /**
+   * When set, overrides inferred closed/open chord naming (e.g. open trace vs closed polygon).
+   * If omitted, closed = (wallCount >= 3).
+   */
+  closedFootprint?: boolean;
 }
 
 /**
@@ -30,9 +35,10 @@ export function EdgeHashiraPlanningPanel({
   rows,
   onRowChange,
   disabled,
+  closedFootprint: closedFootprintProp,
 }: EdgeHashiraPlanningPanelProps) {
   const { t } = useI18n();
-  const closed = defaultClosedFootprint(wallCount);
+  const closed = closedFootprintProp ?? defaultClosedFootprint(wallCount);
 
   const summaries = useMemo(() => {
     const out: string[] = [];
