@@ -36,12 +36,29 @@ export const translations = {
     cta: { ja: 'ダッシュボードへ', en: 'Go to dashboard', fr: 'Tableau de bord' },
   },
 
+  // ─── Settings page (password + pricing note) ───────────────────
+  settingsPage: {
+    title: { ja: '設定', en: 'Settings', fr: 'Paramètres' },
+    subtitle: {
+      ja: 'パスワードとアカウント関連のオプション',
+      en: 'Password and account-related options',
+      fr: 'Mot de passe et options du compte',
+    },
+    profileSectionTitle: { ja: 'プロフィール', en: 'Profile', fr: 'Profil' },
+    profileSectionBody: {
+      ja: '氏名・メールアドレスの変更はプロフィールページで行います。',
+      en: 'Update your name and email on the profile page.',
+      fr: 'Modifiez votre nom et votre e-mail sur la page profil.',
+    },
+    goToProfile: { ja: 'プロフィールを開く', en: 'Open profile', fr: 'Ouvrir le profil' },
+  },
+
   // ─── Navigation ────────────────────────────────────────────────
   nav: {
     dashboard: { ja: 'ダッシュボード', en: 'Dashboard', fr: 'Tableau de bord' },
     scaffold: { ja: '足場積算', en: 'Scaffold Calc', fr: 'Calcul échafaudage' },
     quotations: { ja: '見積一覧', en: 'Quotations', fr: 'Devis' },
-    settings: { ja: '単価について', en: 'Pricing info', fr: 'Infos tarifs' },
+    settings: { ja: '設定', en: 'Settings', fr: 'Paramètres' },
     company: { ja: '会社情報', en: 'Company', fr: 'Société' },
   },
 

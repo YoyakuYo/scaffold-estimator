@@ -176,6 +176,16 @@ export function Navigation() {
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => { router.push('/profile'); setMobileOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                pathname === '/profile' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <User className="h-5 w-5 flex-shrink-0" />
+              <span>{t('nav2', 'profileTooltip')}</span>
+            </button>
           </div>
         </div>
       )}
