@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, FileSpreadsheet, MapPin, Upload } from 'lucide-react';
+import { Building2, MapPin } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { CreateScaffoldConfigDto, ScaffoldRules } from '@/lib/api/scaffold-configs';
 
@@ -131,9 +131,6 @@ export interface BuildingScaffoldSettingsPanelProps extends SiteContactFieldsPro
   endStopperType: 'nuno' | 'frame';
   setEndStopperType: (v: 'nuno' | 'frame') => void;
   setFrameSizeMm: (v: number) => void;
-  showCsvImport: boolean;
-  onDownloadWallsTemplateCsv: () => void;
-  onWallsCsvImportClick: () => void;
 }
 
 export function BuildingScaffoldSettingsPanel({
@@ -155,9 +152,6 @@ export function BuildingScaffoldSettingsPanel({
   endStopperType,
   setEndStopperType,
   setFrameSizeMm,
-  showCsvImport,
-  onDownloadWallsTemplateCsv,
-  onWallsCsvImportClick,
   ...siteProps
 }: BuildingScaffoldSettingsPanelProps) {
   const { t, locale } = useI18n();
@@ -365,34 +359,6 @@ export function BuildingScaffoldSettingsPanel({
             </>
           )}
         </div>
-
-        {showCsvImport && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              {t('scaffold', 'wallsCsvTitle')}
-            </h3>
-            <p className="text-xs text-gray-600 mb-3">{t('scaffold', 'wallsCsvHint')}</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={onDownloadWallsTemplateCsv}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                {t('scaffold', 'wallsCsvDownloadTemplate')}
-              </button>
-              <button
-                type="button"
-                onClick={onWallsCsvImportClick}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
-              >
-                <Upload className="h-4 w-4" />
-                {t('scaffold', 'wallsCsvImport')}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -31,7 +31,6 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
-  FileSpreadsheet,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
@@ -117,113 +116,6 @@ function calcTotalFromSegments(segments: WallSegment[]): number {
     total += Math.abs(segments[i].offsetMm - segments[i - 1].offsetMm);
   }
   return total;
-}
-
-const SCAFFOLD_WALLS_CSV_HEADER = 'side,length_mm,height_mm,stair_access,scaffold_width_mm,enabled';
-
-function escapeCsvCell(v: string): string {
-  if (/[",\r\n]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-  return v;
-}
-
-function parseCsvRow(line: string): string[] {
-  const out: string[] = [];
-  let cur = '';
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      inQ = !inQ;
-    } else if (inQ) {
-      cur += c;
-    } else if (c === ',') {
-      out.push(cur.trim());
-      cur = '';
-    } else {
-      cur += c;
-    }
-  }
-  out.push(cur.trim());
-  return out;
-}
-
-/** Parse wall rows from CSV (UTF-8; strip BOM). Opens cleanly in Excel when saved as CSV. */
-function parseScaffoldWallsCsvText(text: string, defaultHeightMm: number): WallState[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.replace(/^\uFEFF/, ''))
-    .filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
-  const headers = parseCsvRow(lines[0]).map((h) =>
-    h.trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_'),
-  );
-  const idx = (name: string) => headers.indexOf(name);
-  const out: WallState[] = [];
-  for (let li = 1; li < lines.length; li++) {
-    const cells = parseCsvRow(lines[li]);
-    const get = (k: string) => {
-      const i = idx(k);
-      return i >= 0 ? (cells[i] ?? '').trim() : '';
-    };
-    const lengthMm = Number(get('length_mm'));
-    if (!Number.isFinite(lengthMm) || lengthMm < 600) continue;
-    let heightMm = Number(get('height_mm'));
-    if (!Number.isFinite(heightMm) || heightMm < 1000) heightMm = defaultHeightMm;
-    const stairRaw = Number(get('stair_access'));
-    const stairAccessCount = Number.isFinite(stairRaw)
-      ? Math.min(4, Math.max(0, Math.floor(stairRaw)))
-      : 0;
-    const swRaw = get('scaffold_width_mm');
-    const sw = Number(swRaw);
-    const scaffoldWidthMm =
-      swRaw !== '' && [600, 900, 1200].includes(sw) ? sw : undefined;
-    const en = get('enabled').toLowerCase();
-    const enabled = en === '' || en === '1' || en === 'true' || en === 'yes' || en === 'y';
-    let side = get('side');
-    if (!side) side = `E${out.length + 1}`;
-    out.push({
-      side,
-      enabled,
-      lengthMm,
-      heightMm,
-      scaffoldWidthMm,
-      stairAccessCount,
-      kaidanCount: 0,
-      kaidanOffsets: [],
-      isMultiSegment: false,
-      segments: [],
-    });
-  }
-  return out;
-}
-
-function buildWallsCsvFromState(walls: WallState[]): string {
-  const lines = [SCAFFOLD_WALLS_CSV_HEADER];
-  for (const w of walls) {
-    const len =
-      w.isMultiSegment && w.segments.length > 0 ? calcTotalFromSegments(w.segments) : w.lengthMm;
-    lines.push(
-      [
-        escapeCsvCell(w.side),
-        String(len),
-        String(w.heightMm),
-        String(w.stairAccessCount ?? 0),
-        w.scaffoldWidthMm != null ? String(w.scaffoldWidthMm) : '',
-        w.enabled ? 'true' : 'false',
-      ].join(','),
-    );
-  }
-  return `\uFEFF${lines.join('\r\n')}`;
-}
-
-function triggerDownloadTextFile(filename: string, body: string, mime: string) {
-  const blob = new Blob([body], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
@@ -1049,7 +941,6 @@ function ScaffoldPageContent() {
   const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
   const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
   const [aiBimHashiraRows, setAiBimHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
-  const wallsCsvFileRef = useRef<HTMLInputElement>(null);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -1369,53 +1260,6 @@ function ScaffoldPageContent() {
     [],
   );
 
-  const downloadWallsTemplateCsv = useCallback(() => {
-    const defaultH = buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
-    const body = `\uFEFF${SCAFFOLD_WALLS_CSV_HEADER}\r\nE1,10000,${defaultH},0,,true\r\nE2,12000,${defaultH},0,,true\r\n`;
-    triggerDownloadTextFile('scaffold-walls-template.csv', body, 'text/csv;charset=utf-8');
-  }, [buildingHeightMm]);
-
-  const downloadWallsCurrentCsv = useCallback(() => {
-    if (walls.length === 0) return;
-    triggerDownloadTextFile(
-      'scaffold-walls.csv',
-      buildWallsCsvFromState(walls),
-      'text/csv;charset=utf-8',
-    );
-  }, [walls]);
-
-  const handleWallsCsvImport = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const defaultH = buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
-        const parsed = parseScaffoldWallsCsvText(text, defaultH);
-        if (parsed.length === 0) {
-          alert(t('scaffold', 'wallsCsvInvalid'));
-          return;
-        }
-        if (
-          walls.length > 0 &&
-          typeof window !== 'undefined' &&
-          !window.confirm(t('scaffold', 'csvReplaceWallsConfirm'))
-        ) {
-          return;
-        }
-        setWalls(parsed);
-        setPrefilled(true);
-        setPolygonVertices([]);
-        const maxH = Math.max(...parsed.map((w) => w.heightMm));
-        if (maxH >= 1000) setBuildingHeightMm(maxH);
-      } catch {
-        alert(t('scaffold', 'wallsCsvInvalid'));
-      }
-    },
-    [buildingHeightMm, walls.length, t],
-  );
-
   // ─── Calculate handler ──────────────────────────────────
   const handleCalculate = () => {
     if (!perimeterModel.isClosed && !prefilled) {
@@ -1582,14 +1426,6 @@ function ScaffoldPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
-      <input
-        ref={wallsCsvFileRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        aria-hidden
-        onChange={handleWallsCsvImport}
-      />
         {/* Header */}
       <div className="max-w-[1600px] mx-auto px-4 pt-6 pb-4">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -2583,32 +2419,6 @@ function ScaffoldPageContent() {
         </div>
       )}
 
-      {showDrawingUpload &&
-        walls.length === 0 &&
-        !editConfigId &&
-        manualSubTab === 'drawing' && (
-          <div className="max-w-[1600px] mx-auto px-4 mb-4">
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2">
-              <FileSpreadsheet className="h-4 w-4 text-emerald-700 shrink-0" />
-              <span className="text-xs text-emerald-900 flex-1 min-w-[200px]">{t('scaffold', 'wallsCsvToolbarHint')}</span>
-              <button
-                type="button"
-                onClick={downloadWallsTemplateCsv}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-gray-300 bg-white text-xs font-medium text-gray-800 hover:bg-gray-50"
-              >
-                {t('scaffold', 'wallsCsvDownloadTemplate')}
-              </button>
-              <button
-                type="button"
-                onClick={() => wallsCsvFileRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-emerald-400 bg-emerald-100 text-xs font-medium text-emerald-950 hover:bg-emerald-200"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                {t('scaffold', 'wallsCsvImport')}
-              </button>
-            </div>
-          </div>
-        )}
       </>)}
 
       {/* ═══════════════════════════════════════════════════════
@@ -2621,33 +2431,6 @@ function ScaffoldPageContent() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
           <h2 className="text-lg font-semibold text-gray-800 mb-2">{t('scaffold', 'wallConfig')}</h2>
           <p className="text-sm text-gray-600 mb-4">{t('scaffold', 'perWallHeightIntro')}</p>
-
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2">
-            <FileSpreadsheet className="h-4 w-4 text-emerald-700 shrink-0" />
-            <span className="text-xs text-emerald-900 flex-1 min-w-[200px]">{t('scaffold', 'wallsCsvToolbarHint')}</span>
-            <button
-              type="button"
-              onClick={downloadWallsTemplateCsv}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-gray-300 bg-white text-xs font-medium text-gray-800 hover:bg-gray-50"
-            >
-              {t('scaffold', 'wallsCsvDownloadTemplate')}
-            </button>
-            <button
-              type="button"
-              onClick={downloadWallsCurrentCsv}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-gray-300 bg-white text-xs font-medium text-gray-800 hover:bg-gray-50"
-            >
-              {t('scaffold', 'wallsCsvDownloadCurrent')}
-            </button>
-            <button
-              type="button"
-              onClick={() => wallsCsvFileRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-emerald-400 bg-emerald-100 text-xs font-medium text-emerald-950 hover:bg-emerald-200"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              {t('scaffold', 'wallsCsvImport')}
-            </button>
-          </div>
 
           {/* Quick Height Estimator */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -3173,9 +2956,6 @@ function ScaffoldPageContent() {
           endStopperType={endStopperType}
           setEndStopperType={setEndStopperType}
           setFrameSizeMm={setFrameSizeMm}
-          showCsvImport={false}
-          onDownloadWallsTemplateCsv={downloadWallsTemplateCsv}
-          onWallsCsvImportClick={() => wallsCsvFileRef.current?.click()}
           siteName={siteName}
           setSiteName={setSiteName}
           siteAddress={siteAddress}
