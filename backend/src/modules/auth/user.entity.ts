@@ -49,6 +49,10 @@ export class User {
   @Column({ type: 'text', default: 'pending', name: 'approval_status' })
   approvalStatus: ApprovalStatus;
 
+  /** Full app access without Stripe; set in DB (e.g. Supabase) for lifetime/comp accounts. */
+  @Column({ name: 'subscription_exempt', default: false })
+  subscriptionExempt: boolean;
+
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
   lastActiveAt: Date | null;
 

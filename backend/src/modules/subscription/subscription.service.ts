@@ -245,6 +245,7 @@ export class SubscriptionService {
   async hasActiveAccess(userId: string, role?: string): Promise<boolean> {
     if (role === 'superadmin') return true;
     const user = await this.getUserOrFail(userId);
+    if (user.subscriptionExempt) return true;
     const companyId = user.companyId;
     const now = new Date();
 
@@ -305,6 +306,7 @@ export class SubscriptionService {
   async resolveEffectiveCapabilities(userId: string, role?: string): Promise<EffectivePlanCapabilities> {
     if (role === 'superadmin') return SUPERADMIN_CAPABILITIES;
     const user = await this.getUserOrFail(userId);
+    if (user.subscriptionExempt) return SUPERADMIN_CAPABILITIES;
     const companyId = user.companyId;
 
     if (companyId) {
@@ -346,6 +348,7 @@ export class SubscriptionService {
   async assertTrialDrawingUploadAllowed(userId: string): Promise<void> {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') return;
+    if (user.subscriptionExempt) return;
     const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
     if (!row) return;
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
@@ -363,6 +366,7 @@ export class SubscriptionService {
   async recordTrialDrawingUploadIfTrialing(userId: string): Promise<void> {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') return;
+    if (user.subscriptionExempt) return;
     const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
     if (!row) return;
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
@@ -381,10 +385,11 @@ export class SubscriptionService {
     let sub = await this.ensureSubscriptionForUser(userId);
     sub = await this.expireTrialIfNeeded(sub);
     const now = Date.now();
+    const exempt = user.subscriptionExempt;
     const trialDaysRemaining =
-      sub.trialEnd && sub.status === 'trialing'
-        ? Math.max(0, Math.ceil((new Date(sub.trialEnd).getTime() - now) / (1000 * 60 * 60 * 24)))
-        : 0;
+      exempt || !sub.trialEnd || sub.status !== 'trialing'
+        ? 0
+        : Math.max(0, Math.ceil((new Date(sub.trialEnd).getTime() - now) / (1000 * 60 * 60 * 24)));
     const hasAccess = await this.hasActiveAccess(userId, user.role);
     const checkoutTiers = this.getAvailableCheckoutTiers();
     const capabilities = await this.resolveEffectiveCapabilities(userId, user.role);
@@ -392,24 +397,27 @@ export class SubscriptionService {
       user.companyId && user.role !== 'superadmin'
         ? await this.countCompanySeats(user.companyId)
         : 0;
+    const subPayload = exempt
+      ? { ...sub, plan: 'enterprise' as const, status: 'active' as const, trialStart: null, trialEnd: null }
+      : sub;
     return {
-      ...sub,
+      ...subPayload,
       hasAccess,
       trialDaysRemaining,
       trialLengthDays: TRIAL_DAYS,
       trialFileUploads:
-        sub.status === 'trialing'
-          ? {
+        exempt || sub.status !== 'trialing'
+          ? undefined
+          : {
               used: sub.trialDocumentsUsed ?? 0,
               max: TRIAL_MAX_DRAWING_UPLOADS,
-            }
-          : undefined,
+            },
       isStripeConfigured: !!this.stripe && checkoutTiers.length > 0,
       checkoutPlans: checkoutTiers,
       bankTransfer: this.getBankTransferInstructions(user.email),
       capabilities,
       seatUsage:
-        user.role === 'superadmin'
+        user.role === 'superadmin' || exempt
           ? undefined
           : { used: seatUsed, limit: capabilities.maxSeats },
     };
@@ -422,6 +430,9 @@ export class SubscriptionService {
 
     if (user.role === 'superadmin') {
       throw new ForbiddenException('Superadmin account does not require paid subscription checkout.');
+    }
+    if (user.subscriptionExempt) {
+      throw new ForbiddenException('This account has full access without a paid subscription.');
     }
 
     let customerId = sub.stripeCustomerId;
