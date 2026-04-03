@@ -39,6 +39,11 @@ interface DrawingUploadProps {
   /** Optional per-edge note (e.g. CF); UI-only unless parent persists it. */
   wallCfNotes?: string[];
   onWallCfNoteChange?: (edgeIndex: number, note: string) => void;
+  /** Plan run: choose X or Y then signed run length (mm) — same order as walls. */
+  edgePlanAxes?: Array<'X' | 'Y'>;
+  edgePlanAxisMm?: number[];
+  onEdgePlanAxisChange?: (edgeIndex: number, axis: 'X' | 'Y') => void;
+  onEdgePlanAxisMmChange?: (edgeIndex: number, mm: number) => void;
   /**
    * When false, image/PDF skips Vision/AI API (Premium-only); DXF still uses client parser.
    * Default true.
@@ -86,6 +91,14 @@ function fmtMeters(mm: number): string {
 function parseMetersInputToMm(s: string): number | null {
   const v = parseFloat(String(s).trim().replace(',', '.'));
   if (!Number.isFinite(v) || v <= 0) return null;
+  return Math.round(v * 1000);
+}
+
+function parseSignedMetersToMm(s: string): number | null {
+  const t = String(s).trim().replace(',', '.');
+  if (t === '' || t === '-' || t === '+') return null;
+  const v = parseFloat(t);
+  if (!Number.isFinite(v)) return null;
   return Math.round(v * 1000);
 }
 
@@ -168,6 +181,10 @@ export function DrawingUpload({
   onWallHeightMmChange,
   wallCfNotes = [],
   onWallCfNoteChange,
+  edgePlanAxes = [],
+  edgePlanAxisMm = [],
+  onEdgePlanAxisChange,
+  onEdgePlanAxisMmChange,
   allowAiPoweredFileParsing = true,
 }: DrawingUploadProps) {
   const { t } = useI18n();
@@ -918,6 +935,15 @@ export function DrawingUpload({
                     (wallHeightsMm.length > i ? wallHeightsMm[i] : undefined) ??
                     buildingHeightMm ??
                     0;
+                  const planAxis = edgePlanAxes[i] ?? 'X';
+                  const planAxisMm =
+                    edgePlanAxisMm.length > i ? edgePlanAxisMm[i]! : (planAxis === 'X' && dxM != null
+                      ? Math.round(dxM * 1000)
+                      : planAxis === 'Y' && dyM != null
+                        ? Math.round(dyM * 1000)
+                        : 0);
+
+                  const fieldBox = 'rounded-md border border-gray-200 bg-white/90 p-1.5 shadow-sm';
 
                   return (
                     <div
@@ -930,7 +956,7 @@ export function DrawingUpload({
                             : 'bg-amber-50/80 border border-dashed border-amber-300'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <div className="flex items-center justify-between gap-1 mb-2">
                         <span className="text-[11px] font-bold text-blue-800">
                           {lA}→{lB}
                         </span>
@@ -945,9 +971,9 @@ export function DrawingUpload({
                           </button>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                        <div>
-                          <span className="text-[10px] text-gray-500 block">L ({mUnit})</span>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">L ({mUnit})</span>
                           <input
                             type="number"
                             min={0.01}
@@ -957,11 +983,11 @@ export function DrawingUpload({
                               const mm = parseMetersInputToMm(e.target.value);
                               if (mm != null) editWallLength(i, mm);
                             }}
-                            className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
+                            className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
                           />
                         </div>
-                        <div>
-                          <span className="text-[10px] text-gray-500 block">H ({mUnit})</span>
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">H ({mUnit})</span>
                           {onWallHeightMmChange ? (
                             <input
                               type="number"
@@ -972,7 +998,7 @@ export function DrawingUpload({
                                 const mm = parseMetersInputToMm(e.target.value);
                                 if (mm != null && mm >= 1000) onWallHeightMmChange(i, mm);
                               }}
-                              className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-[11px] font-mono"
+                              className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
                             />
                           ) : (
                             <span className="text-[11px] text-gray-700 block py-0.5">
@@ -980,21 +1006,49 @@ export function DrawingUpload({
                             </span>
                           )}
                         </div>
-                        <div className="col-span-2 text-[10px] text-gray-500 font-mono">
-                          ΔX{' '}
-                          {dxM != null && Number.isFinite(dxM) ? dxM.toFixed(2) : '—'}
-                          {mUnit} · ΔY{' '}
-                          {dyM != null && Number.isFinite(dyM) ? dyM.toFixed(2) : '—'}
-                          {mUnit}
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">
+                            {t('scaffoldExtra', 'edgeXYRun') || 'XY'}
+                          </span>
+                          <div className="flex gap-1.5 items-center">
+                            <select
+                              value={planAxis}
+                              disabled={!onEdgePlanAxisChange}
+                              onChange={(e) =>
+                                onEdgePlanAxisChange?.(i, e.target.value as 'X' | 'Y')
+                              }
+                              className="w-11 shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-semibold bg-gray-50 disabled:opacity-60"
+                            >
+                              <option value="X">X</option>
+                              <option value="Y">Y</option>
+                            </select>
+                            <input
+                              type="number"
+                              step="any"
+                              value={planAxisMm / 1000}
+                              onChange={(e) => {
+                                const mm = parseSignedMetersToMm(e.target.value);
+                                if (mm != null) onEdgePlanAxisMmChange?.(i, mm);
+                              }}
+                              disabled={!onEdgePlanAxisMmChange}
+                              className="min-w-0 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono disabled:opacity-60"
+                            />
+                            <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
+                          </div>
+                          {dxM != null && dyM != null ? (
+                            <p className="text-[9px] text-gray-400 mt-0.5 font-mono truncate" title="Geometry">
+                              ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}
+                            </p>
+                          ) : null}
                         </div>
                         {onWallCfNoteChange ? (
-                          <div className="col-span-2">
-                            <span className="text-[10px] text-gray-500 block">CF</span>
+                          <div className={fieldBox}>
+                            <span className="text-[10px] text-gray-500 block mb-0.5">CF</span>
                             <input
                               type="text"
                               value={wallCfNotes[i] ?? ''}
                               onChange={(e) => onWallCfNoteChange(i, e.target.value)}
-                              className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-[11px]"
+                              className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px]"
                               placeholder={t('scaffoldExtra', 'edgeNotePlaceholder') || '—'}
                             />
                           </div>

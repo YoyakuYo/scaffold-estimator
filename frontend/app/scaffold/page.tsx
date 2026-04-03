@@ -97,6 +97,25 @@ interface WallState {
   segments: WallSegment[];
   /** Optional per-edge note (drawing upload side panel); not sent to calculation API. */
   cfNote?: string;
+  /** Plan run for this edge: axis (X or Y) and signed run in mm (drawing panel). */
+  edgePlanAxis?: 'X' | 'Y';
+  edgePlanAxisMm?: number;
+}
+
+/** Signed run (mm) on the stronger axis for edge i → i+1 (closed polygon). */
+function inferEdgePlanAxisFromVertices(
+  verts: Array<{ x: number; y: number }>,
+  edgeIndex: number,
+  closed: boolean,
+): { axis: 'X' | 'Y'; mm: number } | null {
+  const n = verts.length;
+  if (n < 2 || edgeIndex < 0 || edgeIndex >= n) return null;
+  const next = closed ? (edgeIndex + 1) % n : edgeIndex + 1;
+  if (next >= n) return null;
+  const dx = Math.round(verts[next].x - verts[edgeIndex].x);
+  const dy = Math.round(verts[next].y - verts[edgeIndex].y);
+  if (Math.abs(dx) >= Math.abs(dy)) return { axis: 'X', mm: dx };
+  return { axis: 'Y', mm: dy };
 }
 
 function calcTotalFromSegments(segments: WallSegment[]): number {
@@ -958,13 +977,27 @@ function ScaffoldPageContent() {
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
     setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
     setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
+    const rawPoly = editConfig.calculationResult?.polygonVertices;
+    const editPolyMm =
+      Array.isArray(rawPoly) && rawPoly.length >= 3
+        ? rawPoly.map((p: { x?: number; y?: number; xFrac?: number; yFrac?: number }) => ({
+            x: p.x ?? p.xFrac ?? 0,
+            y: p.y ?? p.yFrac ?? 0,
+          }))
+        : null;
+
     const wallList = editConfig.walls ?? [];
     if (wallList.length > 0) {
       const buildingH = editConfig.buildingHeightMm ?? 3000;
-      const mapped: WallState[] = wallList.map((w: any) => {
+      const closedLoop = wallList.length >= 3;
+      const mapped: WallState[] = wallList.map((w: any, wi: number) => {
         const segs = w.segments && Array.isArray(w.segments) ? w.segments : [];
         const isMulti = segs.length > 0;
         const lengthMm = isMulti ? calcTotalFromSegments(segs) : (w.wallLengthMm ?? 0);
+        const inf =
+          editPolyMm && editPolyMm.length === wallList.length
+            ? inferEdgePlanAxisFromVertices(editPolyMm, wi, closedLoop)
+            : null;
         return {
           side: w.side,
           enabled: w.enabled !== false,
@@ -977,6 +1010,8 @@ function ScaffoldPageContent() {
           isMultiSegment: isMulti,
           segments: segs.length > 0 ? segs : [{ lengthMm: w.wallLengthMm ?? 0, offsetMm: 0 }],
           cfNote: '',
+          edgePlanAxis: inf?.axis ?? 'X',
+          edgePlanAxisMm: inf?.mm ?? lengthMm,
         };
       });
       setWalls(mapped);
@@ -998,14 +1033,8 @@ function ScaffoldPageContent() {
       setCornerKindsUseManual(false);
       setVertexCornerKinds([]);
     }
-    const poly = editConfig.calculationResult?.polygonVertices;
-    if (Array.isArray(poly) && poly.length >= 3) {
-      setPolygonVertices(
-        poly.map((p: { x?: number; y?: number; xFrac?: number; yFrac?: number }) => ({
-          x: p.x ?? p.xFrac ?? 0,
-          y: p.y ?? p.yFrac ?? 0,
-        })),
-      );
+    if (editPolyMm) {
+      setPolygonVertices(editPolyMm);
     }
     const uiPath = (editConfig.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
       ?.uiInputPath;
@@ -1193,11 +1222,39 @@ function ScaffoldPageContent() {
         setPolygonVertices(vertices);
       }
       setWalls((prev) => {
-        // Preserve existing wall settings (height, kaidan, multi-segment) when lengths update
+        const closed = detected.length >= 3;
+        const vertForInfer =
+          vertices && vertices.length === detected.length ? vertices : null;
         return detected.map((w, i) => {
+          const inf =
+            vertForInfer && vertForInfer.length >= 3
+              ? inferEdgePlanAxisFromVertices(vertForInfer, i, closed)
+              : null;
           const existing = prev[i];
           if (existing && existing.side === w.side) {
-            return { ...existing, lengthMm: w.lengthMm };
+            const axis = existing.edgePlanAxis ?? inf?.axis ?? 'X';
+            let mmFromGeom: number | null = null;
+            if (vertForInfer && vertForInfer.length >= 2) {
+              const nV = vertForInfer.length;
+              const nextIdx = closed ? (i + 1) % nV : i + 1;
+              if (nextIdx < nV) {
+                mmFromGeom = Math.round(
+                  axis === 'X'
+                    ? vertForInfer[nextIdx].x - vertForInfer[i].x
+                    : vertForInfer[nextIdx].y - vertForInfer[i].y,
+                );
+              }
+            }
+            const edgePlanAxisMm =
+              existing.edgePlanAxisMm != null
+                ? existing.edgePlanAxisMm
+                : mmFromGeom ?? inf?.mm ?? w.lengthMm;
+            return {
+              ...existing,
+              lengthMm: w.lengthMm,
+              edgePlanAxis: axis,
+              edgePlanAxisMm,
+            };
           }
           const defaultH =
             buildingHeightMm && buildingHeightMm >= 1000 ? buildingHeightMm : 3000;
@@ -1212,6 +1269,8 @@ function ScaffoldPageContent() {
             isMultiSegment: false,
             segments: [],
             cfNote: '',
+            edgePlanAxis: inf?.axis ?? 'X',
+            edgePlanAxisMm: inf?.mm ?? w.lengthMm,
           };
         });
       });
@@ -1227,6 +1286,21 @@ function ScaffoldPageContent() {
       );
     },
     [],
+  );
+
+  const syncEdgePlanMmFromPolygon = useCallback(
+    (wallIndex: number, axis: 'X' | 'Y'): number | null => {
+      const verts = polygonVertices;
+      if (verts.length < 2 || wallIndex < 0 || wallIndex >= verts.length) return null;
+      const closedFootprint = verts.length >= 3 && walls.length === verts.length;
+      const n = verts.length;
+      const nextIdx = closedFootprint ? (wallIndex + 1) % n : wallIndex + 1;
+      if (nextIdx >= n) return null;
+      return Math.round(
+        axis === 'X' ? verts[nextIdx].x - verts[wallIndex].x : verts[nextIdx].y - verts[wallIndex].y,
+      );
+    },
+    [polygonVertices, walls.length],
   );
 
   // ─── Calculate handler ──────────────────────────────────
@@ -2223,23 +2297,32 @@ function ScaffoldPageContent() {
               buildingHeightMm={buildingHeightMm ?? 3000}
               onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
               onComplete={(result) => {
-                const mapped: WallState[] = result.walls.map((w, i) => ({
-                  side: w.side,
-                  enabled: true,
-                  lengthMm: w.wallLengthMm,
-                  heightMm: w.wallHeightMm,
-                  stairAccessCount: w.stairAccessCount,
-                  kaidanCount: 0,
-                  kaidanOffsets: [],
-                  isMultiSegment: false,
-                  segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
-                  cfNote: '',
-                }));
+                const verts = result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac }));
+                const nW = result.walls.length;
+                const closed = verts.length >= 3 && verts.length === nW;
+                const mapped: WallState[] = result.walls.map((w, i) => {
+                  const inf =
+                    verts.length >= 3 && verts.length === nW
+                      ? inferEdgePlanAxisFromVertices(verts, i, closed)
+                      : null;
+                  return {
+                    side: w.side,
+                    enabled: true,
+                    lengthMm: w.wallLengthMm,
+                    heightMm: w.wallHeightMm,
+                    stairAccessCount: w.stairAccessCount,
+                    kaidanCount: 0,
+                    kaidanOffsets: [],
+                    isMultiSegment: false,
+                    segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
+                    cfNote: '',
+                    edgePlanAxis: inf?.axis ?? 'X',
+                    edgePlanAxisMm: inf?.mm ?? w.wallLengthMm,
+                  };
+                });
                 setWalls(mapped);
                 setBuildingHeightMm(result.buildingHeightMm);
-                setPolygonVertices(
-                  result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac })),
-                );
+                setPolygonVertices(verts);
                 setPrefilled(true);
                 setInputMode('drawing');
                 setPendingInputUiPath('cad_draw');
@@ -2355,6 +2438,18 @@ function ScaffoldPageContent() {
             onWallHeightMmChange={(edgeIdx, mm) => updateWall(edgeIdx, { heightMm: mm })}
             wallCfNotes={walls.map((w) => w.cfNote ?? '')}
             onWallCfNoteChange={(edgeIdx, note) => updateWall(edgeIdx, { cfNote: note })}
+            edgePlanAxes={walls.map((w) => w.edgePlanAxis ?? 'X')}
+            edgePlanAxisMm={walls.map((w) => w.edgePlanAxisMm ?? w.lengthMm)}
+            onEdgePlanAxisChange={(edgeIdx, axis) => {
+              const mm = syncEdgePlanMmFromPolygon(edgeIdx, axis);
+              updateWall(edgeIdx, {
+                edgePlanAxis: axis,
+                ...(mm != null ? { edgePlanAxisMm: mm } : {}),
+              });
+            }}
+            onEdgePlanAxisMmChange={(edgeIdx, mm) =>
+              updateWall(edgeIdx, { edgePlanAxisMm: mm })
+            }
             allowAiPoweredFileParsing={canAi}
           />
         </div>

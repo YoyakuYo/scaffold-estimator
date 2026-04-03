@@ -499,9 +499,9 @@ export const translations = {
     sitePhone: { ja: '電話', en: 'Phone', fr: 'Téléphone' },
     siteFax: { ja: 'FAX', en: 'Fax', fr: 'Fax' },
     defaultHeightForDrawingMm: {
-      ja: 'デフォルトの壁高さ (mm)',
-      en: 'Default wall height (mm)',
-      fr: 'Hauteur de mur par défaut (mm)',
+      ja: 'デフォルトの壁高さ (m)',
+      en: 'Default wall height (m)',
+      fr: 'Hauteur de mur par défaut (m)',
     },
     defaultHeightDrawingHint: {
       ja: '新しく検出した辺の初期値です。各壁は下の一覧で個別に変更できます。',
@@ -1517,6 +1517,7 @@ export const translations = {
     retry: { ja: 'やり直す', en: 'Retry', fr: 'Reessayer' },
     dimensionPlaceholder: { ja: '寸法 (mm)', en: 'Dimension (mm)', fr: 'Dimension (mm)' },
     dimensionPlaceholderM: { ja: '長さ (m)', en: 'Length (m)', fr: 'Longueur (m)' },
+    edgeXYRun: { ja: 'XY（軸＋実長）', en: 'XY (axis + run)', fr: 'XY (axe + cote)' },
     edgeNotePlaceholder: { ja: 'メモ', en: 'Note', fr: 'Note' },
     skip: { ja: 'スキップ', en: 'Skip', fr: 'Ignorer' },
     clickFirstVertexA: { ja: 'クリックして最初の頂点 (A) を指定', en: 'Click to place the first vertex (A)', fr: 'Cliquez pour placer le premier sommet (A)' },
