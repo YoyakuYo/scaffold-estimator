@@ -72,7 +72,21 @@ export default function ForgotPasswordPage() {
         {mutation.isError && (
           <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
             <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-            <span>{t('passwordReset', 'forgotError')}</span>
+            <span>
+              {(() => {
+                const err = mutation.error as {
+                  response?: { data?: { message?: string | string[] } };
+                  message?: string;
+                };
+                if (!err?.response) {
+                  return t('passwordReset', 'forgotNetworkError');
+                }
+                const m = err.response.data?.message;
+                if (Array.isArray(m)) return m.filter(Boolean).join(' ');
+                if (typeof m === 'string' && m.trim()) return m;
+                return t('passwordReset', 'forgotError');
+              })()}
+            </span>
           </div>
         )}
 

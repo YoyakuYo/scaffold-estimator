@@ -98,6 +98,11 @@ export const translations = {
       en: 'Something went wrong. Please try again later.',
       fr: 'Une erreur s’est produite. Réessayez plus tard.',
     },
+    forgotNetworkError: {
+      ja: 'サーバーに接続できません。ホスティングの環境変数 NEXT_PUBLIC_BACKEND_URL にバックエンドのURL（例: https://xxx.onrender.com/api/v1）を設定してフロントを再デプロイしてください。',
+      en: 'Cannot reach the API. Set NEXT_PUBLIC_BACKEND_URL on your frontend host to your backend URL (e.g. https://your-api.onrender.com/api/v1) and redeploy.',
+      fr: 'Impossible de joindre l’API. Définissez NEXT_PUBLIC_BACKEND_URL sur l’URL du backend (ex. https://votre-api.onrender.com/api/v1) et redéployez le frontend.',
+    },
     backToLogin: { ja: 'ログインに戻る', en: 'Back to sign in', fr: 'Retour à la connexion' },
     resetTitle: { ja: '新しいパスワードを設定', en: 'Choose a new password', fr: 'Choisissez un nouveau mot de passe' },
     resetSubtitle: {
