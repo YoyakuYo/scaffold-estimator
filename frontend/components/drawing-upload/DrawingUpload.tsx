@@ -21,7 +21,10 @@ import {
   type ScaffoldWallCfKey,
 } from '@/lib/scaffold-wall-cf-options';
 import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
-import type { EdgeHashiraFormRow } from '@/lib/edge-hashira-labels';
+import {
+  EDGE_HASHIRA_STATION_SELECT_MAX,
+  type EdgeHashiraFormRow,
+} from '@/lib/edge-hashira-labels';
 import {
   loadDrawingUploadSession,
   saveDrawingUploadSession,
@@ -29,13 +32,14 @@ import {
 } from '@/lib/drawing-upload-persist';
 
 const SCAFFOLD_WALL_CF_LABEL_KEYS = {
-  '': 'wallCfUnspecified',
-  std: 'wallCfStd',
-  pattanko: 'wallCfPattanko',
-  opening: 'wallCfOpening',
-  stair: 'wallCfStair',
-  other: 'wallCfOther',
+  reflex: 'wallCfReflex',
+  c: 'wallCfC',
 } as const satisfies Record<ScaffoldWallCfKey, keyof TranslationKeys['scaffoldExtra']>;
+
+const HASHIRA_STATION_OPTIONS = Array.from(
+  { length: EDGE_HASHIRA_STATION_SELECT_MAX },
+  (_, i) => i + 1,
+);
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -1090,6 +1094,17 @@ export function DrawingUpload({
                         ? Math.round(dyM * 1000)
                         : 0);
 
+                  const hasHashiraPlanning = Boolean(onEdgeHashiraRowChange);
+                  const hr = edgeHashiraRows[i] ?? { axis: '' as const, countStr: '' };
+                  const hashiraAxis = hr.axis === 'X' || hr.axis === 'Y' ? hr.axis : null;
+                  const effectiveAxis: 'X' | 'Y' = hashiraAxis ?? planAxis;
+                  const rawStation = hr.countStr.trim();
+                  const stationParsed = rawStation === '' ? Number.NaN : parseInt(rawStation, 10);
+                  const stationEnd =
+                    Number.isFinite(stationParsed) && stationParsed > 0
+                      ? Math.min(500, Math.floor(stationParsed))
+                      : null;
+
                   const fieldBox = 'rounded-md border border-gray-200 bg-white/90 p-1.5 shadow-sm';
 
                   return (
@@ -1157,31 +1172,72 @@ export function DrawingUpload({
                           <span className="text-[10px] text-gray-500 block mb-0.5">
                             {t('scaffoldExtra', 'edgeXYRun') || 'XY'}
                           </span>
-                          <div className="flex gap-1.5 items-center">
+                          <div className="flex flex-wrap gap-1.5 items-center">
                             <select
-                              value={planAxis}
+                              value={effectiveAxis}
                               disabled={!onEdgePlanAxisChange}
-                              onChange={(e) =>
-                                onEdgePlanAxisChange?.(i, e.target.value as 'X' | 'Y')
-                              }
+                              onChange={(e) => {
+                                const axis = e.target.value as 'X' | 'Y';
+                                onEdgePlanAxisChange?.(i, axis);
+                                onEdgeHashiraRowChange?.(i, { axis });
+                              }}
                               className="w-11 shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-semibold bg-gray-50 disabled:opacity-60"
                             >
                               <option value="X">X</option>
                               <option value="Y">Y</option>
                             </select>
-                            <input
-                              type="number"
-                              step="any"
-                              value={planAxisMm / 1000}
-                              onChange={(e) => {
-                                const mm = parseSignedMetersToMm(e.target.value);
-                                if (mm != null) onEdgePlanAxisMmChange?.(i, mm);
-                              }}
-                              disabled={!onEdgePlanAxisMmChange}
-                              className="min-w-0 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono disabled:opacity-60"
-                            />
-                            <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
+                            {hasHashiraPlanning ? (
+                              <select
+                                value={stationEnd != null ? String(stationEnd) : ''}
+                                disabled={!onEdgeHashiraRowChange}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  onEdgeHashiraRowChange?.(i, {
+                                    axis: effectiveAxis,
+                                    countStr: v === '' ? '' : v,
+                                  });
+                                }}
+                                title={
+                                  (t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''
+                                }
+                                className="min-w-[3.25rem] shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-mono bg-white disabled:opacity-60"
+                              >
+                                <option value="">
+                                  {t('scaffoldExtra', 'edgePlanStationEnd') || 'To #'}
+                                </option>
+                                {HASHIRA_STATION_OPTIONS.map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={planAxisMm / 1000}
+                                  onChange={(e) => {
+                                    const mm = parseSignedMetersToMm(e.target.value);
+                                    if (mm != null) onEdgePlanAxisMmChange?.(i, mm);
+                                  }}
+                                  disabled={!onEdgePlanAxisMmChange}
+                                  className="min-w-0 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono disabled:opacity-60"
+                                />
+                                <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
+                              </>
+                            )}
                           </div>
+                          {hasHashiraPlanning && stationEnd != null ? (
+                            <p
+                              className="text-[10px] font-mono text-blue-900 mt-0.5 font-semibold"
+                              title={
+                                (t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''
+                              }
+                            >
+                              {`${effectiveAxis}1\u2013${effectiveAxis}${stationEnd}`}
+                            </p>
+                          ) : null}
                           {dxM != null && dyM != null ? (
                             <p className="text-[9px] text-gray-400 mt-0.5 font-mono truncate" title="Geometry">
                               ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}

@@ -51,6 +51,7 @@ import {
   labelingForEnabledWallIndices,
   type EdgeHashiraFormRow,
 } from '@/lib/edge-hashira-labels';
+import { normalizeScaffoldWallCfKey } from '@/lib/scaffold-wall-cf-options';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 
@@ -1017,7 +1018,7 @@ function ScaffoldPageContent() {
           kaidanOffsets: [],
           isMultiSegment: isMulti,
           segments: segs.length > 0 ? segs : [{ lengthMm: w.wallLengthMm ?? 0, offsetMm: 0 }],
-          cfNote: '',
+          cfNote: normalizeScaffoldWallCfKey((w as { cfNote?: string }).cfNote),
           edgePlanAxis: inf?.axis ?? 'X',
           edgePlanAxisMm: inf?.mm ?? lengthMm,
         };
@@ -1272,6 +1273,7 @@ function ScaffoldPageContent() {
               lengthMm: w.lengthMm,
               edgePlanAxis: axis,
               edgePlanAxisMm,
+              cfNote: normalizeScaffoldWallCfKey(existing.cfNote),
             };
           }
           const defaultH =
@@ -1286,7 +1288,7 @@ function ScaffoldPageContent() {
             kaidanOffsets: [],
             isMultiSegment: false,
             segments: [],
-            cfNote: '',
+            cfNote: 'reflex',
             edgePlanAxis: inf?.axis ?? 'X',
             edgePlanAxisMm: inf?.mm ?? w.lengthMm,
           };
@@ -2338,7 +2340,7 @@ function ScaffoldPageContent() {
                     kaidanOffsets: [],
                     isMultiSegment: false,
                     segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
-                    cfNote: '',
+                    cfNote: 'reflex',
                     edgePlanAxis: inf?.axis ?? 'X',
                     edgePlanAxisMm: inf?.mm ?? w.wallLengthMm,
                   };
@@ -2461,7 +2463,7 @@ function ScaffoldPageContent() {
             buildingHeightHint={t('scaffold', 'defaultHeightDrawingHint')}
             wallHeightsMm={walls.map((w) => w.heightMm)}
             onWallHeightMmChange={(edgeIdx, mm) => updateWall(edgeIdx, { heightMm: mm })}
-            wallCfNotes={walls.map((w) => w.cfNote ?? '')}
+            wallCfNotes={walls.map((w) => normalizeScaffoldWallCfKey(w.cfNote))}
             onWallCfNoteChange={(edgeIdx, note) => updateWall(edgeIdx, { cfNote: note })}
             edgePlanAxes={walls.map((w) => w.edgePlanAxis ?? 'X')}
             edgePlanAxisMm={walls.map((w) => w.edgePlanAxisMm ?? w.lengthMm)}

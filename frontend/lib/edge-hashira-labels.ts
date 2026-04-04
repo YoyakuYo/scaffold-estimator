@@ -135,6 +135,9 @@ export function edgeHashiraLineForWallIndex(
 /** Max station chips rendered in material breakdown per edge (wider spans → range text only). */
 const MAX_HASHIRA_STATION_CHIPS = 28;
 
+/** Max station index offered in wall-dimension dropdowns (full range still accepts up to 500 via planning panel). */
+export const EDGE_HASHIRA_STATION_SELECT_MAX = 100;
+
 /**
  * Parse `X1-X10` / `Y2–Y5` (ASCII or en-dash) into `X1`, `X2`, … (null if not a single-axis range).
  */
