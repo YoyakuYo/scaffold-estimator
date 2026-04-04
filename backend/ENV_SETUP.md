@@ -66,10 +66,13 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:3001
 
 # ============================================
-# SMTP (optional — approval/rejection + password reset emails)
+# Email — SendGrid HTTP API (recommended on Render) OR SMTP
 # ============================================
-# Without these, MailerService skips sending. Password reset still returns a
-# generic success message but no email is delivered until SMTP is set.
+# On hosts where SMTP times out, use SendGrid’s REST API (HTTPS) instead of SMTP:
+# SENDGRID_API_KEY=SG.xxx   (API key with Mail Send; same key as SMTP “password”)
+# SMTP_FROM=verified@yourdomain.com   (required with API; your verified sender)
+#
+# Alternative: full SMTP (often flaky from PaaS):
 # Apply supabase-migrations/118_password_reset_tokens.sql (or TypeORM migration
 # 1700000000006) for the password_reset_tokens table + get_user_id_by_email_ci.
 #

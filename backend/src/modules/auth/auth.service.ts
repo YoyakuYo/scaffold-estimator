@@ -440,7 +440,7 @@ export class AuthService {
       if (!sent) {
         await this.supabase.getClient().from('password_reset_tokens').delete().eq('user_id', userId);
         this.logger.warn(
-          'Password reset: SMTP is not configured (set SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM). No email was sent.',
+          'Password reset: mail not configured (set SENDGRID_API_KEY + SMTP_FROM, or full SMTP_*). No email was sent.',
         );
       }
     } catch (err) {

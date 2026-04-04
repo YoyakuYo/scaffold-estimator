@@ -2,33 +2,40 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
- * Minimal email service. Sends only when SMTP is configured (SMTP_HOST, SMTP_USER, SMTP_PASS).
- * To enable: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in .env.
+ * Email via SendGrid HTTP API (recommended on PaaS) or SMTP (nodemailer).
+ *
+ * Password reset / notifications:
+ * - Prefer: SENDGRID_API_KEY + SMTP_FROM (HTTPS to api.sendgrid.com, avoids SMTP timeouts on Render).
+ * - Or: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
  */
 @Injectable()
 export class MailerService {
-  private readonly enabled: boolean;
+  private readonly sendGridApiKey: string | null;
+  private readonly smtpEnabled: boolean;
   private readonly transport: any;
 
   constructor(private configService: ConfigService) {
-    const host = this.configService.get('SMTP_HOST');
-    const user = this.configService.get('SMTP_USER');
-    const pass = this.configService.get('SMTP_PASS');
-    this.enabled = !!(host && user && pass);
-    if (this.enabled) {
+    this.sendGridApiKey = this.configService.get<string>('SENDGRID_API_KEY')?.trim() || null;
+
+    const smtpHost = this.configService.get<string>('SMTP_HOST');
+    const smtpUser = this.configService.get<string>('SMTP_USER');
+    const smtpPass = this.configService.get<string>('SMTP_PASS');
+    this.smtpEnabled = !!(smtpHost && smtpUser && smtpPass);
+    this.transport = null;
+
+    if (this.smtpEnabled) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const nodemailer = require('nodemailer');
-        const host = this.configService.get<string>('SMTP_HOST')!.trim();
+        const host = smtpHost!.trim();
         const port = parseInt(this.configService.get('SMTP_PORT') || '587', 10);
         const secure = this.configService.get('SMTP_SECURE') === 'true';
-        // PaaS hosts (e.g. Render) often hang on IPv6 to some SMTP providers; IPv4 + longer timeouts fixes "Connection timeout".
         const preferIpv4 = this.configService.get('SMTP_USE_IPV6') !== 'true';
         this.transport = nodemailer.createTransport({
           host,
           port,
           secure,
-          auth: { user, pass },
+          auth: { user: smtpUser, pass: smtpPass },
           connectionTimeout: 90_000,
           greetingTimeout: 45_000,
           socketTimeout: 90_000,
@@ -39,17 +46,72 @@ export class MailerService {
           ...(preferIpv4 ? { family: 4 as const } : {}),
         });
       } catch {
-        this.enabled = false;
         this.transport = null;
       }
-    } else {
-      this.transport = null;
+    }
+  }
+
+  /** True if we can send (SendGrid API or SMTP). */
+  mailConfigured(): boolean {
+    const from =
+      this.configService.get<string>('SMTP_FROM')?.trim() ||
+      this.configService.get<string>('SMTP_USER')?.trim();
+    if (this.sendGridApiKey && from) return true;
+    return this.smtpEnabled && !!this.transport;
+  }
+
+  private resolveFromHeader(): string {
+    return (
+      this.configService.get<string>('SMTP_FROM')?.trim() ||
+      this.configService.get<string>('SMTP_USER')?.trim() ||
+      ''
+    );
+  }
+
+  private parseFrom(): { email: string; name?: string } {
+    const raw = this.resolveFromHeader();
+    const m = raw.match(/^\s*(.+?)\s*<([^>]+)>\s*$/);
+    if (m) return { name: m[1].trim(), email: m[2].trim() };
+    return { email: raw.trim() };
+  }
+
+  private async sendWithSendGrid(to: string, subject: string, text: string, html?: string): Promise<void> {
+    if (!this.sendGridApiKey) throw new Error('SendGrid API key missing');
+    const from = this.parseFrom();
+    if (!from.email) throw new Error('SMTP_FROM is required for SendGrid');
+
+    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.sendGridApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: to }] }],
+        from: from.name ? { email: from.email, name: from.name } : { email: from.email },
+        subject,
+        content: [
+          { type: 'text/plain', value: text },
+          ...(html ? [{ type: 'text/html', value: html }] : []),
+        ],
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`SendGrid API ${res.status}: ${body.slice(0, 800)}`);
     }
   }
 
   async send(to: string, subject: string, text: string, html?: string): Promise<void> {
-    if (!this.enabled || !this.transport) return;
-    const from = this.configService.get('SMTP_FROM') || this.configService.get('SMTP_USER');
+    if (!this.mailConfigured()) return;
+    if (this.sendGridApiKey) {
+      await this.sendWithSendGrid(to, subject, text, html);
+      return;
+    }
+    if (!this.transport) return;
+    const from = this.resolveFromHeader();
     await this.transport.sendMail({ from, to, subject, text, html: html || text });
   }
 
@@ -71,9 +133,9 @@ export class MailerService {
     await this.send(to, subject, text);
   }
 
-  /** Self-service password reset link (single use, expires in 1 hour). Returns false if SMTP is not configured. */
+  /** Password reset email. Uses SendGrid API when SENDGRID_API_KEY is set; else SMTP. */
   async sendPasswordResetEmail(to: string, resetUrl: string): Promise<boolean> {
-    if (!this.enabled || !this.transport) {
+    if (!this.mailConfigured()) {
       return false;
     }
     const subject = 'Password reset — 仮設材積算システム / Scaffold estimator';
