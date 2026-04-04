@@ -43,6 +43,11 @@ interface Props {
   buildingHeightMm: number;
   onBuildingHeightChange: (h: number) => void;
   onComplete: (result: CadDrawingResult) => void;
+  /** Live footprint in mm (same convention as export vertices) for parent 2D preview while drawing. */
+  onLiveFootprintMmChange?: (
+    verticesMm: Array<{ x: number; y: number }> | null,
+    isClosed: boolean,
+  ) => void;
   initialVertices?: CadPoint[];
   /** Calibration: known real-world distance for a reference segment */
   calibrationMmPerPixel?: number;
@@ -58,6 +63,7 @@ export function CadDrawingCanvas({
   buildingHeightMm,
   onBuildingHeightChange,
   onComplete,
+  onLiveFootprintMmChange,
   initialVertices,
   className = '',
 }: Props) {
@@ -638,6 +644,24 @@ export function CadDrawingCanvas({
       })),
     [points, mmPerPixel],
   );
+
+  useEffect(() => {
+    if (!onLiveFootprintMmChange) return;
+    try {
+      const merged = mergePointsWithCoordDrafts(points);
+      if (merged.length < 2) {
+        onLiveFootprintMmChange(null, false);
+        return;
+      }
+      const verts = merged.map((p) => ({
+        x: Math.round(p.x * mmPerPixel),
+        y: Math.round(p.y * mmPerPixel),
+      }));
+      onLiveFootprintMmChange(verts, isClosed);
+    } catch {
+      onLiveFootprintMmChange(null, false);
+    }
+  }, [points, mmPerPixel, isClosed, mergePointsWithCoordDrafts, onLiveFootprintMmChange]);
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>

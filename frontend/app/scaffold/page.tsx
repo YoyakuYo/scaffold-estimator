@@ -963,6 +963,11 @@ function ScaffoldPageContent() {
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
   const [selectedWallIdx, setSelectedWallIdx] = useState<number | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+  /** Live CAD footprint (mm) for 2D preview while drawing */
+  const [cadLiveFootprintMm, setCadLiveFootprintMm] = useState<Array<{ x: number; y: number }> | null>(
+    null,
+  );
+  const [cadLiveFootprintClosed, setCadLiveFootprintClosed] = useState(false);
   const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
   const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
   const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
@@ -1201,7 +1206,7 @@ function ScaffoldPageContent() {
   }) => {
     const { vertices, labels, activeIndex, closed } = props;
     const n = vertices.length;
-    if (n < 3) return null;
+    if (n < 2) return null;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const p of vertices) {
@@ -1216,7 +1221,9 @@ function ScaffoldPageContent() {
     const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
     const points = vertices.map((p) => `${p.x},${p.y}`).join(' ');
     const edgeSw = Math.max(3, (w + h) * 0.0025);
-    const edgeCount = closed ? n : Math.max(0, n - 1);
+    const effectiveClosed = closed && n >= 3;
+    const edgeCount = effectiveClosed ? n : Math.max(0, n - 1);
+    if (edgeCount < 1) return null;
 
     const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
       x: (a.x + b.x) / 2,
@@ -1225,7 +1232,7 @@ function ScaffoldPageContent() {
 
     return (
       <svg viewBox={vb} className="w-full h-56 rounded-lg bg-gray-50 border border-gray-200" preserveAspectRatio="xMidYMid meet">
-        {closed ? (
+        {effectiveClosed ? (
           <polygon
             points={points}
             fill="#eef2ff"
@@ -1244,7 +1251,7 @@ function ScaffoldPageContent() {
         )}
         {Array.from({ length: edgeCount }, (_, i) => {
           const a = vertices[i];
-          const b = closed ? vertices[(i + 1) % n] : vertices[i + 1];
+          const b = effectiveClosed ? vertices[(i + 1) % n] : vertices[i + 1];
           if (!a || !b) return null;
           const m = mid(a, b);
           const isActive = activeIndex === i;
@@ -1284,7 +1291,7 @@ function ScaffoldPageContent() {
             </g>
           );
         })}
-        {!closed && n > 0 ? (
+        {!effectiveClosed && n > 0 ? (
           <circle
             cx={vertices[n - 1].x}
             cy={vertices[n - 1].y}
@@ -1340,6 +1347,21 @@ function ScaffoldPageContent() {
     manualSubTab,
     editConfigId,
   ]);
+
+  const handleCadLiveFootprintMmChange = useCallback(
+    (verticesMm: Array<{ x: number; y: number }> | null, isClosed: boolean) => {
+      setCadLiveFootprintMm(verticesMm);
+      setCadLiveFootprintClosed(isClosed);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (inputMode !== 'cad_draw' || editConfigId) {
+      setCadLiveFootprintMm(null);
+      setCadLiveFootprintClosed(false);
+    }
+  }, [inputMode, editConfigId]);
 
   const calculateMutation = useMutation({
     mutationFn: ({
@@ -2575,43 +2597,83 @@ function ScaffoldPageContent() {
             <p className="text-sm text-gray-600 mb-4">
               {t('scaffoldExtra', 'cadDrawDescription')}
             </p>
-            <CadDrawingCanvas
-              buildingHeightMm={buildingHeightMm ?? 3000}
-              onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
-              onComplete={(result) => {
-                const verts = result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac }));
-                const nW = result.walls.length;
-                const closed = verts.length >= 3 && verts.length === nW;
-                const mapped: WallState[] = result.walls.map((w, i) => {
-                  const inf =
-                    verts.length >= 3 && verts.length === nW
-                      ? inferEdgePlanAxisFromVertices(verts, i, closed)
-                      : null;
-                  return {
-                    side: w.side,
-                    enabled: true,
-                    lengthMm: w.wallLengthMm,
-                    heightMm: w.wallHeightMm,
-                    stairAccessCount: w.stairAccessCount,
-                    kaidanCount: 0,
-                    kaidanOffsets: [],
-                    isMultiSegment: false,
-                    segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
-                    cfNote: 'reflex',
-                    edgePlanAxis: inf?.axis ?? 'X',
-                    edgePlanAxisMm: inf?.mm ?? w.wallLengthMm,
-                  };
-                });
-                setWalls(mapped);
-                setHashiraRows((prev) => formRowsFromWallCount(prev, mapped.length));
-                setBuildingHeightMm(result.buildingHeightMm);
-                setPolygonVertices(verts);
-                setPrefilled(true);
-                setInputMode('drawing');
-                setPendingInputUiPath('cad_draw');
-              }}
-              className="w-full"
-            />
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 items-start">
+              <CadDrawingCanvas
+                buildingHeightMm={buildingHeightMm ?? 3000}
+                onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
+                onLiveFootprintMmChange={handleCadLiveFootprintMmChange}
+                onComplete={(result) => {
+                  setCadLiveFootprintMm(null);
+                  setCadLiveFootprintClosed(false);
+                  const verts = result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac }));
+                  const nW = result.walls.length;
+                  const closed = verts.length >= 3 && verts.length === nW;
+                  const mapped: WallState[] = result.walls.map((w, i) => {
+                    const inf =
+                      verts.length >= 3 && verts.length === nW
+                        ? inferEdgePlanAxisFromVertices(verts, i, closed)
+                        : null;
+                    return {
+                      side: w.side,
+                      enabled: true,
+                      lengthMm: w.wallLengthMm,
+                      heightMm: w.wallHeightMm,
+                      stairAccessCount: w.stairAccessCount,
+                      kaidanCount: 0,
+                      kaidanOffsets: [],
+                      isMultiSegment: false,
+                      segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
+                      cfNote: 'reflex',
+                      edgePlanAxis: inf?.axis ?? 'X',
+                      edgePlanAxisMm: inf?.mm ?? w.wallLengthMm,
+                    };
+                  });
+                  setWalls(mapped);
+                  setHashiraRows((prev) => formRowsFromWallCount(prev, mapped.length));
+                  setBuildingHeightMm(result.buildingHeightMm);
+                  setPolygonVertices(verts);
+                  setPrefilled(true);
+                  setInputMode('drawing');
+                  setPendingInputUiPath('cad_draw');
+                }}
+                className="w-full min-w-0"
+              />
+              <div className="xl:sticky xl:top-4 rounded-xl border border-gray-200 bg-slate-50/80 p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-semibold text-gray-800">
+                    {t('scaffold', 'aiBimPreview2d')}
+                  </div>
+                  {cadLiveFootprintClosed && (cadLiveFootprintMm?.length ?? 0) >= 3 ? (
+                    <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5">
+                      {t('scaffoldExtra', 'cadPreviewClosedBadge') || 'Closed'}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  {t('scaffoldExtra', 'cadPreviewBlurb')}
+                </p>
+                {cadLiveFootprintMm && cadLiveFootprintMm.length >= 2 ? (() => {
+                  const n = cadLiveFootprintMm.length;
+                  const closedCad = cadLiveFootprintClosed && n >= 3;
+                  const edgeCount = closedCad ? n : n - 1;
+                  const labels = Array.from({ length: edgeCount }, (_, i) =>
+                    edgeChordName(i, edgeCount, closedCad),
+                  );
+                  return (
+                    <FootprintMiniPreview
+                      vertices={cadLiveFootprintMm}
+                      labels={labels}
+                      activeIndex={null}
+                      closed={closedCad}
+                    />
+                  );
+                })() : (
+                  <div className="text-xs text-gray-500 rounded-lg border border-dashed border-gray-300 p-4 bg-white">
+                    {t('scaffoldExtra', 'cadPreviewEmpty')}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

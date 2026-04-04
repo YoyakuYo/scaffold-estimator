@@ -1544,6 +1544,17 @@ export const translations = {
       en: 'Need at least three walls or a traced outline for the plan preview.',
       fr: 'Au moins trois murs ou un trace pour afficher l’apercu.',
     },
+    cadPreviewBlurb: {
+      ja: 'キャンバス上の形状を寸法（mm）で反映したプレビューです。ポリラインを閉じると塗りつぶし表示になります。',
+      en: 'Footprint in real mm as you draw. Closing the polyline fills the shape.',
+      fr: 'Empreinte en mm reel pendant le trace. Fermer la polyligne remplit la forme.',
+    },
+    cadPreviewEmpty: {
+      ja: '少なくとも2点を置くとプレビューが表示されます。',
+      en: 'Place at least two points to see the outline.',
+      fr: 'Placez au moins deux points pour voir le contour.',
+    },
+    cadPreviewClosedBadge: { ja: '閉じた', en: 'Closed', fr: 'Ferme' },
     wallDimensions: { ja: '壁面寸法', en: 'Wall Dimensions', fr: 'Dimensions des murs' },
     clickToPlaceVerticesHint: { ja: '図面上でクリックして頂点を指定すると壁面寸法が表示されます', en: 'Click on the drawing to place vertices and show wall dimensions', fr: 'Cliquez sur le plan pour placer les sommets et afficher les dimensions des murs' },
     vertexAPlacedClickB: { ja: '頂点 A を配置しました。次の頂点 B をクリックしてください。', en: 'Vertex A is placed. Click the next vertex B.', fr: 'Le sommet A est place. Cliquez le sommet suivant B.' },
