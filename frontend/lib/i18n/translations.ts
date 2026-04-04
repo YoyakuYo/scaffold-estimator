@@ -1556,7 +1556,7 @@ export const translations = {
     },
     cadPreviewClosedBadge: { ja: '閉じた', en: 'Closed', fr: 'Ferme' },
     cadPanHint: {
-      ja: 'パン：ホイールクリック・中央／右ドラッグ・Space+ドラッグ・パンツール。ホイールでズーム。',
+      ja: 'パン：中ボタン／右ドラッグ、Space+ドラッグ、パンツール。ホイールでズーム。',
       en: 'Pan: middle click, right-drag, Space+drag, or Pan tool. Scroll wheel zooms.',
       fr: 'Pan : clic milieu, clic droit-glisser, Espace+glisser, ou outil Pan. Molette pour zoomer.',
     },
