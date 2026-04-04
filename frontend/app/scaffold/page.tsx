@@ -33,7 +33,11 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { QuickShapeBuilder, type QuickShapeConfig } from '@/components/quick-shape-builder';
+import {
+  QuickShapeBuilder,
+  type QuickShapeConfig,
+  type QuickShapeBuilderDraft,
+} from '@/components/quick-shape-builder';
 import { visionBimApi, type VisionFootprintResult, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
@@ -797,6 +801,137 @@ function deriveWallsFromClosedFootprint(
   });
 }
 
+/** Matches session shape of `aiBimPreview` state on the scaffold wizard. */
+type AiBimWizardPreview = {
+  buildingHeightMm: number;
+  walls: WallInput[];
+  buildingOutline: Array<{ xFrac: number; yFrac: number }>;
+  massingTiers?: VisionMassingTier[];
+  scaffoldType: 'kusabi' | 'wakugumi';
+  frameSizeMm?: number;
+  wakugumiFrameSeries?: WakugumiFrameSeriesId;
+  wallLengthsFromDimText?: boolean;
+  heightConfidence?: 'high' | 'medium' | 'low';
+  drawingType?: 'plan' | '3d' | 'elevation' | 'section';
+  isStepped?: boolean;
+  obstacles?: Array<
+    | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
+    | { type: 'pillar'; center: { x: number; y: number } | { xFrac: number; yFrac: number }; radiusMm: number }
+    | { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number }
+  >;
+  dto: CreateScaffoldConfigDto;
+};
+
+const WIZARD_DRAFT_SAVE_VERSION = 2;
+
+interface RawWizardDraft {
+  v?: number;
+  walls?: WallState[];
+  polygonVertices?: Array<{ x: number; y: number }>;
+  hashiraRows?: EdgeHashiraFormRow[];
+  buildingHeightMm?: number | null;
+  scaffoldWidthMm?: number;
+  inputMode?: string;
+  manualSubTab?: string;
+  prefilled?: boolean;
+  pendingInputUiPath?: CreateScaffoldConfigDto['inputUiPath'] | null;
+  quickShapeDraft?: QuickShapeBuilderDraft;
+  aiBimPreview?: AiBimWizardPreview;
+  aiBimEdgeHashira?: EdgeHashiraFormRow[];
+  aiBimEdgeCf?: string[];
+}
+
+interface WizardSessionBootstrap {
+  inputMode: 'drawing' | 'quick' | 'ai_extract' | 'cad_draw';
+  manualSubTab: 'drawing' | 'quick';
+  walls: WallState[];
+  polygonVertices: Array<{ x: number; y: number }>;
+  hashiraRows: EdgeHashiraFormRow[];
+  buildingHeightMm: number | null;
+  prefilled: boolean;
+  pendingInputUiPath: CreateScaffoldConfigDto['inputUiPath'] | null;
+  scaffoldWidthMm: number;
+  quickShapeDraft: QuickShapeBuilderDraft | null;
+  aiBimPreview: AiBimWizardPreview | null;
+  aiBimEdgeHashira: EdgeHashiraFormRow[];
+  aiBimEdgeCf: ScaffoldWallCfKey[];
+}
+
+function wizardSessionDefaults(): WizardSessionBootstrap {
+  return {
+    inputMode: 'drawing',
+    manualSubTab: 'drawing',
+    walls: [],
+    polygonVertices: [],
+    hashiraRows: [],
+    buildingHeightMm: null,
+    prefilled: false,
+    pendingInputUiPath: null,
+    scaffoldWidthMm: 600,
+    quickShapeDraft: null,
+    aiBimPreview: null,
+    aiBimEdgeHashira: [],
+    aiBimEdgeCf: [],
+  };
+}
+
+function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionBootstrap {
+  const d = wizardSessionDefaults();
+  if (typeof window === 'undefined' || editConfigId) return d;
+  try {
+    const raw = sessionStorage.getItem(SCAFFOLD_WIZARD_DRAFT_KEY);
+    if (!raw) return d;
+    const parsed = JSON.parse(raw) as RawWizardDraft;
+    if (parsed.v !== 1 && parsed.v !== WIZARD_DRAFT_SAVE_VERSION) return d;
+
+    let mode: WizardSessionBootstrap['inputMode'] =
+      parsed.inputMode === 'ai_extract' ||
+      parsed.inputMode === 'cad_draw' ||
+      parsed.inputMode === 'quick' ||
+      parsed.inputMode === 'drawing'
+        ? parsed.inputMode
+        : 'drawing';
+    let mtab: WizardSessionBootstrap['manualSubTab'] =
+      parsed.manualSubTab === 'quick' ? 'quick' : 'drawing';
+    if (mtab === 'quick') mode = 'quick';
+    if (mode === 'quick') mtab = 'quick';
+
+    d.inputMode = mode;
+    d.manualSubTab = mtab;
+
+    const hasWalls = Array.isArray(parsed.walls) && parsed.walls.length > 0;
+
+    if (mode === 'ai_extract') {
+      d.walls = [];
+      d.polygonVertices = [];
+      d.hashiraRows = [];
+      if (parsed.aiBimPreview) d.aiBimPreview = parsed.aiBimPreview;
+      if (Array.isArray(parsed.aiBimEdgeHashira)) d.aiBimEdgeHashira = parsed.aiBimEdgeHashira;
+      if (Array.isArray(parsed.aiBimEdgeCf)) {
+        d.aiBimEdgeCf = parsed.aiBimEdgeCf.map((x) => normalizeScaffoldWallCfKey(String(x)));
+      }
+    } else {
+      if (hasWalls) {
+        d.walls = parsed.walls!;
+        d.polygonVertices = Array.isArray(parsed.polygonVertices) ? parsed.polygonVertices : [];
+        d.hashiraRows = Array.isArray(parsed.hashiraRows) ? parsed.hashiraRows : [];
+      }
+      if (mode === 'quick' && parsed.quickShapeDraft) {
+        d.quickShapeDraft = parsed.quickShapeDraft;
+      }
+    }
+
+    if (parsed.buildingHeightMm !== undefined) d.buildingHeightMm = parsed.buildingHeightMm;
+    if (typeof parsed.prefilled === 'boolean') d.prefilled = parsed.prefilled;
+    if (parsed.pendingInputUiPath !== undefined) d.pendingInputUiPath = parsed.pendingInputUiPath ?? null;
+    if (typeof parsed.scaffoldWidthMm === 'number') d.scaffoldWidthMm = parsed.scaffoldWidthMm;
+
+    return d;
+  } catch {
+    return wizardSessionDefaults();
+  }
+}
+
 // ─── Page Component ─────────────────────────────────────────
 
 export default function ScaffoldPage() {
@@ -811,34 +946,20 @@ function ScaffoldPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t, locale } = useI18n();
+  const editConfigId = searchParams.get('edit') ?? null;
+  const initialWizard = useMemo(() => bootstrapWizardFromSession(editConfigId), [editConfigId]);
 
   // ─── Input Mode ────────────────────────────────────────
-  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>('drawing');
-  const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>('drawing');
+  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>(() => initialWizard.inputMode);
+  const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>(() => initialWizard.manualSubTab);
   /** First calculate after CAD complete — tag config as cad_draw until saved */
-  const [pendingInputUiPath, setPendingInputUiPath] = useState<CreateScaffoldConfigDto['inputUiPath'] | null>(null);
+  const [pendingInputUiPath, setPendingInputUiPath] = useState<CreateScaffoldConfigDto['inputUiPath'] | null>(
+    () => initialWizard.pendingInputUiPath,
+  );
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
   /** After AI extract: show for double-check before creating config. */
-  const [aiBimPreview, setAiBimPreview] = useState<{
-    buildingHeightMm: number;
-    walls: WallInput[];
-    buildingOutline: Array<{ xFrac: number; yFrac: number }>;
-    massingTiers?: VisionMassingTier[];
-    scaffoldType: 'kusabi' | 'wakugumi';
-    frameSizeMm?: number;
-    wakugumiFrameSeries?: WakugumiFrameSeriesId;
-    wallLengthsFromDimText?: boolean;
-    heightConfidence?: 'high' | 'medium' | 'low';
-    drawingType?: 'plan' | '3d' | 'elevation' | 'section';
-    isStepped?: boolean;
-    obstacles?: Array<
-      | { type: 'balcony' | 'ac'; vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }> }
-      | { type: 'pillar'; center: { x: number; y: number } | { xFrac: number; yFrac: number }; radiusMm: number }
-      | { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number }
-    >;
-    dto: CreateScaffoldConfigDto;
-  } | null>(null);
+  const [aiBimPreview, setAiBimPreview] = useState<AiBimWizardPreview | null>(() => initialWizard.aiBimPreview);
   const [aiBimConfirming, setAiBimConfirming] = useState(false);
   /** Snapshot of AI-extracted footprint for compare / reset (mm polygon, same as buildingOutline). */
   const [aiBimExtractOutline, setAiBimExtractOutline] = useState<FootprintPoint[] | null>(null);
@@ -906,7 +1027,7 @@ function ScaffoldPageContent() {
   // ─── Form state ─────────────────────────────────────────
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
   const [structureType, setStructureType] = useState<'改修工事' | 'S造' | 'RC造'>('改修工事');
-  const [scaffoldWidthMm, setScaffoldWidthMm] = useState(600);
+  const [scaffoldWidthMm, setScaffoldWidthMm] = useState(() => initialWizard.scaffoldWidthMm);
   // Kusabi-specific
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
   // Wakugumi-specific
@@ -914,11 +1035,13 @@ function ScaffoldPageContent() {
   const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<WakugumiFrameSeriesId>('FT917');
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
-  const [walls, setWalls] = useState<WallState[]>([]);
-  const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(null);
-  const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>([]);
+  const [walls, setWalls] = useState<WallState[]>(() => initialWizard.walls);
+  const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(() => initialWizard.buildingHeightMm);
+  const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>(
+    () => initialWizard.polygonVertices,
+  );
   const [selectedWallIdx, setSelectedWallIdx] = useState<number | null>(null);
-  const [prefilled, setPrefilled] = useState(false);
+  const [prefilled, setPrefilled] = useState(() => initialWizard.prefilled);
   /** Live CAD footprint (mm) for 2D preview while drawing */
   const [cadLiveFootprintMm, setCadLiveFootprintMm] = useState<Array<{ x: number; y: number }> | null>(
     null,
@@ -926,12 +1049,17 @@ function ScaffoldPageContent() {
   const [cadLiveFootprintClosed, setCadLiveFootprintClosed] = useState(false);
   const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
   const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
-  const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
-  const [aiBimEdgeHashira, setAiBimEdgeHashira] = useState<EdgeHashiraFormRow[]>([]);
-  const [aiBimEdgeCf, setAiBimEdgeCf] = useState<ScaffoldWallCfKey[]>([]);
-  const wizardDraftRestoredRef = useRef(false);
-
-  const editConfigId = searchParams.get('edit') ?? null;
+  const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>(() => initialWizard.hashiraRows);
+  const [aiBimEdgeHashira, setAiBimEdgeHashira] = useState<EdgeHashiraFormRow[]>(
+    () => initialWizard.aiBimEdgeHashira,
+  );
+  const [aiBimEdgeCf, setAiBimEdgeCf] = useState<ScaffoldWallCfKey[]>(() => initialWizard.aiBimEdgeCf);
+  const [quickShapeDraft, setQuickShapeDraft] = useState<QuickShapeBuilderDraft | null>(
+    () => initialWizard.quickShapeDraft,
+  );
+  const handleQuickShapeDraftChange = useCallback((next: QuickShapeBuilderDraft) => {
+    setQuickShapeDraft(next);
+  }, []);
 
   const { data: editConfig, isLoading: editConfigLoading } = useQuery({
     queryKey: ['scaffold-config', editConfigId!],
@@ -1048,8 +1176,9 @@ function ScaffoldPageContent() {
       return;
     }
     const n = aiBimPreview.walls.length;
-    setAiBimEdgeHashira((prev) => formRowsFromWallCount(prev, n));
+    setAiBimEdgeHashira((prev) => (prev.length === n ? prev : formRowsFromWallCount(prev, n)));
     setAiBimEdgeCf((prev) => {
+      if (prev.length === n) return prev.map((x) => normalizeScaffoldWallCfKey(x));
       const next = prev.slice(0, n).map((x) => normalizeScaffoldWallCfKey(x));
       while (next.length < n) next.push('reflex');
       return next;
@@ -1071,53 +1200,13 @@ function ScaffoldPageContent() {
   }, [aiFootprintKey]);
 
   useEffect(() => {
-    if (walls.length === 0) wizardDraftRestoredRef.current = false;
-  }, [walls.length]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || editConfigId || wizardDraftRestoredRef.current) return;
-    try {
-      const raw = sessionStorage.getItem(SCAFFOLD_WIZARD_DRAFT_KEY);
-      if (!raw) return;
-      const d = JSON.parse(raw) as {
-        v?: number;
-        walls?: WallState[];
-        polygonVertices?: Array<{ x: number; y: number }>;
-        hashiraRows?: EdgeHashiraFormRow[];
-        buildingHeightMm?: number | null;
-        scaffoldWidthMm?: number;
-        inputMode?: 'drawing' | 'quick' | 'ai_extract' | 'cad_draw';
-        manualSubTab?: 'drawing' | 'quick';
-        prefilled?: boolean;
-        pendingInputUiPath?: CreateScaffoldConfigDto['inputUiPath'] | null;
-      };
-      if (d.v !== 1 || !Array.isArray(d.walls) || d.walls.length === 0) return;
-      wizardDraftRestoredRef.current = true;
-      setWalls(d.walls);
-      if (Array.isArray(d.polygonVertices) && d.polygonVertices.length >= 3) {
-        setPolygonVertices(d.polygonVertices);
-      }
-      if (Array.isArray(d.hashiraRows)) setHashiraRows(d.hashiraRows);
-      if (d.buildingHeightMm != null) setBuildingHeightMm(d.buildingHeightMm);
-      if (typeof d.scaffoldWidthMm === 'number') setScaffoldWidthMm(d.scaffoldWidthMm);
-      if (d.inputMode) setInputMode(d.inputMode);
-      if (d.manualSubTab) setManualSubTab(d.manualSubTab);
-      if (typeof d.prefilled === 'boolean') setPrefilled(d.prefilled);
-      if (d.pendingInputUiPath !== undefined) setPendingInputUiPath(d.pendingInputUiPath);
-    } catch {
-      /* ignore */
-    }
-  }, [editConfigId]);
-
-  useEffect(() => {
     if (typeof window === 'undefined' || editConfigId) return;
-    if (walls.length === 0) return;
     const t = window.setTimeout(() => {
       try {
         sessionStorage.setItem(
           SCAFFOLD_WIZARD_DRAFT_KEY,
           JSON.stringify({
-            v: 1,
+            v: WIZARD_DRAFT_SAVE_VERSION,
             walls,
             polygonVertices,
             hashiraRows,
@@ -1127,6 +1216,10 @@ function ScaffoldPageContent() {
             manualSubTab,
             prefilled,
             pendingInputUiPath,
+            quickShapeDraft,
+            aiBimPreview,
+            aiBimEdgeHashira,
+            aiBimEdgeCf,
           }),
         );
       } catch {
@@ -1145,6 +1238,10 @@ function ScaffoldPageContent() {
     manualSubTab,
     prefilled,
     pendingInputUiPath,
+    quickShapeDraft,
+    aiBimPreview,
+    aiBimEdgeHashira,
+    aiBimEdgeCf,
   ]);
 
   const closedFootprintChords =
@@ -2694,6 +2791,8 @@ function ScaffoldPageContent() {
           <QuickShapeBuilder
             onSubmit={handleQuickShapeSubmit}
             isCalculating={calculateMutation.isPending}
+            initialDraft={quickShapeDraft}
+            onDraftChange={handleQuickShapeDraftChange}
           />
           {calculateMutation.isError && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 mt-4 flex items-center gap-3">

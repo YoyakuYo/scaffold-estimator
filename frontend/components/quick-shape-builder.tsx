@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
 import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
@@ -91,58 +91,208 @@ export interface QuickShapeConfig {
   kaidanPerSide: Record<string, KaidanConfig>;
 }
 
+/** Persisted wizard state for sessionStorage (quick builder tab). */
+export interface QuickShapeBuilderDraft {
+  shapeType: ShapeType;
+  rectNorth: number;
+  rectEast: number;
+  rectSouth: number;
+  rectWest: number;
+  lSegments: SideDefinition[];
+  customSegments: SideDefinition[];
+  buildingHeightMm: number;
+  scaffoldType: 'kusabi' | 'wakugumi';
+  scaffoldWidthMm: number;
+  preferredMainTatejiMm: number;
+  frameSizeMm: number;
+  wakugumiFrameSeries: 'FT617' | 'FT917' | 'FT1217';
+  habakiCountPerSpan: number;
+  endStopperType: 'nuno' | 'frame';
+  structureType: '改修工事' | 'S造' | 'RC造';
+  kaidanPerSide: Record<string, KaidanConfig>;
+  scaffoldWidthPerSide: Record<string, number | undefined>;
+}
+
+function isShapeType(v: unknown): v is ShapeType {
+  return v === 'rectangle' || v === 'l-shape' || v === 'custom';
+}
+
+function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShapeBuilderDraft | null {
+  if (!d || !isShapeType(d.shapeType)) return null;
+  const series = d.wakugumiFrameSeries;
+  const wakugumiFrameSeries =
+    series === 'FT617' || series === 'FT917' || series === 'FT1217' ? series : 'FT917';
+  const st = d.structureType;
+  const structureType = st === '改修工事' || st === 'S造' || st === 'RC造' ? st : '改修工事';
+  const est = d.endStopperType;
+  const endStopperType = est === 'nuno' || est === 'frame' ? est : 'nuno';
+  const sct = d.scaffoldType;
+  const scaffoldType = sct === 'kusabi' || sct === 'wakugumi' ? sct : 'kusabi';
+  const habaki = Math.max(1, Math.min(2, Math.round(Number(d.habakiCountPerSpan) || 2)));
+  return {
+    shapeType: d.shapeType,
+    rectNorth: Number.isFinite(d.rectNorth) ? d.rectNorth : 10000,
+    rectEast: Number.isFinite(d.rectEast) ? d.rectEast : 8000,
+    rectSouth: Number.isFinite(d.rectSouth) ? d.rectSouth : 10000,
+    rectWest: Number.isFinite(d.rectWest) ? d.rectWest : 8000,
+    lSegments: Array.isArray(d.lSegments) && d.lSegments.length > 0 ? d.lSegments : [
+      { label: 'AB', lengthMm: 10000 },
+      { label: 'BC', lengthMm: 5000 },
+      { label: 'CD', lengthMm: 5000 },
+      { label: 'DE', lengthMm: 5000 },
+      { label: 'EF', lengthMm: 5000 },
+      { label: 'FA', lengthMm: 10000 },
+    ],
+    customSegments: Array.isArray(d.customSegments) && d.customSegments.length > 2 ? d.customSegments : [
+      { label: 'AB', lengthMm: 10000 },
+      { label: 'BC', lengthMm: 8000 },
+      { label: 'CD', lengthMm: 10000 },
+      { label: 'DA', lengthMm: 8000 },
+    ],
+    buildingHeightMm: Number.isFinite(d.buildingHeightMm) ? d.buildingHeightMm : 9900,
+    scaffoldType,
+    scaffoldWidthMm: [600, 900, 1200].includes(d.scaffoldWidthMm) ? d.scaffoldWidthMm : 600,
+    preferredMainTatejiMm: [1800, 2700, 3600].includes(d.preferredMainTatejiMm)
+      ? d.preferredMainTatejiMm
+      : 1800,
+    frameSizeMm: [1700, 1800, 1900].includes(d.frameSizeMm) ? d.frameSizeMm : 1700,
+    wakugumiFrameSeries,
+    habakiCountPerSpan: habaki,
+    endStopperType,
+    structureType,
+    kaidanPerSide: d.kaidanPerSide && typeof d.kaidanPerSide === 'object' ? d.kaidanPerSide : {},
+    scaffoldWidthPerSide:
+      d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object' ? d.scaffoldWidthPerSide : {},
+  };
+}
+
 interface Props {
   onSubmit: (config: QuickShapeConfig) => void;
   isCalculating?: boolean;
+  /** Hydrate fields after refresh (session draft). */
+  initialDraft?: QuickShapeBuilderDraft | null;
+  /** Debounced snapshot for parent session draft. */
+  onDraftChange?: (draft: QuickShapeBuilderDraft) => void;
 }
 
 // ─── Component ───────────────────────────────────────────────
 
-export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
+export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDraftChange }: Props) {
   const { t } = useI18n();
-  const [shapeType, setShapeType] = useState<ShapeType>('rectangle');
+  const mergedInitial = useMemo(() => draftToInitial(initialDraft ?? null), [initialDraft]);
+
+  const [shapeType, setShapeType] = useState<ShapeType>(() => mergedInitial?.shapeType ?? 'rectangle');
 
   // Rectangle inputs
-  const [rectNorth, setRectNorth] = useState(10000);
-  const [rectEast, setRectEast] = useState(8000);
-  const [rectSouth, setRectSouth] = useState(10000);
-  const [rectWest, setRectWest] = useState(8000);
+  const [rectNorth, setRectNorth] = useState(() => mergedInitial?.rectNorth ?? 10000);
+  const [rectEast, setRectEast] = useState(() => mergedInitial?.rectEast ?? 8000);
+  const [rectSouth, setRectSouth] = useState(() => mergedInitial?.rectSouth ?? 10000);
+  const [rectWest, setRectWest] = useState(() => mergedInitial?.rectWest ?? 8000);
 
   // L-shape inputs
-  const [lSegments, setLSegments] = useState<SideDefinition[]>([
-    { label: 'AB', lengthMm: 10000 },
-    { label: 'BC', lengthMm: 5000 },
-    { label: 'CD', lengthMm: 5000 },
-    { label: 'DE', lengthMm: 5000 },
-    { label: 'EF', lengthMm: 5000 },
-    { label: 'FA', lengthMm: 10000 },
-  ]);
+  const [lSegments, setLSegments] = useState<SideDefinition[]>(
+    () =>
+      mergedInitial?.lSegments ?? [
+        { label: 'AB', lengthMm: 10000 },
+        { label: 'BC', lengthMm: 5000 },
+        { label: 'CD', lengthMm: 5000 },
+        { label: 'DE', lengthMm: 5000 },
+        { label: 'EF', lengthMm: 5000 },
+        { label: 'FA', lengthMm: 10000 },
+      ],
+  );
 
   // Custom polygon
-  const [customSegments, setCustomSegments] = useState<SideDefinition[]>([
-    { label: 'AB', lengthMm: 10000 },
-    { label: 'BC', lengthMm: 8000 },
-    { label: 'CD', lengthMm: 10000 },
-    { label: 'DA', lengthMm: 8000 },
-  ]);
+  const [customSegments, setCustomSegments] = useState<SideDefinition[]>(
+    () =>
+      mergedInitial?.customSegments ?? [
+        { label: 'AB', lengthMm: 10000 },
+        { label: 'BC', lengthMm: 8000 },
+        { label: 'CD', lengthMm: 10000 },
+        { label: 'DA', lengthMm: 8000 },
+      ],
+  );
 
   // Building height; level height is 1800 (kusabi) or frame size (wakugumi) per scaffold type
-  const [buildingHeightMm, setBuildingHeightMm] = useState(9900);
+  const [buildingHeightMm, setBuildingHeightMm] = useState(() => mergedInitial?.buildingHeightMm ?? 9900);
 
   // Scaffold options (same page as shape & height)
-  const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
-  const [scaffoldWidthMm, setScaffoldWidthMm] = useState(600);
-  const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
-  const [frameSizeMm] = useState(1700);
-  const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<'FT617' | 'FT917' | 'FT1217'>('FT917');
-  const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
-  const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
-  const [structureType, setStructureType] = useState<'改修工事' | 'S造' | 'RC造'>('改修工事');
+  const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>(
+    () => mergedInitial?.scaffoldType ?? 'kusabi',
+  );
+  const [scaffoldWidthMm, setScaffoldWidthMm] = useState(() => mergedInitial?.scaffoldWidthMm ?? 600);
+  const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(
+    () => mergedInitial?.preferredMainTatejiMm ?? 1800,
+  );
+  const [frameSizeMm] = useState(() => mergedInitial?.frameSizeMm ?? 1700);
+  const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<'FT617' | 'FT917' | 'FT1217'>(
+    () => mergedInitial?.wakugumiFrameSeries ?? 'FT917',
+  );
+  const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(() => mergedInitial?.habakiCountPerSpan ?? 2);
+  const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>(
+    () => mergedInitial?.endStopperType ?? 'nuno',
+  );
+  const [structureType, setStructureType] = useState<'改修工事' | 'S造' | 'RC造'>(
+    () => mergedInitial?.structureType ?? '改修工事',
+  );
 
   // Kaidan per side
-  const [kaidanPerSide, setKaidanPerSide] = useState<Record<string, KaidanConfig>>({});
+  const [kaidanPerSide, setKaidanPerSide] = useState<Record<string, KaidanConfig>>(
+    () => mergedInitial?.kaidanPerSide ?? {},
+  );
   // Per-side scaffold width (undefined = use global scaffoldWidthMm)
-  const [scaffoldWidthPerSide, setScaffoldWidthPerSide] = useState<Record<string, number | undefined>>({});
+  const [scaffoldWidthPerSide, setScaffoldWidthPerSide] = useState<Record<string, number | undefined>>(
+    () => mergedInitial?.scaffoldWidthPerSide ?? {},
+  );
+
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+
+  useEffect(() => {
+    if (!onDraftChangeRef.current) return;
+    const t = window.setTimeout(() => {
+      onDraftChangeRef.current?.({
+        shapeType,
+        rectNorth,
+        rectEast,
+        rectSouth,
+        rectWest,
+        lSegments,
+        customSegments,
+        buildingHeightMm,
+        scaffoldType,
+        scaffoldWidthMm,
+        preferredMainTatejiMm,
+        frameSizeMm,
+        wakugumiFrameSeries,
+        habakiCountPerSpan,
+        endStopperType,
+        structureType,
+        kaidanPerSide,
+        scaffoldWidthPerSide,
+      });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [
+    shapeType,
+    rectNorth,
+    rectEast,
+    rectSouth,
+    rectWest,
+    lSegments,
+    customSegments,
+    buildingHeightMm,
+    scaffoldType,
+    scaffoldWidthMm,
+    preferredMainTatejiMm,
+    frameSizeMm,
+    wakugumiFrameSeries,
+    habakiCountPerSpan,
+    endStopperType,
+    structureType,
+    kaidanPerSide,
+    scaffoldWidthPerSide,
+  ]);
 
   const getSides = useCallback((): SideDefinition[] => {
     if (shapeType === 'rectangle') {
