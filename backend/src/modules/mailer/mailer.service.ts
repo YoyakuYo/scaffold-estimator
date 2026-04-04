@@ -19,11 +19,24 @@ export class MailerService {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const nodemailer = require('nodemailer');
+        const host = this.configService.get<string>('SMTP_HOST')!.trim();
+        const port = parseInt(this.configService.get('SMTP_PORT') || '587', 10);
+        const secure = this.configService.get('SMTP_SECURE') === 'true';
+        // PaaS hosts (e.g. Render) often hang on IPv6 to some SMTP providers; IPv4 + longer timeouts fixes "Connection timeout".
+        const preferIpv4 = this.configService.get('SMTP_USE_IPV6') !== 'true';
         this.transport = nodemailer.createTransport({
-          host: this.configService.get('SMTP_HOST'),
-          port: parseInt(this.configService.get('SMTP_PORT') || '587', 10),
-          secure: this.configService.get('SMTP_SECURE') === 'true',
+          host,
+          port,
+          secure,
           auth: { user, pass },
+          connectionTimeout: 90_000,
+          greetingTimeout: 45_000,
+          socketTimeout: 90_000,
+          tls: {
+            minVersion: 'TLSv1.2',
+            servername: host,
+          },
+          ...(preferIpv4 ? { family: 4 as const } : {}),
         });
       } catch {
         this.enabled = false;

@@ -79,6 +79,9 @@ FRONTEND_URL=http://localhost:3001
 # SMTP_USER=your-smtp-user
 # SMTP_PASS=your-smtp-password
 # SMTP_FROM="Scaffold App <noreply@example.com>"
+# If SMTP times out on your host (e.g. Render → SendGrid), the app prefers IPv4 by default.
+# To force IPv6 instead: SMTP_USE_IPV6=true
+# Alternative: SendGrid port 465 + SMTP_SECURE=true
 
 # File Upload Limits
 MAX_FILE_SIZE=524288000
