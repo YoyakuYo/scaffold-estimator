@@ -403,6 +403,38 @@ export function expandMiddleSpansToTargetCount(
 }
 
 // ─── Span Fitting Algorithm ──────────────────────────────────
+
+/**
+ * If possible, partition `target` into an exact sum of standard span modules (mm).
+ * Prefers larger spans first when building the decomposition (walkable-bay packing).
+ */
+export function exactSumWithStandardSpans(
+  target: number,
+  spanSizesMm: readonly number[],
+): number[] | null {
+  if (!Number.isFinite(target) || target < 0) return null;
+  if (target === 0) return [];
+  const sizes = [...spanSizesMm].filter((n) => Number.isFinite(n) && n > 0);
+  if (sizes.length === 0) return null;
+  const sortedDesc = [...new Set(sizes)].sort((a, b) => b - a);
+  const min = sortedDesc[sortedDesc.length - 1]!;
+  if (target < min) return null;
+
+  const dp: (number[] | null)[] = Array(target + 1).fill(null);
+  dp[0] = [];
+  for (let t = 1; t <= target; t++) {
+    for (const s of sortedDesc) {
+      if (s <= t && dp[t - s] !== null) {
+        dp[t] = [...dp[t - s]!, s];
+        break;
+      }
+    }
+  }
+  const raw = dp[target];
+  if (!raw) return null;
+  return raw.sort((a, b) => b - a);
+}
+
 /**
  * Given a wall length, find the optimal combination of standard spans
  * to fit.
@@ -495,7 +527,10 @@ export function classifyKusabiRectangleEdgeRoles(
  * Span fitting for walls that meet at corners (closed polygon).
  * - Run along the wall = **wallLength + 300 + terminal**; first bay **1800**; last = terminal.
  * - **Reflex (inner) corner:** subtract **300mm** from nominal wall length **per** reflex vertex on that edge
- *   (effective façade = `scaffoldFacadeBasisMmFromCorners`), then no terminal at reflex and no +300 there.
+ *   (effective façade = `scaffoldFacadeBasisMmFromCorners`). **Rule 1:** when possible, end the wall with the
+ *   width-module terminal span (600/900/1200) so the next wall can reuse the same posts for a continuous
+ *   walk bay (−300 line). **Rule 2:** if an exact standard span packing cannot end with that module, pack
+ *   without it and count **pattanko** at that reflex joint (see calculator).
  * - Middle = **wall + 300 − 1800**, filled from **SPAN_SIZES** (exact when possible).
  * - **Rectangle hint** (`rectangleEdgeRole`): *prefer* long sides as all-1800 middle when possible; *prefer*
  *   short sides ending middle with **1200** then **(terminal+300)** when possible (overrun in penultimate bay).
@@ -525,18 +560,36 @@ export function fitSpansToWallLengthWithCorner(
   const startIsConvex = startKind !== 'reflex';
   const endIsConvex = endKind !== 'reflex';
 
-  // Inner/reflex (re-entrant) corners: subtract overrunMm from nominal wall length per reflex vertex,
-  // then apply convex-end extension (+300 + terminal) only where the end corner is convex.
+  // Inner/reflex (re-entrant) corners: subtract overrunMm from nominal wall length per reflex vertex.
   if (!startIsConvex || !endIsConvex) {
     const reflexInset =
       (startIsConvex ? 0 : CORNER_OVERRUN_MM) + (endIsConvex ? 0 : CORNER_OVERRUN_MM);
     const effectiveFacadeMm = Math.max(0, wallLengthMm - reflexInset);
     const prefix = startIsConvex ? [start] : [];
-    const suffix = endIsConvex ? [terminal] : [];
-    const runTarget = effectiveFacadeMm + (endIsConvex ? CORNER_OVERRUN_MM + terminal : 0);
-    const middleTarget = runTarget - prefix.reduce((a, b) => a + b, 0) - suffix.reduce((a, b) => a + b, 0);
+    const prefixSum = prefix.reduce((a, b) => a + b, 0);
+
+    if (!endIsConvex) {
+      // Rule 1: last span = width-module (terminal); total run = effective façade (posts stop at −300 line).
+      // Next wall (reflex start, prefix=[]) reuses those post lines — continuous bay.
+      const middleNeed = effectiveFacadeMm - prefixSum - terminal;
+      if (middleNeed >= 0) {
+        const middleExact = exactSumWithStandardSpans(middleNeed, SPAN_SIZES);
+        if (middleExact !== null) {
+          return [...prefix, ...middleExact, terminal];
+        }
+      }
+      // Rule 2: cannot end with width-module using exact standard spans → pack to inner line; pattanko at joint.
+      const middleTarget = effectiveFacadeMm - prefixSum;
+      if (middleTarget <= 0) return [...prefix];
+      const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
+      return [...prefix, ...middleSpans];
+    }
+
+    // Reflex start only; convex end: overrun + terminal past outer corner
+    const suffix = [terminal];
+    const runTarget = effectiveFacadeMm + CORNER_OVERRUN_MM + terminal;
+    const middleTarget = runTarget - prefixSum - terminal;
     if (middleTarget <= 0) return [...prefix, ...suffix];
-    // Reflex corner rule: do not allow spans to exceed the target run (no overrun).
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
     return [...prefix, ...middleSpans, ...suffix];
   }

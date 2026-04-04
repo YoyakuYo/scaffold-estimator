@@ -14,6 +14,7 @@ import {
   SizeOption,
   AnchiLayout,
   expandMiddleSpansToTargetCount,
+  exactSumWithStandardSpans,
 } from './scaffold-rules';
 
 // ─── Frame Size Options (建枠サイズ) ──────────────────────────
@@ -255,10 +256,25 @@ export function fitSpansToWallLengthWithCornerWakugumi(
       (startIsConvex ? 0 : WAKUGUMI_CORNER_OVERRUN_MM) + (endIsConvex ? 0 : WAKUGUMI_CORNER_OVERRUN_MM);
     const effectiveFacadeMm = Math.max(0, wallLengthMm - reflexInset);
     const prefix = startIsConvex ? [WAKUGUMI_CORNER_START_SPAN_MM] : [];
-    const suffix = endIsConvex ? [terminal] : [];
-    const runTarget =
-      effectiveFacadeMm + (endIsConvex ? WAKUGUMI_CORNER_OVERRUN_MM + terminal : 0);
-    const middleTarget = runTarget - prefix.reduce((a, b) => a + b, 0) - suffix.reduce((a, b) => a + b, 0);
+    const prefixSum = prefix.reduce((a, b) => a + b, 0);
+
+    if (!endIsConvex) {
+      const middleNeed = effectiveFacadeMm - prefixSum - terminal;
+      if (middleNeed >= 0) {
+        const middleExact = exactSumWithStandardSpans(middleNeed, WAKUGUMI_SPAN_SIZES);
+        if (middleExact !== null) {
+          return [...prefix, ...middleExact, terminal];
+        }
+      }
+      const middleTarget = effectiveFacadeMm - prefixSum;
+      if (middleTarget <= 0) return [...prefix];
+      const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
+      return [...prefix, ...middleSpans];
+    }
+
+    const suffix = [terminal];
+    const runTarget = effectiveFacadeMm + WAKUGUMI_CORNER_OVERRUN_MM + terminal;
+    const middleTarget = runTarget - prefixSum - terminal;
     if (middleTarget <= 0) return [...prefix, ...suffix];
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
     return [...prefix, ...middleSpans, ...suffix];

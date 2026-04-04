@@ -9,6 +9,7 @@ import {
   WAKUGUMI_SHITASAN_SIZES,
   findNearestSizeWakugumi,
   WakugumiLevelCalcResult,
+  cornerTerminalSpanMmWakugumi,
   type WakugumiFrameSeriesCode,
 } from './scaffold-rules-wakugumi';
 import { freeScaffoldEndCountForWall, reflexCornerInsetTotalMm } from './scaffold-rules';
@@ -100,8 +101,25 @@ export class ScaffoldCalculatorWakugumiService {
     const summary = this.aggregateComponents(wallResults);
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
-    // PATTANKO (パッタンコ): only at non-L-shaped corners (2 per corner per level). When pattankoCornerCount omitted, do not add.
-    const pattankoCornerCount = input.pattankoCornerCount ?? 0;
+    let reflexReentrantPattankoCorners = 0;
+    if (input.walls.length >= 2) {
+      const n = input.walls.length;
+      const term = cornerTerminalSpanMmWakugumi(input.scaffoldWidthMm);
+      for (let k = 0; k < n; k++) {
+        const prev = (k - 1 + n) % n;
+        if (
+          input.walls[prev]!.endCornerKind === 'reflex' &&
+          input.walls[k]!.startCornerKind === 'reflex'
+        ) {
+          const sp = wallResults[prev]!.spans;
+          const last = sp.length > 0 ? sp[sp.length - 1] : -1;
+          if (last !== term) reflexReentrantPattankoCorners++;
+        }
+      }
+    }
+
+    const pattankoCornerCount =
+      (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners;
     const pattankoQty = pattankoCornerCount * 2 * maxLevels;
     if (pattankoQty > 0) {
       summary.push({

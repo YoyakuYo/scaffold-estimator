@@ -14,6 +14,7 @@ import {
   LevelCalcResult,
   freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
+  cornerTerminalSpanMmKusabi,
 } from './scaffold-rules';
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -241,8 +242,27 @@ export class ScaffoldCalculatorService {
     // Get max levels across all walls for summary
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
-    // PATTANKO (パッタンコ): only at non-L-shaped corners (2 per corner per level). When pattankoCornerCount omitted, do not add.
-    const pattankoCornerCount = input.pattankoCornerCount ?? 0;
+    /** Reflex (re-entrant) joint without a width-module last span → filler planks between bays (Rule 2). */
+    let reflexReentrantPattankoCorners = 0;
+    if (input.walls.length >= 2) {
+      const n = input.walls.length;
+      const term = cornerTerminalSpanMmKusabi(input.scaffoldWidthMm);
+      for (let k = 0; k < n; k++) {
+        const prev = (k - 1 + n) % n;
+        if (
+          input.walls[prev]!.endCornerKind === 'reflex' &&
+          input.walls[k]!.startCornerKind === 'reflex'
+        ) {
+          const sp = wallResults[prev]!.spans;
+          const last = sp.length > 0 ? sp[sp.length - 1] : -1;
+          if (last !== term) reflexReentrantPattankoCorners++;
+        }
+      }
+    }
+
+    // PATTANKO (パッタンコ): DTO count + reflex fallback corners (2 per corner per level).
+    const pattankoCornerCount =
+      (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners;
     const pattankoQty = pattankoCornerCount * 2 * maxLevels;
     if (pattankoQty > 0) {
       summary.push({

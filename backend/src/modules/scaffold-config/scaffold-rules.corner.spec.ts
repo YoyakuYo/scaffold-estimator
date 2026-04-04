@@ -2,8 +2,10 @@ import {
   CORNER_OVERRUN_MM,
   CORNER_SPAN_MM,
   CORNER_START_SPAN_MM,
+  SPAN_SIZES,
   classifyKusabiRectangleEdgeRoles,
   cornerTerminalSpanMmKusabi,
+  exactSumWithStandardSpans,
   fitSpansToWallLengthWithCorner,
   inferReflexVerticesFromOutline,
   scaffoldFacadeBasisMmFromCorners,
@@ -133,16 +135,36 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(sum).toBe(1500 + CORNER_OVERRUN_MM);
   });
 
-  it('reflex end: uses -300 inset and no forced terminal bay', () => {
+  it('reflex end (Rule 1): last span = width-module; total run = wall − 300 (walk joint)', () => {
     const wallMm = 6000;
     const spans = fitSpansToWallLengthWithCorner(wallMm, 600, {
       startCornerKind: 'convex',
       endCornerKind: 'reflex',
     });
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
     const sum = spans.reduce((a, b) => a + b, 0);
-    // Must NOT exceed the closed inner corner line: max run = wall - 300mm
-    expect(sum).toBeLessThanOrEqual(wallMm - CORNER_OVERRUN_MM);
+    expect(sum).toBe(wallMm - CORNER_OVERRUN_MM);
+  });
+
+  it('reflex end (Rule 2): cannot end with width-module exactly → no terminal last span', () => {
+    const wallMm = 5555;
+    const terminal = cornerTerminalSpanMmKusabi(600);
+    const eff = wallMm - CORNER_OVERRUN_MM;
+    const need = eff - CORNER_START_SPAN_MM - terminal;
+    expect(exactSumWithStandardSpans(need, SPAN_SIZES)).toBeNull();
+    const spans = fitSpansToWallLengthWithCorner(wallMm, 600, {
+      startCornerKind: 'convex',
+      endCornerKind: 'reflex',
+    });
+    expect(spans[spans.length - 1]).not.toBe(terminal);
+    const sum = spans.reduce((a, b) => a + b, 0);
+    expect(sum).toBeLessThanOrEqual(eff);
+  });
+
+  it('exactSumWithStandardSpans: decomposes when possible', () => {
+    expect(exactSumWithStandardSpans(3300, SPAN_SIZES)?.reduce((a, b) => a + b, 0)).toBe(3300);
+    expect(exactSumWithStandardSpans(2855, SPAN_SIZES)).toBeNull();
   });
 });
 
@@ -174,14 +196,17 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
     expect(spans[spans.length - 1]).toBe(914);
   });
 
-  it('reflex end: uses -300 inset and no forced terminal bay', () => {
-    const wallMm = 8000;
+  it('reflex end: last span = width-module when exact packing exists', () => {
+    // 6397 − 300 = 6097 = 1829 + 1829 + 610 + 1829 (corner start + 2 middles + terminal)
+    const wallMm = 6397;
+    const terminal = cornerTerminalSpanMmWakugumi(600);
     const spans = fitSpansToWallLengthWithCornerWakugumi(wallMm, 600, {
       startCornerKind: 'convex',
       endCornerKind: 'reflex',
     });
     expect(spans[0]).toBe(WAKUGUMI_CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBeLessThanOrEqual(wallMm - WAKUGUMI_CORNER_OVERRUN_MM);
+    expect(sum).toBe(wallMm - WAKUGUMI_CORNER_OVERRUN_MM);
   });
 });
