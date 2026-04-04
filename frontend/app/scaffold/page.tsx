@@ -58,6 +58,10 @@ import {
 } from '@/lib/scaffold-wall-cf-options';
 import { EDGE_HASHIRA_STATION_SELECT_MAX } from '@/lib/edge-hashira-labels';
 import { footprintVerticesForWallPreview } from '@/lib/footprint-preview';
+import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
+import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
+import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
+import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 
@@ -121,22 +125,6 @@ interface WallState {
   /** Plan run for this edge: axis (X or Y) and signed run in mm (drawing panel). */
   edgePlanAxis?: 'X' | 'Y';
   edgePlanAxisMm?: number;
-}
-
-/** Signed run (mm) on the stronger axis for edge i → i+1 (closed polygon). */
-function inferEdgePlanAxisFromVertices(
-  verts: Array<{ x: number; y: number }>,
-  edgeIndex: number,
-  closed: boolean,
-): { axis: 'X' | 'Y'; mm: number } | null {
-  const n = verts.length;
-  if (n < 2 || edgeIndex < 0 || edgeIndex >= n) return null;
-  const next = closed ? (edgeIndex + 1) % n : edgeIndex + 1;
-  if (next >= n) return null;
-  const dx = Math.round(verts[next].x - verts[edgeIndex].x);
-  const dy = Math.round(verts[next].y - verts[edgeIndex].y);
-  if (Math.abs(dx) >= Math.abs(dy)) return { axis: 'X', mm: dx };
-  return { axis: 'Y', mm: dy };
 }
 
 function calcTotalFromSegments(segments: WallSegment[]): number {
@@ -314,10 +302,14 @@ function BuildingShapeSvg({
   outline,
   wallLengthsMm,
   className,
+  viewZoom = 1,
+  viewPan = { x: 0, y: 0 },
 }: {
   outline: Array<{ xFrac: number; yFrac: number }>;
   wallLengthsMm?: number[];
   className?: string;
+  viewZoom?: number;
+  viewPan?: { x: number; y: number };
 }) {
   if (outline.length < 3) return <div className={className} />;
   const xs = outline.map((p) => p.xFrac);
@@ -338,8 +330,14 @@ function BuildingShapeSvg({
     const my = ny((a.yFrac + b.yFrac) / 2);
     return { mx, my, text: `${(lenMm / 1000).toFixed(3)}m` };
   }) ?? [];
+  const baseVb = { x: -0.1, y: -0.1, w: 1.2, h: 1.2 };
+  const vb = zoomPanViewBox(baseVb, viewZoom, viewPan);
   return (
-    <svg viewBox="-0.1 -0.1 1.2 1.2" preserveAspectRatio="xMidYMid meet" className={className}>
+    <svg
+      viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+      preserveAspectRatio="xMidYMid meet"
+      className={className}
+    >
       <polygon points={points} fill="#e0e7ff" stroke="#6366f1" strokeWidth={0.025} />
       {labels.map((l, i) => (
         <text key={i} x={l.mx} y={l.my} textAnchor="middle" dominantBaseline="middle"
@@ -760,53 +758,9 @@ function remapMassingTiersAfterFootprintEdit(
 function buildClosedFootprintFromQuickShape(
   config: QuickShapeConfig,
 ): { vertices: FootprintPoint[] } {
-  const sides = config.sides;
-  if (sides.length < 3) return { vertices: [] };
-
-  if (config.shapeType === 'rectangle' && sides.length === 4) {
-    const w = sides[0].lengthMm;
-    const d = sides[1].lengthMm;
-    const vertices: FootprintPoint[] = [
-      { xFrac: 0, yFrac: 0 },
-      { xFrac: w, yFrac: 0 },
-      { xFrac: w, yFrac: d },
-      { xFrac: 0, yFrac: d },
-    ];
-    return { vertices };
-  }
-
-  if (config.shapeType === 'l-shape' && sides.length === 6) {
-    // Rectilinear L: A→B (E), B→C (N), C→D (E), D→E (S), E→F (W), F→A (N). All in mm.
-    const [ab, bc, cd, de, ef] = sides.map((s) => s.lengthMm);
-    const vertices: FootprintPoint[] = [
-      { xFrac: 0, yFrac: 0 },
-      { xFrac: ab, yFrac: 0 },
-      { xFrac: ab, yFrac: bc },
-      { xFrac: ab + cd, yFrac: bc },
-      { xFrac: ab + cd, yFrac: bc - de },
-      { xFrac: ab + cd - ef, yFrac: bc - de },
-    ];
-    // Closure: last edge is vertex[5] → vertex[0]. Length is derived when building walls.
-    return { vertices };
-  }
-
-  // Custom (or any other) polygon: build chain with equal exterior angles for first n-1 segments,
-  // then close with last edge (n-1)→0 so the footprint is guaranteed closed.
-  const n = sides.length;
-  const extAngle = (2 * Math.PI) / n;
-  let angle = 0;
-  let cx = 0;
-  let cy = 0;
-  const vertices: FootprintPoint[] = [{ xFrac: 0, yFrac: 0 }];
-  for (let i = 0; i < n - 1; i++) {
-    const len = sides[i].lengthMm;
-    cx += len * Math.cos(angle);
-    cy += len * Math.sin(angle);
-    angle += extAngle;
-    vertices.push({ xFrac: cx, yFrac: cy });
-  }
-  // Last edge is (n-1) → 0; we do not add a duplicate first point. Closure is explicit when deriving walls.
-  return { vertices };
+  const pts = buildQuickShapeFootprintMm(config.shapeType, config.sides);
+  if (pts.length < 3) return { vertices: [] };
+  return { vertices: pts.map((p) => ({ xFrac: p.x, yFrac: p.y })) };
 }
 
 /**
@@ -889,6 +843,8 @@ function ScaffoldPageContent() {
   /** Snapshot of AI-extracted footprint for compare / reset (mm polygon, same as buildingOutline). */
   const [aiBimExtractOutline, setAiBimExtractOutline] = useState<FootprintPoint[] | null>(null);
   const [aiBimCompareExtract, setAiBimCompareExtract] = useState(false);
+  const [aiFootprintPreviewZoom, setAiFootprintPreviewZoom] = useState(1);
+  const [aiFootprintPreviewPan, setAiFootprintPreviewPan] = useState({ x: 0, y: 0 });
   const scaffoldManagerRef = useRef<ScaffoldManager | null>(null);
   if (!scaffoldManagerRef.current) scaffoldManagerRef.current = new ScaffoldManager();
 
@@ -1099,6 +1055,20 @@ function ScaffoldPageContent() {
       return next;
     });
   }, [aiBimPreview]);
+
+  const aiFootprintKey = useMemo(
+    () =>
+      aiBimPreview?.buildingOutline
+        ? aiBimPreview.buildingOutline.map((p) => `${p.xFrac},${p.yFrac}`).join('|')
+        : '',
+    [aiBimPreview?.buildingOutline],
+  );
+
+  useEffect(() => {
+    if (!aiFootprintKey) return;
+    setAiFootprintPreviewZoom(1);
+    setAiFootprintPreviewPan({ x: 0, y: 0 });
+  }, [aiFootprintKey]);
 
   useEffect(() => {
     if (walls.length === 0) wizardDraftRestoredRef.current = false;
@@ -1742,24 +1712,30 @@ function ScaffoldPageContent() {
          ═══════════════════════════════════════════════════════ */}
       {inputMode === 'ai_extract' && !editConfigId && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <ScanLine className="h-5 w-5 text-violet-600" />
-              {t('scaffold', 'aiExtractModeTitle')}
-            </h2>
-            <p className="text-sm text-gray-600 mb-6">
-              {aiBimPreview
-                ? t('scaffold', 'aiBimModeReady')
-                : t('scaffold', 'aiExtractModeDescription')}
-            </p>
-            {!aiBimPreview && (
-              <p className="text-xs text-violet-700/90 -mt-4 mb-6">
-                {t('scaffold', 'aiExtractColorSamplingHint')}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-800 mb-1 flex items-center gap-2">
+                <ScanLine className="h-5 w-5 text-violet-600" />
+                {t('scaffold', 'aiExtractModeTitle')}
+              </h2>
+              <p className="text-sm text-gray-600">
+                {aiBimPreview
+                  ? t('scaffold', 'aiBimModeReady')
+                  : t('scaffold', 'aiExtractModeDescription')}
               </p>
-            )}
-            {!aiBimPreview && (
-            <>
-            <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors">
+            </div>
+
+            {!aiBimPreview ? (
+              <div className="flex flex-col lg:flex-row" style={{ minHeight: 520 }}>
+                <div className="flex-1 relative bg-gray-100 flex flex-col items-center justify-center p-8 min-h-[400px] text-center">
+                  <Building2 className="h-14 w-14 text-gray-400 mb-3 mx-auto" />
+                  <p className="text-sm text-gray-500 max-w-sm">
+                    {t('scaffold', 'aiExtractModeDescription')}
+                  </p>
+                </div>
+                <div className="w-full lg:w-96 flex flex-col border-t lg:border-t-0 lg:border-l border-gray-200 p-4 gap-3 shrink-0 bg-white">
+                  <p className="text-xs text-violet-700/90">{t('scaffold', 'aiExtractColorSamplingHint')}</p>
+            <label className="flex flex-col items-center justify-center w-full min-h-[200px] border-2 border-dashed border-violet-300 rounded-xl cursor-pointer bg-violet-50/50 hover:bg-violet-50 transition-colors px-4 py-8">
               <Upload className="h-10 w-10 text-violet-500 mb-2" />
               <span className="text-sm font-medium text-violet-700 mb-1">{t('scaffold', 'aiBimUploadCta')}</span>
               <span className="text-xs text-gray-500">
@@ -1926,38 +1902,55 @@ function ScaffoldPageContent() {
               />
             </label>
             {aiBimUploading && (
-              <div className="mt-4 flex items-center gap-2 text-violet-600">
+              <div className="mt-2 flex items-center gap-2 text-violet-600 text-sm">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span>{t('scaffold', 'aiBimAnalyzing')}</span>
               </div>
             )}
             {aiBimError && (
-              <div className="mt-4 flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div className="mt-2 flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
                 {aiBimError}
               </div>
             )}
-            </>
-            )}
-
-            {aiBimPreview && (
-              <div className="flex flex-col lg:flex-row gap-4">
-                {/* ── LEFT PANEL: 2D Plan Preview + Shape SVG ── */}
-                <div className="w-full lg:w-[480px] lg:min-w-[420px] lg:flex-shrink-0 space-y-3">
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col lg:flex-row" style={{ minHeight: 520 }}>
+                <div className="flex-1 relative bg-gray-100 p-4 flex flex-col gap-3 min-h-[400px]">
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg shrink-0">
                     <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                       <Check className="h-4 w-4" />
                       {t('scaffoldExtra', 'extractionComplete')}
                     </p>
                   </div>
-                  <div className="bg-white rounded-lg border border-gray-200 p-2">
+                  <div
+                    className="relative flex-1 min-h-[280px] rounded-lg border border-gray-200 bg-white overflow-hidden"
+                    onWheel={(e) => {
+                      e.preventDefault();
+                      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+                      setAiFootprintPreviewZoom((z) => Math.min(8, Math.max(0.25, z * factor)));
+                    }}
+                  >
+                    <div className="absolute top-2 right-2 z-10">
+                      <PreviewZoomToolbar
+                        onZoomIn={() => setAiFootprintPreviewZoom((z) => Math.min(8, z * 1.15))}
+                        onZoomOut={() => setAiFootprintPreviewZoom((z) => Math.max(0.25, z / 1.15))}
+                        onReset={() => {
+                          setAiFootprintPreviewZoom(1);
+                          setAiFootprintPreviewPan({ x: 0, y: 0 });
+                        }}
+                      />
+                    </div>
                     <BuildingShapeSvg
                       outline={aiBimPreview.buildingOutline}
                       wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                      className="w-full h-64"
+                      viewZoom={aiFootprintPreviewZoom}
+                      viewPan={aiFootprintPreviewPan}
+                      className="w-full h-full min-h-[260px]"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -1973,8 +1966,7 @@ function ScaffoldPageContent() {
                     </button>
                   </div>
                 </div>
-                {/* ── RIGHT PANEL: Review, Wall Table, 3D, Settings ── */}
-                <div className="flex-1 min-w-0 border border-gray-200 rounded-xl p-5 bg-gray-50/50 space-y-4">
+                <div className="flex-1 min-w-0 border-t lg:border-t-0 lg:border-l border-gray-200 p-5 bg-gray-50/50 space-y-4 overflow-y-auto max-h-[85vh]">
                   <h3 className="text-sm font-semibold text-gray-800">{t('scaffold', 'aiBimReviewTitle')}</h3>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -2589,91 +2581,58 @@ function ScaffoldPageContent() {
          ═══════════════════════════════════════════════════════ */}
       {inputMode === 'cad_draw' && !editConfigId && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <PenTool className="h-5 w-5 text-emerald-600" />
-              {t('scaffoldExtra', 'cadDrawTitle')}
-            </h2>
-            <p className="text-sm text-gray-600 mb-4">
-              {t('scaffoldExtra', 'cadDrawDescription')}
-            </p>
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 items-start">
-              <CadDrawingCanvas
-                buildingHeightMm={buildingHeightMm ?? 3000}
-                onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
-                onLiveFootprintMmChange={handleCadLiveFootprintMmChange}
-                onComplete={(result) => {
-                  setCadLiveFootprintMm(null);
-                  setCadLiveFootprintClosed(false);
-                  const verts = result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac }));
-                  const nW = result.walls.length;
-                  const closed = verts.length >= 3 && verts.length === nW;
-                  const mapped: WallState[] = result.walls.map((w, i) => {
-                    const inf =
-                      verts.length >= 3 && verts.length === nW
-                        ? inferEdgePlanAxisFromVertices(verts, i, closed)
-                        : null;
-                    return {
-                      side: w.side,
-                      enabled: true,
-                      lengthMm: w.wallLengthMm,
-                      heightMm: w.wallHeightMm,
-                      stairAccessCount: w.stairAccessCount,
-                      kaidanCount: 0,
-                      kaidanOffsets: [],
-                      isMultiSegment: false,
-                      segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
-                      cfNote: 'reflex',
-                      edgePlanAxis: inf?.axis ?? 'X',
-                      edgePlanAxisMm: inf?.mm ?? w.wallLengthMm,
-                    };
-                  });
-                  setWalls(mapped);
-                  setHashiraRows((prev) => formRowsFromWallCount(prev, mapped.length));
-                  setBuildingHeightMm(result.buildingHeightMm);
-                  setPolygonVertices(verts);
-                  setPrefilled(true);
-                  setInputMode('drawing');
-                  setPendingInputUiPath('cad_draw');
-                }}
-                className="w-full min-w-0"
-              />
-              <div className="xl:sticky xl:top-4 rounded-xl border border-gray-200 bg-slate-50/80 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-semibold text-gray-800">
-                    {t('scaffold', 'aiBimPreview2d')}
-                  </div>
-                  {cadLiveFootprintClosed && (cadLiveFootprintMm?.length ?? 0) >= 3 ? (
-                    <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-1.5 py-0.5">
-                      {t('scaffoldExtra', 'cadPreviewClosedBadge') || 'Closed'}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="text-xs text-gray-500 mb-3">
-                  {t('scaffoldExtra', 'cadPreviewBlurb')}
-                </p>
-                {cadLiveFootprintMm && cadLiveFootprintMm.length >= 2 ? (() => {
-                  const n = cadLiveFootprintMm.length;
-                  const closedCad = cadLiveFootprintClosed && n >= 3;
-                  const edgeCount = closedCad ? n : n - 1;
-                  const labels = Array.from({ length: edgeCount }, (_, i) =>
-                    edgeChordName(i, edgeCount, closedCad),
-                  );
-                  return (
-                    <FootprintMiniPreview
-                      vertices={cadLiveFootprintMm}
-                      labels={labels}
-                      activeIndex={null}
-                      closed={closedCad}
-                    />
-                  );
-                })() : (
-                  <div className="text-xs text-gray-500 rounded-lg border border-dashed border-gray-300 p-4 bg-white">
-                    {t('scaffoldExtra', 'cadPreviewEmpty')}
-                  </div>
-                )}
-              </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-800 mb-1 flex items-center gap-2">
+                <PenTool className="h-5 w-5 text-emerald-600" />
+                {t('scaffoldExtra', 'cadDrawTitle')}
+              </h2>
+              <p className="text-sm text-gray-600">{t('scaffoldExtra', 'cadDrawDescription')}</p>
             </div>
+            <CadDrawingCanvas
+              buildingHeightMm={buildingHeightMm ?? 3000}
+              onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
+              onLiveFootprintMmChange={handleCadLiveFootprintMmChange}
+              onComplete={(result) => {
+                setCadLiveFootprintMm(null);
+                setCadLiveFootprintClosed(false);
+                const verts = result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac }));
+                const nW = result.walls.length;
+                const closed = verts.length >= 3 && verts.length === nW;
+                const mapped: WallState[] = result.walls.map((w, i) => {
+                  const inf =
+                    verts.length >= 3 && verts.length === nW
+                      ? inferEdgePlanAxisFromVertices(verts, i, closed)
+                      : null;
+                  return {
+                    side: w.side,
+                    enabled: true,
+                    lengthMm: w.wallLengthMm,
+                    heightMm: w.wallHeightMm,
+                    stairAccessCount: w.stairAccessCount,
+                    kaidanCount: 0,
+                    kaidanOffsets: [],
+                    isMultiSegment: false,
+                    segments: [{ lengthMm: w.wallLengthMm, offsetMm: 0 }],
+                    cfNote: normalizeScaffoldWallCfKey(w.cfNote ?? 'reflex'),
+                    edgePlanAxis: w.edgePlanAxis ?? inf?.axis ?? 'X',
+                    edgePlanAxisMm: w.edgePlanAxisMm ?? inf?.mm ?? w.wallLengthMm,
+                  };
+                });
+                setWalls(mapped);
+                setHashiraRows((prev) =>
+                  result.edgeHashiraRows && result.edgeHashiraRows.length === mapped.length
+                    ? result.edgeHashiraRows
+                    : formRowsFromWallCount(prev, mapped.length),
+                );
+                setBuildingHeightMm(result.buildingHeightMm);
+                setPolygonVertices(verts);
+                setPrefilled(true);
+                setInputMode('drawing');
+                setPendingInputUiPath('cad_draw');
+              }}
+              className="w-full min-w-0"
+            />
           </div>
         </div>
       )}

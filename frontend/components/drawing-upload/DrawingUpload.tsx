@@ -30,6 +30,8 @@ import {
   saveDrawingUploadSession,
   clearDrawingUploadSession,
 } from '@/lib/drawing-upload-persist';
+import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
+import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 
 const SCAFFOLD_WALL_CF_LABEL_KEYS = {
   reflex: 'wallCfReflex',
@@ -240,6 +242,14 @@ export function DrawingUpload({
 
   const [tracing, setTracing] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
+  const previewPanRef = useRef(previewPan);
+  previewPanRef.current = previewPan;
+  const [svgRightPan, setSvgRightPan] = useState<{
+    startWorld: Vertex;
+    pan0: { x: number; y: number };
+  } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -668,7 +678,17 @@ export function DrawingUpload({
     return bbox(shape.verts, bgSegs.length > 0 ? bgSegs : undefined);
   }, [shape.verts, bgSegs, previewUrl, imgSize]);
 
-  const scale = vb.w / 500;
+  useEffect(() => {
+    setPreviewZoom(1);
+    setPreviewPan({ x: 0, y: 0 });
+  }, [vb.x, vb.y, vb.w, vb.h]);
+
+  const displayVb = useMemo(
+    () => zoomPanViewBox(vb, previewZoom, previewPan),
+    [vb, previewZoom, previewPan],
+  );
+
+  const scale = displayVb.w / 500;
   const vtxR = Math.max(4, scale * 4);
   const fs = Math.max(10, scale * 10);
   const sw = Math.max(1, scale * 1.5);
@@ -683,13 +703,40 @@ export function DrawingUpload({
     setDragIdx(i);
   }, []);
 
-  const onSvgMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (dragIdx === null || !svgRef.current) return;
-    const c = svgPt(e, svgRef.current);
-    if (c) moveVertex(dragIdx, c);
-  }, [dragIdx, moveVertex]);
+  const onSvgWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    setPreviewZoom((z) => Math.min(8, Math.max(0.25, z * factor)));
+  }, []);
 
-  const onSvgUp = useCallback(() => { setDragIdx(null); }, []);
+  const onSvgDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button !== 2) return;
+    e.preventDefault();
+    if (!svgRef.current) return;
+    const c = svgPt(e, svgRef.current);
+    if (!c) return;
+    setSvgRightPan({ startWorld: c, pan0: { ...previewPanRef.current } });
+  }, [tracing]);
+
+  const onSvgMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (dragIdx !== null && svgRef.current) {
+      const c = svgPt(e, svgRef.current);
+      if (c) moveVertex(dragIdx, c);
+      return;
+    }
+    if (svgRightPan !== null && svgRef.current) {
+      const c = svgPt(e, svgRef.current);
+      if (!c) return;
+      const dwx = c.x - svgRightPan.startWorld.x;
+      const dwy = c.y - svgRightPan.startWorld.y;
+      setPreviewPan({ x: svgRightPan.pan0.x - dwx, y: svgRightPan.pan0.y - dwy });
+    }
+  }, [dragIdx, svgRightPan, moveVertex]);
+
+  const onSvgUp = useCallback(() => {
+    setDragIdx(null);
+    setSvgRightPan(null);
+  }, []);
 
   // ── SVG interaction: trace click ──
   const onSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
@@ -820,16 +867,40 @@ export function DrawingUpload({
           )}
 
           {(hasSvg || (previewUrl && imgSize)) && (
+            <div className="absolute top-2 right-2 z-10">
+              <PreviewZoomToolbar
+                onZoomIn={() => setPreviewZoom((z) => Math.min(8, z * 1.15))}
+                onZoomOut={() => setPreviewZoom((z) => Math.max(0.25, z / 1.15))}
+                onReset={() => {
+                  setPreviewZoom(1);
+                  setPreviewPan({ x: 0, y: 0 });
+                }}
+              />
+            </div>
+          )}
+
+          {(hasSvg || (previewUrl && imgSize)) && (
             <svg
               ref={svgRef}
               className="absolute inset-0 w-full h-full"
-              viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+              viewBox={`${displayVb.x} ${displayVb.y} ${displayVb.w} ${displayVb.h}`}
               preserveAspectRatio="xMidYMid meet"
+              onMouseDown={onSvgDown}
               onMouseMove={onSvgMove}
               onMouseUp={onSvgUp}
               onMouseLeave={onSvgUp}
               onClick={onSvgClick}
-              style={{ cursor: tracing ? 'crosshair' : dragIdx !== null ? 'grabbing' : 'default' }}
+              onWheel={onSvgWheel}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{
+                cursor: svgRightPan
+                  ? 'grabbing'
+                  : tracing
+                    ? 'crosshair'
+                    : dragIdx !== null
+                      ? 'grabbing'
+                      : 'default',
+              }}
             >
               {previewUrl && imgSize && (
                 <image href={previewUrl} x={0} y={0} width={imgSize.w} height={imgSize.h} />

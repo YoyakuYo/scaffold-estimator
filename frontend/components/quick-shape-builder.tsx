@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
+import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
+import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 import {
   Square,
   CornerDownRight,
@@ -26,6 +29,48 @@ interface SideDefinition {
 interface KaidanConfig {
   enabled: boolean;
   count: number;
+}
+
+function QuickShapeFootprintSvg({
+  vertsMm,
+  className = '',
+  viewZoom = 1,
+  viewPan = { x: 0, y: 0 },
+}: {
+  vertsMm: Array<{ x: number; y: number }>;
+  className?: string;
+  viewZoom?: number;
+  viewPan?: { x: number; y: number };
+}) {
+  if (vertsMm.length < 3) {
+    return (
+      <div className={`flex items-center justify-center text-gray-400 text-sm p-8 ${className}`}>
+        —
+      </div>
+    );
+  }
+  const xs = vertsMm.map((p) => p.x);
+  const ys = vertsMm.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const w = Math.max(maxX - minX, 1e-6);
+  const h = Math.max(maxY - minY, 1e-6);
+  const nx = (x: number) => (x - minX) / w;
+  const ny = (y: number) => (y - minY) / h;
+  const points = vertsMm.map((p) => `${nx(p.x)},${ny(p.y)}`).join(' ');
+  const baseVb = { x: -0.1, y: -0.1, w: 1.2, h: 1.2 };
+  const vb = zoomPanViewBox(baseVb, viewZoom, viewPan);
+  return (
+    <svg
+      viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+      preserveAspectRatio="xMidYMid meet"
+      className={className}
+    >
+      <polygon points={points} fill="#dbeafe" stroke="#2563eb" strokeWidth={0.025} strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 export interface QuickShapeConfig {
@@ -181,13 +226,68 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
   const sectionTitleClass =
     'flex items-center gap-2 text-base font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4';
 
+  const previewFootprintMm = useMemo(() => {
+    const sides = getSides();
+    return buildQuickShapeFootprintMm(shapeType, sides);
+  }, [getSides, shapeType, rectNorth, rectEast, rectSouth, rectWest, lSegments, customSegments]);
+
+  const previewFootprintKey = useMemo(
+    () =>
+      previewFootprintMm.length >= 3
+        ? previewFootprintMm.map((p) => `${p.x},${p.y}`).join('|')
+        : '',
+    [previewFootprintMm],
+  );
+
+  const [qbPreviewZoom, setQbPreviewZoom] = useState(1);
+  const [qbPreviewPan, setQbPreviewPan] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!previewFootprintKey) return;
+    setQbPreviewZoom(1);
+    setQbPreviewPan({ x: 0, y: 0 });
+  }, [previewFootprintKey]);
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="bg-slate-50 border-b border-gray-200 px-6 py-4">
         <p className="text-sm text-gray-600 leading-relaxed max-w-3xl">{t('quickBuilder', 'singlePageBlurb')}</p>
       </div>
 
-      <div className="p-6 space-y-10">
+      <div className="flex flex-col lg:flex-row" style={{ minHeight: 520 }}>
+        <div className="flex-1 relative bg-gray-100 min-h-[400px] flex flex-col p-4">
+          <div className="absolute top-4 right-4 z-10">
+            <PreviewZoomToolbar
+              onZoomIn={() => setQbPreviewZoom((z) => Math.min(8, z * 1.15))}
+              onZoomOut={() => setQbPreviewZoom((z) => Math.max(0.25, z / 1.15))}
+              onReset={() => {
+                setQbPreviewZoom(1);
+                setQbPreviewPan({ x: 0, y: 0 });
+              }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mb-2 shrink-0 pr-20">
+            {t('scaffoldExtra', 'wallConfigPreviewHint') || 'Footprint from current side lengths (mm).'}
+          </p>
+          <div
+            className="flex-1 min-h-[280px] rounded-lg border border-gray-200 bg-white overflow-hidden"
+            onWheel={(e) => {
+              e.preventDefault();
+              const factor = e.deltaY > 0 ? 0.9 : 1.1;
+              setQbPreviewZoom((z) => Math.min(8, Math.max(0.25, z * factor)));
+            }}
+          >
+            <QuickShapeFootprintSvg
+              vertsMm={previewFootprintMm}
+              viewZoom={qbPreviewZoom}
+              viewPan={qbPreviewPan}
+              className="w-full h-full min-h-[260px]"
+            />
+          </div>
+        </div>
+
+        <div className="w-full lg:min-w-[320px] lg:max-w-xl lg:flex-1 border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto max-h-[88vh]">
+          <div className="p-6 space-y-10">
         {/* Shape + dimensions */}
         <section aria-labelledby="qb-section-shape">
           <h3 id="qb-section-shape" className={sectionTitleClass}>
@@ -584,6 +684,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating }: Props) {
               </button>
             </div>
         </section>
+          </div>
+        </div>
       </div>
     </div>
   );

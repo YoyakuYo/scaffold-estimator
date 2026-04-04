@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
 import { useI18n } from '@/lib/i18n';
+import { type TranslationKeys } from '@/lib/i18n/translations';
 import {
   MousePointer2,
   PenTool,
@@ -12,10 +13,22 @@ import {
   Grid3X3,
   Ruler,
   RotateCcw,
-  ZoomIn,
-  ZoomOut,
   Move,
+  Building2,
 } from 'lucide-react';
+import {
+  SCAFFOLD_WALL_CF_KEYS,
+  normalizeScaffoldWallCfKey,
+  type ScaffoldWallCfKey,
+} from '@/lib/scaffold-wall-cf-options';
+import {
+  EDGE_HASHIRA_STATION_SELECT_MAX,
+  formRowsFromWallCount,
+  type EdgeHashiraFormRow,
+} from '@/lib/edge-hashira-labels';
+import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
+import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
+import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -32,9 +45,34 @@ export interface CadWall {
 
 export interface CadDrawingResult {
   vertices: Array<{ xFrac: number; yFrac: number }>;
-  walls: Array<{ side: string; wallLengthMm: number; wallHeightMm: number; stairAccessCount: number }>;
+  walls: Array<{
+    side: string;
+    wallLengthMm: number;
+    wallHeightMm: number;
+    stairAccessCount: number;
+    cfNote?: string;
+    edgePlanAxis?: 'X' | 'Y';
+    edgePlanAxisMm?: number;
+  }>;
   buildingHeightMm: number;
   closed: boolean;
+  edgeHashiraRows?: EdgeHashiraFormRow[];
+}
+
+const SCAFFOLD_WALL_CF_LABEL_KEYS = {
+  reflex: 'wallCfReflex',
+  c: 'wallCfC',
+} as const satisfies Record<ScaffoldWallCfKey, keyof TranslationKeys['scaffoldExtra']>;
+
+const HASHIRA_STATION_OPTIONS = Array.from(
+  { length: EDGE_HASHIRA_STATION_SELECT_MAX },
+  (_, i) => i + 1,
+);
+
+function parseMetersInputToMm(s: string): number | null {
+  const v = parseFloat(String(s).trim().replace(',', '.'));
+  if (!Number.isFinite(v) || v <= 0) return null;
+  return Math.round(v * 1000);
 }
 
 type Tool = 'select' | 'polyline' | 'rectangle' | 'pan';
@@ -68,6 +106,7 @@ export function CadDrawingCanvas({
   className = '',
 }: Props) {
   const { t } = useI18n();
+  const mUnit = t('common', 'metersShort') || 'm';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<Tool>('polyline');
@@ -80,12 +119,24 @@ export function CadDrawingCanvas({
   const [pan, setPan] = useState<CadPoint>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<CadPoint | null>(null);
+  const spaceDownRef = useRef(false);
+  const [canvasSize, setCanvasSize] = useState({ w: 900, h: 600 });
+  const [wallHeightsMmLocal, setWallHeightsMmLocal] = useState<number[]>([]);
+  const [wallCfLocal, setWallCfLocal] = useState<ScaffoldWallCfKey[]>([]);
+  const [edgePlanAxesLocal, setEdgePlanAxesLocal] = useState<Array<'X' | 'Y'>>([]);
+  const [edgePlanAxisMmLocal, setEdgePlanAxisMmLocal] = useState<number[]>([]);
+  const [hashiraRowsLocal, setHashiraRowsLocal] = useState<EdgeHashiraFormRow[]>([]);
 
   // Calibration state
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<CadPoint[]>([]);
   const [calibrationMm, setCalibrationMm] = useState<number | null>(null);
   const [mmPerPixel, setMmPerPixel] = useState(100); // default: 100mm per grid unit
+
+  const pointsRef = useRef(points);
+  const mmPerPixelRef = useRef(mmPerPixel);
+  pointsRef.current = points;
+  mmPerPixelRef.current = mmPerPixel;
 
   // Dimension editing
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
@@ -97,8 +148,96 @@ export function CadDrawingCanvas({
     vertexCoordDraftsRef.current = vertexCoordDrafts;
   }, [vertexCoordDrafts]);
 
-  const canvasWidth = 900;
-  const canvasHeight = 600;
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const cw = Math.max(320, Math.min(920, el.clientWidth - 8));
+      const ch = Math.round(cw * (600 / 900));
+      setCanvasSize((prev) => (prev.w === cw && prev.h === ch ? prev : { w: cw, h: ch }));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && e.target === document.body) e.preventDefault();
+      if (e.code === 'Space') spaceDownRef.current = true;
+    };
+    const ku = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceDownRef.current = false;
+    };
+    window.addEventListener('keydown', kd);
+    window.addEventListener('keyup', ku);
+    return () => {
+      window.removeEventListener('keydown', kd);
+      window.removeEventListener('keyup', ku);
+    };
+  }, []);
+
+  const canvasWidth = canvasSize.w;
+  const canvasHeight = canvasSize.h;
+
+  const edgeCountForDims = useMemo(() => {
+    if (points.length < 2) return 0;
+    return isClosed ? points.length : points.length - 1;
+  }, [points.length, isClosed]);
+
+  const vertsMm = useMemo(
+    () =>
+      points.map((p) => ({
+        x: Math.round(p.x * mmPerPixel),
+        y: Math.round(p.y * mmPerPixel),
+      })),
+    [points, mmPerPixel],
+  );
+
+  useEffect(() => {
+    const n = edgeCountForDims;
+    setWallHeightsMmLocal((prev) => {
+      const next = prev.slice(0, n);
+      while (next.length < n) next.push(buildingHeightMm);
+      return next;
+    });
+    setWallCfLocal((prev) => {
+      const next = prev.slice(0, n).map((v) => normalizeScaffoldWallCfKey(v));
+      while (next.length < n) next.push('reflex');
+      return next;
+    });
+    setHashiraRowsLocal((prev) => formRowsFromWallCount(prev, n));
+  }, [edgeCountForDims, buildingHeightMm]);
+
+  useEffect(() => {
+    const n = edgeCountForDims;
+    if (n === 0) {
+      setEdgePlanAxesLocal([]);
+      setEdgePlanAxisMmLocal([]);
+      return;
+    }
+    const vm = pointsRef.current.map((p) => ({
+      x: Math.round(p.x * mmPerPixelRef.current),
+      y: Math.round(p.y * mmPerPixelRef.current),
+    }));
+    setEdgePlanAxesLocal((prev) => {
+      const next = prev.slice(0, n);
+      while (next.length < n) {
+        const i = next.length;
+        const inf = inferEdgePlanAxisFromVertices(vm, i, isClosed);
+        next.push(inf?.axis ?? 'X');
+      }
+      return next;
+    });
+    setEdgePlanAxisMmLocal((prev) => {
+      const next = prev.slice(0, n);
+      while (next.length < n) {
+        const i = next.length;
+        const inf = inferEdgePlanAxisFromVertices(vm, i, isClosed);
+        next.push(inf?.mm ?? 0);
+      }
+      return next;
+    });
+  }, [edgeCountForDims, isClosed]);
 
   const snapPoint = useCallback(
     (p: CadPoint): CadPoint => {
@@ -365,6 +504,7 @@ export function CadDrawingCanvas({
 
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (spaceDownRef.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -451,7 +591,10 @@ export function CadDrawingCanvas({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (tool === 'pan' || e.button === 1) {
+      const panActive =
+        tool === 'pan' || e.button === 1 || e.button === 2 || (e.button === 0 && spaceDownRef.current);
+      if (panActive) {
+        if (e.button === 2) e.preventDefault();
         const canvas = canvasRef.current;
         if (!canvas) return;
         const rect = canvas.getBoundingClientRect();
@@ -605,8 +748,11 @@ export function CadDrawingCanvas({
       return {
         side: `edge-${i}`,
         wallLengthMm: Math.max(600, len),
-        wallHeightMm: buildingHeightMm,
+        wallHeightMm: wallHeightsMmLocal[i] ?? buildingHeightMm,
         stairAccessCount: 0,
+        cfNote: wallCfLocal[i] ?? 'reflex',
+        edgePlanAxis: edgePlanAxesLocal[i],
+        edgePlanAxisMm: edgePlanAxisMmLocal[i],
       };
     });
 
@@ -615,8 +761,28 @@ export function CadDrawingCanvas({
       yFrac: Math.round(p.y * mmPerPixel),
     }));
 
-    onComplete({ vertices, walls, buildingHeightMm, closed: true });
-  }, [points, isClosed, buildingHeightMm, mmPerPixel, edgeLengthMm, onComplete, mergePointsWithCoordDrafts]);
+    onComplete({
+      vertices,
+      walls,
+      buildingHeightMm,
+      closed: true,
+      edgeHashiraRows:
+        hashiraRowsLocal.length === walls.length ? hashiraRowsLocal : undefined,
+    });
+  }, [
+    points,
+    isClosed,
+    buildingHeightMm,
+    mmPerPixel,
+    edgeLengthMm,
+    onComplete,
+    mergePointsWithCoordDrafts,
+    wallHeightsMmLocal,
+    wallCfLocal,
+    edgePlanAxesLocal,
+    edgePlanAxisMmLocal,
+    hashiraRowsLocal,
+  ]);
 
   const edgeList = useMemo(() => {
     if (points.length < 2) return [];
@@ -663,87 +829,15 @@ export function CadDrawingCanvas({
     }
   }, [points, mmPerPixel, isClosed, mergePointsWithCoordDrafts, onLiveFootprintMmChange]);
 
+  const cadPerimeterMm = useMemo(
+    () => edgeList.reduce((s, e) => s + e.lengthMm, 0),
+    [edgeList],
+  );
+
   return (
-    <div className={`flex flex-col gap-3 ${className}`}>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 bg-gray-800 rounded-lg p-2">
-        <div className="flex gap-1 border-r border-gray-600 pr-2">
-          {([
-            { id: 'select' as Tool, icon: MousePointer2, labelKey: 'cadToolSelect' as const },
-            { id: 'polyline' as Tool, icon: PenTool, labelKey: 'cadToolPolyline' as const },
-            { id: 'rectangle' as Tool, icon: Square, labelKey: 'cadToolRectangle' as const },
-            { id: 'pan' as Tool, icon: Move, labelKey: 'cadToolPan' as const },
-          ]).map((tb) => (
-            <button
-              key={tb.id}
-              onClick={() => setTool(tb.id)}
-              className={`p-2 rounded ${tool === tb.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-              title={t('viewer', tb.labelKey)}
-            >
-              <tb.icon className="h-4 w-4" />
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-1 border-r border-gray-600 pr-2">
-          <button onClick={handleUndo} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'undo')}>
-            <Undo2 className="h-4 w-4" />
-          </button>
-          <button onClick={handleClear} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'clear')}>
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button onClick={() => setZoom((z) => Math.min(5, z * 1.2))} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'zoomIn')}>
-            <ZoomIn className="h-4 w-4" />
-          </button>
-          <button onClick={() => setZoom((z) => Math.max(0.2, z * 0.8))} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'zoomOut')}>
-            <ZoomOut className="h-4 w-4" />
-          </button>
-          <button onClick={() => { setZoom(1); setPan({ x: 100, y: 100 }); }} className="p-2 rounded text-gray-300 hover:bg-gray-700" title={t('viewer', 'cadReset')}>
-            <RotateCcw className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex gap-1 border-r border-gray-600 pr-2">
-          <button
-            onClick={() => setShowGrid(!showGrid)}
-            className={`p-2 rounded ${showGrid ? 'bg-gray-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-            title={t('viewer', 'cadGrid')}
-          >
-            <Grid3X3 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setSnapToGrid(!snapToGrid)}
-            className={`px-2 py-1 rounded text-xs font-mono ${snapToGrid ? 'bg-green-700 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
-            title={t('viewer', 'cadSnap')}
-          >
-            SNAP
-          </button>
-        </div>
-
-        <button
-          onClick={handleCalibrate}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium ${
-            calibrationMode ? 'bg-red-600 text-white' : 'text-gray-300 hover:bg-gray-700 border border-gray-600'
-          }`}
-        >
-          <Ruler className="h-3.5 w-3.5" />
-          {t('viewer', 'cadReferenceDim')}
-        </button>
-
-        {isClosed && (
-          <button
-            onClick={handleComplete}
-            className="ml-auto flex items-center gap-1 px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700"
-          >
-            <Check className="h-4 w-4" />
-            {t('viewer', 'cadConfirmDrawing')}
-          </button>
-        )}
-      </div>
-
-      {/* Calibration dialog */}
+    <div className={`flex flex-col ${className}`}>
       {calibrationMode && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3 mb-3">
           <Ruler className="h-5 w-5 text-amber-600 flex-shrink-0" />
           {calibrationPoints.length < 2 ? (
             <span className="text-sm text-amber-800">
@@ -779,181 +873,418 @@ export function CadDrawingCanvas({
         </div>
       )}
 
-      <div className="flex gap-3">
-        {/* Canvas */}
-        <div ref={containerRef} className="flex-1">
-          <canvas
-            ref={canvasRef}
-            width={canvasWidth}
-            height={canvasHeight}
-            onClick={handleCanvasClick}
-            onMouseMove={handleMouseMove}
-            onMouseDown={handleMouseDown}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onWheel={handleWheel}
-            className="rounded-lg border border-gray-700 cursor-crosshair w-full"
-            style={{ aspectRatio: `${canvasWidth}/${canvasHeight}` }}
-          />
-          <div className="flex items-center justify-between mt-1 text-xs text-gray-500 px-1">
-            <span>
-              {tool === 'polyline' && !isClosed
-                ? points.length === 0
-                  ? t('viewer', 'cadHintPolylineFirst')
-                  : points.length >= 3
-                    ? t('viewer', 'cadHintPolylineClose')
-                    : t('viewer', 'cadHintPolylineNext')
-                : tool === 'rectangle' && !isClosed
+      <div className="flex flex-col lg:flex-row border border-gray-200 rounded-xl overflow-hidden bg-white" style={{ minHeight: 520 }}>
+        <div className="flex-1 flex flex-col relative bg-gray-100 min-h-[400px]">
+          <div className="flex flex-wrap items-center gap-2 p-2 border-b border-gray-200 bg-white shrink-0">
+            <div className="flex gap-1 border-r border-gray-200 pr-2">
+              {([
+                { id: 'select' as Tool, icon: MousePointer2, labelKey: 'cadToolSelect' as const },
+                { id: 'polyline' as Tool, icon: PenTool, labelKey: 'cadToolPolyline' as const },
+                { id: 'rectangle' as Tool, icon: Square, labelKey: 'cadToolRectangle' as const },
+                { id: 'pan' as Tool, icon: Move, labelKey: 'cadToolPan' as const },
+              ]).map((tb) => (
+                <button
+                  key={tb.id}
+                  type="button"
+                  onClick={() => setTool(tb.id)}
+                  className={`p-2 rounded ${tool === tb.id ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                  title={t('viewer', tb.labelKey)}
+                >
+                  <tb.icon className="h-4 w-4" />
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1 border-r border-gray-200 pr-2">
+              <button type="button" onClick={handleUndo} className="p-2 rounded text-gray-600 hover:bg-gray-100" title={t('viewer', 'undo')}>
+                <Undo2 className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={handleClear} className="p-2 rounded text-gray-600 hover:bg-gray-100" title={t('viewer', 'clear')}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex gap-1 border-r border-gray-200 pr-2">
+              <button
+                type="button"
+                onClick={() => setShowGrid(!showGrid)}
+                className={`p-2 rounded ${showGrid ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
+                title={t('viewer', 'cadGrid')}
+              >
+                <Grid3X3 className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSnapToGrid(!snapToGrid)}
+                className={`px-2 py-1 rounded text-xs font-mono ${snapToGrid ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+                title={t('viewer', 'cadSnap')}
+              >
+                SNAP
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleCalibrate}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium border ${
+                calibrationMode ? 'bg-red-600 text-white border-red-600' : 'text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Ruler className="h-3.5 w-3.5" />
+              {t('viewer', 'cadReferenceDim')}
+            </button>
+            {isClosed && (
+              <button
+                type="button"
+                onClick={handleComplete}
+                className="ml-auto flex items-center gap-1 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+              >
+                <Check className="h-4 w-4" />
+                {t('viewer', 'cadConfirmDrawing')}
+              </button>
+            )}
+          </div>
+
+          <div className="relative flex-1 p-3 flex flex-col min-h-0">
+            <div className="absolute top-5 right-5 z-10">
+              <PreviewZoomToolbar
+                onZoomIn={() => setZoom((z) => Math.min(5, z * 1.15))}
+                onZoomOut={() => setZoom((z) => Math.max(0.2, z / 1.15))}
+                onReset={() => { setZoom(1); setPan({ x: 100, y: 100 }); }}
+              />
+            </div>
+            <div ref={containerRef} className="flex-1 flex items-center justify-center min-h-[280px]">
+              <canvas
+                ref={canvasRef}
+                width={canvasWidth}
+                height={canvasHeight}
+                onClick={handleCanvasClick}
+                onMouseMove={handleMouseMove}
+                onMouseDown={handleMouseDown}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onWheel={handleWheel}
+                onContextMenu={(e) => e.preventDefault()}
+                className="rounded-lg border border-gray-300 cursor-crosshair bg-[#1a1a2e] max-w-full"
+                style={{ width: canvasWidth, height: canvasHeight }}
+              />
+            </div>
+            <p className="text-[11px] text-gray-500 mt-2 px-1">{t('scaffoldExtra', 'cadPanHint')}</p>
+            <div className="flex items-center justify-between mt-1 text-xs text-gray-500 px-1">
+              <span>
+                {tool === 'polyline' && !isClosed
                   ? points.length === 0
-                    ? t('viewer', 'cadHintRectCorner')
-                    : t('viewer', 'cadHintRectDiagonal')
-                  : isClosed
-                    ? t('viewer', 'cadHintClosedConfirm')
-                    : ''}
-            </span>
-            <span>
-              {t('viewer', 'cadCanvasScaleHint')
-                .replace('{z}', String(Math.round(zoom * 100)))
-                .replace('{v}', mmPerPixel.toFixed(1))}
-            </span>
+                    ? t('viewer', 'cadHintPolylineFirst')
+                    : points.length >= 3
+                      ? t('viewer', 'cadHintPolylineClose')
+                      : t('viewer', 'cadHintPolylineNext')
+                  : tool === 'rectangle' && !isClosed
+                    ? points.length === 0
+                      ? t('viewer', 'cadHintRectCorner')
+                      : t('viewer', 'cadHintRectDiagonal')
+                    : isClosed
+                      ? t('viewer', 'cadHintClosedConfirm')
+                      : ''}
+              </span>
+              <span>
+                {t('viewer', 'cadCanvasScaleHint')
+                  .replace('{z}', String(Math.round(zoom * 100)))
+                  .replace('{v}', mmPerPixel.toFixed(1))}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Edge dimension list */}
-        <div className="w-64 bg-gray-800 rounded-lg p-3 text-white overflow-y-auto max-h-[660px]">
-          <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase">{t('viewer', 'cadDimensionList')}</h4>
-          <div className="mb-3">
-            <label className="text-xs text-gray-400 block mb-1">{t('viewer', 'buildingHeight')}</label>
-            <div className="flex items-center gap-1">
+        <div className="w-full lg:w-96 flex flex-col border-t lg:border-t-0 lg:border-l border-gray-200 bg-white max-h-[90vh] lg:max-h-none">
+          <div className="p-4 border-b border-gray-200 shrink-0">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="h-4 w-4 text-blue-600" />
+              {t('viewer', 'buildingHeight')}
+            </label>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={buildingHeightMm}
-                onChange={(e) => onBuildingHeightChange(Math.max(1000, Number(e.target.value) || 3000))}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm font-mono text-white"
-                min={1000}
-                step={100}
+                min={1}
+                step={0.01}
+                value={buildingHeightMm >= 1000 ? Math.round((buildingHeightMm / 1000) * 1000) / 1000 : ''}
+                onChange={(e) => {
+                  const mm = parseMetersInputToMm(e.target.value);
+                  if (mm != null) onBuildingHeightChange(Math.max(1000, mm));
+                }}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
-              <span className="text-xs text-gray-500">{t('common', 'mm')}</span>
+              <span className="text-sm text-gray-500 w-8">{mUnit}</span>
             </div>
           </div>
-          {vertexMmList.length > 0 && (
-            <div className="mb-3 pb-2 border-b border-gray-600">
-              <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1.5">
-                {t('viewer', 'cadVertexCoordinates')}
-              </div>
-              <div className="space-y-2">
-                {vertexMmList.map((v) => {
-                  const kx = `${v.index}-x`;
-                  const ky = `${v.index}-y`;
-                  const vx =
-                    vertexCoordDrafts[kx] !== undefined ? vertexCoordDrafts[kx] : String(v.xMm);
-                  const vy =
-                    vertexCoordDrafts[ky] !== undefined ? vertexCoordDrafts[ky] : String(v.yMm);
-                  const n = v.index + 1;
+
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Ruler className="h-4 w-4 text-blue-600" />
+                {t('scaffoldExtra', 'wallDimensions') || 'Wall dimensions'}
+              </h3>
+              {cadPerimeterMm > 0 && (
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                  {(t('viewer', 'perimeterLabel') || 'Perimeter')}: {(cadPerimeterMm / 1000).toFixed(2)}{mUnit}
+                </span>
+              )}
+            </div>
+
+            {edgeList.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">{t('scaffoldExtra', 'cadDimsEmptyHint')}</p>
+            ) : (
+              <div className="space-y-1.5">
+                {edgeList.map((edge) => {
+                  const i = edge.index;
+                  const lA = String.fromCharCode(65 + (i % 26));
+                  const jv = (i + 1) % points.length;
+                  const lB = String.fromCharCode(65 + (jv % 26));
+                  const len = edge.lengthMm;
+                  const hMm = wallHeightsMmLocal[i] ?? buildingHeightMm;
+                  const planAxis = edgePlanAxesLocal[i] ?? 'X';
+                  const planAxisMm = edgePlanAxisMmLocal[i] ?? 0;
+                  const v0 = vertsMm[i];
+                  const v1 = vertsMm[jv];
+                  const dxM = v0 && v1 ? (v1.x - v0.x) / 1000 : null;
+                  const dyM = v0 && v1 ? (v1.y - v0.y) / 1000 : null;
+                  const hr = hashiraRowsLocal[i] ?? { axis: '' as const, countStr: '' };
+                  const hashiraAxis = hr.axis === 'X' || hr.axis === 'Y' ? hr.axis : null;
+                  const effectiveAxis: 'X' | 'Y' = hashiraAxis ?? planAxis;
+                  const rawStation = hr.countStr.trim();
+                  const stationParsed = rawStation === '' ? Number.NaN : parseInt(rawStation, 10);
+                  const stationEnd =
+                    Number.isFinite(stationParsed) && stationParsed > 0
+                      ? Math.min(500, Math.floor(stationParsed))
+                      : null;
+                  const fieldBox = 'rounded-md border border-gray-200 bg-white/90 p-1.5 shadow-sm';
                   return (
                     <div
-                      key={v.index}
-                      className="rounded border border-gray-700/80 bg-gray-900/40 p-1.5 space-y-1"
+                      key={i}
+                      className={`rounded-lg border px-2 py-2 transition-colors ${
+                        editingEdge === i
+                          ? 'bg-blue-50 ring-2 ring-blue-300 border-blue-200'
+                          : 'bg-gray-50 border-gray-200'
+                      }`}
                     >
-                      <div className="text-[10px] font-semibold text-gray-400">{v.label}</div>
-                      <div className="flex items-center gap-1">
-                        <label className="text-[10px] font-mono text-amber-400/90 w-7 shrink-0">
-                          X{n}
-                        </label>
-                        <input
-                          type="number"
-                          step={1}
-                          value={vx}
-                          onChange={(e) =>
-                            setVertexCoordDrafts((d) => ({ ...d, [kx]: e.target.value }))
-                          }
-                          onBlur={() => commitVertexCoordMm(v.index)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              (e.target as HTMLInputElement).blur();
-                            }
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="min-w-0 flex-1 bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-[11px] font-mono text-white"
-                        />
-                        <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
+                      <div className="flex items-center justify-between gap-1 mb-2">
+                        <span className="text-[11px] font-bold text-blue-800">
+                          {lA}→{lB}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <label className="text-[10px] font-mono text-sky-400/90 w-7 shrink-0">
-                          Y{n}
-                        </label>
-                        <input
-                          type="number"
-                          step={1}
-                          value={vy}
-                          onChange={(e) =>
-                            setVertexCoordDrafts((d) => ({ ...d, [ky]: e.target.value }))
-                          }
-                          onBlur={() => commitVertexCoordMm(v.index)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              (e.target as HTMLInputElement).blur();
-                            }
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="min-w-0 flex-1 bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-[11px] font-mono text-white"
-                        />
-                        <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">L ({mUnit})</span>
+                          {editingEdge === i ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && applyEdgeLength()}
+                                className="w-full px-1.5 py-0.5 border border-blue-300 rounded text-[11px] font-mono"
+                                autoFocus
+                                min={600}
+                              />
+                              <button type="button" onClick={applyEdgeLength} className="text-green-600 shrink-0">
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleEdgeClick(i)}
+                              className="w-full text-left px-1.5 py-0.5 text-[11px] font-mono text-gray-800 hover:bg-gray-50 rounded"
+                            >
+                              {(len / 1000).toFixed(3)}
+                            </button>
+                          )}
+                        </div>
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">H ({mUnit})</span>
+                          <input
+                            type="number"
+                            min={1}
+                            step={0.01}
+                            value={hMm >= 1000 ? Math.round((hMm / 1000) * 1000) / 1000 : ''}
+                            onChange={(e) => {
+                              const mm = parseMetersInputToMm(e.target.value);
+                              if (mm != null && mm >= 1000) {
+                                setWallHeightsMmLocal((prev) => {
+                                  const n = [...prev];
+                                  n[i] = mm;
+                                  return n;
+                                });
+                              }
+                            }}
+                            className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
+                          />
+                        </div>
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">
+                            {t('scaffoldExtra', 'edgeXYRun') || 'XY'}
+                          </span>
+                          <div className="flex flex-wrap gap-1.5 items-center">
+                            <select
+                              value={effectiveAxis}
+                              onChange={(e) => {
+                                const axis = e.target.value as 'X' | 'Y';
+                                const mmAxis =
+                                  axis === 'X' && dxM != null
+                                    ? Math.round(dxM * 1000)
+                                    : axis === 'Y' && dyM != null
+                                      ? Math.round(dyM * 1000)
+                                      : planAxisMm;
+                                setEdgePlanAxesLocal((prev) => {
+                                  const n = [...prev];
+                                  n[i] = axis;
+                                  return n;
+                                });
+                                setEdgePlanAxisMmLocal((prev) => {
+                                  const n = [...prev];
+                                  n[i] = mmAxis;
+                                  return n;
+                                });
+                                setHashiraRowsLocal((prev) => {
+                                  const n = [...prev];
+                                  const cur = n[i] ?? { axis: '' as const, countStr: '' };
+                                  n[i] = { ...cur, axis };
+                                  return n;
+                                });
+                              }}
+                              className="w-11 shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-semibold bg-gray-50"
+                            >
+                              <option value="X">X</option>
+                              <option value="Y">Y</option>
+                            </select>
+                            <select
+                              value={stationEnd != null ? String(stationEnd) : ''}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setHashiraRowsLocal((prev) => {
+                                  const n = [...prev];
+                                  const cur = n[i] ?? { axis: '' as const, countStr: '' };
+                                  n[i] = { ...cur, axis: effectiveAxis, countStr: v === '' ? '' : v };
+                                  return n;
+                                });
+                              }}
+                              title={(t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''}
+                              className="min-w-[3.25rem] shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-mono bg-white"
+                            >
+                              <option value="">{t('scaffoldExtra', 'edgePlanStationEnd') || 'To #'}</option>
+                              {HASHIRA_STATION_OPTIONS.map((n) => (
+                                <option key={n} value={n}>
+                                  {n}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {stationEnd != null ? (
+                            <p className="text-[10px] font-mono text-blue-900 mt-0.5 font-semibold">
+                              {`${effectiveAxis}1\u2013${effectiveAxis}${stationEnd}`}
+                            </p>
+                          ) : null}
+                          {dxM != null && dyM != null ? (
+                            <p className="text-[9px] text-gray-400 mt-0.5 font-mono truncate" title="Δ">
+                              ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className={fieldBox}>
+                          <span className="text-[10px] text-gray-500 block mb-0.5">CF</span>
+                          <select
+                            value={normalizeScaffoldWallCfKey(wallCfLocal[i])}
+                            onChange={(e) => {
+                              const v = normalizeScaffoldWallCfKey(e.target.value);
+                              setWallCfLocal((prev) => {
+                                const n = [...prev];
+                                n[i] = v;
+                                return n;
+                              });
+                            }}
+                            className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] bg-white"
+                          >
+                            {SCAFFOLD_WALL_CF_KEYS.map((cfKey) => (
+                              <option key={cfKey} value={cfKey}>
+                                {t('scaffoldExtra', SCAFFOLD_WALL_CF_LABEL_KEYS[cfKey]) || cfKey}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <p className="text-[9px] text-gray-500 mt-1.5 leading-snug">{t('viewer', 'cadVertexXyHint')}</p>
-            </div>
-          )}
-          {edgeList.length > 0 && (
-            <div className="space-y-1">
-              {edgeList.map((edge) => (
-                <div
-                  key={edge.index}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                    editingEdge === edge.index ? 'bg-blue-700' : 'hover:bg-gray-700'
-                  }`}
-                  onClick={() => handleEdgeClick(edge.index)}
-                >
-                  <span className="text-xs font-medium text-gray-400 w-10">{edge.label}</span>
-                  {editingEdge === edge.index ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && applyEdgeLength()}
-                        className="w-20 bg-gray-600 border border-blue-400 rounded px-1 py-0.5 text-xs font-mono text-white"
-                        autoFocus
-                        min={600}
-                      />
-                      <button onClick={applyEdgeLength} className="text-green-400 hover:text-green-300">
-                        <Check className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-mono text-gray-200">
-                      {(edge.lengthMm / 1000).toFixed(3)}m
-                    </span>
-                  )}
+            )}
+
+            {vertexMmList.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-gray-100">
+                <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">
+                  {t('viewer', 'cadVertexCoordinates')}
                 </div>
-              ))}
-            </div>
-          )}
-          {edgeList.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-gray-600">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">{t('viewer', 'cadPerimeterShort')}</span>
-                <span className="font-mono text-gray-200">
-                  {(edgeList.reduce((s, e) => s + e.lengthMm, 0) / 1000).toFixed(3)}m
-                </span>
+                <div className="space-y-2">
+                  {vertexMmList.map((v) => {
+                    const kx = `${v.index}-x`;
+                    const ky = `${v.index}-y`;
+                    const vx =
+                      vertexCoordDrafts[kx] !== undefined ? vertexCoordDrafts[kx] : String(v.xMm);
+                    const vy =
+                      vertexCoordDrafts[ky] !== undefined ? vertexCoordDrafts[ky] : String(v.yMm);
+                    const n = v.index + 1;
+                    return (
+                      <div key={v.index} className="rounded border border-gray-200 bg-gray-50/80 p-1.5 space-y-1">
+                        <div className="text-[10px] font-semibold text-gray-600">{v.label}</div>
+                        <div className="flex items-center gap-1">
+                          <label className="text-[10px] font-mono text-amber-700 w-7 shrink-0">X{n}</label>
+                          <input
+                            type="number"
+                            step={1}
+                            value={vx}
+                            onChange={(e) => setVertexCoordDrafts((d) => ({ ...d, [kx]: e.target.value }))}
+                            onBlur={() => commitVertexCoordMm(v.index)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            }}
+                            className="min-w-0 flex-1 border border-gray-200 rounded px-1.5 py-0.5 text-[11px] font-mono bg-white"
+                          />
+                          <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <label className="text-[10px] font-mono text-sky-700 w-7 shrink-0">Y{n}</label>
+                          <input
+                            type="number"
+                            step={1}
+                            value={vy}
+                            onChange={(e) => setVertexCoordDrafts((d) => ({ ...d, [ky]: e.target.value }))}
+                            onBlur={() => commitVertexCoordMm(v.index)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            }}
+                            className="min-w-0 flex-1 border border-gray-200 rounded px-1.5 py-0.5 text-[11px] font-mono bg-white"
+                          />
+                          <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[9px] text-gray-500 mt-1.5">{t('viewer', 'cadVertexXyHint')}</p>
               </div>
-              <div className="flex justify-between text-xs mt-1">
-                <span className="text-gray-400">{t('viewer', 'cadVertexCount')}</span>
-                <span className="font-mono text-gray-200">{points.length}</span>
-              </div>
+            )}
+          </div>
+
+          {hashiraRowsLocal.length > 0 && hashiraRowsLocal.length === edgeList.length && edgeList.length > 0 && (
+            <div className="p-4 border-t border-gray-200 bg-slate-50/40 shrink-0">
+              <EdgeHashiraPlanningPanel
+                wallCount={edgeList.length}
+                lengthsMm={edgeList.map((e) => e.lengthMm)}
+                rows={hashiraRowsLocal}
+                onRowChange={(wi, patch) => {
+                  setHashiraRowsLocal((prev) => {
+                    const n = [...prev];
+                    n[wi] = { ...(n[wi] ?? { axis: '' as const, countStr: '' }), ...patch };
+                    return n;
+                  });
+                }}
+                closedFootprint={isClosed && points.length >= 3}
+              />
             </div>
           )}
         </div>

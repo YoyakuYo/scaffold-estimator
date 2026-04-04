@@ -1555,6 +1555,16 @@ export const translations = {
       fr: 'Placez au moins deux points pour voir le contour.',
     },
     cadPreviewClosedBadge: { ja: '閉じた', en: 'Closed', fr: 'Ferme' },
+    cadPanHint: {
+      ja: 'パン：ホイールクリック・中央／右ドラッグ・Space+ドラッグ・パンツール。ホイールでズーム。',
+      en: 'Pan: middle click, right-drag, Space+drag, or Pan tool. Scroll wheel zooms.',
+      fr: 'Pan : clic milieu, clic droit-glisser, Espace+glisser, ou outil Pan. Molette pour zoomer.',
+    },
+    cadDimsEmptyHint: {
+      ja: 'キャンバスで辺を描くと、長さ・高さ・XY走行・CF をここで編集できます。',
+      en: 'Draw edges on the canvas to edit length, height, XY run, and CF here.',
+      fr: 'Tracez des aretes sur le canevas pour modifier longueur, hauteur, course XY et CF ici.',
+    },
     wallDimensions: { ja: '壁面寸法', en: 'Wall Dimensions', fr: 'Dimensions des murs' },
     clickToPlaceVerticesHint: { ja: '図面上でクリックして頂点を指定すると壁面寸法が表示されます', en: 'Click on the drawing to place vertices and show wall dimensions', fr: 'Cliquez sur le plan pour placer les sommets et afficher les dimensions des murs' },
     vertexAPlacedClickB: { ja: '頂点 A を配置しました。次の頂点 B をクリックしてください。', en: 'Vertex A is placed. Click the next vertex B.', fr: 'Le sommet A est place. Cliquez le sommet suivant B.' },
