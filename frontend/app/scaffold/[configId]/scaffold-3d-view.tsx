@@ -44,6 +44,24 @@ const JACK_H = 0.3;
 const CORNER_OVERRUN_M = 0.3;
 const CORNER_TURN_SPAN_KUSABI_M = 0.6;
 const CORNER_TURN_SPAN_WAKUGUMI_M = 0.61;
+/** Match backend `cornerTerminalSpanMmKusabi` / detailed corner width-module bay. */
+function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
+  const w = Number(scaffoldWidthMm);
+  if (!Number.isFinite(w) || w <= 0) return 600;
+  if (w <= 600) return 600;
+  if (w <= 900) return 900;
+  return 1200;
+}
+/** Match backend `cornerTerminalSpanMmWakugumi`. */
+function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
+  const w = Number(scaffoldWidthMm);
+  if (!Number.isFinite(w) || w <= 0) return 610;
+  if (w <= 600) return 610;
+  if (w <= 900) return 914;
+  return 1219;
+}
+
+type CornerStartMode = 'none' | 'convex-overrun' | 'reflex-share';
 /** Offset from building wall to inner posts (always 300mm). */
 const WALL_TO_INNER_POSTS_MM = 300;
 /** Saturated red for 端部 — visible against pipe grey in default and technical palettes. */
@@ -801,7 +819,7 @@ export default function Scaffold3DView({
         maxSpans?: number,
         skipInnerAtStart?: boolean,
         skipInnerAtEnd?: boolean,
-        dropLeadingCorner600?: boolean,
+        cornerStart: CornerStartMode = 'none',
         flushDeckAtCornerEnd?: boolean,
       ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
         const scaffoldWidthMm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900;
@@ -818,16 +836,17 @@ export default function Scaffold3DView({
         const postX: number[] = [0];
         let acc = 0;
         for (const s of spans) { acc += s / 1000; postX.push(acc); }
-        // Corner start: shift all posts back by CORNER_OVERRUN so the leading corner span
-        // straddles the building vertex (300mm before + 300mm after).
-        const hasCornerStart = !!dropLeadingCorner600 && !isBracket && postX.length > 1;
-        if (hasCornerStart) {
+        // Convex corner start: shift back by CORNER_OVERRUN so the leading bay straddles the vertex.
+        // Reflex (inner) corner start: reuse previous wall's posts — no shift, still skip meshing post[0].
+        const hasConvexOverrunStart =
+          cornerStart === 'convex-overrun' && !isBracket && postX.length > 1;
+        if (hasConvexOverrunStart) {
           for (let j = 0; j < postX.length; j++) postX[j] -= CORNER_OVERRUN_M;
         }
-        // Skip rendering posts at postX[0] when this wall's start is a polygon corner — the
-        // previous wall's last line and cornerGroup supply that steel. Row-aware nearExistingWallPost
-        // ensures cornerGroup still adds any missing outer/inner (no false inner↔outer matches).
-        const reuseStartFromPrevCorner = hasCornerStart;
+        const reuseStartFromPrevCorner =
+          (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share') &&
+          !isBracket &&
+          postX.length > 1;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
         const startSpanIdx = 0;
         const totalLen = postX.length > 1
@@ -2116,36 +2135,47 @@ export default function Scaffold3DView({
           useCornerSpanLayout && !tierIsOpen && (tierV?.length ?? 0) >= 3;
         const startKind = wall.startCornerKind ?? 'convex';
         const endKind = wall.endCornerKind ?? 'convex';
-        const isStartCorner = closedLoopCorners
-          ? startKind !== 'reflex'
-          : useCornerSpanLayout
-            ? localIdx > 0 && (tHCS[localIdx] ?? false)
-            : (tHCS[localIdx] ?? false);
-        const isEndCorner = closedLoopCorners
+        const scaffoldWmm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900;
+        const terminalBayMm = isWakugumi
+          ? cornerTerminalSpanMmWakugumi3d(scaffoldWmm)
+          : cornerTerminalSpanMmKusabi3d(scaffoldWmm);
+        const wallSpansArr = wall.spans;
+        const lastSpanMm =
+          Array.isArray(wallSpansArr) && wallSpansArr.length > 0
+            ? wallSpansArr[wallSpansArr.length - 1]!
+            : 0;
+
+        let cornerStart: CornerStartMode = 'none';
+        if (closedLoopCorners) {
+          cornerStart = startKind !== 'reflex' ? 'convex-overrun' : 'reflex-share';
+        } else if (useCornerSpanLayout && localIdx > 0 && (tHCS[localIdx] ?? false)) {
+          cornerStart = 'convex-overrun';
+        }
+
+        const baseEndFlush = closedLoopCorners
           ? endKind !== 'reflex'
           : useCornerSpanLayout
             ? localIdx < nWLoop - 1 && (tHCE[localIdx] ?? false)
             : (tHCE[localIdx] ?? false);
+        /** Reflex inner joint Rule 1: width-module last span → mate deck to next wall. */
+        const reflexEndWalkJoint = endKind === 'reflex' && lastSpanMm === terminalBayMm;
+        const flushDeckAtCornerEnd = baseEndFlush || reflexEndWalkJoint;
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        // Corner rule (足場コーナー詳細図): at polygon corners, apply 300mm overrun + 600mm corner span.
-        // dropLeadingCorner600 = true when this wall's START connects to the previous wall's end at a corner.
-        // flushDeckAtCornerEnd = true when this wall's END connects to the next wall's start at a corner.
-        const applyCornerAtStart = isStartCorner;
-        const applyCornerAtEnd = isEndCorner;
         const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
           spanCaps[i],
           false,
           false,
-          applyCornerAtStart,
-          applyCornerAtEnd,
+          cornerStart,
+          flushDeckAtCornerEnd,
         );
 
-        const isCornerConnected = applyCornerAtStart || applyCornerAtEnd;
+        const isCornerConnected =
+          cornerStart !== 'none' || flushDeckAtCornerEnd;
         const baseLen = Math.max(runLenM, 1e-6);
         const bux = edgeLen >= 1e-9 ? (v2.x - v1.x) / edgeLen : 1;
         const buz = edgeLen >= 1e-9 ? (v2.z - v1.z) / edgeLen : 0;
@@ -2408,8 +2438,6 @@ export default function Scaffold3DView({
           const infoB = wallRenderInfos[globalNext];
           if (!infoA || !infoB) continue;
           if (infoA.postX.length < 2 || infoB.postX.length < 2) continue;
-          // Inner (reflex) corners: no outer-corner L-deck patch (matches span rules).
-          if (walls[globalNext]?.startCornerKind === 'reflex') continue;
 
           const isLShaped = tierLEnd[localWi] ?? false;
 
@@ -2427,6 +2455,58 @@ export default function Scaffold3DView({
           const bInnerStart = toWorldXZ(infoB.root, infoB.postX[bIdx], infoB.widthM);
           const bOuterNext = toWorldXZ(infoB.root, infoB.postX[bNextIdx], 0);
           const bInnerNext = toWorldXZ(infoB.root, infoB.postX[bNextIdx], infoB.widthM);
+
+          const wallA = walls[globalWi];
+          const wallB = walls[globalNext];
+          const tiA = (wallA as any).tierIndex ?? 0;
+          const tiB = (wallB as any).tierIndex ?? 0;
+          const baseA = (tiA === 0 ? 0 : ((wallA as any).baseHeightMm ?? 0)) / 1000;
+          const baseB = (tiB === 0 ? 0 : ((wallB as any).baseHeightMm ?? 0)) / 1000;
+          if (Math.abs(baseA - baseB) > 0.5) continue;
+          const baseYM_corner = Math.min(baseA, baseB);
+          const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
+          const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
+          const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
+
+          // Reflex (re-entrant) joint: Rule 2 = orange pattanko fillers; Rule 1 = fall through to L-deck.
+          const isReflexInnerJoint =
+            wallB?.startCornerKind === 'reflex' && wallA?.endCornerKind === 'reflex';
+          const swRef = result?.scaffoldWidthMm ?? wallA?.scaffoldWidthMm ?? 900;
+          const termRef = isWakugumi
+            ? cornerTerminalSpanMmWakugumi3d(swRef)
+            : cornerTerminalSpanMmKusabi3d(swRef);
+          const spAW = wallA?.spans;
+          const lastSpanAW =
+            Array.isArray(spAW) && spAW.length > 0 ? spAW[spAW.length - 1]! : -1;
+          const reflexWalkJointOk = isReflexInnerJoint && lastSpanAW === termRef;
+
+          if (isReflexInnerJoint && !reflexWalkJointOk) {
+            const pattankoMatRef = cornerPlankMat.clone();
+            if ('color' in pattankoMatRef && pattankoMatRef.color) {
+              pattankoMatRef.color.setHex(0xf97316);
+            }
+            for (let lv = 1; lv <= maxLvThisCorner; lv++) {
+              const yDeck = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
+              const addFiller = (p0: PointXZ, p1: PointXZ) => {
+                const dx = p1.x - p0.x;
+                const dz = p1.z - p0.z;
+                const L = Math.hypot(dx, dz);
+                if (L < 0.03) return;
+                const midX = (p0.x + p1.x) / 2;
+                const midZ = (p0.z + p1.z) / 2;
+                const geo = new THREE.BoxGeometry(Math.min(L * 0.48, 0.38), 0.02, 0.12);
+                const mesh = new THREE.Mesh(geo, pattankoMatRef);
+                mesh.position.set(midX, yDeck + 0.024, midZ);
+                mesh.rotation.y = Math.atan2(dz, dx);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                cornerGroup.add(mesh);
+              };
+              addFiller(aOuterEnd, bOuterNext);
+              addFiller(aInnerEnd, bInnerNext);
+            }
+            continue;
+          }
 
           // Determine best pairing: outer-to-outer or outer-to-inner
           // at the corner vertex (walls meet at polygon vertex)
@@ -2449,18 +2529,6 @@ export default function Scaffold3DView({
             r1 = aOuterPrev; r2 = aOuterEnd;
             t1 = bOuterStart; t2 = bInnerStart;
           }
-
-          const wallA = walls[globalWi];
-          const wallB = walls[globalNext];
-          const tiA = (wallA as any).tierIndex ?? 0;
-          const tiB = (wallB as any).tierIndex ?? 0;
-          const baseA = (tiA === 0 ? 0 : ((wallA as any).baseHeightMm ?? 0)) / 1000;
-          const baseB = (tiB === 0 ? 0 : ((wallB as any).baseHeightMm ?? 0)) / 1000;
-          if (Math.abs(baseA - baseB) > 0.5) continue;
-          const baseYM_corner = Math.min(baseA, baseB);
-          const lvA = Math.min(wallA.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
-          const lvB = Math.min(wallB.levelCalc?.fullLevels ?? 1, MAX_3D_RENDER_LEVELS);
-          const maxLvThisCorner = Math.min(lvA, lvB, maxLevelsForCorners);
 
           // All 4 corner endpoints define the walkable corner area
           const allCornerPts = [aOuterEnd, aInnerEnd, bOuterStart, bInnerStart];
