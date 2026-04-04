@@ -35,12 +35,37 @@ function stripScaffoldSiteSnakeKeys(payload: Record<string, unknown>): Record<st
   return next;
 }
 
-function isPostgrestMissingScaffoldSiteColumnError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
+/** PGRST204 message: Could not find the 'column_name' column ... */
+function parsePostgrestMissingColumnName(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
   const o = err as { code?: string; message?: string };
-  if (o.code !== 'PGRST204') return false;
-  const msg = String(o.message ?? '');
-  return SCAFFOLD_SITE_SNAKE_KEYS.some((k) => msg.includes(k));
+  if (o.code !== 'PGRST204') return null;
+  const m = String(o.message ?? '').match(/Could not find the '([^']+)' column/);
+  return m?.[1] ?? null;
+}
+
+function isPostgrestMissingScaffoldSiteColumnError(err: unknown): boolean {
+  const col = parsePostgrestMissingColumnName(err);
+  return col != null && (SCAFFOLD_SITE_SNAKE_KEYS as readonly string[]).includes(col);
+}
+
+/**
+ * Strips optional DB columns when PostgREST reports schema cache miss (migration not applied on Supabase).
+ * Site fields are removed as a group; wakugumi_frame_series is removed alone.
+ */
+function stripScaffoldConfigPayloadForMissingColumn(
+  payload: Record<string, unknown>,
+  missingColumn: string,
+): { next: Record<string, unknown>; strippedSiteColumns: boolean } | null {
+  if ((SCAFFOLD_SITE_SNAKE_KEYS as readonly string[]).includes(missingColumn)) {
+    return { next: stripScaffoldSiteSnakeKeys(payload), strippedSiteColumns: true };
+  }
+  if (missingColumn === 'wakugumi_frame_series') {
+    const next = { ...payload };
+    delete next.wakugumi_frame_series;
+    return { next, strippedSiteColumns: false };
+  }
+  return null;
 }
 
 @Injectable()
@@ -268,21 +293,28 @@ export class ScaffoldConfigService {
       status: 'configured',
     });
     let usedSiteColumnFallback = false;
-    let { data: savedConfigRow, error: configErr } = await client
-      .from('scaffold_configurations')
-      .insert(configIns)
-      .select()
-      .single();
-    if (configErr && isPostgrestMissingScaffoldSiteColumnError(configErr)) {
-      this.logger.warn(
-        'scaffold_configurations: site_* columns missing; retrying insert without them. Run migration AddScaffoldSiteContactColumns or supabase-migrations/019_scaffold_site_contact.sql.',
-      );
-      usedSiteColumnFallback = true;
-      ({ data: savedConfigRow, error: configErr } = await client
-        .from('scaffold_configurations')
-        .insert(stripScaffoldSiteSnakeKeys(configIns as Record<string, unknown>))
-        .select()
-        .single());
+    let insertPayload = { ...(configIns as Record<string, unknown>) };
+    let savedConfigRow: Record<string, unknown> | null = null;
+    let configErr: { code?: string; message?: string } | null = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const ins = await client.from('scaffold_configurations').insert(insertPayload).select().single();
+      savedConfigRow = (ins.data as Record<string, unknown> | null) ?? null;
+      configErr = ins.error;
+      if (!configErr && savedConfigRow) break;
+      const missing = parsePostgrestMissingColumnName(configErr);
+      const stripped = missing ? stripScaffoldConfigPayloadForMissingColumn(insertPayload, missing) : null;
+      if (!stripped) break;
+      if (stripped.strippedSiteColumns) {
+        usedSiteColumnFallback = true;
+        this.logger.warn(
+          'scaffold_configurations: site_* columns missing; retrying insert without them. Run migration AddScaffoldSiteContactColumns or supabase-migrations/019_scaffold_site_contact.sql.',
+        );
+      } else {
+        this.logger.warn(
+          'scaffold_configurations: wakugumi_frame_series column missing; retrying insert without it. Run supabase-migrations/115_wakugumi_frame_series.sql.',
+        );
+      }
+      insertPayload = stripped.next;
     }
     if (configErr || !savedConfigRow) {
       this.logger.error('Insert config failed', configErr);
@@ -576,17 +608,29 @@ export class ScaffoldConfigService {
     const siteContactPatch = this.scaffoldSiteContactFromDto(dto);
     const updatesPayload = configUpdates as Record<string, unknown>;
     updatesPayload.calculation_result = calculationResult;
-    let { error: updErr } = await client.from('scaffold_configurations').update(updatesPayload).eq('id', configId);
-    if (updErr && isPostgrestMissingScaffoldSiteColumnError(updErr)) {
-      this.logger.warn(
-        'scaffold_configurations: site_* columns missing on update; retrying without them. Run migration AddScaffoldSiteContactColumns or supabase-migrations/019_scaffold_site_contact.sql.',
-      );
-      if (siteContactPatch) {
-        calculationResult = { ...calculationResult, siteContact: siteContactPatch };
+    let updatePayload = { ...updatesPayload };
+    let updErr: { code?: string; message?: string } | null = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const upd = await client.from('scaffold_configurations').update(updatePayload).eq('id', configId);
+      updErr = upd.error;
+      if (!updErr) break;
+      const missing = parsePostgrestMissingColumnName(updErr);
+      const stripped = missing ? stripScaffoldConfigPayloadForMissingColumn(updatePayload, missing) : null;
+      if (!stripped) break;
+      if (stripped.strippedSiteColumns) {
+        this.logger.warn(
+          'scaffold_configurations: site_* columns missing on update; retrying without them. Run migration AddScaffoldSiteContactColumns or supabase-migrations/019_scaffold_site_contact.sql.',
+        );
+        if (siteContactPatch) {
+          calculationResult = { ...calculationResult, siteContact: siteContactPatch };
+        }
+        updatePayload = { ...stripped.next, calculation_result: calculationResult };
+      } else {
+        this.logger.warn(
+          'scaffold_configurations: wakugumi_frame_series column missing on update; retrying without it. Run supabase-migrations/115_wakugumi_frame_series.sql.',
+        );
+        updatePayload = { ...stripped.next, calculation_result: calculationResult };
       }
-      const stripped = stripScaffoldSiteSnakeKeys(updatesPayload);
-      stripped.calculation_result = calculationResult;
-      ({ error: updErr } = await client.from('scaffold_configurations').update(stripped).eq('id', configId));
     }
     if (updErr) {
       this.logger.error('Update config failed', updErr);
