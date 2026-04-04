@@ -51,7 +51,13 @@ import {
   labelingForEnabledWallIndices,
   type EdgeHashiraFormRow,
 } from '@/lib/edge-hashira-labels';
-import { normalizeScaffoldWallCfKey } from '@/lib/scaffold-wall-cf-options';
+import {
+  normalizeScaffoldWallCfKey,
+  SCAFFOLD_WALL_CF_KEYS,
+  type ScaffoldWallCfKey,
+} from '@/lib/scaffold-wall-cf-options';
+import { EDGE_HASHIRA_STATION_SELECT_MAX } from '@/lib/edge-hashira-labels';
+import { footprintVerticesForWallPreview } from '@/lib/footprint-preview';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 
@@ -89,6 +95,13 @@ const DrawingUpload = dynamic(
     loading: () => <ScaffoldDrawingUploadLoading />,
   },
 );
+
+const HASHIRA_STATION_OPTIONS = Array.from(
+  { length: EDGE_HASHIRA_STATION_SELECT_MAX },
+  (_, i) => i + 1,
+);
+
+const SCAFFOLD_WIZARD_DRAFT_KEY = 'scaffold-wizard-draft-v1';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -953,6 +966,9 @@ function ScaffoldPageContent() {
   const [cornerKindsUseManual, setCornerKindsUseManual] = useState(false);
   const [vertexCornerKinds, setVertexCornerKinds] = useState<Array<'convex' | 'reflex'>>([]);
   const [hashiraRows, setHashiraRows] = useState<EdgeHashiraFormRow[]>([]);
+  const [aiBimEdgeHashira, setAiBimEdgeHashira] = useState<EdgeHashiraFormRow[]>([]);
+  const [aiBimEdgeCf, setAiBimEdgeCf] = useState<ScaffoldWallCfKey[]>([]);
+  const wizardDraftRestoredRef = useRef(false);
 
   const editConfigId = searchParams.get('edit') ?? null;
 
@@ -1064,19 +1080,107 @@ function ScaffoldPageContent() {
     });
   }, [walls.length]);
 
+  useEffect(() => {
+    if (!aiBimPreview) {
+      setAiBimEdgeHashira([]);
+      setAiBimEdgeCf([]);
+      return;
+    }
+    const n = aiBimPreview.walls.length;
+    setAiBimEdgeHashira((prev) => formRowsFromWallCount(prev, n));
+    setAiBimEdgeCf((prev) => {
+      const next = prev.slice(0, n).map((x) => normalizeScaffoldWallCfKey(x));
+      while (next.length < n) next.push('reflex');
+      return next;
+    });
+  }, [aiBimPreview]);
+
+  useEffect(() => {
+    if (walls.length === 0) wizardDraftRestoredRef.current = false;
+  }, [walls.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || editConfigId || wizardDraftRestoredRef.current) return;
+    try {
+      const raw = sessionStorage.getItem(SCAFFOLD_WIZARD_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as {
+        v?: number;
+        walls?: WallState[];
+        polygonVertices?: Array<{ x: number; y: number }>;
+        hashiraRows?: EdgeHashiraFormRow[];
+        buildingHeightMm?: number | null;
+        scaffoldWidthMm?: number;
+        inputMode?: 'drawing' | 'quick' | 'ai_extract' | 'cad_draw';
+        manualSubTab?: 'drawing' | 'quick';
+        prefilled?: boolean;
+        pendingInputUiPath?: CreateScaffoldConfigDto['inputUiPath'] | null;
+      };
+      if (d.v !== 1 || !Array.isArray(d.walls) || d.walls.length === 0) return;
+      wizardDraftRestoredRef.current = true;
+      setWalls(d.walls);
+      if (Array.isArray(d.polygonVertices) && d.polygonVertices.length >= 3) {
+        setPolygonVertices(d.polygonVertices);
+      }
+      if (Array.isArray(d.hashiraRows)) setHashiraRows(d.hashiraRows);
+      if (d.buildingHeightMm != null) setBuildingHeightMm(d.buildingHeightMm);
+      if (typeof d.scaffoldWidthMm === 'number') setScaffoldWidthMm(d.scaffoldWidthMm);
+      if (d.inputMode) setInputMode(d.inputMode);
+      if (d.manualSubTab) setManualSubTab(d.manualSubTab);
+      if (typeof d.prefilled === 'boolean') setPrefilled(d.prefilled);
+      if (d.pendingInputUiPath !== undefined) setPendingInputUiPath(d.pendingInputUiPath);
+    } catch {
+      /* ignore */
+    }
+  }, [editConfigId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || editConfigId) return;
+    if (walls.length === 0) return;
+    const t = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem(
+          SCAFFOLD_WIZARD_DRAFT_KEY,
+          JSON.stringify({
+            v: 1,
+            walls,
+            polygonVertices,
+            hashiraRows,
+            buildingHeightMm,
+            scaffoldWidthMm,
+            inputMode,
+            manualSubTab,
+            prefilled,
+            pendingInputUiPath,
+          }),
+        );
+      } catch {
+        /* quota */
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [
+    editConfigId,
+    walls,
+    polygonVertices,
+    hashiraRows,
+    buildingHeightMm,
+    scaffoldWidthMm,
+    inputMode,
+    manualSubTab,
+    prefilled,
+    pendingInputUiPath,
+  ]);
+
   const closedFootprintChords =
     walls.length >= 3 && (perimeterModel.isClosed || polygonVertices.length >= 3);
   const wallChordAt = (index: number) =>
     edgeChordName(index, walls.length, closedFootprintChords);
 
   const footprintForPreview = useMemo(() => {
-    if (!Array.isArray(polygonVertices) || polygonVertices.length < 3) return null;
-    // Only show the preview when the polygon matches the wall count (1 edge per wall).
-    if (walls.length >= 3 && polygonVertices.length === walls.length) {
-      return polygonVertices;
-    }
-    return polygonVertices;
-  }, [polygonVertices, walls.length]);
+    if (walls.length < 3) return null;
+    return footprintVerticesForWallPreview(polygonVertices, walls, closedFootprintChords);
+  }, [polygonVertices, walls, closedFootprintChords]);
 
   useEffect(() => {
     if (!cornerKindsUseManual || walls.length < 3) return;
@@ -1093,8 +1197,9 @@ function ScaffoldPageContent() {
     vertices: Array<{ x: number; y: number }>;
     labels: string[];
     activeIndex: number | null;
+    closed: boolean;
   }) => {
-    const { vertices, labels, activeIndex } = props;
+    const { vertices, labels, activeIndex, closed } = props;
     const n = vertices.length;
     if (n < 3) return null;
 
@@ -1110,6 +1215,8 @@ function ScaffoldPageContent() {
     const pad = Math.max(w, h) * 0.12;
     const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
     const points = vertices.map((p) => `${p.x},${p.y}`).join(' ');
+    const edgeSw = Math.max(3, (w + h) * 0.0025);
+    const edgeCount = closed ? n : Math.max(0, n - 1);
 
     const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
       x: (a.x + b.x) / 2,
@@ -1118,10 +1225,27 @@ function ScaffoldPageContent() {
 
     return (
       <svg viewBox={vb} className="w-full h-56 rounded-lg bg-gray-50 border border-gray-200" preserveAspectRatio="xMidYMid meet">
-        <polygon points={points} fill="#eef2ff" stroke="#6366f1" strokeWidth={2} />
-        {Array.from({ length: n }, (_, i) => {
+        {closed ? (
+          <polygon
+            points={points}
+            fill="#eef2ff"
+            stroke="#6366f1"
+            strokeWidth={edgeSw}
+            strokeLinejoin="round"
+          />
+        ) : (
+          <polyline
+            points={points}
+            fill="none"
+            stroke="#c7d2fe"
+            strokeWidth={edgeSw}
+            strokeLinejoin="round"
+          />
+        )}
+        {Array.from({ length: edgeCount }, (_, i) => {
           const a = vertices[i];
-          const b = vertices[(i + 1) % n];
+          const b = closed ? vertices[(i + 1) % n] : vertices[i + 1];
+          if (!a || !b) return null;
           const m = mid(a, b);
           const isActive = activeIndex === i;
           return (
@@ -1132,11 +1256,17 @@ function ScaffoldPageContent() {
                 x2={b.x}
                 y2={b.y}
                 stroke={isActive ? '#f97316' : '#4f46e5'}
-                strokeWidth={isActive ? 5 : 2.5}
-                opacity={isActive ? 0.95 : 0.35}
+                strokeWidth={isActive ? edgeSw * 2.2 : edgeSw * 1.25}
+                opacity={isActive ? 0.95 : 0.45}
                 strokeLinecap="round"
               />
-              <circle cx={a.x} cy={a.y} r={6} fill={isActive ? '#fb923c' : '#6366f1'} opacity={0.9} />
+              <circle
+                cx={a.x}
+                cy={a.y}
+                r={Math.max(5, edgeSw * 2.2)}
+                fill={isActive ? '#fb923c' : '#6366f1'}
+                opacity={0.9}
+              />
               <text
                 x={m.x}
                 y={m.y}
@@ -1154,6 +1284,15 @@ function ScaffoldPageContent() {
             </g>
           );
         })}
+        {!closed && n > 0 ? (
+          <circle
+            cx={vertices[n - 1].x}
+            cy={vertices[n - 1].y}
+            r={Math.max(5, edgeSw * 2.2)}
+            fill="#6366f1"
+            opacity={0.9}
+          />
+        ) : null}
       </svg>
     );
   }, []);
@@ -1881,6 +2020,10 @@ function ScaffoldPageContent() {
                             <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimHeightHeader')}</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimScaffoldWidthHeader')}</th>
                             <th className="text-right py-2 px-3 font-medium text-gray-700">{t('scaffold', 'aiBimStairCountHeader')}</th>
+                            <th className="text-left py-2 px-2 font-medium text-gray-700">
+                              {t('scaffoldExtra', 'edgeXYRun') || 'XY'}
+                            </th>
+                            <th className="text-left py-2 px-2 font-medium text-gray-700">CF</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1991,6 +2134,110 @@ function ScaffoldPageContent() {
                                   ))}
                                 </select>
                               </td>
+                              <td className="py-2 px-2 align-top">
+                                {(() => {
+                                  const hr = aiBimEdgeHashira[i] ?? { axis: '' as const, countStr: '' };
+                                  const aiClosed = aiBimPreview.walls.length >= 3;
+                                  const aiVerts = aiBimPreview.buildingOutline.map((p) => ({
+                                    x: p.xFrac,
+                                    y: p.yFrac,
+                                  }));
+                                  const inf =
+                                    aiVerts.length === aiBimPreview.walls.length
+                                      ? inferEdgePlanAxisFromVertices(aiVerts, i, aiClosed)
+                                      : null;
+                                  const effectiveAxis: 'X' | 'Y' =
+                                    (hr.axis === 'X' || hr.axis === 'Y' ? hr.axis : null) ??
+                                    inf?.axis ??
+                                    'X';
+                                  const rawStation = hr.countStr.trim();
+                                  const stationParsed =
+                                    rawStation === '' ? Number.NaN : parseInt(rawStation, 10);
+                                  const stationEnd =
+                                    Number.isFinite(stationParsed) && stationParsed > 0
+                                      ? Math.min(500, Math.floor(stationParsed))
+                                      : null;
+                                  return (
+                                    <div className="flex flex-col gap-0.5 min-w-[4.5rem]">
+                                      <div className="flex flex-wrap gap-1 items-center">
+                                        <select
+                                          value={effectiveAxis}
+                                          onChange={(e) => {
+                                            const axis = e.target.value as 'X' | 'Y';
+                                            setAiBimEdgeHashira((prev) => {
+                                              const next = [...prev];
+                                              const cur = next[i] ?? { axis: '' as const, countStr: '' };
+                                              next[i] = { ...cur, axis };
+                                              return next;
+                                            });
+                                          }}
+                                          className="w-10 rounded border border-gray-300 px-0.5 py-0.5 text-[10px] font-semibold bg-gray-50"
+                                        >
+                                          <option value="X">X</option>
+                                          <option value="Y">Y</option>
+                                        </select>
+                                        <select
+                                          value={stationEnd != null ? String(stationEnd) : ''}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            setAiBimEdgeHashira((prev) => {
+                                              const next = [...prev];
+                                              const cur = next[i] ?? { axis: '' as const, countStr: '' };
+                                              next[i] = {
+                                                ...cur,
+                                                axis: effectiveAxis,
+                                                countStr: v === '' ? '' : v,
+                                              };
+                                              return next;
+                                            });
+                                          }}
+                                          title={
+                                            (t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''
+                                          }
+                                          className="min-w-[2.75rem] rounded border border-gray-300 px-0.5 py-0.5 text-[10px] font-mono bg-white"
+                                        >
+                                          <option value="">
+                                            {t('scaffoldExtra', 'edgePlanStationEnd') || '#'}
+                                          </option>
+                                          {HASHIRA_STATION_OPTIONS.map((n) => (
+                                            <option key={n} value={n}>
+                                              {n}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      {stationEnd != null ? (
+                                        <span className="text-[9px] font-mono text-violet-800 font-semibold">
+                                          {`${effectiveAxis}1\u2013${effectiveAxis}${stationEnd}`}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td className="py-2 px-2 align-top">
+                                <select
+                                  value={normalizeScaffoldWallCfKey(aiBimEdgeCf[i])}
+                                  onChange={(e) => {
+                                    const v = normalizeScaffoldWallCfKey(e.target.value);
+                                    setAiBimEdgeCf((prev) => {
+                                      const next = [...prev];
+                                      next[i] = v;
+                                      return next;
+                                    });
+                                  }}
+                                  className="w-full min-w-[5.5rem] rounded border border-gray-300 px-1 py-0.5 text-[10px] bg-white"
+                                >
+                                  {SCAFFOLD_WALL_CF_KEYS.map((cfKey) => (
+                                    <option key={cfKey} value={cfKey}>
+                                      {t(
+                                        'scaffoldExtra',
+                                        cfKey === 'reflex' ? 'wallCfReflex' : 'wallCfC',
+                                      ) || cfKey}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -2000,7 +2247,7 @@ function ScaffoldPageContent() {
                             <td className="py-2 px-3 text-right font-mono font-semibold text-gray-800">
                               {aiBimPreview.walls.reduce((s, w) => s + w.wallLengthMm, 0).toLocaleString()}
                             </td>
-                            <td colSpan={3} />
+                            <td colSpan={5} />
                           </tr>
                         </tfoot>
                       </table>
@@ -2276,6 +2523,15 @@ function ScaffoldPageContent() {
                         if (!wallsWereDecomposed) {
                           delete (dtoBase as any).massingTiers;
                         }
+                        const hashiraForDto = formRowsFromWallCount(
+                          aiBimEdgeHashira,
+                          sanitizedWalls.length,
+                        );
+                        const allWallIndices = sanitizedWalls.map((_, idx) => idx);
+                        const edgeHashiraFromAi = labelingForEnabledWallIndices(
+                          allWallIndices,
+                          hashiraForDto,
+                        );
                         const dto = {
                           ...dtoBase,
                           walls: sanitizedWalls,
@@ -2285,6 +2541,7 @@ function ScaffoldPageContent() {
                           sitePhone: '',
                           siteFax: '',
                           pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
+                          ...(edgeHashiraFromAi ? { edgeHashiraLabeling: edgeHashiraFromAi } : {}),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);
@@ -2634,6 +2891,115 @@ function ScaffoldPageContent() {
                   )}
                 </div>
 
+                {(() => {
+                  const hr = hashiraRows[i] ?? { axis: '' as const, countStr: '' };
+                  const hashiraAxis = hr.axis === 'X' || hr.axis === 'Y' ? hr.axis : null;
+                  const effectiveAxis: 'X' | 'Y' =
+                    hashiraAxis ?? wall.edgePlanAxis ?? 'X';
+                  const rawStation = hr.countStr.trim();
+                  const stationParsed =
+                    rawStation === '' ? Number.NaN : parseInt(rawStation, 10);
+                  const stationEnd =
+                    Number.isFinite(stationParsed) && stationParsed > 0
+                      ? Math.min(500, Math.floor(stationParsed))
+                      : null;
+                  const xyBox =
+                    'rounded-md border border-gray-200 bg-white/90 px-2 py-1.5 shadow-sm min-w-0';
+                  return (
+                    <div
+                      className="mt-2 flex flex-wrap items-end gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className={xyBox}>
+                        <span className="text-[10px] text-gray-500 block mb-0.5">
+                          {t('scaffoldExtra', 'edgeXYRun') || 'XY'}
+                        </span>
+                        <div className="flex flex-wrap gap-1 items-center">
+                          <select
+                            value={effectiveAxis}
+                            disabled={!wall.enabled}
+                            onChange={(e) => {
+                              const axis = e.target.value as 'X' | 'Y';
+                              const mm = syncEdgePlanMmFromPolygon(i, axis);
+                              updateWall(i, {
+                                edgePlanAxis: axis,
+                                ...(mm != null ? { edgePlanAxisMm: mm } : {}),
+                              });
+                              setHashiraRows((prev) => {
+                                const next = [...prev];
+                                const cur = next[i] ?? { axis: '' as const, countStr: '' };
+                                next[i] = { ...cur, axis };
+                                return next;
+                              });
+                            }}
+                            className="w-11 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-semibold bg-gray-50 disabled:opacity-50"
+                          >
+                            <option value="X">X</option>
+                            <option value="Y">Y</option>
+                          </select>
+                          <select
+                            value={stationEnd != null ? String(stationEnd) : ''}
+                            disabled={!wall.enabled}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setHashiraRows((prev) => {
+                                const next = [...prev];
+                                const cur = next[i] ?? { axis: '' as const, countStr: '' };
+                                next[i] = {
+                                  ...cur,
+                                  axis: effectiveAxis,
+                                  countStr: v === '' ? '' : v,
+                                };
+                                return next;
+                              });
+                            }}
+                            title={
+                              (t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''
+                            }
+                            className="min-w-[3.25rem] rounded border border-gray-200 px-1 py-0.5 text-[11px] font-mono bg-white disabled:opacity-50"
+                          >
+                            <option value="">
+                              {t('scaffoldExtra', 'edgePlanStationEnd') || 'To #'}
+                            </option>
+                            {HASHIRA_STATION_OPTIONS.map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {stationEnd != null ? (
+                          <p className="text-[9px] font-mono text-blue-800 mt-0.5 font-semibold">
+                            {`${effectiveAxis}1\u2013${effectiveAxis}${stationEnd}`}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className={xyBox}>
+                        <span className="text-[10px] text-gray-500 block mb-0.5">CF</span>
+                        <select
+                          value={normalizeScaffoldWallCfKey(wall.cfNote)}
+                          disabled={!wall.enabled}
+                          onChange={(e) =>
+                            updateWall(i, {
+                              cfNote: normalizeScaffoldWallCfKey(e.target.value),
+                            })
+                          }
+                          className="min-w-[7.5rem] rounded border border-gray-200 px-1.5 py-0.5 text-[11px] bg-white disabled:opacity-50"
+                        >
+                          {SCAFFOLD_WALL_CF_KEYS.map((cfKey) => (
+                            <option key={cfKey} value={cfKey}>
+                              {t(
+                                'scaffoldExtra',
+                                cfKey === 'reflex' ? 'wallCfReflex' : 'wallCfC',
+                              ) || cfKey}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Multi-Segment Wall Editor */}
                 {wall.enabled && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
@@ -2839,10 +3205,12 @@ function ScaffoldPageContent() {
                     vertices={footprintForPreview}
                     labels={walls.map((_, i) => wallChordAt(i))}
                     activeIndex={selectedWallIdx}
+                    closed={closedFootprintChords}
                   />
                 ) : (
                   <div className="text-xs text-gray-500 rounded-lg border border-dashed border-gray-300 p-4">
-                    Upload a drawing and detect the outline first.
+                    {t('scaffoldExtra', 'wallConfigPreviewHint') ||
+                      'Add at least three walls, or trace/upload an outline so the plan preview can render.'}
                   </div>
                 )}
               </div>

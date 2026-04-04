@@ -1539,6 +1539,11 @@ export const translations = {
     drawingPreview: { ja: '図面プレビュー', en: 'Drawing preview', fr: 'Apercu du plan' },
     heightPlaceholder: { ja: '例: 10000', en: 'e.g. 10000', fr: 'ex. : 10000' },
     heightPlaceholderM: { ja: '例: 3', en: 'e.g. 3', fr: 'ex. : 3' },
+    wallConfigPreviewHint: {
+      ja: '壁を3本以上にするか、図面から周囲を取り込むとプレビューが表示されます。',
+      en: 'Need at least three walls or a traced outline for the plan preview.',
+      fr: 'Au moins trois murs ou un trace pour afficher l’apercu.',
+    },
     wallDimensions: { ja: '壁面寸法', en: 'Wall Dimensions', fr: 'Dimensions des murs' },
     clickToPlaceVerticesHint: { ja: '図面上でクリックして頂点を指定すると壁面寸法が表示されます', en: 'Click on the drawing to place vertices and show wall dimensions', fr: 'Cliquez sur le plan pour placer les sommets et afficher les dimensions des murs' },
     vertexAPlacedClickB: { ja: '頂点 A を配置しました。次の頂点 B をクリックしてください。', en: 'Vertex A is placed. Click the next vertex B.', fr: 'Le sommet A est place. Cliquez le sommet suivant B.' },
