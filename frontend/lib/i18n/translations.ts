@@ -1555,6 +1555,16 @@ export const translations = {
     cadDrawDescription: { ja: 'ポリラインツールで建物の外形を描画し、寸法を入力してください。基準寸法ボタンで1辺の実寸を設定すると自動でスケール計算されます。', en: 'Draw the building outline using the polyline tool and enter dimensions. Use the calibration button to set a real-world distance for one edge to auto-calculate scale.', fr: 'Dessinez le contour du batiment avec l\'outil polyligne et entrez les dimensions. Utilisez le bouton de calibration pour definir une distance reelle sur un cote afin de calculer l\'echelle automatiquement.' },
     extractionComplete: { ja: 'AI抽出完了 — 下のテーブルで寸法を確認・修正してください', en: 'AI extraction complete — Review and edit dimensions in the table below', fr: 'Extraction IA terminee — Verifiez et modifiez les dimensions dans le tableau ci-dessous' },
     uploadAnotherFile: { ja: '別のファイルをアップロード', en: 'Upload another file', fr: 'Televerser un autre fichier' },
+    drawingUploadResetTraceKeepFile: {
+      ja: '外形・下の寸法のみクリア（ファイルはそのまま）',
+      en: 'Clear footprint and wall table only (keep the uploaded file)',
+      fr: 'Effacer le contour et le tableau (garder le fichier)',
+    },
+    drawingUploadResetTraceStatus: {
+      ja: '外形をクリアしました。同じ図面で再トレースするか、右上で別ファイルを選べます。',
+      en: 'Footprint cleared. Trace again on this drawing or choose another file above.',
+      fr: 'Contour effacé. Retracez sur ce plan ou choisissez un autre fichier.',
+    },
     scaffoldType: { ja: '足場タイプ', en: 'Scaffold Type', fr: 'Scaffold Type' },
     frameSize: { ja: '建枠サイズ', en: 'Frame Size', fr: 'Frame Size' },
     frameSizeHint: { ja: 'レベル高さ = 建枠サイズ', en: 'Level height = frame size', fr: 'Level height = frame size' },

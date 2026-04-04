@@ -470,8 +470,11 @@ export class VisionBimService {
     this.logger.log('Processing PDF: converting to image for AI analysis...');
     try {
       const sharp = (await import('sharp')).default;
-      const pngBuffer = await sharp(buffer, { density: 300 })
-        .png()
+      /** Lower DPI + cap longest side speeds upload to the vision API without losing plan legibility. */
+      const maxPx = 2048;
+      const pngBuffer = await sharp(buffer, { density: 200 })
+        .resize(maxPx, maxPx, { fit: 'inside', withoutEnlargement: true })
+        .png({ compressionLevel: 7 })
         .toBuffer();
       this.logger.log(`PDF converted to PNG: ${pngBuffer.length} bytes`);
       return this.processImage(pngBuffer);
@@ -975,12 +978,30 @@ export class VisionBimService {
     }
 
     try {
+      const sharp = (await import('sharp')).default;
+      const maxPx = 2048;
+      let imageBuffer = buffer;
+      try {
+        const meta = await sharp(buffer).metadata();
+        if (
+          meta.width &&
+          meta.height &&
+          Math.max(meta.width, meta.height) > maxPx
+        ) {
+          imageBuffer = await sharp(buffer)
+            .resize(maxPx, maxPx, { fit: 'inside', withoutEnlargement: true })
+            .toBuffer();
+        }
+      } catch {
+        /* not a raster sharp can resize — use original buffer */
+      }
+
       // Determinism + repeatability: cache by file hash so re-uploading the same plan
       // returns the same extracted footprint (within this server process lifetime).
       const cacheTtlMs = 1000 * 60 * 60; // 1 hour
       const modelForKey =
         this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
-      const hash = createHash('sha256').update(buffer).digest('hex');
+      const hash = createHash('sha256').update(imageBuffer).digest('hex');
       // Bump version when extraction logic changes to avoid serving stale simplified shapes.
       const cacheKey = `vision-bim:v8:${modelForKey}:${hash}`;
       const cached = VisionBimService.imageCache.get(cacheKey);
@@ -992,8 +1013,8 @@ export class VisionBimService {
       const Anthropic = await import('@anthropic-ai/sdk');
       const client = new Anthropic.default({ apiKey });
 
-      const base64 = buffer.toString('base64');
-      const mediaType = this.detectImageMediaType(buffer);
+      const base64 = imageBuffer.toString('base64');
+      const mediaType = this.detectImageMediaType(imageBuffer);
 
       // Use env override or a current vision-capable model (claude-3-5-sonnet-20241022 was retired)
       const model =

@@ -22,6 +22,11 @@ import {
 } from '@/lib/scaffold-wall-cf-options';
 import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
 import type { EdgeHashiraFormRow } from '@/lib/edge-hashira-labels';
+import {
+  loadDrawingUploadSession,
+  saveDrawingUploadSession,
+  clearDrawingUploadSession,
+} from '@/lib/drawing-upload-persist';
 
 const SCAFFOLD_WALL_CF_LABEL_KEYS = {
   '': 'wallCfUnspecified',
@@ -69,6 +74,11 @@ interface DrawingUploadProps {
    * Default true.
    */
   allowAiPoweredFileParsing?: boolean;
+  /**
+   * When true, the last upload + editor state is restored after refresh (IndexedDB).
+   * Disable when embedding while editing an existing saved config.
+   */
+  persistSession?: boolean;
 }
 
 interface Vertex { x: number; y: number }
@@ -208,6 +218,7 @@ export function DrawingUpload({
   edgeHashiraRows = [],
   onEdgeHashiraRowChange,
   allowAiPoweredFileParsing = true,
+  persistSession = true,
 }: DrawingUploadProps) {
   const { t } = useI18n();
   const mUnit = t('common', 'metersShort') || 'm';
@@ -229,11 +240,92 @@ export function DrawingUpload({
   const svgRef = useRef<SVGSVGElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const skipExtSync = useRef(false);
+  const userStartedUploadRef = useRef(false);
+  const onWallsDetectedRef = useRef(onWallsDetected);
+  const onBuildingHeightChangeRef = useRef(onBuildingHeightChange);
+  onWallsDetectedRef.current = onWallsDetected;
+  onBuildingHeightChangeRef.current = onBuildingHeightChange;
 
   // ── Cleanup ──
   useEffect(() => {
     return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
   }, [previewUrl]);
+
+  // ── Restore session after refresh (new calc only) ──
+  useEffect(() => {
+    if (!persistSession) return;
+    let cancelled = false;
+    (async () => {
+      const session = await loadDrawingUploadSession();
+      if (cancelled || !session) return;
+      if (userStartedUploadRef.current) return;
+      const blob = new Blob([session.blob], { type: session.mimeType || 'application/octet-stream' });
+      const f = new File([blob], session.fileName, {
+        type: session.mimeType || 'application/octet-stream',
+        lastModified: session.savedAt,
+      });
+      const url = session.fileKind === 'image' ? URL.createObjectURL(blob) : null;
+      setPreviewUrl(url);
+      setFile(f);
+      setKind(session.fileKind);
+      setShape({
+        verts: session.shape.verts.map(v => ({ x: v.x, y: v.y })),
+        wallMm: [...session.shape.wallMm],
+        coordsAreMm: session.shape.coordsAreMm,
+      });
+      setBgSegs(
+        session.bgSegs.map(s => ({
+          start: { x: s.start.x, y: s.start.y },
+          end: { x: s.end.x, y: s.end.y },
+        })),
+      );
+      setTracing(session.tracing);
+      setStatus(session.status);
+      setPhase('editor');
+      setImgSize(null);
+      setErrMsg('');
+      onBuildingHeightChangeRef.current(session.buildingHeightMm ?? null);
+      if (session.shape.verts.length < 3) {
+        onWallsDetectedRef.current([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [persistSession]);
+
+  // ── Persist editor state (debounced) ──
+  useEffect(() => {
+    if (!persistSession || phase !== 'editor' || !file) return;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const buf = await file.arrayBuffer();
+          await saveDrawingUploadSession({
+            v: 1,
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            fileKind: kind,
+            blob: buf,
+            shape: {
+              verts: shape.verts.map(v => ({ x: v.x, y: v.y })),
+              wallMm: [...shape.wallMm],
+              coordsAreMm: shape.coordsAreMm,
+            },
+            bgSegs: bgSegs.map(s => ({
+              start: { x: s.start.x, y: s.start.y },
+              end: { x: s.end.x, y: s.end.y },
+            })),
+            tracing,
+            status,
+            buildingHeightMm: buildingHeightMm ?? null,
+            savedAt: Date.now(),
+          });
+        } catch {
+          /* ignore */
+        }
+      })();
+    }, 450);
+    return () => clearTimeout(t);
+  }, [persistSession, phase, file, kind, shape, bgSegs, tracing, status, buildingHeightMm]);
 
   // ── Sync shape → parent ──
   useEffect(() => {
@@ -386,7 +478,7 @@ export function DrawingUpload({
         setTracing(true);
       }
 
-      try { await drawingsApi.upload(f, 'default-project'); } catch { /* non-critical */ }
+      void drawingsApi.upload(f, 'default-project').catch(() => { /* non-critical */ });
       setPhase('editor');
     } catch (err: any) {
       setErrMsg(`${t('scaffoldExtra', 'dxfParsingError') || 'DXF parsing error'}: ${err.message}`);
@@ -501,6 +593,7 @@ export function DrawingUpload({
   // ── Dropzone ──
   const onDrop = useCallback(async (accepted: File[]) => {
     if (!accepted.length) return;
+    userStartedUploadRef.current = true;
     const f = accepted[0];
     const fk = fileKind(f.name);
 
@@ -523,8 +616,24 @@ export function DrawingUpload({
     onDrop, accept: ACCEPT, maxFiles: 1, maxSize: 50 * 1024 * 1024,
   });
 
-  // ── Reset ──
-  const reset = useCallback(() => {
+  // ── Clear footprint only (keep uploaded file / DXF underlay) ──
+  const resetShapeKeepFile = useCallback(() => {
+    setShape({ verts: [], wallMm: [], coordsAreMm: false });
+    setTracing(previewUrl !== null || bgSegs.length > 0);
+    setDragIdx(null);
+    setPendingDimIdx(null);
+    setPendingDimVal('');
+    setErrMsg('');
+    perimeterModel.clear();
+    onWallsDetected([]);
+    setStatus(
+      t('scaffoldExtra', 'drawingUploadResetTraceStatus')
+      || 'Cleared footprint — trace again on the same file, or use another file.',
+    );
+  }, [previewUrl, bgSegs.length, perimeterModel, onWallsDetected, t]);
+
+  // ── Remove file and return to dropzone ──
+  const resetAll = useCallback(() => {
     setPhase('idle');
     setFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -535,8 +644,12 @@ export function DrawingUpload({
     setErrMsg('');
     setTracing(false);
     setDragIdx(null);
+    setPendingDimIdx(null);
+    setPendingDimVal('');
     perimeterModel.clear();
-  }, [previewUrl, perimeterModel]);
+    onWallsDetected([]);
+    if (persistSession) void clearDrawingUploadSession();
+  }, [previewUrl, perimeterModel, onWallsDetected, persistSession]);
 
   // ── Image load ──
   const onImgLoad = useCallback(() => {
@@ -654,7 +767,7 @@ export function DrawingUpload({
         <div className="flex flex-col items-center gap-4">
           <AlertCircle className="h-10 w-10 text-red-500" />
           <p className="text-base font-medium text-red-700">{errMsg}</p>
-          <button onClick={reset} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2">
+          <button onClick={resetAll} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2">
             <RotateCcw className="h-4 w-4" /> {t('scaffoldExtra', 'retry') || 'Retry'}
           </button>
         </div>
@@ -675,10 +788,22 @@ export function DrawingUpload({
           <span className="text-sm font-medium text-gray-700 truncate max-w-xs">{file?.name}</span>
           <span className="px-2 py-0.5 bg-gray-200 rounded text-xs font-medium text-gray-600 uppercase">{kind}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {status && <span className="text-xs text-green-600 hidden sm:inline">{status}</span>}
-          <button onClick={reset} className="p-1.5 hover:bg-gray-200 rounded-lg" title={t('viewer', 'clear') || 'Reset'}>
+          <button
+            type="button"
+            onClick={resetShapeKeepFile}
+            className="p-1.5 hover:bg-gray-200 rounded-lg"
+            title={t('scaffoldExtra', 'drawingUploadResetTraceKeepFile') || 'Clear footprint (keep file)'}
+          >
             <RotateCcw className="h-4 w-4 text-gray-500" />
+          </button>
+          <button
+            type="button"
+            onClick={resetAll}
+            className="text-xs font-medium text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50"
+          >
+            {t('scaffoldExtra', 'uploadAnotherFile') || 'Upload another file'}
           </button>
         </div>
       </div>
@@ -1120,13 +1245,25 @@ export function DrawingUpload({
                 <Check className="h-4 w-4" /> {(t('scaffoldExtra', 'confirmShape') || 'Confirm shape')} ({verts.length})
               </button>
             ) : verts.length >= 3 ? (
-              <button onClick={() => { setTracing(true); setShape(prev => ({ ...prev, verts: [], wallMm: [] })); }}
-                className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTracing(true);
+                  setShape(prev => ({ ...prev, verts: [], wallMm: [] }));
+                  perimeterModel.clear();
+                  onWallsDetected([]);
+                }}
+                className="flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
+              >
                 <Pencil className="h-4 w-4" /> {t('scaffoldExtra', 'reselectVertices') || 'Reselect vertices'}
               </button>
             ) : null}
-            <button onClick={reset}
-              className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={resetShapeKeepFile}
+              className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
+              title={t('scaffoldExtra', 'drawingUploadResetTraceKeepFile') || ''}
+            >
               <RotateCcw className="h-4 w-4" /> {t('viewer', 'clear') || 'Reset'}
             </button>
           </div>

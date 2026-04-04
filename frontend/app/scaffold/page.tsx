@@ -1230,6 +1230,12 @@ function ScaffoldPageContent() {
       detected: Array<{ side: string; lengthMm: number }>,
       vertices?: Array<{ x: number; y: number }>,
     ) => {
+      if (detected.length === 0) {
+        setPolygonVertices([]);
+        setWalls([]);
+        setHashiraRows((prev) => formRowsFromWallCount(prev, 0));
+        return;
+      }
       if (vertices && vertices.length >= 3) {
         setPolygonVertices(vertices);
       }
@@ -1606,16 +1612,18 @@ function ScaffoldPageContent() {
                   setAiBimError(null);
                   setAiBimUploading(true);
                   try {
-                    const raw = await visionBimApi.analyze(file);
-                    let bimFacadeColors: CreateScaffoldConfigDto['bimFacadeColors'];
-                    if (isRasterImageUpload(file)) {
-                      try {
-                        const extracted = await extractBimFacadeColorsFromImageFile(file);
-                        if (extracted) bimFacadeColors = extracted;
-                      } catch {
-                        /* sampling failed — fall back to default 3D palette */
-                      }
-                    }
+                    const [raw, bimFacadeColors] = await Promise.all([
+                      visionBimApi.analyze(file),
+                      (async (): Promise<CreateScaffoldConfigDto['bimFacadeColors'] | undefined> => {
+                        if (!isRasterImageUpload(file)) return undefined;
+                        try {
+                          const extracted = await extractBimFacadeColorsFromImageFile(file);
+                          return extracted ?? undefined;
+                        } catch {
+                          return undefined;
+                        }
+                      })(),
+                    ]);
                     const footprint = raw as VisionFootprintResult;
                     const obstacles = footprint.obstacles;
                     const manager = scaffoldManagerRef.current!;
@@ -2443,6 +2451,7 @@ function ScaffoldPageContent() {
         <div className="max-w-[1600px] mx-auto px-4 mb-6">
           <DrawingUpload
             perimeterModel={perimeterModel}
+            persistSession={!editConfigId}
             onWallsDetected={handleWallsDetected}
             onSegmentEdit={handleSegmentEdit}
             externalWallLengths={walls.map(w => w.lengthMm)}
