@@ -1524,7 +1524,7 @@ export const translations = {
     dimensionPlaceholderM: { ja: '長さ (m)', en: 'Length (m)', fr: 'Longueur (m)' },
     edgeXYRun: { ja: 'XY（軸＋実長）', en: 'XY (axis + run)', fr: 'XY (axe + cote)' },
     wallCfReflex: { ja: 'R（反射）', en: 'R (reflex)', fr: 'R (reflex)' },
-    wallCfC: { ja: 'C', en: 'C', fr: 'C' },
+    wallCfC: { ja: 'C（凸）', en: 'C (convex)', fr: 'C (convex)' },
     edgePlanStationEnd: { ja: '番号', en: 'To #', fr: 'Jusqu\'a' },
     edgePlanStationEndHint: {
       ja: 'X1–Xn / Y1–Yn（始点は常に1）',
