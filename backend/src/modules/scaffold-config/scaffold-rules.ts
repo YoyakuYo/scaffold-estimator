@@ -85,21 +85,22 @@ export const MAIN_TATEJI_OPTIONS: SizeOption[] = [
 export const KUSABI_TOP_GUARD_HEIGHT_MM = 1800;
 
 // ─── Span Sizes (available standard sizes) ───────────────────
+// Same imperial-origin module set as 枠組 (wakugumi): 2尺〜6尺.
 
-export const SPAN_SIZES: number[] = [600, 900, 1200, 1500, 1800];
+export const SPAN_SIZES: number[] = [610, 914, 1219, 1524, 1829];
 
 export const SPAN_OPTIONS: SizeOption[] = [
-  { value: 600,  label: '600mm (0.6m)' },
-  { value: 900,  label: '900mm (0.9m)' },
-  { value: 1200, label: '1200mm (1.2m)' },
-  { value: 1500, label: '1500mm (1.5m)' },
-  { value: 1800, label: '1800mm (1.8m・標準)' },
+  { value: 610,  label: '610mm (2尺)' },
+  { value: 914,  label: '914mm (3尺)' },
+  { value: 1219, label: '1219mm (4尺)' },
+  { value: 1524, label: '1524mm (5尺)' },
+  { value: 1829, label: '1829mm (6尺・標準)' },
 ];
 
 // ─── Horizontal Bar / Nuno (布材) Catalog ─────────────────────
 // Used as: yokoji base stabilizer, plank support, tesuri (inner handrail), stopper
 
-export const NUNO_SIZES: number[] = [200, 300, 600, 900, 1200, 1500, 1800];
+export const NUNO_SIZES: number[] = [200, 300, ...SPAN_SIZES];
 
 // ─── Plank / Anchi (踏板) Catalog ────────────────────────────
 
@@ -107,7 +108,7 @@ export const NUNO_SIZES: number[] = [200, 300, 600, 900, 1200, 1500, 1800];
 // - Full anchi: 500mm (for all widths)
 // - Half anchi (for 900 width): 240mm
 export const ANCHI_WIDTHS: number[] = [240, 500];
-export const ANCHI_LENGTHS: number[] = [600, 900, 1200, 1500, 1800]; // matches span sizes
+export const ANCHI_LENGTHS: number[] = [...SPAN_SIZES]; // matches span sizes
 
 export interface AnchiSpec {
   widthMm: number;
@@ -145,12 +146,12 @@ export const ANCHI_LAYOUT_BY_WIDTH: Record<number, AnchiLayout> = {
 // ─── Brace (ブレス) Catalog ──────────────────────────────────
 // X-brace used on OUTER face only, 1 per span per level
 
-export const BRACE_SIZES: number[] = [600, 900, 1200, 1500, 1800]; // matches span sizes
+export const BRACE_SIZES: number[] = [...SPAN_SIZES]; // matches span sizes
 
 // ─── Habaki / Toe Board (巾木) ───────────────────────────────
 // Used on front + back faces at plank level
 
-export const HABAKI_SIZES: number[] = [600, 900, 1200, 1500, 1800]; // matches span sizes
+export const HABAKI_SIZES: number[] = [...SPAN_SIZES]; // matches span sizes
 
 // ─── Jack Base (ジャッキベース) ──────────────────────────────
 // Adjustable 0~300mm, counted as units only (no size in quotation)
@@ -273,12 +274,13 @@ export const CORNER_OVERRUN_MM = 300;
  * Default terminal span when scaffold width is 600mm. Wider scaffolds use the matching width
  * (900 / 1200) as the corner bay module (足場コーナー詳細図 — continuous walk).
  */
-export const CORNER_SPAN_MM = 600;
+/** Default terminal bay into the turn @600mm nominal scaffold width — matches width-module 2尺. */
+export const CORNER_SPAN_MM = 610;
 /**
- * First span along each wall after the corner (mm) — standard 1.8m bay; shares posts with the
+ * First span along each wall after the corner (mm) — 6尺 bay; shares posts with the
  * previous wall’s terminal bay for continuous deck (足場コーナー詳細図).
  */
-export const CORNER_START_SPAN_MM = 1800;
+export const CORNER_START_SPAN_MM = 1829;
 
 /** Total mm to subtract from nominal wall length for reflex (inner/re-entrant) corners on that edge. */
 export function reflexCornerInsetTotalMm(
@@ -306,13 +308,13 @@ export function scaffoldFacadeBasisMmFromCorners(
   return Math.max(0, wallLengthMm - inset);
 }
 
-/** Corner terminal bay length = scaffold width (600 / 900 / 1200). */
+/** Corner terminal bay length = width-module (610 / 914 / 1219 by nominal 600 / 900 / 1200 足場幅). */
 export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
   if (!Number.isFinite(w) || w <= 0) return CORNER_SPAN_MM;
-  if (w <= 600) return 600;
-  if (w <= 900) return 900;
-  return 1200;
+  if (w <= 600) return 610;
+  if (w <= 900) return 914;
+  return 1219;
 }
 
 /** Footprint vertex (fractional or mm — only turn direction matters for reflex detection). */
@@ -355,13 +357,16 @@ export function inferReflexVerticesFromOutline(outline: OutlineVertexInput[]): b
  */
 function splitOneMiddleSpanInPlace(spans: number[], spanSizes: readonly number[]): boolean {
   const set = new Set(spanSizes);
+  const positives = [...set].filter((n) => Number.isFinite(n) && n > 0);
+  if (positives.length === 0) return false;
+  const minSpan = Math.min(...positives);
   let bestI = -1;
   let bestA = 0;
   let bestB = 0;
   let bestSpan = -1;
   for (let i = 0; i < spans.length; i++) {
     const s = spans[i];
-    if (s <= 600) continue;
+    if (s <= minSpan) continue;
     for (const a of spanSizes) {
       const b = s - a;
       if (b > 0 && set.has(b)) {
@@ -467,8 +472,8 @@ export interface KusabiCornerMiddleFitPreference {
 }
 
 /**
- * Sum of spans **between** the first 1800 corner bay and the terminal bay (mm).
- * Closed polygon standard run: wall + 300 + terminal = 1800 + this + terminal → this = wall − 1500.
+ * Sum of spans **between** the first corner-start bay and the terminal bay (mm).
+ * Closed polygon standard run: wall + 300 + terminal = CORNER_START + this + terminal.
  */
 export function kusabiCornerMiddleSumMm(wallLengthMm: number): number {
   return wallLengthMm + CORNER_OVERRUN_MM - CORNER_START_SPAN_MM;
@@ -488,7 +493,7 @@ function scoreKusabiCornerMiddleFit(
   const pen = pref.terminalMm + pref.overrunMm;
   const tailOk =
     fullMiddleSpans.length >= 2 &&
-    fullMiddleSpans[fullMiddleSpans.length - 2] === 1200 &&
+    fullMiddleSpans[fullMiddleSpans.length - 2] === 1219 &&
     fullMiddleSpans[fullMiddleSpans.length - 1] === pen;
   return (tailOk ? 500_000 : 0) + fullMiddleSpans.filter((s) => s === start).length * 100 - fullMiddleSpans.length;
 }
@@ -525,17 +530,17 @@ export function classifyKusabiRectangleEdgeRoles(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * - Run along the wall = **wallLength + 300 + terminal**; first bay **1800**; last = terminal.
+ * - Run along the wall = **wallLength + 300 + terminal**; first bay **1829**; last = terminal (610/914/1219).
  * - **Reflex (inner) corner:** subtract **300mm** from nominal wall length **per** reflex vertex on that edge
  *   (effective façade = `scaffoldFacadeBasisMmFromCorners`). **Rule 1:** when possible, end the wall with the
- *   width-module terminal span (600/900/1200) so the next wall can reuse the same posts for a continuous
+ *   width-module terminal span so the next wall can reuse the same posts for a continuous
  *   walk bay (−300 line). **Rule 2:** if an exact standard span packing cannot end with that module, pack
  *   without it and count **pattanko** at that reflex joint (see calculator).
- * - Middle = **wall + 300 − 1800**, filled from **SPAN_SIZES** (exact when possible).
- * - **Rectangle hint** (`rectangleEdgeRole`): *prefer* long sides as all-1800 middle when possible; *prefer*
- *   short sides ending middle with **1200** then **(terminal+300)** when possible (overrun in penultimate bay).
+ * - Middle = **wall + 300 − 1829**, filled from **SPAN_SIZES** (exact when possible).
+ * - **Rectangle hint** (`rectangleEdgeRole`): *prefer* long sides as all–corner-start middle when possible; *prefer*
+ *   short sides ending middle with **1219** then **(terminal+300)** when possible (overrun in penultimate bay).
  *   Other lengths still use valid standard combinations — hints are not literal prescriptions.
- * - **Too short** for [1800, …, terminal]: legacy **[terminal, …middle…, terminal]** with total = wall+300.
+ * - **Too short** for [1829, …, terminal]: legacy **[terminal, …middle…, terminal]** with total = wall+300.
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,

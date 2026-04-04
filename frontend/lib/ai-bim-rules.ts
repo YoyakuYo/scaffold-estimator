@@ -15,10 +15,10 @@ export const AI_BIM_RULES = {
   MIDDLE_RAIL_HEIGHT_MM: 450,
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
-  /** Terminal span into the turn (kusabi). Run budget: wall+300+terminal; rectangle short/long templates see backend. */
-  CORNER_SPAN_MM: 600,
-  /** First span along each wall after the turn (kusabi). */
-  CORNER_START_SPAN_MM: 1800,
+  /** Terminal span into the turn (kusabi) — width module 610/914/1219. */
+  CORNER_SPAN_MM: 610,
+  /** First span along each wall after the turn (kusabi) — 6尺. */
+  CORNER_START_SPAN_MM: 1829,
   MIN_WALL_LENGTH_MM: 600,
   JACK_BASE_MAX_MM: 300,
 } as const;
@@ -439,9 +439,9 @@ export function countCornerTypes(
  * Used to teach AI extraction about corner handling:
  *
  * 1. At every polygon corner where two walls meet:
- *    - Kusabi run = wallLength + 300 + terminal; middle = standard spans (wall + 300 − 1800).
+ *    - Kusabi run = wallLength + 300 + terminal; middle = standard spans (wall + 300 − 1829).
  *    - Rectangle: shorter sides / longer sides are hints to prefer certain tail patterns when valid, not fixed grids.
- *    - wall+300 < 1800+terminal → legacy [t,…,t].
+ *    - wall+300 < 1829+terminal → legacy [t,…,t].
  *
  * 2. Wakugumi: [1829, …middle…, terminal]; same post-sharing idea at vertices.
  *

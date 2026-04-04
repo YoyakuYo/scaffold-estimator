@@ -150,7 +150,7 @@ Optional fields (read from dimension lines and annotations):
   Only omit if no dimension annotations are visible at all.
   DIMENSION ASSIGNMENT RULE: Each exterior edge gets the dimension line that runs PARALLEL to it and is closest to it on the outside. The overall dimension for a side = the total structural wall length (do NOT include open terraces/decks beyond the structural wall). Use the dimension arrow that measures the building's structural envelope, not sub-dimensions of interior partitions.
 - wallLengthsFromDimText: true if wallLengthsMm was read from explicit dimension lines; false/omit if only estimated from proportions.
-- scaffoldTypeHint: "wakugumi" for frame scaffold or imperial spans (1829/914/1219/1524); "kusabi" for wedge scaffold or metric spans (600/900/1200/1500/1800). Omit if unclear.
+- scaffoldTypeHint: "wakugumi" for frame scaffold / 枠組; "kusabi" for wedge scaffold / くさび式 (both use the same standard span grid 610/914/1219/1524/1829). Omit if unclear.
 - spanSizeMm: main span in mm if visible (1829, 914, 900, 1200, etc.).
 - frameSizeMm: for frame scaffold only — 1700, 1800, or 1900 if shown.
 - groundLineY, eavesLineY: optional y coordinates if visible.

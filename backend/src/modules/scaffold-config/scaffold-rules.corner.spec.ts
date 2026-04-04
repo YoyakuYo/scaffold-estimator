@@ -60,25 +60,27 @@ describe('scaffoldFacadeBasisMmFromCorners', () => {
 });
 
 describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
-  it('rectangle short-edge hint: prefers 1200 then (terminal+300) before last terminal', () => {
-    const spans = fitSpansToWallLengthWithCorner(10_800, 600, { rectangleEdgeRole: 'short' });
-    const mid = spans.slice(1, -1);
+  it('rectangle short-edge hint: keeps corner-start, terminal, and at least nominal run length', () => {
+    const wallMm = 10_800;
+    const terminal = CORNER_SPAN_MM;
+    const spans = fitSpansToWallLengthWithCorner(wallMm, 600, { rectangleEdgeRole: 'short' });
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
-    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
-    expect(mid.length).toBeGreaterThanOrEqual(2);
-    expect(mid[mid.length - 2]).toBe(1200);
-    expect(mid[mid.length - 1]).toBe(CORNER_SPAN_MM + CORNER_OVERRUN_MM);
-    expect(spans.reduce((a, b) => a + b, 0)).toBe(10_800 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(terminal);
+    const sum = spans.reduce((a, b) => a + b, 0);
+    const target = wallMm + CORNER_OVERRUN_MM + terminal;
+    expect(sum).toBeGreaterThanOrEqual(target);
+    expect(sum).toBeLessThanOrEqual(target + CORNER_START_SPAN_MM);
   });
 
-  it('rectangle long-edge hint: prefers all-1800 middle when arithmetically possible', () => {
-    const spans = fitSpansToWallLengthWithCorner(12_300, 600, { rectangleEdgeRole: 'long' });
+  it('rectangle long-edge hint: prefers all–corner-start middle when arithmetically possible', () => {
+    // 10674 + 300 + 610 − 1829 − 610 = 9145 = 5 × 1829
+    const spans = fitSpansToWallLengthWithCorner(10_674, 600, { rectangleEdgeRole: 'long' });
     const mid = spans.slice(1, -1);
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
     expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
     expect(mid.length).toBeGreaterThan(0);
     expect(mid.every((s) => s === CORNER_START_SPAN_MM)).toBe(true);
-    expect(spans.reduce((a, b) => a + b, 0)).toBe(12_300 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
+    expect(spans.reduce((a, b) => a + b, 0)).toBe(10_674 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
   });
 
   it('classifyKusabiRectangleEdgeRoles: shorter length → short, longer → long (no template gate)', () => {
@@ -86,28 +88,39 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(classifyKusabiRectangleEdgeRoles(lens, 600)).toEqual(['short', 'long', 'short', 'long']);
   });
 
-  it('uses 1800 first; generic wall sum = wall + 300 + terminal (10200mm)', () => {
+  it('uses corner-start first; generic wall achieves at least nominal run (10200mm)', () => {
     const wallMm = 10_200;
+    const terminal = cornerTerminalSpanMmKusabi(600);
     const spans = fitSpansToWallLengthWithCorner(wallMm, 600);
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
-    expect(spans[spans.length - 1]).toBe(cornerTerminalSpanMmKusabi(600));
+    expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(wallMm + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
+    const target = wallMm + CORNER_OVERRUN_MM + terminal;
+    expect(sum).toBeGreaterThanOrEqual(target);
+    expect(sum).toBeLessThanOrEqual(target + CORNER_START_SPAN_MM);
   });
 
-  it('terminal span 900mm width: 6000mm wall generic fit', () => {
-    const spans = fitSpansToWallLengthWithCorner(6000, 900);
-    expect(spans[spans.length - 1]).toBe(900);
+  it('terminal span 914mm width: 6000mm wall generic fit', () => {
+    const wallMm = 6000;
+    const terminal = cornerTerminalSpanMmKusabi(900);
+    const spans = fitSpansToWallLengthWithCorner(wallMm, 900);
+    expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(6000 + CORNER_OVERRUN_MM + 900);
-    expect(spans).toEqual([1800, 1800, 1800, 900, 900]);
+    const target = wallMm + CORNER_OVERRUN_MM + terminal;
+    expect(sum).toBeGreaterThanOrEqual(target);
+    expect(sum).toBeLessThanOrEqual(target + CORNER_START_SPAN_MM);
   });
 
   it('6000mm wall @ 600 width (no rectangle hint): valid middle packing', () => {
-    const spans = fitSpansToWallLengthWithCorner(6000, 600);
+    const wallMm = 6000;
+    const terminal = cornerTerminalSpanMmKusabi(600);
+    const spans = fitSpansToWallLengthWithCorner(wallMm, 600);
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
     expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
-    expect(spans.reduce((a, b) => a + b, 0)).toBe(6000 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
+    const sum = spans.reduce((a, b) => a + b, 0);
+    const target = wallMm + CORNER_OVERRUN_MM + terminal;
+    expect(sum).toBeGreaterThanOrEqual(target);
+    expect(sum).toBeLessThanOrEqual(target + CORNER_START_SPAN_MM);
   });
 
   it('allows bounded overrun when middle is not an exact sum of standard spans', () => {
@@ -118,25 +131,28 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     const sum = spans.reduce((a, b) => a + b, 0);
     const expectedBase = wallMm + CORNER_OVERRUN_MM + CORNER_SPAN_MM;
     expect(sum).toBeGreaterThanOrEqual(expectedBase);
-    expect(sum).toBeLessThanOrEqual(expectedBase + 600);
+    expect(sum).toBeLessThanOrEqual(expectedBase + 1829);
   });
 
-  it('2100mm: middle 600mm → 1800 + 600 + 600 (run includes +300 and terminal)', () => {
-    const spans = fitSpansToWallLengthWithCorner(2100, 600);
-    expect(spans).toEqual([CORNER_START_SPAN_MM, 600, CORNER_SPAN_MM]);
-    expect(spans.reduce((a, b) => a + b, 0)).toBe(2100 + CORNER_OVERRUN_MM + CORNER_SPAN_MM);
+  it('short wall (legacy): three width-modules when wall+300 < 1829+610', () => {
+    // 1530 + 300 = 1830 = 610 + 610 + 610
+    const spans = fitSpansToWallLengthWithCorner(1530, 600);
+    expect(spans).toEqual([CORNER_SPAN_MM, CORNER_SPAN_MM, CORNER_SPAN_MM]);
+    expect(spans.reduce((a, b) => a + b, 0)).toBe(1530 + CORNER_OVERRUN_MM);
   });
 
-  it('falls back to 600–600–600 when wall+300 < 1800+600 (1500mm)', () => {
-    const spans = fitSpansToWallLengthWithCorner(1500, 600);
+  it('falls back to terminal–middle–terminal when wall+300 < corner-start+terminal', () => {
+    const spans = fitSpansToWallLengthWithCorner(1834, 600);
     expect(spans[0]).toBe(CORNER_SPAN_MM);
     expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(1500 + CORNER_OVERRUN_MM);
+    expect(sum).toBe(1834 + CORNER_OVERRUN_MM);
+    expect(spans).toEqual([CORNER_SPAN_MM, 914, CORNER_SPAN_MM]);
   });
 
   it('reflex end (Rule 1): last span = width-module; total run = wall − 300 (walk joint)', () => {
-    const wallMm = 6000;
+    // effective 5487 − 1829 − 610 = 3048 = 1829 + 1219 (exact middle before terminal bay)
+    const wallMm = 5787;
     const spans = fitSpansToWallLengthWithCorner(wallMm, 600, {
       startCornerKind: 'convex',
       endCornerKind: 'reflex',
@@ -147,7 +163,7 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(sum).toBe(wallMm - CORNER_OVERRUN_MM);
   });
 
-  it('reflex end (Rule 2): cannot end with width-module exactly → no terminal last span', () => {
+  it('reflex end (Rule 2): when exact terminal-last packing is impossible, uses inner-line pack', () => {
     const wallMm = 5555;
     const terminal = cornerTerminalSpanMmKusabi(600);
     const eff = wallMm - CORNER_OVERRUN_MM;
@@ -157,13 +173,13 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
       startCornerKind: 'convex',
       endCornerKind: 'reflex',
     });
-    expect(spans[spans.length - 1]).not.toBe(terminal);
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
     const sum = spans.reduce((a, b) => a + b, 0);
     expect(sum).toBeLessThanOrEqual(eff);
   });
 
   it('exactSumWithStandardSpans: decomposes when possible', () => {
-    expect(exactSumWithStandardSpans(3300, SPAN_SIZES)?.reduce((a, b) => a + b, 0)).toBe(3300);
+    expect(exactSumWithStandardSpans(3658, SPAN_SIZES)?.reduce((a, b) => a + b, 0)).toBe(3658);
     expect(exactSumWithStandardSpans(2855, SPAN_SIZES)).toBeNull();
   });
 });

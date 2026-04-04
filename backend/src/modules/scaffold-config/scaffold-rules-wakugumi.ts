@@ -15,6 +15,8 @@ import {
   AnchiLayout,
   expandMiddleSpansToTargetCount,
   exactSumWithStandardSpans,
+  SPAN_OPTIONS,
+  SPAN_SIZES,
 } from './scaffold-rules';
 
 // ─── Frame Size Options (建枠サイズ) ──────────────────────────
@@ -55,18 +57,11 @@ export function wakugumiFrameSeriesFromScaffoldWidthMm(widthMm: number): Wakugum
   return 'FT1217';
 }
 
-// ─── Span Sizes (imperial-derived) ──────────────────────────
-// Same progression as kusabi but imperial-origin values
+// ─── Span Sizes ─────────────────────────────────────────────
+// Single catalog shared with くさび式 (kusabi).
 
-export const WAKUGUMI_SPAN_SIZES: number[] = [610, 914, 1219, 1524, 1829];
-
-export const WAKUGUMI_SPAN_OPTIONS: SizeOption[] = [
-  { value: 610,  label: '610mm (2尺)' },
-  { value: 914,  label: '914mm (3尺)' },
-  { value: 1219, label: '1219mm (4尺)' },
-  { value: 1524, label: '1524mm (5尺)' },
-  { value: 1829, label: '1829mm (6尺・標準)' },
-];
+export const WAKUGUMI_SPAN_SIZES: number[] = SPAN_SIZES;
+export const WAKUGUMI_SPAN_OPTIONS: SizeOption[] = SPAN_OPTIONS;
 
 // ─── Scaffold Width Options (足場幅) ────────────────────────
 // Same as kusabi: 600, 900, 1200mm
@@ -104,21 +99,21 @@ export const WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH: Record<number, AnchiLayout> = {
 // ─── Brace Sizes ────────────────────────────────────────────
 // Matches span sizes
 
-export const WAKUGUMI_BRACE_SIZES: number[] = [610, 914, 1219, 1524, 1829];
+export const WAKUGUMI_BRACE_SIZES: number[] = SPAN_SIZES;
 
 // ─── Shitasan (下桟) Sizes ──────────────────────────────────
 // Bottom horizontal bar, matches span sizes
 
-export const WAKUGUMI_SHITASAN_SIZES: number[] = [610, 914, 1219, 1524, 1829];
+export const WAKUGUMI_SHITASAN_SIZES: number[] = SPAN_SIZES;
 
 // ─── Habaki (巾木) Sizes ────────────────────────────────────
 
-export const WAKUGUMI_HABAKI_SIZES: number[] = [610, 914, 1219, 1524, 1829];
+export const WAKUGUMI_HABAKI_SIZES: number[] = SPAN_SIZES;
 
 // ─── Negarami (根がらみ) Sizes ──────────────────────────────
 
 /** @deprecated Negarami is not counted as separate material for wakugumi (ties are integral to frame system). */
-export const WAKUGUMI_NEGARAMI_SIZES: number[] = [610, 914, 1219, 1524, 1829];
+export const WAKUGUMI_NEGARAMI_SIZES: number[] = SPAN_SIZES;
 
 // ─── Stair Set ──────────────────────────────────────────────
 

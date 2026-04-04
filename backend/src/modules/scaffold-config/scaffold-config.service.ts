@@ -7,7 +7,13 @@ import { ScaffoldCalculatorWakugumiService } from './scaffold-calculator-wakugum
 import { CreateScaffoldConfigDto } from './dto/create-config.dto';
 import { PatchResultLabelsDto } from './dto/patch-result-labels.dto';
 import { PatchSiteContactDto } from './dto/patch-site-contact.dto';
-import { ALL_RULES, inferReflexVerticesFromOutline, KUSABI_TOP_GUARD_HEIGHT_MM } from './scaffold-rules';
+import {
+  ALL_RULES,
+  cornerTerminalSpanMmKusabi,
+  inferReflexVerticesFromOutline,
+  KUSABI_TOP_GUARD_HEIGHT_MM,
+  SPAN_SIZES,
+} from './scaffold-rules';
 import {
   ALL_WAKUGUMI_RULES,
   WAKUGUMI_FRAME_HEIGHT_MM,
@@ -924,23 +930,24 @@ export class ScaffoldConfigService {
     add('KUSABI-MA-18-TOP', '上部支柱 MA-18', 'Top Guard Post MA-18', 'post', '1800mm', '本', 1800, null, 6.9, 40);
 
     // ─── Braces ──────────────────────────────────
-    for (const size of [600, 900, 1200, 1500, 1800]) {
-      add(`KUSABI-BRACE-${size}`, `ブレス`, `Brace ${size}mm`, 'brace', `L=${size}mm`, '本', size, null, null, size <= 900 ? 25 : 35);
+    for (const size of SPAN_SIZES) {
+      add(`KUSABI-BRACE-${size}`, `ブレス`, `Brace ${size}mm`, 'brace', `L=${size}mm`, '本', size, null, null, size <= 914 ? 25 : 35);
     }
 
     // ─── Handrails ───────────────────────────────
-    for (const size of [600, 900, 1200, 1500, 1800]) {
-      add(`KUSABI-TESURI-${size}`, `手摺`, `Handrail ${size}mm`, 'handrail', `L=${size}mm`, '本', size, null, null, size <= 900 ? 20 : 30);
+    for (const size of SPAN_SIZES) {
+      add(`KUSABI-TESURI-${size}`, `手摺`, `Handrail ${size}mm`, 'handrail', `L=${size}mm`, '本', size, null, null, size <= 914 ? 20 : 30);
     }
 
     // ─── End Handrails (Stoppers) ────────────────
-    for (const size of [600, 900, 1200]) {
+    for (const nominalW of [600, 900, 1200] as const) {
+      const size = cornerTerminalSpanMmKusabi(nominalW);
       add(`KUSABI-STOPPER-${size}`, `端部手摺`, `End Handrail ${size}mm`, 'handrail', `L=${size}mm`, '本', size, null, null, 20);
     }
 
     // ─── Base Ties (Negarami) ────────────────────
-    for (const size of [600, 900, 1200, 1500, 1800]) {
-      add(`KUSABI-NEGR-${size}`, `根がらみ`, `Base Tie ${size}mm`, 'horizontal', `L=${size}mm`, '本', size, null, null, size <= 900 ? 15 : 22);
+    for (const size of SPAN_SIZES) {
+      add(`KUSABI-NEGR-${size}`, `根がらみ`, `Base Tie ${size}mm`, 'horizontal', `L=${size}mm`, '本', size, null, null, size <= 914 ? 15 : 22);
     }
 
     // ─── Plank Bearers (Width Yokoji) ────────────
@@ -949,18 +956,29 @@ export class ScaffoldConfigService {
     }
 
     // ─── Full Planks (Anchi 500mm wide) ──────────
-    for (const span of [600, 900, 1200, 1500, 1800]) {
-      add(`KUSABI-ANCHI-500x${span}`, `踏板`, `Plank 500×${span}mm`, 'plank', `500×${span}mm`, '枚', span, 500, null, span <= 900 ? 45 : 65);
+    for (const span of SPAN_SIZES) {
+      add(`KUSABI-ANCHI-500x${span}`, `踏板`, `Plank 500×${span}mm`, 'plank', `500×${span}mm`, '枚', span, 500, null, span <= 914 ? 45 : 65);
     }
 
     // ─── Half Planks (Anchi 240mm wide, for 900mm width) ─
-    for (const span of [600, 900, 1200, 1500, 1800]) {
-      add(`KUSABI-ANCHI-HALF-240x${span}`, `踏板 (半幅)`, `Half Plank 240×${span}mm`, 'plank', `240×${span}mm`, '枚', span, 240, null, span <= 900 ? 30 : 45);
+    for (const span of SPAN_SIZES) {
+      add(`KUSABI-ANCHI-HALF-240x${span}`, `踏板 (半幅)`, `Half Plank 240×${span}mm`, 'plank', `240×${span}mm`, '枚', span, 240, null, span <= 914 ? 30 : 45);
     }
 
     // ─── Toe Boards (Habaki) ─────────────────────
-    for (const size of [600, 900, 1200, 1500, 1800]) {
-      add(`KUSABI-HABAKI-${size}`, `巾木`, `Toe Board ${size}mm`, 'toe_board', `L=${size}mm`, '枚', size, null, null, size <= 900 ? 15 : 22);
+    for (const size of SPAN_SIZES) {
+      add(
+        `KUSABI-HABAKI-${size}`,
+        '巾木',
+        `Toe Board ${size}mm`,
+        'toe_board',
+        `L=${size}mm`,
+        '\u679a',
+        size,
+        null,
+        null,
+        size <= 914 ? 15 : 22,
+      );
     }
 
     // ─── Stair Set ───────────────────────────────

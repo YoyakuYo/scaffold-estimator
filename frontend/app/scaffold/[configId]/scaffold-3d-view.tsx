@@ -40,17 +40,15 @@ const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
 // Corner detail base rule (足場コーナー詳細図): 300mm overrun past building corner + corner span.
-// Corner terminal span = scaffold width (kusabi 600/900/1200; wakugumi 610/914/1219). 300mm overrun on total run.
+// Width-module bay (both types): 610 / 914 / 1219 for nominal 600 / 900 / 1200 足場幅.
 const CORNER_OVERRUN_M = 0.3;
-const CORNER_TURN_SPAN_KUSABI_M = 0.6;
-const CORNER_TURN_SPAN_WAKUGUMI_M = 0.61;
 /** Match backend `cornerTerminalSpanMmKusabi` / detailed corner width-module bay. */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return 600;
-  if (w <= 600) return 600;
-  if (w <= 900) return 900;
-  return 1200;
+  if (!Number.isFinite(w) || w <= 0) return 610;
+  if (w <= 600) return 610;
+  if (w <= 900) return 914;
+  return 1219;
 }
 /** Match backend `cornerTerminalSpanMmWakugumi`. */
 function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
@@ -121,13 +119,13 @@ const WALL_COLORS_HEX = [
 
 // Span size (mm) → distinct plank + habaki colour per span length
 const SPAN_COLORS: Record<number, number> = {
-  600: 0x3b82f6,   // blue
-  900: 0x10b981,   // green
-  1200: 0xf59e0b,  // amber
-  1500: 0xef4444,  // red
-  1800: 0x8b5cf6,  // purple
+  610: 0x3b82f6,   // blue
+  914: 0x10b981,   // green
+  1219: 0xf59e0b,  // amber
+  1524: 0xef4444,  // red
+  1829: 0x8b5cf6,  // purple
 };
-const STANDARD_SPANS = [600, 900, 1200, 1500, 1800];
+const STANDARD_SPANS = [610, 914, 1219, 1524, 1829];
 
 // ── Performance limits ──────────────────────────────────────
 // Each span-level creates ~20 mesh objects.  Beyond this threshold
@@ -828,7 +826,7 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Closed polygon: [1800/1829, …middle…, 600/610]; sum = wallLength+300mm so last posts sit past the corner (last bay is normal 600/610).
+        // Closed polygon: [1829, …middle…, 610/914/1219]; sum = wallLength+300+terminal.
         const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? capSpansFor3dPreview(allSpans, maxSpans)
@@ -3817,7 +3815,7 @@ export default function Scaffold3DView({
             {technicalMode ? '見積表示 ON' : '見積表示'}
           </button>
           <span className="font-medium">Span (plank color):</span>
-          {[600, 900, 1200, 1500, 1800].map((mm) => (
+          {STANDARD_SPANS.map((mm) => (
             <span key={mm} className="inline-flex items-center gap-1">
               <span
                 className="w-3 h-3 rounded-full border border-gray-400"
