@@ -359,7 +359,7 @@ export default function ScaffoldPlanView({ result, configId }: Props) {
     [result?.edgeHashiraLabeling],
   );
 
-  const scaffoldWidthMm = result?.scaffoldWidthMm ?? 600;
+  const scaffoldWidthMm = result?.scaffoldWidthMm ?? 610;
 
   // For tier-aware buildings (stepped/setback), use only ground-tier walls for
   // the plan polygon. Upper tiers stack vertically and share the same plan footprint.

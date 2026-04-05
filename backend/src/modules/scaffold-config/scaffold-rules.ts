@@ -35,13 +35,32 @@ export interface WallInput {
   stairAccessCount: number; // number of stair access points for this wall
 }
 
+// ─── Scaffold width catalog (足場幅) ─────────────────────────
+// Front↔back between post rows — same imperial-origin class as span modules (610 / 914 / 1219).
+
+export const SCAFFOLD_WIDTH_NARROW_MM = 610;
+export const SCAFFOLD_WIDTH_MEDIUM_MM = 914;
+export const SCAFFOLD_WIDTH_WIDE_MM = 1219;
+
+/** Map legacy nominal widths (600/900/1200) and stray values to the catalog triple. */
+export function normalizeScaffoldWidthMmToCatalog(widthMm: number): number {
+  const w = Number(widthMm);
+  if (!Number.isFinite(w) || w <= 0) return SCAFFOLD_WIDTH_NARROW_MM;
+  if (w === 600 || w === SCAFFOLD_WIDTH_NARROW_MM) return SCAFFOLD_WIDTH_NARROW_MM;
+  if (w === 900 || w === SCAFFOLD_WIDTH_MEDIUM_MM) return SCAFFOLD_WIDTH_MEDIUM_MM;
+  if (w === 1200 || w === SCAFFOLD_WIDTH_WIDE_MM) return SCAFFOLD_WIDTH_WIDE_MM;
+  if (w < 762) return SCAFFOLD_WIDTH_NARROW_MM;
+  if (w < 1066) return SCAFFOLD_WIDTH_MEDIUM_MM;
+  return SCAFFOLD_WIDTH_WIDE_MM;
+}
+
 // ─── Scaffold Width Options (足場幅 / Frame Width) ──────────
 // Distance between front and back row of posts
 
 export const SCAFFOLD_WIDTH_OPTIONS: SizeOption[] = [
-  { value: 600,  label: '600mm (標準)' },
-  { value: 900,  label: '900mm (広幅)' },
-  { value: 1200, label: '1200mm (超広幅)' },
+  { value: 610,  label: '610mm (標準・2尺幅)' },
+  { value: 914,  label: '914mm (広幅・3尺幅)' },
+  { value: 1219, label: '1219mm (超広幅・4尺幅)' },
 ];
 
 // ─── Post Catalog (支柱 / TATEJI) ───────────────────────────
@@ -126,9 +145,9 @@ for (const w of ANCHI_WIDTHS) {
 
 // ─── Anchi Selection by Scaffold Width ───────────────────────
 // Width selection → Anchi width logic:
-// - 600mm width → 1 Anchi of 500mm
-// - 900mm width → 1 Anchi (500mm) + 1 half Anchi (240mm)
-// - 1200mm width → 2 Anchi (500mm)
+// - 610mm width → 1 Anchi of 500mm
+// - 914mm width → 1 Anchi (500mm) + 1 half Anchi (240mm)
+// - 1219mm width → 2 Anchi (500mm)
 
 export interface AnchiLayout {
   fullAnchiWidth: number;   // mm
@@ -138,9 +157,9 @@ export interface AnchiLayout {
 }
 
 export const ANCHI_LAYOUT_BY_WIDTH: Record<number, AnchiLayout> = {
-  600:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiPerSpan: 0 },
-  900:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiWidth: 240, halfAnchiPerSpan: 1 },
-  1200: { fullAnchiWidth: 500, fullAnchiPerSpan: 2, halfAnchiPerSpan: 0 },
+  610:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiPerSpan: 0 },
+  914:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiWidth: 240, halfAnchiPerSpan: 1 },
+  1219: { fullAnchiWidth: 500, fullAnchiPerSpan: 2, halfAnchiPerSpan: 0 },
 };
 
 // ─── Brace (ブレス) Catalog ──────────────────────────────────
@@ -286,8 +305,7 @@ export function freeScaffoldEndCountForWall(wallIndex: number, wallCount: number
 /** Last two posts extend this far past the building corner (mm). */
 export const CORNER_OVERRUN_MM = 300;
 /**
- * Default terminal bay into the turn — catalog module matching nominal 足場幅 600 / 900 / 1200:
- * **610 / 914 / 1219 mm** (same imperial-origin set as middle spans; not 600/900/1200).
+ * Default terminal bay into the turn — catalog module matching 足場幅 tier (610 / 914 / 1219 mm).
  */
 export const CORNER_SPAN_MM = 610;
 /**
@@ -322,13 +340,9 @@ export function scaffoldFacadeBasisMmFromCorners(
   return Math.max(0, wallLengthMm - inset);
 }
 
-/** Corner terminal bay = catalog 610 / 914 / 1219 per nominal 足場幅 600 / 900 / 1200 (same as wakugumi). */
+/** Corner terminal bay = same catalog module as the scaffold width tier (610 / 914 / 1219). */
 export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
-  const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return CORNER_SPAN_MM;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
 }
 
 /** Footprint vertex (fractional or mm — only turn direction matters for reflex detection). */
@@ -465,13 +479,13 @@ export function exactSumWithStandardSpans(
  * - If an overrun ≤ 300mm is impossible with standard spans, choose the smallest
  *   overrun achievable.
  * Returns array of span sizes.
- * @param options.northWall - When true (North = wall index 0), allow last span to overrun up to 600mm to close corner with East.
+ * @param options.northWall - When true (North = wall index 0), allow last span to overrun up to 610mm to close corner with East.
  */
 export function fitSpansToWallLength(
   wallLengthMm: number,
   options?: { northWall?: boolean },
 ): number[] {
-  const maxOverrunMm = options?.northWall ? 600 : 300;
+  const maxOverrunMm = options?.northWall ? 610 : 300;
   return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
 }
 
@@ -518,7 +532,7 @@ function scoreKusabiCornerMiddleFit(
  */
 export function classifyKusabiRectangleEdgeRoles(
   wallLengthsMm: readonly number[],
-  _scaffoldWidthMm: number = 600,
+  _scaffoldWidthMm: number = SCAFFOLD_WIDTH_NARROW_MM,
 ): (KusabiRectangleCornerEdgeRole | null)[] {
   const none = () => wallLengthsMm.map(() => null as null);
   if (wallLengthsMm.length !== 4) return none();
@@ -558,7 +572,7 @@ export function classifyKusabiRectangleEdgeRoles(
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
-  scaffoldWidthMm: number = 600,
+  scaffoldWidthMm: number = SCAFFOLD_WIDTH_NARROW_MM,
   options?: {
     rectangleEdgeRole?: KusabiRectangleCornerEdgeRole | null;
     /** Corner kind at the START of this wall (vertex i). Default: convex. */

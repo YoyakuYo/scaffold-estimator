@@ -27,7 +27,7 @@ export interface WallInput {
   /** Multi-segment wall definition (stepped/L-shaped walls).
    *  If provided, wallLengthMm = sum of segments + return wall transitions. */
   segments?: WallSegment[];
-  /** Per-wall scaffold width (600/900/1200). Overrides global scaffoldWidthMm. */
+  /** Per-wall scaffold width (610/914/1219). Overrides global scaffoldWidthMm. */
   scaffoldWidthMm?: number;
   /** Tier base elevation (mm). Scaffold starts at this height instead of ground level.
    *  Used for stepped/setback buildings where upper tiers have smaller footprints. */
@@ -48,7 +48,7 @@ export interface CreateScaffoldConfigDto {
   scaffoldWidthMm: number;
   /** Distance from building wall to nearest posts (mm). 250–500 so scaffold can breathe. */
   wallStandoffMm?: number;
-  /** Per-side scaffold width. e.g. { north: 900, south: 600 }. Overrides scaffoldWidthMm for matching sides. */
+  /** Per-side scaffold width. e.g. { north: 914, south: 610 }. Overrides scaffoldWidthMm for matching sides. */
   widthBySide?: Record<string, number>;
   // Kusabi-specific
   preferredMainTatejiMm?: number;
@@ -185,7 +185,7 @@ export interface WallCalculationResult {
   postPositions: number;
   stairAccessCount: number;
   kaidanSpanIndices?: number[]; // Array of start span indices for kaidan (0-based, each covers 2 spans)
-  needsExtendedBay?: boolean; // Whether extended bay pattern is used (width <= 600mm)
+  needsExtendedBay?: boolean; // Whether extended bay pattern is used (narrow tier ≤610mm)
   /** Multi-segment wall shape (passed through from input) */
   segments?: WallSegment[];
   components: CalculatedComponent[];

@@ -23,6 +23,11 @@ import {
 } from '@/lib/bim-tier-footprint-normalize';
 import { computeBimPreviewPlanToM } from '@/lib/bim-preview-plan-coords';
 import { bimHexToNumber } from '@/lib/bim-facade-colors';
+import {
+  normalizeScaffoldWidthMmToCatalog,
+  SCAFFOLD_WIDTH_MEDIUM_MM,
+  SCAFFOLD_WIDTH_NARROW_MM,
+} from '@/lib/scaffold-width-catalog';
 
 /**
  * 3D Scaffold View — Closed Polygon
@@ -44,11 +49,7 @@ const JACK_H = 0.3;
 const CORNER_OVERRUN_M = 0.3;
 /** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
-  const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return 610;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
 }
 /** Match backend `cornerTerminalSpanMmWakugumi`. */
 function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
@@ -67,9 +68,9 @@ const SPAN_OVERRUN_TO_WALL_M = 0.3;
 
 /** Anchi (plank) layout by scaffold width — matches backend ANCHI_LAYOUT_BY_WIDTH. */
 const ANCHI_LAYOUT_BY_WIDTH: Record<number, { full: number; half: number; fullWidthMm: number; halfWidthMm?: number }> = {
-  600:  { full: 1, half: 0, fullWidthMm: 500 },
-  900:  { full: 1, half: 1, fullWidthMm: 500, halfWidthMm: 240 },
-  1200: { full: 2, half: 0, fullWidthMm: 500 },
+  610:  { full: 1, half: 0, fullWidthMm: 500 },
+  914:  { full: 1, half: 1, fullWidthMm: 500, halfWidthMm: 240 },
+  1219: { full: 2, half: 0, fullWidthMm: 500 },
 };
 /** Height of scaffold working level lv (1-based): GROUND_Y + JACK_H + lv * LEVEL_H. Not building floor level. */
 type ViewMode = 'all' | 'wall';
@@ -816,8 +817,9 @@ export default function Scaffold3DView({
         cornerStart: CornerStartMode = 'none',
         flushDeckAtCornerEnd?: boolean,
       ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
-        const scaffoldWidthMm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900;
-        const widthM = scaffoldWidthMm / 1000;
+        const rawWidthMm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM;
+        const widthMm = normalizeScaffoldWidthMmToCatalog(rawWidthMm);
+        const widthM = widthMm / 1000;
         const isBracket = wall.layoutMode === 'bracket';
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
@@ -859,11 +861,11 @@ export default function Scaffold3DView({
         const cornerInnerPostX = null as number | null;
 
         const kaidanSpanIndices = wall.kaidanSpanIndices || [];
-        const widthMm = scaffoldWidthMm;
         const stairCount = wall.stairAccessCount || 0;
         const hasAnyStairs = kaidanSpanIndices.length > 0 || stairCount > 0;
-        const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= 600 && hasAnyStairs);
-        const anchiLayout = ANCHI_LAYOUT_BY_WIDTH[widthMm] ?? ANCHI_LAYOUT_BY_WIDTH[600];
+        const needsExtendedBay = wall.needsExtendedBay ?? (widthMm <= SCAFFOLD_WIDTH_NARROW_MM && hasAnyStairs);
+        const anchiLayout =
+          ANCHI_LAYOUT_BY_WIDTH[widthMm] ?? ANCHI_LAYOUT_BY_WIDTH[SCAFFOLD_WIDTH_NARROW_MM];
         const habakiCountPerSpan = result?.habakiCountPerSpan ?? 2;
 
         // Door opening span indices (for skipping planks/braces/habaki at ground level)
@@ -1244,7 +1246,7 @@ export default function Scaffold3DView({
         if (postX.length >= 2) {
           const exEnd = postX[postX.length - 1];
           const zEndStopper = widthM;
-          const swMm = scaffoldWidthMm;
+          const swMm = widthMm;
           const lastSpanMm = spans[spans.length - 1] ?? 0;
           const isEndTerminalBay =
             !isBracket &&
@@ -1918,7 +1920,10 @@ export default function Scaffold3DView({
           continue;
         }
         const wall = walls[i];
-        const wallWidthM = (result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900) / 1000;
+        const wallWidthM =
+          normalizeScaffoldWidthMmToCatalog(
+            result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM,
+          ) / 1000;
 
         // Find which tier group this wall belongs to
         let tgi = 0;
@@ -2129,7 +2134,9 @@ export default function Scaffold3DView({
           useCornerSpanLayout && !tierIsOpen && (tierV?.length ?? 0) >= 3;
         const startKind = wall.startCornerKind ?? 'convex';
         const endKind = wall.endCornerKind ?? 'convex';
-        const scaffoldWmm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? 900;
+        const scaffoldWmm = normalizeScaffoldWidthMmToCatalog(
+          result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM,
+        );
         const terminalBayMm = isWakugumi
           ? cornerTerminalSpanMmWakugumi3d(scaffoldWmm)
           : cornerTerminalSpanMmKusabi3d(scaffoldWmm);
@@ -2465,7 +2472,9 @@ export default function Scaffold3DView({
           // Reflex (re-entrant) joint: Rule 2 = orange pattanko fillers; Rule 1 = fall through to L-deck.
           const isReflexInnerJoint =
             wallB?.startCornerKind === 'reflex' && wallA?.endCornerKind === 'reflex';
-          const swRef = result?.scaffoldWidthMm ?? wallA?.scaffoldWidthMm ?? 900;
+          const swRef = normalizeScaffoldWidthMmToCatalog(
+            result?.scaffoldWidthMm ?? wallA?.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM,
+          );
           const termRef = isWakugumi
             ? cornerTerminalSpanMmWakugumi3d(swRef)
             : cornerTerminalSpanMmKusabi3d(swRef);

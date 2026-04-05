@@ -12,6 +12,7 @@ import {
   cornerTerminalSpanMmKusabi,
   inferReflexVerticesFromOutline,
   KUSABI_TOP_GUARD_HEIGHT_MM,
+  normalizeScaffoldWidthMmToCatalog,
   SPAN_SIZES,
 } from './scaffold-rules';
 import {
@@ -129,7 +130,7 @@ export class ScaffoldConfigService {
     take('siteFax', 'siteFax');
   }
 
-  /** Wakugumi: FT frame series fixes level height (1700mm) and layout width (600/900/1200). */
+  /** Wakugumi: FT frame series fixes level height (1700mm) and layout width (610/914/1219). */
   private applyWakugumiFrameSeries(dto: CreateScaffoldConfigDto): CreateScaffoldConfigDto {
     const series =
       dto.wakugumiFrameSeries ?? wakugumiFrameSeriesFromScaffoldWidthMm(dto.scaffoldWidthMm);
@@ -376,6 +377,7 @@ export class ScaffoldConfigService {
     savedConfig.calculationResult = calculationResult;
     savedConfig.wallStandoffMm = standoffMm;
     savedConfig.status = 'calculated';
+    this.normalizeLoadedConfigScaffoldWidths(savedConfig);
     this.hydrateSiteContactFromCalculationResult(savedConfig);
 
     const quantityInserts: Record<string, unknown>[] = [];
@@ -664,6 +666,7 @@ export class ScaffoldConfigService {
     config.wallStandoffMm = wallStandoffMm;
     config.calculationResult = calculationResult;
     config.status = 'calculated';
+    this.normalizeLoadedConfigScaffoldWidths(config);
 
     const quantityInserts: Record<string, unknown>[] = [];
     for (const comp of result.summary) {
@@ -695,6 +698,7 @@ export class ScaffoldConfigService {
     const config = mapRowToCamel<ScaffoldConfiguration>(row as Record<string, unknown>);
     if (!config) throw new NotFoundException('Scaffold configuration not found');
     this.applyLegacyMassingCorrection(config);
+    this.normalizeLoadedConfigScaffoldWidths(config);
     this.hydrateSiteContactFromCalculationResult(config);
     return config;
   }
@@ -767,6 +771,7 @@ export class ScaffoldConfigService {
     const cfg = mapRowToCamel<ScaffoldConfiguration>(rows[0] as Record<string, unknown>);
     if (!cfg) return null;
     this.applyLegacyMassingCorrection(cfg);
+    this.normalizeLoadedConfigScaffoldWidths(cfg);
     return cfg;
   }
 
@@ -847,8 +852,44 @@ export class ScaffoldConfigService {
     if (projectId) q = q.eq('project_id', projectId);
     const { data: rows } = await q;
     const list = mapRowsToCamel<ScaffoldConfiguration>(rows || []);
-    for (const cfg of list) this.applyLegacyMassingCorrection(cfg);
+    for (const cfg of list) {
+      this.applyLegacyMassingCorrection(cfg);
+      this.normalizeLoadedConfigScaffoldWidths(cfg);
+    }
     return list;
+  }
+
+  /** In-memory normalization for legacy DB rows (600/900/1200) and JSON snapshots. */
+  private normalizeLoadedConfigScaffoldWidths(config: ScaffoldConfiguration): void {
+    config.scaffoldWidthMm = normalizeScaffoldWidthMmToCatalog(config.scaffoldWidthMm);
+    if (Array.isArray(config.walls)) {
+      for (const w of config.walls) {
+        if (w && typeof w.scaffoldWidthMm === 'number') {
+          w.scaffoldWidthMm = normalizeScaffoldWidthMmToCatalog(w.scaffoldWidthMm);
+        }
+      }
+    }
+    const cr = config.calculationResult;
+    if (cr && typeof cr === 'object' && !Array.isArray(cr)) {
+      const o = cr as Record<string, unknown>;
+      if (typeof o.scaffoldWidthMm === 'number') {
+        o.scaffoldWidthMm = normalizeScaffoldWidthMmToCatalog(o.scaffoldWidthMm);
+      }
+      if (o.widthBySide && typeof o.widthBySide === 'object' && !Array.isArray(o.widthBySide)) {
+        const wb = o.widthBySide as Record<string, number>;
+        for (const k of Object.keys(wb)) {
+          const v = wb[k];
+          if (typeof v === 'number') wb[k] = normalizeScaffoldWidthMmToCatalog(v);
+        }
+      }
+      if (Array.isArray(o.walls)) {
+        for (const w of o.walls as Array<{ scaffoldWidthMm?: number }>) {
+          if (w && typeof w.scaffoldWidthMm === 'number') {
+            w.scaffoldWidthMm = normalizeScaffoldWidthMmToCatalog(w.scaffoldWidthMm);
+          }
+        }
+      }
+    }
   }
 
   private applyLegacyMassingCorrection(config: ScaffoldConfiguration): void {
@@ -984,7 +1025,7 @@ export class ScaffoldConfigService {
     }
 
     // ─── End Handrails (Stoppers) ────────────────
-    for (const nominalW of [600, 900, 1200] as const) {
+    for (const nominalW of [610, 914, 1219] as const) {
       const size = cornerTerminalSpanMmKusabi(nominalW);
       add(`KUSABI-STOPPER-${size}`, `端部手摺`, `End Handrail ${size}mm`, 'handrail', `L=${size}mm`, '本', size, null, null, 20);
     }
@@ -995,7 +1036,7 @@ export class ScaffoldConfigService {
     }
 
     // ─── Plank Bearers (Width Yokoji) ────────────
-    for (const size of [600, 900, 1200]) {
+    for (const size of [610, 914, 1219]) {
       add(`KUSABI-BEARER-${size}`, `踏板受け`, `Plank Bearer ${size}mm`, 'horizontal', `L=${size}mm`, '本', size, null, null, 18);
     }
 

@@ -3,20 +3,21 @@
 import { Building2, MapPin } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { CreateScaffoldConfigDto, ScaffoldRules } from '@/lib/api/scaffold-configs';
+import type { ScaffoldWidthCatalogMm } from '@/lib/scaffold-width-catalog';
 
 const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
 
 type WakugumiFrameSeriesId = NonNullable<CreateScaffoldConfigDto['wakugumiFrameSeries']>;
 
-function scaffoldWidthMmFromWakugumiSeries(s: WakugumiFrameSeriesId): 600 | 900 | 1200 {
-  if (s === 'FT617') return 600;
-  if (s === 'FT917') return 900;
-  return 1200;
+function scaffoldWidthMmFromWakugumiSeries(s: WakugumiFrameSeriesId): ScaffoldWidthCatalogMm {
+  if (s === 'FT617') return 610;
+  if (s === 'FT917') return 914;
+  return 1219;
 }
 
 function wakugumiSeriesFromScaffoldWidthMm(w: number): WakugumiFrameSeriesId {
-  if (w <= 600) return 'FT617';
-  if (w <= 900) return 'FT917';
+  if (w <= 610) return 'FT617';
+  if (w <= 914) return 'FT917';
   return 'FT1217';
 }
 
@@ -282,9 +283,9 @@ export function BuildingScaffoldSettingsPanel({
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 {(rules?.scaffoldWidths || [
-                  { value: 600, label: '600mm' },
-                  { value: 900, label: '900mm' },
-                  { value: 1200, label: '1200mm' },
+                  { value: 610, label: '610mm' },
+                  { value: 914, label: '914mm' },
+                  { value: 1219, label: '1219mm' },
                 ]).map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}

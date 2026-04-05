@@ -10,6 +10,11 @@ import {
   resolveEdgeHashiraXY,
 } from '@/lib/edge-hashira-labels';
 import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight, Layers, Camera } from 'lucide-react';
+import {
+  normalizeScaffoldWidthMmToCatalog,
+  SCAFFOLD_WIDTH_MEDIUM_MM,
+  SCAFFOLD_WIDTH_NARROW_MM,
+} from '@/lib/scaffold-width-catalog';
 
 // ─── Constants ──────────────────────────────────────────────────
 const LEVEL_H_KUSABI = 1800; // mm between levels (kusabi fixed)
@@ -165,8 +170,11 @@ export default function Scaffold2DView({ result }: Props) {
       }
     }
 
-    const widthMm = w.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? 900;
-    const needsExtendedBay = w.needsExtendedBay ?? (widthMm <= 600 && (stairPositions.length > 0));
+    const widthMm = normalizeScaffoldWidthMmToCatalog(
+      w.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM,
+    );
+    const needsExtendedBay =
+      w.needsExtendedBay ?? (widthMm <= SCAFFOLD_WIDTH_NARROW_MM && stairPositions.length > 0);
 
     return {
       wall: w,

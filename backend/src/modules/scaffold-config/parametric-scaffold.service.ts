@@ -3,7 +3,7 @@
  *
  * Rules:
  * - True perimeter tracing: use every vertex from polygon (no bounding box).
- * - Per-segment scaffold width (600/900/1200).
+ * - Per-segment scaffold width (610/914/1219).
  * - Pattanko gap: 200mm from wall to platform edge (always).
  * - Buragetto: if wall-to-obstacle distance < (width + 200mm) → Single-Pole + Bracket.
  * - Width transitions: mitered corner join when adjacent segments have different widths.
@@ -11,7 +11,7 @@
 
 export const PATTANKO_GAP_MM = 200;
 export const CLEARANCE_THRESHOLD_EXTRA = 200; // if clearance < width + this → bracket
-export const SCAFFOLD_WIDTH_OPTIONS = [600, 900, 1200] as const;
+export const SCAFFOLD_WIDTH_OPTIONS = [610, 914, 1219] as const;
 
 export type LayoutMode = 'double_post' | 'bracket';
 
@@ -188,7 +188,7 @@ export function buildEdgesFromVertices(
 
 /**
  * Site boundary / obstacle rule: if requested width hits obstacle (clearance < width + 200mm),
- * try downsize to 600mm first; if still insufficient, use bracket.
+ * try downsize to 610mm first; if still insufficient, use bracket.
  */
 function resolveWidthAndLayout(
   requestedMm: number,
@@ -198,8 +198,8 @@ function resolveWidthAndLayout(
   if (clearanceMm >= requestedMm + CLEARANCE_THRESHOLD_EXTRA) {
     return { widthMm: requestedMm, layoutMode: 'double_post' };
   }
-  if (clearanceMm >= 600 + CLEARANCE_THRESHOLD_EXTRA) {
-    return { widthMm: 600, layoutMode: 'double_post' };
+  if (clearanceMm >= 610 + CLEARANCE_THRESHOLD_EXTRA) {
+    return { widthMm: 610, layoutMode: 'double_post' };
   }
   return { widthMm: requestedMm, layoutMode: 'bracket' };
 }
@@ -211,7 +211,7 @@ export function computeSideConfigs(
   obstacles: ObstacleInput[],
   refMm?: number,
 ): SideConfig[] {
-  const defaultWidth = 900;
+  const defaultWidth = 914;
   const obstacleSet = buildObstacleSet(obstacles, refMm);
   const configs: SideConfig[] = [];
 

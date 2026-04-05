@@ -58,7 +58,7 @@ export class ScaffoldConfiguration {
   siteFax: string | null;
 
   // ─── Wall Definitions (JSON) ───────────────────────────
-  // Array of { side, wallLengthMm, wallHeightMm, enabled, stairAccessCount, segments? }
+  // Array of { side, wallLengthMm, wallHeightMm, enabled, stairAccessCount, scaffoldWidthMm?, segments? }
   // side can be 'north' | 'south' | 'east' | 'west' or arbitrary edge names for complex polygons
   @Column({ type: 'jsonb', name: 'walls' })
   walls: Array<{
@@ -67,6 +67,8 @@ export class ScaffoldConfiguration {
     wallHeightMm: number;
     enabled: boolean;
     stairAccessCount: number;
+    /** Per-wall scaffold width (610/914/1219). Overrides global scaffoldWidthMm when set. */
+    scaffoldWidthMm?: number;
     /** Optional multi-segment wall definition.
      *  Each segment has a length (along the wall face) and an offset
      *  (perpendicular distance from the base line — positive = outward).
@@ -88,8 +90,8 @@ export class ScaffoldConfiguration {
 
   // ─── Scaffold Configuration ─────────────────────────────
 
-  /** Scaffold width (front↔back) in mm: 600, 900, 1200 */
-  @Column({ type: 'int', name: 'scaffold_width_mm', default: 600 })
+  /** Scaffold width (front↔back) in mm: 610, 914, 1219 */
+  @Column({ type: 'int', name: 'scaffold_width_mm', default: 610 })
   scaffoldWidthMm: number;
 
   /** Distance from building wall to inner posts in mm. Always 300mm in 3D view. */

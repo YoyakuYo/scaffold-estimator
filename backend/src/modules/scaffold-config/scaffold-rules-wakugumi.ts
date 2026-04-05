@@ -16,8 +16,10 @@ import {
   cornerTerminalSpanMmKusabi,
   expandMiddleSpansToTargetCount,
   exactSumWithStandardSpans,
+  normalizeScaffoldWidthMmToCatalog,
   SPAN_OPTIONS,
   SPAN_SIZES,
+  SCAFFOLD_WIDTH_NARROW_MM,
 } from './scaffold-rules';
 
 // ─── Frame Size Options (建枠サイズ) ──────────────────────────
@@ -30,31 +32,31 @@ export const WAKUGUMI_FRAME_SIZE_OPTIONS: SizeOption[] = [
   { value: 1700, label: '1700mm (FT-17)' },
 ];
 
-/** Walk-through frame product line (width between posts). Maps to layout width 600/900/1200. */
+/** Walk-through frame product line (width between posts). Maps to layout width 610/914/1219. */
 export type WakugumiFrameSeriesCode = 'FT617' | 'FT917' | 'FT1217';
 
 export const WAKUGUMI_FRAME_SERIES_OPTIONS: Array<{
   value: WakugumiFrameSeriesCode;
   label: string;
   labelJp: string;
-  /** Nominal catalog width (mm) — brace/shitasan nearest sizes */
+  /** Catalog width (mm) — brace/shitasan / plank layout */
   catalogWidthMm: number;
-  /** Scaffold width for plank layout (600 / 900 / 1200) */
   scaffoldWidthMm: number;
 }> = [
-  { value: 'FT617', label: 'FT-617 (610mm wide)', labelJp: 'FT-617（幅610mm）', catalogWidthMm: 610, scaffoldWidthMm: 600 },
-  { value: 'FT917', label: 'FT-917 (914mm wide)', labelJp: 'FT-917（幅914mm）', catalogWidthMm: 914, scaffoldWidthMm: 900 },
-  { value: 'FT1217', label: 'FT-1217 (1219mm wide)', labelJp: 'FT-1217（幅1219mm）', catalogWidthMm: 1219, scaffoldWidthMm: 1200 },
+  { value: 'FT617', label: 'FT-617 (610mm wide)', labelJp: 'FT-617（幅610mm）', catalogWidthMm: 610, scaffoldWidthMm: 610 },
+  { value: 'FT917', label: 'FT-917 (914mm wide)', labelJp: 'FT-917（幅914mm）', catalogWidthMm: 914, scaffoldWidthMm: 914 },
+  { value: 'FT1217', label: 'FT-1217 (1219mm wide)', labelJp: 'FT-1217（幅1219mm）', catalogWidthMm: 1219, scaffoldWidthMm: 1219 },
 ];
 
 export function scaffoldWidthFromWakugumiFrameSeries(code: WakugumiFrameSeriesCode): number {
   const row = WAKUGUMI_FRAME_SERIES_OPTIONS.find((o) => o.value === code);
-  return row?.scaffoldWidthMm ?? 900;
+  return row?.scaffoldWidthMm ?? 914;
 }
 
 export function wakugumiFrameSeriesFromScaffoldWidthMm(widthMm: number): WakugumiFrameSeriesCode {
-  if (widthMm <= 600) return 'FT617';
-  if (widthMm <= 900) return 'FT917';
+  const w = normalizeScaffoldWidthMmToCatalog(widthMm);
+  if (w === 610) return 'FT617';
+  if (w === 914) return 'FT917';
   return 'FT1217';
 }
 
@@ -65,12 +67,12 @@ export const WAKUGUMI_SPAN_SIZES: number[] = SPAN_SIZES;
 export const WAKUGUMI_SPAN_OPTIONS: SizeOption[] = SPAN_OPTIONS;
 
 // ─── Scaffold Width Options (足場幅) ────────────────────────
-// Same as kusabi: 600, 900, 1200mm
+// Same as kusabi: 610, 914, 1219mm
 
 export const WAKUGUMI_SCAFFOLD_WIDTH_OPTIONS: SizeOption[] = [
-  { value: 600,  label: '600mm (標準)' },
-  { value: 900,  label: '900mm (広幅)' },
-  { value: 1200, label: '1200mm (超広幅)' },
+  { value: 610,  label: '610mm (標準・2尺幅)' },
+  { value: 914,  label: '914mm (広幅・3尺幅)' },
+  { value: 1219, label: '1219mm (超広幅・4尺幅)' },
 ];
 
 // ─── Habaki Count Options ───────────────────────────────────
@@ -92,9 +94,9 @@ export const WAKUGUMI_END_STOPPER_TYPE_OPTIONS = [
 // Same logic as kusabi
 
 export const WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH: Record<number, AnchiLayout> = {
-  600:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiPerSpan: 0 },
-  900:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiWidth: 240, halfAnchiPerSpan: 1 },
-  1200: { fullAnchiWidth: 500, fullAnchiPerSpan: 2, halfAnchiPerSpan: 0 },
+  610:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiPerSpan: 0 },
+  914:  { fullAnchiWidth: 500, fullAnchiPerSpan: 1, halfAnchiWidth: 240, halfAnchiPerSpan: 1 },
+  1219: { fullAnchiWidth: 500, fullAnchiPerSpan: 2, halfAnchiPerSpan: 0 },
 };
 
 // ─── Brace Sizes ────────────────────────────────────────────
@@ -206,19 +208,19 @@ export const WAKUGUMI_CORNER_START_SPAN_MM = 1829;
  * - Prefer to keep the overrun small (≤ 300mm) to allow tight corner connections.
  * - If an overrun ≤ 300mm is impossible with standard spans, choose the smallest
  *   overrun achievable.
- * - North wall (wall index 0): last span may overrun up to 600mm to close corner with East.
+ * - North wall (wall index 0): last span may overrun up to 610mm to close corner with East.
  */
 export function fitSpansToWallLengthWakugumi(
   wallLengthMm: number,
   options?: { northWall?: boolean },
 ): number[] {
-  const maxOverrunMm = options?.northWall ? 600 : 300;
+  const maxOverrunMm = options?.northWall ? 610 : 300;
   return fitSpansToWallLengthWithOverrun(wallLengthMm, WAKUGUMI_SPAN_SIZES, maxOverrunMm);
 }
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * 1829 → middle → terminal (= catalog 610 / 914 / 1219 per 足場幅 600 / 900 / 1200); run = wall + 300mm.
+ * 1829 → middle → terminal (= catalog 610 / 914 / 1219 per 足場幅 tier); run = wall + 300mm.
  * Short walls fall back to [t, …middle…, t].
  */
 /** Same catalog corner terminals as くさび式 (`cornerTerminalSpanMmKusabi`). */
@@ -228,7 +230,7 @@ export function cornerTerminalSpanMmWakugumi(scaffoldWidthMm: number): number {
 
 export function fitSpansToWallLengthWithCornerWakugumi(
   wallLengthMm: number,
-  scaffoldWidthMm: number = 600,
+  scaffoldWidthMm: number = SCAFFOLD_WIDTH_NARROW_MM,
   options?: {
     /** Corner kind at the START of this wall (vertex i). Default: convex. */
     startCornerKind?: 'convex' | 'reflex';

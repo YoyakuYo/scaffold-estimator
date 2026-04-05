@@ -73,6 +73,12 @@ import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
+import type { ScaffoldWidthCatalogMm } from '@/lib/scaffold-width-catalog';
+import {
+  normalizeScaffoldWidthMmToCatalog,
+  SCAFFOLD_WIDTH_CATALOG_MM,
+  SCAFFOLD_WIDTH_NARROW_MM,
+} from '@/lib/scaffold-width-catalog';
 
 function ScaffoldCadCanvasLoading() {
   const { t } = useI18n();
@@ -148,15 +154,16 @@ const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
 
 type WakugumiFrameSeriesId = NonNullable<CreateScaffoldConfigDto['wakugumiFrameSeries']>;
 
-function scaffoldWidthMmFromWakugumiSeries(s: WakugumiFrameSeriesId): 600 | 900 | 1200 {
-  if (s === 'FT617') return 600;
-  if (s === 'FT917') return 900;
-  return 1200;
+function scaffoldWidthMmFromWakugumiSeries(s: WakugumiFrameSeriesId): ScaffoldWidthCatalogMm {
+  if (s === 'FT617') return 610;
+  if (s === 'FT917') return 914;
+  return 1219;
 }
 
 function wakugumiSeriesFromScaffoldWidthMm(w: number): WakugumiFrameSeriesId {
-  if (w <= 600) return 'FT617';
-  if (w <= 900) return 'FT917';
+  const n = normalizeScaffoldWidthMmToCatalog(w);
+  if (n === 610) return 'FT617';
+  if (n === 914) return 'FT917';
   return 'FT1217';
 }
 
@@ -869,7 +876,7 @@ function wizardSessionDefaults(): WizardSessionBootstrap {
     buildingHeightMm: null,
     prefilled: false,
     pendingInputUiPath: null,
-    scaffoldWidthMm: 600,
+    scaffoldWidthMm: SCAFFOLD_WIDTH_NARROW_MM,
     quickShapeDraft: null,
     aiBimPreview: null,
     aiBimEdgeHashira: [],
@@ -937,7 +944,9 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
     if (parsed.buildingHeightMm !== undefined) d.buildingHeightMm = parsed.buildingHeightMm;
     if (typeof parsed.prefilled === 'boolean') d.prefilled = parsed.prefilled;
     if (parsed.pendingInputUiPath !== undefined) d.pendingInputUiPath = parsed.pendingInputUiPath ?? null;
-    if (typeof parsed.scaffoldWidthMm === 'number') d.scaffoldWidthMm = parsed.scaffoldWidthMm;
+    if (typeof parsed.scaffoldWidthMm === 'number') {
+      d.scaffoldWidthMm = normalizeScaffoldWidthMmToCatalog(parsed.scaffoldWidthMm);
+    }
 
     return d;
   } catch {
@@ -1085,7 +1094,7 @@ function ScaffoldPageContent() {
     if (!editConfigId || !editConfig) return;
     setScaffoldType(editConfig.scaffoldType);
     setStructureType(editConfig.structureType || '改修工事');
-    const baseW = editConfig.scaffoldWidthMm ?? 600;
+    const baseW = normalizeScaffoldWidthMmToCatalog(editConfig.scaffoldWidthMm ?? SCAFFOLD_WIDTH_NARROW_MM);
     if (editConfig.scaffoldType === 'wakugumi') {
       const s = editConfig.wakugumiFrameSeries;
       if (s === 'FT617' || s === 'FT917' || s === 'FT1217') {
@@ -2231,7 +2240,7 @@ function ScaffoldPageContent() {
                                   className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
                                 >
                                   <option value="">{aiBimPreview.dto.scaffoldWidthMm}mm</option>
-                                  {[600, 900, 1200].filter((wmm) => wmm !== aiBimPreview.dto.scaffoldWidthMm).map((wmm) => (
+                                  {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((wmm) => wmm !== aiBimPreview.dto.scaffoldWidthMm).map((wmm) => (
                                     <option key={wmm} value={wmm}>{wmm}mm</option>
                                   ))}
                                 </select>
@@ -2469,7 +2478,7 @@ function ScaffoldPageContent() {
                             <select
                               value={aiBimPreview.dto.scaffoldWidthMm}
                               onChange={(e) => {
-                                const width = Number(e.target.value) || 600;
+                                const width = Number(e.target.value) || SCAFFOLD_WIDTH_NARROW_MM;
                                 const series = wakugumiSeriesFromScaffoldWidthMm(width);
                                 setAiBimPreview({
                                   ...aiBimPreview,
@@ -2487,7 +2496,7 @@ function ScaffoldPageContent() {
                               }}
                               className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500 bg-white"
                             >
-                              {[600, 900, 1200].map((w) => (
+                              {[...SCAFFOLD_WIDTH_CATALOG_MM].map((w) => (
                                 <option key={w} value={w}>
                                   {w}mm
                                 </option>
@@ -2949,7 +2958,7 @@ function ScaffoldPageContent() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <option value="">{scaffoldWidthMm}mm</option>
-                      {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
+                      {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((w) => w !== scaffoldWidthMm).map((w) => (
                         <option key={w} value={w}>{w}mm</option>
                       ))}
                     </select>

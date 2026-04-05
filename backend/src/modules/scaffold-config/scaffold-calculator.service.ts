@@ -53,7 +53,7 @@ export interface WallCalculationInput {
   /** Multi-segment wall definition. If provided, wallLengthMm should
    *  already be the total (segments + return transitions). */
   segments?: WallSegment[];
-  /** Per-wall scaffold width (600/900/1200). Overrides global when set. */
+  /** Per-wall scaffold width (610/914/1219). Overrides global when set. */
   scaffoldWidthMm?: number;
   /** Buragetto: 'bracket' = single-pole + bracket when obstacle clearance < width+200mm. */
   layoutMode?: 'double_post' | 'bracket';
@@ -70,7 +70,7 @@ export interface WallCalculationInput {
 export interface ScaffoldCalculationInput {
   walls: WallCalculationInput[];
   structureType?: '改修工事' | 'S造' | 'RC造';  // Construction pattern
-  scaffoldWidthMm: number;         // 600, 900, 1200
+  scaffoldWidthMm: number;         // 610, 914, 1219
   preferredMainTatejiMm: number;   // 1800, 2700, 3600
   /** @deprecated Ignored; fixed at KUSABI_TOP_GUARD_HEIGHT_MM in rules. */
   topGuardHeightMm?: number;
@@ -103,7 +103,7 @@ export interface WallCalculationResult {
   levelCalc: LevelCalcResult;
   stairAccessCount: number;
   kaidanSpanIndices?: number[];    // Array of start span indices for kaidan (0-based, each covers 2 spans)
-  needsExtendedBay?: boolean;      // Whether extended bay pattern is used (width <= 600mm)
+  needsExtendedBay?: boolean;      // Whether extended bay pattern is used (narrow tier ≤610mm)
   segments?: WallSegment[];        // Multi-segment shape (passed through from input)
   components: CalculatedComponent[];
   /** Per-wall scaffold width used (from parametric or global). */
@@ -386,7 +386,7 @@ export class ScaffoldCalculatorService {
     }
 
     // Determine if extended bay pattern is needed
-    const needsExtendedBay = widthMm <= 600 && kaidanSpanIndices.length > 0;
+    const needsExtendedBay = widthMm <= 610 && kaidanSpanIndices.length > 0;
 
     // Group spans by size for material counting
     const spanGroups = this.groupSpansBySize(spans);
@@ -573,11 +573,11 @@ export class ScaffoldCalculatorService {
     }
 
     // ─── 9. 踏板 / アンチ ──────────────────────────────
-    const anchiLayout = ANCHI_LAYOUT_BY_WIDTH[widthMm] || ANCHI_LAYOUT_BY_WIDTH[600];
+    const anchiLayout = ANCHI_LAYOUT_BY_WIDTH[widthMm] || ANCHI_LAYOUT_BY_WIDTH[610];
     const totalAnchiSlots = totalSpans * L;
     
-    // For extended bay (≤600mm): NO anchi removal (kaidan sits on extended bay)
-    // For replacement (≥900mm): Remove 1 full anchi per kaidan per level
+    // For extended bay (≤610mm): NO anchi removal (kaidan sits on extended bay)
+    // For replacement (≥914mm): Remove 1 full anchi per kaidan per level
     let stairReplacements = 0;
     if (!needsExtendedBay && kaidanSpanIndices.length > 0) {
       // Replacement pattern: remove 1 full anchi per kaidan per level

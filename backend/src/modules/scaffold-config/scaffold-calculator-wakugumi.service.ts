@@ -45,7 +45,7 @@ import {
 export interface WakugumiCalculationInput {
   walls: WallCalculationInput[];
   structureType?: '改修工事' | 'S造' | 'RC造';
-  scaffoldWidthMm: number;         // 600, 900, 1200 (from FT frame series)
+  scaffoldWidthMm: number;         // 610, 914, 1219 (from FT frame series)
   frameSizeMm: number;             // 1700 (FT-17)
   /** FT-617 / FT-917 / FT-1217 — walk-through frame width line */
   wakugumiFrameSeries?: WakugumiFrameSeriesCode;
@@ -229,7 +229,7 @@ export class ScaffoldCalculatorWakugumiService {
       kaidanSpanIndices.sort((a, b) => a - b);
     }
 
-    const needsExtendedBay = widthMm <= 600 && kaidanSpanIndices.length > 0;
+    const needsExtendedBay = widthMm <= 610 && kaidanSpanIndices.length > 0;
     const spanGroups = this.groupSpansBySize(spans);
 
     const components: CalculatedComponent[] = [];
@@ -363,7 +363,7 @@ export class ScaffoldCalculatorWakugumiService {
     }
 
     // ─── 7. 踏板 / アンチ ────────────────────────────────
-    const anchiLayout = WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[widthMm] || WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[600];
+    const anchiLayout = WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[widthMm] || WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[610];
     const totalAnchiSlots = totalSpans * L;
 
     // Stair replacement logic (same as kusabi) — planks only on full working levels L.

@@ -13,7 +13,8 @@ import {
   IsEmail,
   IsIn,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { normalizeScaffoldWidthMmToCatalog } from '../scaffold-rules';
 import { EdgeHashiraLabelingDto } from './patch-result-labels.dto';
 
 /** Per-upload façade colors sampled from BIM/render image (stored in calculationResult for 3D view). */
@@ -60,8 +61,8 @@ export class WallSegmentDto {
   offsetMm: number;
 }
 
-/** Per-wall scaffold width (600/900/1200). When set, overrides global scaffoldWidthMm for this wall. */
-export const SCAFFOLD_WIDTH_OPTIONS = [600, 900, 1200] as const;
+/** Per-wall scaffold width (610/914/1219). When set, overrides global scaffoldWidthMm for this wall. */
+export const SCAFFOLD_WIDTH_OPTIONS = [610, 914, 1219] as const;
 
 export class WallInputDto {
   @IsString()
@@ -101,11 +102,13 @@ export class WallInputDto {
   @Type(() => WallSegmentDto)
   segments?: WallSegmentDto[];
 
-  /** Per-wall scaffold width (600/900/1200). Overrides global scaffoldWidthMm for this wall. */
+  /** Per-wall scaffold width (610/914/1219). Overrides global scaffoldWidthMm for this wall. */
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null ? value : normalizeScaffoldWidthMmToCatalog(Number(value)),
+  )
   @IsNumber()
-  @Min(600)
-  @Max(1200)
+  @IsIn(SCAFFOLD_WIDTH_OPTIONS as unknown as number[])
   scaffoldWidthMm?: number;
 
   /** Base elevation (mm) for tier-aware scaffold on stepped/setback buildings. */
@@ -152,8 +155,10 @@ export class CreateScaffoldConfigDto {
   @Type(() => WallInputDto)
   walls: WallInputDto[];
 
-  /** Scaffold width (front↔back): 600, 900, 1200. Used when widthBySide not set. */
+  /** Scaffold width (front↔back): 610, 914, 1219. Used when widthBySide not set. */
+  @Transform(({ value }) => normalizeScaffoldWidthMmToCatalog(Number(value)))
   @IsNumber()
+  @IsIn(SCAFFOLD_WIDTH_OPTIONS as unknown as number[])
   scaffoldWidthMm: number;
 
   /** Distance from building wall to nearest posts (mm). 250–500 so scaffold can breathe. */
@@ -163,8 +168,17 @@ export class CreateScaffoldConfigDto {
   @Max(500)
   wallStandoffMm?: number;
 
-  /** Per-side scaffold width (mm). e.g. { north: 900, south: 600 }. Overrides scaffoldWidthMm for matching sides. */
+  /** Per-side scaffold width (mm). e.g. { north: 914, south: 610 }. Overrides scaffoldWidthMm for matching sides. */
   @IsOptional()
+  @Transform(({ value }) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      const n = Number(v);
+      if (Number.isFinite(n)) out[k] = normalizeScaffoldWidthMmToCatalog(n);
+    }
+    return out;
+  })
   widthBySide?: Record<string, number>;
 
   /** Preferred main tateji: 1800, 2700, 3600 (kusabi only) */
@@ -182,7 +196,7 @@ export class CreateScaffoldConfigDto {
   @IsNumber()
   frameSizeMm?: number;
 
-  /** Wakugumi frame product line: FT-617 / FT-917 / FT-1217 (sets layout width 600/900/1200) */
+  /** Wakugumi frame product line: FT-617 / FT-917 / FT-1217 (sets layout width 610/914/1219) */
   @IsOptional()
   @IsEnum(['FT617', 'FT917', 'FT1217'])
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';

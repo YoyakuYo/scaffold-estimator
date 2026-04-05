@@ -15,7 +15,7 @@ export const AI_BIM_RULES = {
   MIDDLE_RAIL_HEIGHT_MM: 450,
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
-  /** Terminal span into the turn (kusabi) — nominal 足場幅 600 / 900 / 1200 mm. */
+  /** Terminal span into the turn (kusabi) — catalog 足場幅 tier (610 / 914 / 1219 mm). */
   CORNER_SPAN_MM: 610,
   /** First span along each wall after the turn (kusabi) — 6尺. */
   CORNER_START_SPAN_MM: 1829,
@@ -27,7 +27,7 @@ export function getAiBimDefaults() {
   return {
     preferredMainTatejiMm: AI_BIM_RULES.VERTICAL_STANDARD_SPACING_MM,
     topGuardHeightMm: AI_BIM_RULES.VERTICAL_STANDARD_SPACING_MM,
-    scaffoldWidthMm: 900 as 600 | 900 | 1200,
+    scaffoldWidthMm: 914 as 610 | 914 | 1219,
     levelHeightMm: AI_BIM_RULES.LEVEL_HEIGHT_MM,
     handrailHeightMm: AI_BIM_RULES.HANDRAIL_HEIGHT_MIN_MM,
     middleRailHeightMm: AI_BIM_RULES.MIDDLE_RAIL_HEIGHT_MM,
@@ -459,7 +459,7 @@ export const CORNER_RULES = {
   kusabiCornerStartSpanMm: AI_BIM_RULES.CORNER_START_SPAN_MM,
   kusabiCornerSpanMm: AI_BIM_RULES.CORNER_SPAN_MM,
   wakugumiCornerStartSpanMm: 1829,
-  wakugumiCornerSpanMm: 600,
+  wakugumiCornerSpanMm: 610,
   sharedPostAtVertex: true,
   lShapedThresholdDeg: 70,
   pattankoForNonRightAngle: true,

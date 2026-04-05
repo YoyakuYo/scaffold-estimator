@@ -15,6 +15,7 @@ import {
 import { groupScaffoldSummaryByMaterial, scaffoldWallQuantityKey } from '@/lib/merge-scaffold-summary-rows';
 import { quotationComponentBaseName } from '@/lib/quotation-display-name';
 import { useI18n } from '@/lib/i18n';
+import { SCAFFOLD_WIDTH_MEDIUM_MM, SCAFFOLD_WIDTH_NARROW_MM } from '@/lib/scaffold-width-catalog';
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -312,14 +313,14 @@ function ScaffoldResultPage() {
       base.scaffoldType === 'wakugumi'
         ? (base.frameSizeMm ?? 1700)
         : (base.topGuardHeightMm ?? 1800);
-    const scaffoldWidthMm = config.scaffoldWidthMm ?? base.scaffoldWidthMm ?? 900;
+    const scaffoldWidthMm = config.scaffoldWidthMm ?? base.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM;
     const minimalWalls: WallCalculationResult[] = config.walls
       .filter((w) => w.enabled !== false)
       .map((w) => {
         const wallH = w.wallHeightMm ?? config.buildingHeightMm ?? 3000;
         const wallLevels = Math.max(1, Math.floor(wallH / levelH));
         const stairAccessCount = w.stairAccessCount ?? 0;
-        const needsExtBay = scaffoldWidthMm <= 600 && stairAccessCount > 0;
+        const needsExtBay = scaffoldWidthMm <= SCAFFOLD_WIDTH_NARROW_MM && stairAccessCount > 0;
         return {
           side: w.side,
           sideJp: w.side,

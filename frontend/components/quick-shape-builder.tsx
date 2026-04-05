@@ -23,6 +23,11 @@ import {
   SCAFFOLD_WALL_CF_KEYS,
   type ScaffoldWallCfKey,
 } from '@/lib/scaffold-wall-cf-options';
+import {
+  normalizeScaffoldWidthMmToCatalog,
+  SCAFFOLD_WIDTH_CATALOG_MM,
+  SCAFFOLD_WIDTH_NARROW_MM,
+} from '@/lib/scaffold-width-catalog';
 
 const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
   reflex: 'wallCfReflex',
@@ -192,7 +197,9 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     ],
     buildingHeightMm: Number.isFinite(d.buildingHeightMm) ? d.buildingHeightMm : 9900,
     scaffoldType,
-    scaffoldWidthMm: [600, 900, 1200].includes(d.scaffoldWidthMm) ? d.scaffoldWidthMm : 600,
+    scaffoldWidthMm: normalizeScaffoldWidthMmToCatalog(
+      Number.isFinite(d.scaffoldWidthMm) ? d.scaffoldWidthMm : SCAFFOLD_WIDTH_NARROW_MM,
+    ),
     preferredMainTatejiMm: [1800, 2700, 3600].includes(d.preferredMainTatejiMm)
       ? d.preferredMainTatejiMm
       : 1800,
@@ -203,7 +210,14 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     structureType,
     kaidanPerSide: d.kaidanPerSide && typeof d.kaidanPerSide === 'object' ? d.kaidanPerSide : {},
     scaffoldWidthPerSide:
-      d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object' ? d.scaffoldWidthPerSide : {},
+      d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object'
+        ? Object.fromEntries(
+            Object.entries(d.scaffoldWidthPerSide as Record<string, number>).map(([k, v]) => [
+              k,
+              normalizeScaffoldWidthMmToCatalog(v),
+            ]),
+          )
+        : {},
     edgePlanByLabel: parseEdgePlanByLabel(d.edgePlanByLabel),
     cfNoteByLabel: parseCfNoteByLabel(d.cfNoteByLabel),
   };
@@ -263,7 +277,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>(
     () => mergedInitial?.scaffoldType ?? 'kusabi',
   );
-  const [scaffoldWidthMm, setScaffoldWidthMm] = useState(() => mergedInitial?.scaffoldWidthMm ?? 600);
+  const [scaffoldWidthMm, setScaffoldWidthMm] = useState(
+    () => mergedInitial?.scaffoldWidthMm ?? SCAFFOLD_WIDTH_NARROW_MM,
+  );
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(
     () => mergedInitial?.preferredMainTatejiMm ?? 1800,
   );
@@ -685,13 +701,13 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                             const v = e.target.value;
                             setScaffoldWidthPerSide((prev) => ({
                               ...prev,
-                              [side.label]: v ? Number(v) : undefined,
+                              [side.label]: v ? normalizeScaffoldWidthMmToCatalog(Number(v)) : undefined,
                             }));
                           }}
                           className="w-[4.75rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
                         >
                           <option value="">{scaffoldWidthMm}mm</option>
-                          {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
+                          {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((w) => w !== scaffoldWidthMm).map((w) => (
                             <option key={w} value={w}>
                               {w}mm
                             </option>
@@ -862,9 +878,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value={600}>600mm</option>
-                  <option value={900}>900mm</option>
-                  <option value={1200}>1200mm</option>
+                  <option value={610}>610mm</option>
+                  <option value={914}>914mm</option>
+                  <option value={1219}>1219mm</option>
                 </select>
               </div>
 
@@ -914,7 +930,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                       onChange={(e) => {
                         const s = e.target.value as 'FT617' | 'FT917' | 'FT1217';
                         setWakugumiFrameSeries(s);
-                        const w = s === 'FT617' ? 600 : s === 'FT917' ? 900 : 1200;
+                        const w = s === 'FT617' ? 610 : s === 'FT917' ? 914 : 1219;
                         setScaffoldWidthMm(w);
                       }}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
