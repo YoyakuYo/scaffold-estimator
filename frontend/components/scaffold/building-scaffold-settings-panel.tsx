@@ -33,7 +33,7 @@ export interface SiteContactFieldsProps {
   setSiteFax: (v: string) => void;
 }
 
-/** Site / contact only (used in AI flow without default-height row). */
+/** Site / contact fields only (parent supplies section title when needed). */
 export function SiteContactFields({
   siteName,
   setSiteName,
@@ -48,13 +48,7 @@ export function SiteContactFields({
 }: SiteContactFieldsProps) {
   const { t } = useI18n();
   return (
-    <div className="mb-6 pb-6 border-b border-gray-200">
-      <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2 flex-wrap">
-        <MapPin className="h-4 w-4 text-emerald-600" />
-        {t('scaffold', 'siteInfoSection')}
-        <span className="text-xs font-normal text-gray-500">({t('scaffold', 'optional')})</span>
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('scaffold', 'siteName')}</label>
           <input
@@ -108,7 +102,6 @@ export function SiteContactFields({
           />
         </div>
       </div>
-    </div>
   );
 }
 
@@ -177,18 +170,24 @@ export function BuildingScaffoldSettingsPanel({
         </h2>
 
         {showSiteContact ? (
-          <SiteContactFields
-            siteName={siteName}
-            setSiteName={setSiteName}
-            siteAddress={siteAddress}
-            setSiteAddress={setSiteAddress}
-            siteEmail={siteEmail}
-            setSiteEmail={setSiteEmail}
-            sitePhone={sitePhone}
-            setSitePhone={setSitePhone}
-            siteFax={siteFax}
-            setSiteFax={setSiteFax}
-          />
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-emerald-600" />
+              {t('scaffold', 'siteInfoSection')}
+            </h3>
+            <SiteContactFields
+              siteName={siteName}
+              setSiteName={setSiteName}
+              siteAddress={siteAddress}
+              setSiteAddress={setSiteAddress}
+              siteEmail={siteEmail}
+              setSiteEmail={setSiteEmail}
+              sitePhone={sitePhone}
+              setSitePhone={setSitePhone}
+              siteFax={siteFax}
+              setSiteFax={setSiteFax}
+            />
+          </div>
         ) : null}
 
         <div className="mb-6 pb-6 border-b border-gray-200">

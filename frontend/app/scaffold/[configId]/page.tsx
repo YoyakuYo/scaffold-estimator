@@ -107,6 +107,51 @@ function formatWallSide(
   return side;
 }
 
+/** e.g. [1800,1800,600,600] → `1800×2 600×2` */
+function formatSpanLengthsGroupedMm(spans: number[]): string {
+  if (!Array.isArray(spans) || spans.length === 0) return '—';
+  const runs: { mm: number; n: number }[] = [];
+  for (const mm of spans) {
+    const last = runs[runs.length - 1];
+    if (last && last.mm === mm) last.n += 1;
+    else runs.push({ mm, n: 1 });
+  }
+  return runs.map((r) => `${r.mm}×${r.n}`).join(' ');
+}
+
+function buildWallSpanSummaryLines(
+  walls: WallCalculationResult[],
+  edgeLabeling: EdgeHashiraLabeling | undefined,
+  polygonVertices: unknown[] | undefined,
+  locale: string | undefined,
+  spansWord: string,
+): string[] {
+  const wallCount = walls.length;
+  if (wallCount === 0) return [];
+  const closedLoop = Array.isArray(polygonVertices) && polygonVertices.length >= 3;
+  return walls.map((w, i) => {
+    const chord = formatWallSide(w.side, w.sideJp, locale, {
+      wallIndex: i,
+      wallCount,
+      closedLoop,
+    });
+    const range = edgeHashiraColumnRangeSegment(
+      edgeLabeling,
+      i,
+      wallCount,
+      w.sideJp,
+      w.side,
+      w.postPositions,
+    );
+    const spanGroups = formatSpanLengthsGroupedMm(w.spans ?? []);
+    const n = w.totalSpans ?? w.spans?.length ?? 0;
+    if (range) {
+      return `${chord} / ${range} (${n} ${spansWord} ${spanGroups})`;
+    }
+    return `${chord} (${n} ${spansWord} ${spanGroups})`;
+  });
+}
+
 export default function ScaffoldResultPageWrapper() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
@@ -207,6 +252,16 @@ function ScaffoldResultPage() {
     const base = resultMergedForViz ?? result;
     return normalizeScaffoldResultForQuotation(base);
   }, [result, resultMergedForViz]);
+
+  const wallSpanSummaryLines = useMemo(() => {
+    const base = resultMergedForViz ?? result;
+    const walls = base?.walls;
+    if (!walls?.length) return [];
+    const edgeLabeling = (base as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
+    const poly = (base as { polygonVertices?: unknown[] }).polygonVertices;
+    const spansWord = t('result', 'spansLabel');
+    return buildWallSpanSummaryLines(walls, edgeLabeling, poly, locale, spansWord);
+  }, [result, resultMergedForViz, locale, t]);
 
   const resultFor3D = useMemo(() => {
     const base = resultMergedForViz ?? result;
@@ -496,18 +551,37 @@ function ScaffoldResultPage() {
             {t('scaffold', 'siteInfoSection')}
           </div>
           <p className="text-xs text-gray-500 mb-3 print:hidden">{t('result', 'excelSiteHeaderHint')}</p>
-          <SiteContactFields
-            siteName={exportSite.siteName}
-            setSiteName={(v) => setExportSite((s) => ({ ...s, siteName: v }))}
-            siteAddress={exportSite.siteAddress}
-            setSiteAddress={(v) => setExportSite((s) => ({ ...s, siteAddress: v }))}
-            siteEmail={exportSite.siteEmail}
-            setSiteEmail={(v) => setExportSite((s) => ({ ...s, siteEmail: v }))}
-            sitePhone={exportSite.sitePhone}
-            setSitePhone={(v) => setExportSite((s) => ({ ...s, sitePhone: v }))}
-            siteFax={exportSite.siteFax}
-            setSiteFax={(v) => setExportSite((s) => ({ ...s, siteFax: v }))}
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
+            <div className="min-w-0">
+              <SiteContactFields
+                siteName={exportSite.siteName}
+                setSiteName={(v) => setExportSite((s) => ({ ...s, siteName: v }))}
+                siteAddress={exportSite.siteAddress}
+                setSiteAddress={(v) => setExportSite((s) => ({ ...s, siteAddress: v }))}
+                siteEmail={exportSite.siteEmail}
+                setSiteEmail={(v) => setExportSite((s) => ({ ...s, siteEmail: v }))}
+                sitePhone={exportSite.sitePhone}
+                setSitePhone={(v) => setExportSite((s) => ({ ...s, sitePhone: v }))}
+                siteFax={exportSite.siteFax}
+                setSiteFax={(v) => setExportSite((s) => ({ ...s, siteFax: v }))}
+              />
+            </div>
+            {wallSpanSummaryLines.length > 0 ? (
+              <div className="min-w-0 rounded-lg border border-gray-100 bg-slate-50/90 p-3 print:break-inside-avoid">
+                <div className="text-xs font-semibold text-gray-700 mb-2">{t('result', 'spanConfig')}</div>
+                <ul className="space-y-1.5 text-[11px] sm:text-xs text-gray-800 leading-snug">
+                  {wallSpanSummaryLines.map((line, idx) => (
+                    <li
+                      key={idx}
+                      className="font-mono rounded-md border border-gray-200/90 bg-white px-2 py-1.5 break-all"
+                    >
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/* Summary Cards */}
