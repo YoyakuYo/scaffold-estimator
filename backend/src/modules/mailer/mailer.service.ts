@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -14,25 +14,27 @@ import { ConfigService } from '@nestjs/config';
  *     SMTP_PASS=<Brevo SMTP key>
  *     Optional: SMTP_FROM="Name <verified@domain.com>" (else From falls back to SMTP_USER)
  *     Port 587: leave SMTP_SECURE unset or false (STARTTLS).
+ *
+ * When BREVO_API_KEY or SENDGRID_API_KEY is set, SMTP transport is not created — avoids
+ * Render/cloud SMTP timeouts when you intended to use HTTPS APIs.
  */
 @Injectable()
-export class MailerService {
-  private readonly brevoApiKey: string | null;
-  private readonly sendGridApiKey: string | null;
+export class MailerService implements OnModuleInit {
+  private readonly logger = new Logger(MailerService.name);
   private readonly smtpEnabled: boolean;
   private readonly transport: any;
 
   constructor(private configService: ConfigService) {
-    this.brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim() || null;
-    this.sendGridApiKey = this.configService.get<string>('SENDGRID_API_KEY')?.trim() || null;
-
     const smtpHost = this.configService.get<string>('SMTP_HOST');
     const smtpUser = this.configService.get<string>('SMTP_USER');
     const smtpPass = this.configService.get<string>('SMTP_PASS');
     this.smtpEnabled = !!(smtpHost && smtpUser && smtpPass);
     this.transport = null;
 
-    if (this.smtpEnabled) {
+    const skipSmtpBecauseApi =
+      !!this.getBrevoApiKey() || !!this.getSendGridApiKey();
+
+    if (this.smtpEnabled && !skipSmtpBecauseApi) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const nodemailer = require('nodemailer');
@@ -60,13 +62,53 @@ export class MailerService {
     }
   }
 
+  onModuleInit(): void {
+    const from =
+      this.configService.get<string>('SMTP_FROM')?.trim() ||
+      this.configService.get<string>('SMTP_USER')?.trim();
+    if (this.getBrevoApiKey() && from) {
+      this.logger.log('Email delivery: Brevo HTTPS API (api.brevo.com). SMTP transport skipped.');
+      return;
+    }
+    if (this.getSendGridApiKey() && from) {
+      this.logger.log('Email delivery: SendGrid HTTPS API. SMTP transport skipped.');
+      return;
+    }
+    if (this.transport) {
+      const host = this.configService.get<string>('SMTP_HOST')?.trim() || '(unknown host)';
+      this.logger.warn(
+        `Email delivery: SMTP to ${host}. If this times out on your host, set BREVO_API_KEY + SMTP_FROM instead.`,
+      );
+      return;
+    }
+    this.logger.warn(
+      'Email delivery: not configured (need BREVO_API_KEY or SENDGRID_API_KEY + SMTP_FROM, or SMTP_HOST+SMTP_USER+SMTP_PASS).',
+    );
+  }
+
+  /**
+   * Read on demand so runtime env (e.g. PaaS inject) matches send().
+   * Also accepts legacy SENDINBLUE_API_KEY.
+   */
+  private getBrevoApiKey(): string | null {
+    const k =
+      this.configService.get<string>('BREVO_API_KEY')?.trim() ||
+      this.configService.get<string>('SENDINBLUE_API_KEY')?.trim();
+    return k || null;
+  }
+
+  private getSendGridApiKey(): string | null {
+    const k = this.configService.get<string>('SENDGRID_API_KEY')?.trim();
+    return k || null;
+  }
+
   /** True if we can send (Brevo / SendGrid API or SMTP). */
   mailConfigured(): boolean {
     const from =
       this.configService.get<string>('SMTP_FROM')?.trim() ||
       this.configService.get<string>('SMTP_USER')?.trim();
-    if (this.brevoApiKey && from) return true;
-    if (this.sendGridApiKey && from) return true;
+    if (this.getBrevoApiKey() && from) return true;
+    if (this.getSendGridApiKey() && from) return true;
     return this.smtpEnabled && !!this.transport;
   }
 
@@ -86,7 +128,8 @@ export class MailerService {
   }
 
   private async sendWithBrevo(to: string, subject: string, text: string, html?: string): Promise<void> {
-    if (!this.brevoApiKey) throw new Error('Brevo API key missing');
+    const apiKey = this.getBrevoApiKey();
+    if (!apiKey) throw new Error('Brevo API key missing');
     const from = this.parseFrom();
     if (!from.email) throw new Error('SMTP_FROM is required for Brevo');
 
@@ -94,7 +137,7 @@ export class MailerService {
       method: 'POST',
       headers: {
         accept: 'application/json',
-        'api-key': this.brevoApiKey,
+        'api-key': apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -114,14 +157,15 @@ export class MailerService {
   }
 
   private async sendWithSendGrid(to: string, subject: string, text: string, html?: string): Promise<void> {
-    if (!this.sendGridApiKey) throw new Error('SendGrid API key missing');
+    const apiKey = this.getSendGridApiKey();
+    if (!apiKey) throw new Error('SendGrid API key missing');
     const from = this.parseFrom();
     if (!from.email) throw new Error('SMTP_FROM is required for SendGrid');
 
     const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.sendGridApiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -144,11 +188,11 @@ export class MailerService {
 
   async send(to: string, subject: string, text: string, html?: string): Promise<void> {
     if (!this.mailConfigured()) return;
-    if (this.brevoApiKey) {
+    if (this.getBrevoApiKey()) {
       await this.sendWithBrevo(to, subject, text, html);
       return;
     }
-    if (this.sendGridApiKey) {
+    if (this.getSendGridApiKey()) {
       await this.sendWithSendGrid(to, subject, text, html);
       return;
     }

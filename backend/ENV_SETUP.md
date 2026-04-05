@@ -73,6 +73,7 @@ FRONTEND_URL=http://localhost:3001
 #
 # Brevo over HTTPS (preferred on Render — same account as Brevo SMTP, different key type):
 # BREVO_API_KEY=xkeysib-xxx   # Brevo → Transactional → API keys (not the SMTP password)
+# (Legacy alias: SENDINBLUE_API_KEY — same value as BREVO_API_KEY if you already use that name.)
 # SMTP_FROM="App <verified@yourdomain.com>"
 #
 # Brevo SMTP relay (OK on your own server/VPS; may fail on Render with “Connection timeout”):
@@ -83,7 +84,8 @@ FRONTEND_URL=http://localhost:3001
 # SMTP_SECURE=false          # default; use STARTTLS on 587 (omit or false)
 # SMTP_FROM="App <verified@yourdomain.com>"   # recommended; if omitted, From = SMTP_USER
 #
-# If you use both BREVO_API_KEY and SMTP, the app sends via HTTPS first (API), not SMTP.
+# If BREVO_API_KEY or SENDGRID_API_KEY is set, the app never opens an SMTP connection (HTTPS only).
+# On boot, logs show either "Brevo HTTPS API" or "SMTP to …" so you can confirm what Render is using.
 #
 # SendGrid (HTTPS, avoids SMTP timeouts on some PaaS):
 # SENDGRID_API_KEY=SG.xxx   (API key with Mail Send; same key as SMTP “password”)
