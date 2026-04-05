@@ -151,14 +151,15 @@ export const WAKUGUMI_CALC_RULES = {
   jackBaseMaxMm: 300,
 
   /**
-   * Per span per level component rules:
-   * - Brace: 2 per span (BOTH faces — front + back)
-   * - Shitasan: 2 per span (bottom horizontal, both faces)
+   * Per span per level — inner row and outer row each get one **set**:
+   * one set = 1 下桟 + 1 ブレス on that face (内列・外列それぞれ 1 セット/スパン/段).
+   * Totals: 2 ブレス + 2 下桟 per span per level.
    * - Tesuri: 0 (NOT used in wakugumi)
    * - Habaki: 1 or 2 per span (user-selectable)
+   * 相間ブラケット・装間ネットは枠組では使用しない（BOM に出さない）。
    */
-  bracePerSpanPerLevel: 2,       // both faces
-  shitasanPerSpanPerLevel: 2,    // bottom horizontal, both faces
+  bracePerSpanPerLevel: 2,       // 1 per face × 2 faces
+  shitasanPerSpanPerLevel: 2,   // 1 per face × 2 faces
   tesuriPerSpanPerLevel: 0,      // not used
 
   /**

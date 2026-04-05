@@ -287,8 +287,8 @@ export class ScaffoldCalculatorWakugumiService {
       materialCode: `WAKU-FRAME-${input.frameSizeMm}`,
     });
 
-    // ─── 3. ブレス (Brace) — BOTH faces ──────────────────
-    // N × 2 (front + back) × L levels
+    // ─── 3. ブレス (Brace) — 内列・外列それぞれ 1 本/スパン/段（下桟とセット）──
+    // N × bracePerSpanPerLevel × Ltot
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
       components.push({
@@ -305,8 +305,7 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 5. 下桟 (Shitasan) — bottom horizontal, both faces ─
-    // N × 2 × L levels
+    // ─── 5. 下桟 (Shitasan) — 内列・外列それぞれ 1 本/スパン/段（ブレスとセット）──
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
       components.push({
@@ -436,45 +435,7 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 相間ブラゲット / 装間ネット / メッシュシート（内列・スパン長ベース、段=Ltot ＝最上ガード帯含む）──
-    const innerPostStationsW = Math.max(0, postPositions - Math.floor(cornerPostDeduction / 2));
-    const wallRunMmW = spans.reduce((sum, s) => sum + s, 0);
-    const sokanNettoSheetsW = wallRunMmW > 0 ? Math.ceil(wallRunMmW / 6000) : 0;
-
-    const sokanBracketQtyW = innerPostStationsW * Ltot;
-    if (sokanBracketQtyW > 0) {
-      sortOrder++;
-      components.push({
-        type: 'sokan_bracket',
-        category: CAT.safety.jp,
-        categoryEn: CAT.safety.en,
-        name: 'Sokan bracket',
-        nameJp: '相間ブラゲット',
-        sizeSpec: 'Inner post mount',
-        unit: '本',
-        quantity: sokanBracketQtyW,
-        sortOrder,
-        materialCode: 'SOKAN-BRACKET',
-      });
-    }
-
-    const sokanNettoQtyW = sokanNettoSheetsW * Ltot;
-    if (sokanNettoQtyW > 0) {
-      sortOrder++;
-      components.push({
-        type: 'sokan_netto',
-        category: CAT.safety.jp,
-        categoryEn: CAT.safety.en,
-        name: 'Sokan net (6m)',
-        nameJp: '装間ネット',
-        sizeSpec: '6000mm',
-        unit: '枚',
-        quantity: sokanNettoQtyW,
-        sortOrder,
-        materialCode: 'SOKAN-NETTO',
-      });
-    }
-
+    // ─── メッシュシート（スパン長ベース、段=Ltot ＝最上ガード帯含む）──
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       const meshQtyW = Number(count) * Ltot;
       if (meshQtyW <= 0) continue;

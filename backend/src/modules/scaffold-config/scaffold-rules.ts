@@ -203,15 +203,15 @@ export const CALC_RULES = {
   jackBaseMinMm: 0,
   jackBaseMaxMm: 300,
 
-  /** 
-   * Per span per level component rules:
-   * - Brace: 1 per span (outer face z=0 / 外列)
-   * - Tesuri (nuno bar): 2 per span × inner face; outer face uses brace (上部固定1800mm)
+  /**
+   * Per span per level (くさび式):
+   * - Outer row: 1 ブレス/スパン/段
+   * - Inner row: 手摺（布材）2 本高さ/スパン/段（外列はブレス）
    * - Habaki: 2 per span (front + back)
    * - Anchi: 1 per span (sits on width yokoji)
    */
-  bracePerSpanPerLevel: 1,        // outer face (建側から見て外列)
-  tesuriPerSpanPerLevel: 2,       // 2 rails × inner face (outer: brace)
+  bracePerSpanPerLevel: 1,        // outer face only
+  tesuriPerSpanPerLevel: 2,       // inner face, two rail heights
   habakiPerSpanPerLevel: 2,       // front + back
 
   /**
