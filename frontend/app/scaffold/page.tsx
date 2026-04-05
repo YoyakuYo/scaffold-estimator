@@ -1156,9 +1156,14 @@ function ScaffoldPageContent() {
     }
     const uiPath = (editConfig.calculationResult as { uiInputPath?: CreateScaffoldConfigDto['inputUiPath'] } | undefined)
       ?.uiInputPath;
-    if (uiPath === 'quick') setManualSubTab('quick');
-    else setManualSubTab('drawing');
-    setInputMode('drawing');
+    if (uiPath === 'quick') {
+      setManualSubTab('quick');
+      setInputMode('quick');
+    } else {
+      setManualSubTab('drawing');
+      // CAD / AI edits use the shared manual panel + wall table (no full CAD/AI wizard rehydrate here).
+      setInputMode('drawing');
+    }
   }, [editConfigId, editConfig]);
 
   useEffect(() => {
@@ -1396,7 +1401,14 @@ function ScaffoldPageContent() {
     if (planGatesRelaxed) return;
     if (inputMode === 'ai_extract' && !canAi) setInputMode('drawing');
     if (inputMode === 'cad_draw' && !canCad) setInputMode('drawing');
-    if (!canFile && manualSubTab === 'drawing' && !editConfigId) {
+    // Do not yank users off CAD / AI into Quick when file upload is gated (manualSubTab defaults to 'drawing').
+    if (
+      !canFile &&
+      manualSubTab === 'drawing' &&
+      !editConfigId &&
+      inputMode !== 'cad_draw' &&
+      inputMode !== 'ai_extract'
+    ) {
       setManualSubTab('quick');
       setInputMode('quick');
     }
@@ -2725,7 +2737,6 @@ function ScaffoldPageContent() {
                 setBuildingHeightMm(result.buildingHeightMm);
                 setPolygonVertices(verts);
                 setPrefilled(true);
-                setInputMode('drawing');
                 setPendingInputUiPath('cad_draw');
               }}
               className="w-full min-w-0"
