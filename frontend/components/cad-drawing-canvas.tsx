@@ -27,7 +27,6 @@ import {
   type EdgeHashiraFormRow,
 } from '@/lib/edge-hashira-labels';
 import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
-import { EdgeHashiraPlanningPanel } from '@/components/edge-hashira-planning-panel';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 
 // ─── Types ──────────────────────────────────────────────────
@@ -141,12 +140,6 @@ export function CadDrawingCanvas({
   // Dimension editing
   const [editingEdge, setEditingEdge] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
-  /** Draft strings for manual vertex coords: keys `${index}-x` / `${index}-y` (mm). */
-  const [vertexCoordDrafts, setVertexCoordDrafts] = useState<Record<string, string>>({});
-  const vertexCoordDraftsRef = useRef(vertexCoordDrafts);
-  useLayoutEffect(() => {
-    vertexCoordDraftsRef.current = vertexCoordDrafts;
-  }, [vertexCoordDrafts]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -617,7 +610,6 @@ export function CadDrawingCanvas({
   }, []);
 
   const handleUndo = useCallback(() => {
-    setVertexCoordDrafts({});
     if (isClosed) {
       setIsClosed(false);
     } else {
@@ -629,7 +621,6 @@ export function CadDrawingCanvas({
     setPoints([]);
     setIsClosed(false);
     setEditingEdge(null);
-    setVertexCoordDrafts({});
   }, []);
 
   const handleCalibrate = useCallback(() => {
@@ -684,67 +675,12 @@ export function CadDrawingCanvas({
     setEditingEdge(null);
   }, [editingEdge, editValue, points, mmPerPixel]);
 
-  const commitVertexCoordMm = useCallback(
-    (index: number) => {
-      const kx = `${index}-x`;
-      const ky = `${index}-y`;
-      setVertexCoordDrafts((drafts) => {
-        const hasX = drafts[kx] !== undefined;
-        const hasY = drafts[ky] !== undefined;
-        if (!hasX && !hasY) return drafts;
-
-        setPoints((prev) => {
-          const p = prev[index];
-          if (!p) return prev;
-          const curXmm = Math.round(p.x * mmPerPixel);
-          const curYmm = Math.round(p.y * mmPerPixel);
-          const xMm = parseFloat(hasX ? drafts[kx]! : String(curXmm));
-          const yMm = parseFloat(hasY ? drafts[ky]! : String(curYmm));
-          const xFinal = Number.isNaN(xMm) ? curXmm : xMm;
-          const yFinal = Number.isNaN(yMm) ? curYmm : yMm;
-          const next = [...prev];
-          next[index] = { x: xFinal / mmPerPixel, y: yFinal / mmPerPixel };
-          return next;
-        });
-
-        const out = { ...drafts };
-        delete out[kx];
-        delete out[ky];
-        return out;
-      });
-    },
-    [mmPerPixel],
-  );
-
-  const mergePointsWithCoordDrafts = useCallback(
-    (base: CadPoint[]): CadPoint[] => {
-      const drafts = vertexCoordDraftsRef.current;
-      return base.map((p, i) => {
-        const kx = `${i}-x`;
-        const ky = `${i}-y`;
-        if (drafts[kx] === undefined && drafts[ky] === undefined) return p;
-        const curXmm = Math.round(p.x * mmPerPixel);
-        const curYmm = Math.round(p.y * mmPerPixel);
-        const xMm = parseFloat(drafts[kx] !== undefined ? drafts[kx]! : String(curXmm));
-        const yMm = parseFloat(drafts[ky] !== undefined ? drafts[ky]! : String(curYmm));
-        const xFinal = Number.isNaN(xMm) ? curXmm : xMm;
-        const yFinal = Number.isNaN(yMm) ? curYmm : yMm;
-        return { x: xFinal / mmPerPixel, y: yFinal / mmPerPixel };
-      });
-    },
-    [mmPerPixel],
-  );
-
   const handleComplete = useCallback(() => {
     if (!isClosed || points.length < 3) return;
 
-    const merged = mergePointsWithCoordDrafts(points);
-    setPoints(merged);
-    setVertexCoordDrafts({});
-
-    const walls = merged.map((p, i) => {
-      const j = (i + 1) % merged.length;
-      const len = edgeLengthMm(p, merged[j]);
+    const walls = points.map((p, i) => {
+      const j = (i + 1) % points.length;
+      const len = edgeLengthMm(p, points[j]);
       return {
         side: `edge-${i}`,
         wallLengthMm: Math.max(600, len),
@@ -756,7 +692,7 @@ export function CadDrawingCanvas({
       };
     });
 
-    const vertices = merged.map((p) => ({
+    const vertices = points.map((p) => ({
       xFrac: Math.round(p.x * mmPerPixel),
       yFrac: Math.round(p.y * mmPerPixel),
     }));
@@ -776,7 +712,6 @@ export function CadDrawingCanvas({
     mmPerPixel,
     edgeLengthMm,
     onComplete,
-    mergePointsWithCoordDrafts,
     wallHeightsMmLocal,
     wallCfLocal,
     edgePlanAxesLocal,
@@ -799,27 +734,14 @@ export function CadDrawingCanvas({
     return edges;
   }, [points, isClosed, edgeLengthMm]);
 
-  /** World XY in mm — same convention as export (`xFrac` / `yFrac`). */
-  const vertexMmList = useMemo(
-    () =>
-      points.map((p, i) => ({
-        index: i,
-        label: String.fromCharCode(65 + (i % 26)),
-        xMm: Math.round(p.x * mmPerPixel),
-        yMm: Math.round(p.y * mmPerPixel),
-      })),
-    [points, mmPerPixel],
-  );
-
   useEffect(() => {
     if (!onLiveFootprintMmChange) return;
     try {
-      const merged = mergePointsWithCoordDrafts(points);
-      if (merged.length < 2) {
+      if (points.length < 2) {
         onLiveFootprintMmChange(null, false);
         return;
       }
-      const verts = merged.map((p) => ({
+      const verts = points.map((p) => ({
         x: Math.round(p.x * mmPerPixel),
         y: Math.round(p.y * mmPerPixel),
       }));
@@ -827,7 +749,7 @@ export function CadDrawingCanvas({
     } catch {
       onLiveFootprintMmChange(null, false);
     }
-  }, [points, mmPerPixel, isClosed, mergePointsWithCoordDrafts, onLiveFootprintMmChange]);
+  }, [points, mmPerPixel, isClosed, onLiveFootprintMmChange]);
 
   const cadPerimeterMm = useMemo(
     () => edgeList.reduce((s, e) => s + e.lengthMm, 0),
@@ -1214,79 +1136,7 @@ export function CadDrawingCanvas({
               </div>
             )}
 
-            {vertexMmList.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">
-                  {t('viewer', 'cadVertexCoordinates')}
-                </div>
-                <div className="space-y-2">
-                  {vertexMmList.map((v) => {
-                    const kx = `${v.index}-x`;
-                    const ky = `${v.index}-y`;
-                    const vx =
-                      vertexCoordDrafts[kx] !== undefined ? vertexCoordDrafts[kx] : String(v.xMm);
-                    const vy =
-                      vertexCoordDrafts[ky] !== undefined ? vertexCoordDrafts[ky] : String(v.yMm);
-                    const n = v.index + 1;
-                    return (
-                      <div key={v.index} className="rounded border border-gray-200 bg-gray-50/80 p-1.5 space-y-1">
-                        <div className="text-[10px] font-semibold text-gray-600">{v.label}</div>
-                        <div className="flex items-center gap-1">
-                          <label className="text-[10px] font-mono text-amber-700 w-7 shrink-0">X{n}</label>
-                          <input
-                            type="number"
-                            step={1}
-                            value={vx}
-                            onChange={(e) => setVertexCoordDrafts((d) => ({ ...d, [kx]: e.target.value }))}
-                            onBlur={() => commitVertexCoordMm(v.index)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            }}
-                            className="min-w-0 flex-1 border border-gray-200 rounded px-1.5 py-0.5 text-[11px] font-mono bg-white"
-                          />
-                          <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <label className="text-[10px] font-mono text-sky-700 w-7 shrink-0">Y{n}</label>
-                          <input
-                            type="number"
-                            step={1}
-                            value={vy}
-                            onChange={(e) => setVertexCoordDrafts((d) => ({ ...d, [ky]: e.target.value }))}
-                            onBlur={() => commitVertexCoordMm(v.index)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            }}
-                            className="min-w-0 flex-1 border border-gray-200 rounded px-1.5 py-0.5 text-[11px] font-mono bg-white"
-                          />
-                          <span className="text-[9px] text-gray-500 shrink-0">{t('common', 'mm')}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-[9px] text-gray-500 mt-1.5">{t('viewer', 'cadVertexXyHint')}</p>
-              </div>
-            )}
           </div>
-
-          {hashiraRowsLocal.length > 0 && hashiraRowsLocal.length === edgeList.length && edgeList.length > 0 && (
-            <div className="p-4 border-t border-gray-200 bg-slate-50/40 shrink-0">
-              <EdgeHashiraPlanningPanel
-                wallCount={edgeList.length}
-                lengthsMm={edgeList.map((e) => e.lengthMm)}
-                rows={hashiraRowsLocal}
-                onRowChange={(wi, patch) => {
-                  setHashiraRowsLocal((prev) => {
-                    const n = [...prev];
-                    n[wi] = { ...(n[wi] ?? { axis: '' as const, countStr: '' }), ...patch };
-                    return n;
-                  });
-                }}
-                closedFootprint={isClosed && points.length >= 3}
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>
