@@ -473,6 +473,7 @@ export class ScaffoldCalculatorService {
     });
 
     // ─── 3. ブレス (外面・交差筋違) ─────────────────────
+    // Lsafety = L+1: include one more bay of braces for the top guard band (same as tesuri/habaki perimeter).
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
       components.push({
@@ -483,7 +484,7 @@ export class ScaffoldCalculatorService {
         nameJp: `ブレス`,
         sizeSpec: `${spanSizeMm}`,
         unit: '本',
-        quantity: Number(count) * L * CALC_RULES.bracePerSpanPerLevel,
+        quantity: Number(count) * Lsafety * CALC_RULES.bracePerSpanPerLevel,
         sortOrder,
         materialCode: `KUSABI-BRACE-${spanSizeMm}`,
       });
