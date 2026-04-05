@@ -324,6 +324,8 @@ export class ScaffoldCalculatorService {
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
     const L = levelCalc.fullLevels;
+    /** Top guard band: habaki / end stopper / sokan / mesh extend one level like the upper safety row. */
+    const Lsafety = L + 1;
 
     // ─── Convert kaidan offsets to span indices ──────────────
     // Helper: find which 2-span window is closest to an offset
@@ -511,7 +513,7 @@ export class ScaffoldCalculatorService {
       nunoBarsBySize[stopperSize] = { tesuri: 0, stopper: 0, negarami: 0, bearer: 0 };
     }
     const freeEnds = freeScaffoldEndCountForWall(wallIndex, input.walls.length);
-    nunoBarsBySize[stopperSize].stopper += CALC_RULES.stoppersPerEndPerLevel * freeEnds * L;
+    nunoBarsBySize[stopperSize].stopper += CALC_RULES.stoppersPerEndPerLevel * freeEnds * Lsafety;
 
     // 7. 根がらみ (Negarami/Base Tie) - collect by size
     const yokojiWidthSize = findNearestSize(widthMm, NUNO_SIZES);
@@ -647,7 +649,7 @@ export class ScaffoldCalculatorService {
         nameJp: `巾木`,
         sizeSpec: `${spanSizeMm}`,
         unit: '枚',
-        quantity: Number(count) * L * CALC_RULES.habakiPerSpanPerLevel,
+        quantity: Number(count) * Lsafety * CALC_RULES.habakiPerSpanPerLevel,
         sortOrder,
         materialCode: `KUSABI-HABAKI-${spanSizeMm}`,
       });
@@ -658,7 +660,7 @@ export class ScaffoldCalculatorService {
     const wallRunMm = spans.reduce((sum, s) => sum + s, 0);
     const sokanNettoSheets = wallRunMm > 0 ? Math.ceil(wallRunMm / 6000) : 0;
 
-    const sokanBracketQty = innerPostStations * L;
+    const sokanBracketQty = innerPostStations * Lsafety;
     if (sokanBracketQty > 0) {
       sortOrder++;
       components.push({
@@ -675,7 +677,7 @@ export class ScaffoldCalculatorService {
       });
     }
 
-    const sokanNettoQty = sokanNettoSheets * L;
+    const sokanNettoQty = sokanNettoSheets * Lsafety;
     if (sokanNettoQty > 0) {
       sortOrder++;
       components.push({
@@ -693,7 +695,7 @@ export class ScaffoldCalculatorService {
     }
 
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
-      const meshQty = Number(count) * L;
+      const meshQty = Number(count) * Lsafety;
       if (meshQty <= 0) continue;
       sortOrder++;
       components.push({

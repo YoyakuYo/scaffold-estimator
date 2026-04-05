@@ -274,8 +274,8 @@ export const CORNER_OVERRUN_MM = 300;
  * Default terminal span when scaffold width is 600mm. Wider scaffolds use the matching width
  * (900 / 1200) as the corner bay module (足場コーナー詳細図 — continuous walk).
  */
-/** Default terminal bay into the turn @600mm nominal scaffold width — matches width-module 2尺. */
-export const CORNER_SPAN_MM = 610;
+/** Default terminal bay into the turn — matches nominal 足場幅 (600 / 900 / 1200 mm). */
+export const CORNER_SPAN_MM = 600;
 /**
  * First span along each wall after the corner (mm) — 6尺 bay; shares posts with the
  * previous wall’s terminal bay for continuous deck (足場コーナー詳細図).
@@ -308,13 +308,13 @@ export function scaffoldFacadeBasisMmFromCorners(
   return Math.max(0, wallLengthMm - inset);
 }
 
-/** Corner terminal bay length = width-module (610 / 914 / 1219 by nominal 600 / 900 / 1200 足場幅). */
+/** Corner terminal bay length = nominal 足場幅 (600 / 900 / 1200 mm) + 300 mm overrun (convex rule). */
 export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
   if (!Number.isFinite(w) || w <= 0) return CORNER_SPAN_MM;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  if (w <= 600) return 600;
+  if (w <= 900) return 900;
+  return 1200;
 }
 
 /** Footprint vertex (fractional or mm — only turn direction matters for reflex detection). */
@@ -530,7 +530,7 @@ export function classifyKusabiRectangleEdgeRoles(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * - Run along the wall = **wallLength + 300 + terminal**; first bay **1829**; last = terminal (610/914/1219).
+ * - Run along the wall = **wallLength + 300 + terminal**; first bay **1829**; last = terminal (= nominal 足場幅 600/900/1200).
  * - **Reflex (inner) corner:** subtract **300mm** from nominal wall length **per** reflex vertex on that edge
  *   (effective façade = `scaffoldFacadeBasisMmFromCorners`). **Rule 1:** when possible, end the wall with the
  *   width-module terminal span so the next wall can reuse the same posts for a continuous

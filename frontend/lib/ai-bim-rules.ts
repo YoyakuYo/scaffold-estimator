@@ -15,8 +15,8 @@ export const AI_BIM_RULES = {
   MIDDLE_RAIL_HEIGHT_MM: 450,
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
-  /** Terminal span into the turn (kusabi) — width module 610/914/1219. */
-  CORNER_SPAN_MM: 610,
+  /** Terminal span into the turn (kusabi) — nominal 足場幅 600 / 900 / 1200 mm. */
+  CORNER_SPAN_MM: 600,
   /** First span along each wall after the turn (kusabi) — 6尺. */
   CORNER_START_SPAN_MM: 1829,
   MIN_WALL_LENGTH_MM: 600,
@@ -459,7 +459,7 @@ export const CORNER_RULES = {
   kusabiCornerStartSpanMm: AI_BIM_RULES.CORNER_START_SPAN_MM,
   kusabiCornerSpanMm: AI_BIM_RULES.CORNER_SPAN_MM,
   wakugumiCornerStartSpanMm: 1829,
-  wakugumiCornerSpanMm: 610,
+  wakugumiCornerSpanMm: 600,
   sharedPostAtVertex: true,
   lShapedThresholdDeg: 70,
   pattankoForNonRightAngle: true,

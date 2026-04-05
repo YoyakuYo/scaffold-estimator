@@ -40,23 +40,23 @@ const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
 // Corner detail base rule (足場コーナー詳細図): 300mm overrun past building corner + corner span.
-// Width-module bay (both types): 610 / 914 / 1219 for nominal 600 / 900 / 1200 足場幅.
+// Corner bay into the turn: nominal 足場幅 600 / 900 / 1200 mm (+ 300 mm overrun in layout rules).
 const CORNER_OVERRUN_M = 0.3;
 /** Match backend `cornerTerminalSpanMmKusabi` / detailed corner width-module bay. */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return 610;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  if (!Number.isFinite(w) || w <= 0) return 600;
+  if (w <= 600) return 600;
+  if (w <= 900) return 900;
+  return 1200;
 }
 /** Match backend `cornerTerminalSpanMmWakugumi`. */
 function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return 610;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  if (!Number.isFinite(w) || w <= 0) return 600;
+  if (w <= 600) return 600;
+  if (w <= 900) return 900;
+  return 1200;
 }
 
 type CornerStartMode = 'none' | 'convex-overrun' | 'reflex-share';
@@ -262,7 +262,7 @@ function buildOffsetPathXZ(
 
 /**
  * When capping span count for 3D perf, keep the **first** and **last** span entries.
- * A plain `slice(0, max)` dropped the terminal 600/610 corner bay while leaving the leading 1800/1829,
+ * A plain `slice(0, max)` dropped the terminal corner bay while leaving the leading 1800/1829,
  * which broke post lines at the building corner and produced bogus “600 + 600 + placeholder” visuals.
  */
 function capSpansFor3dPreview(allSpans: number[], maxSpans: number): number[] {
@@ -826,7 +826,7 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Closed polygon: [1829, …middle…, 610/914/1219]; sum = wallLength+300+terminal.
+        // Closed polygon: [1829, …middle…, terminal = nominal 600/900/1200]; sum = wallLength+300+terminal.
         const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? capSpansFor3dPreview(allSpans, maxSpans)

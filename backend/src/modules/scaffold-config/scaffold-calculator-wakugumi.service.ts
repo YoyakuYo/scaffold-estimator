@@ -169,15 +169,13 @@ export class ScaffoldCalculatorWakugumiService {
           endCornerKind: wall.endCornerKind,
         })
       : fitSpansToWallLengthWakugumi(wall.wallLengthMm, { northWall: wallIndex === 0 });
-    const cornerPostDeduction =
-      useCornerLogic && input.walls.length >= 2
-        ? (wallIndex > 0 ? 2 : 0) +
-          (input.walls.length >= 3 && wallIndex === input.walls.length - 1 ? 2 : 0)
-        : 0;
+    // Kusabi shares post lines at polygon corners (BOM deduction). Wakugumi places a separate frame
+    // line at each corner (no shared corner frame with the adjacent wall).
+    const cornerPostDeduction = 0;
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1;
     const L = levelCalc.fullLevels;
-    /** 最上は常にもう一段建枠（L+1） */
+    /** Top safety band: +1 level of frame / brace / shitasan (no deck planks on that band). */
     const Ltot = L + 1;
 
     // ─── Kaidan offset → span index mapping ──────────────
@@ -362,12 +360,12 @@ export class ScaffoldCalculatorWakugumiService {
 
     // ─── 7. 踏板 / アンチ ────────────────────────────────
     const anchiLayout = WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[widthMm] || WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[600];
-    const totalAnchiSlots = totalSpans * Ltot;
+    const totalAnchiSlots = totalSpans * L;
 
-    // Stair replacement logic (same as kusabi)
+    // Stair replacement logic (same as kusabi) — planks only on full working levels L.
     let stairReplacements = 0;
     if (!needsExtendedBay && kaidanSpanIndices.length > 0) {
-      stairReplacements = kaidanSpanIndices.length * Ltot;
+      stairReplacements = kaidanSpanIndices.length * L;
     }
 
     const spanEntries = Object.entries(spanGroups).sort(
@@ -377,7 +375,7 @@ export class ScaffoldCalculatorWakugumiService {
 
     const anchiDeductions: Record<string, number> = {};
     for (const [spanSizeMm, count] of spanEntries) {
-      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * Ltot;
+      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * L;
       const deduction = Math.min(remainingStairDeductions, perSpanAnchi);
       anchiDeductions[spanSizeMm] = deduction;
       remainingStairDeductions -= deduction;
@@ -385,7 +383,7 @@ export class ScaffoldCalculatorWakugumiService {
 
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
-      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * Ltot;
+      const perSpanAnchi = anchiLayout.fullAnchiPerSpan * Number(count) * L;
       const stairDeduction = anchiDeductions[spanSizeMm] || 0;
       components.push({
         type: 'anchi',
@@ -413,7 +411,7 @@ export class ScaffoldCalculatorWakugumiService {
           nameJp: `踏板 (半幅)`,
           sizeSpec: `${anchiLayout.halfAnchiWidth}×${spanSizeMm}`,
           unit: '枚',
-          quantity: anchiLayout.halfAnchiPerSpan * Number(count) * Ltot,
+          quantity: anchiLayout.halfAnchiPerSpan * Number(count) * L,
           sortOrder,
           materialCode: `WAKU-ANCHI-${anchiLayout.halfAnchiWidth}x${spanSizeMm}`,
         });
@@ -460,7 +458,7 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    const sokanNettoQtyW = sokanNettoSheetsW * L;
+    const sokanNettoQtyW = sokanNettoSheetsW * Ltot;
     if (sokanNettoQtyW > 0) {
       sortOrder++;
       components.push({
@@ -478,7 +476,7 @@ export class ScaffoldCalculatorWakugumiService {
     }
 
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
-      const meshQtyW = Number(count) * L;
+      const meshQtyW = Number(count) * Ltot;
       if (meshQtyW <= 0) continue;
       sortOrder++;
       components.push({

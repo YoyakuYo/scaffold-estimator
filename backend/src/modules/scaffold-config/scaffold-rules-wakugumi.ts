@@ -189,7 +189,7 @@ export const WAKUGUMI_CORNER_OVERRUN_MM = 300;
 /**
  * Terminal span into the turn (mm) — 2尺. Total run = wall + 300mm so last posts sit past the corner.
  */
-export const WAKUGUMI_CORNER_SPAN_MM = 610;
+export const WAKUGUMI_CORNER_SPAN_MM = 600;
 /** First span along each wall after the corner (mm) — 6尺. */
 export const WAKUGUMI_CORNER_START_SPAN_MM = 1829;
 
@@ -215,15 +215,15 @@ export function fitSpansToWallLengthWakugumi(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * 1829 → middle → terminal(610|914|1219 by scaffold width); run = wall + 300mm.
+ * 1829 → middle → terminal (= nominal 足場幅 600/900/1200); run = wall + 300mm.
  * Short walls fall back to [t, …middle…, t].
  */
 export function cornerTerminalSpanMmWakugumi(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
   if (!Number.isFinite(w) || w <= 0) return WAKUGUMI_CORNER_SPAN_MM;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  if (w <= 600) return 600;
+  if (w <= 900) return 900;
+  return 1200;
 }
 
 export function fitSpansToWallLengthWithCornerWakugumi(
