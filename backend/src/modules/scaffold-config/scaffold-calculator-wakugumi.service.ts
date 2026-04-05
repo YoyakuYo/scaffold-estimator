@@ -436,12 +436,12 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 相間ブラゲット / 装間ネット / メッシュシート（内列・スパン長ベース、段=L）──
+    // ─── 相間ブラゲット / 装間ネット / メッシュシート（内列・スパン長ベース、段=Ltot ＝最上ガード帯含む）──
     const innerPostStationsW = Math.max(0, postPositions - Math.floor(cornerPostDeduction / 2));
     const wallRunMmW = spans.reduce((sum, s) => sum + s, 0);
     const sokanNettoSheetsW = wallRunMmW > 0 ? Math.ceil(wallRunMmW / 6000) : 0;
 
-    const sokanBracketQtyW = innerPostStationsW * L;
+    const sokanBracketQtyW = innerPostStationsW * Ltot;
     if (sokanBracketQtyW > 0) {
       sortOrder++;
       components.push({
