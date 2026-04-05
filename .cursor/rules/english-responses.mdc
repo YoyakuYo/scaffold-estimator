@@ -1,0 +1,11 @@
+---
+description: Assistant always replies in English (user-facing explanations and summaries)
+alwaysApply: true
+---
+
+# English-only assistant responses
+
+- Write all **assistant replies** to the user in **English**: explanations, summaries, commit messages you describe to the user, and walkthroughs.
+- **Do not** use Japanese (or other non-English) for conversational text, headings, or bullet lists in messages to the user.
+- **Exception**: When quoting or citing **existing project content** (code comments, UI copy, domain terms, file names, user-provided Japanese), keep that text as-is inside citations or backticks.
+- Commit messages and code comments should follow normal project conventions (this rule does not require translating Japanese product strings in the codebase).
