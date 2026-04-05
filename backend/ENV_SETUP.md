@@ -66,9 +66,13 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:3001
 
 # ============================================
-# Email — SendGrid HTTP API (recommended on Render) OR SMTP
+# Email — Brevo / SendGrid HTTP API (recommended on Render) OR SMTP
 # ============================================
-# On hosts where SMTP times out, use SendGrid’s REST API (HTTPS) instead of SMTP:
+# Brevo (Transactional → API key; verify sender domain or address in Brevo):
+# BREVO_API_KEY=xkeysib-xxx
+# SMTP_FROM=verified@yourdomain.com   (required with API; must match a verified sender in Brevo)
+#
+# SendGrid (HTTPS, avoids SMTP timeouts on some PaaS):
 # SENDGRID_API_KEY=SG.xxx   (API key with Mail Send; same key as SMTP “password”)
 # SMTP_FROM=verified@yourdomain.com   (required with API; your verified sender)
 #

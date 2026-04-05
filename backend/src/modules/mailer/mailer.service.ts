@@ -2,19 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
- * Email via SendGrid HTTP API (recommended on PaaS) or SMTP (nodemailer).
+ * Email via Brevo HTTP API, SendGrid HTTP API, or SMTP (nodemailer).
  *
  * Password reset / notifications:
- * - Prefer: SENDGRID_API_KEY + SMTP_FROM (HTTPS to api.sendgrid.com, avoids SMTP timeouts on Render).
+ * - Prefer: BREVO_API_KEY + SMTP_FROM (HTTPS to api.brevo.com).
+ * - Or: SENDGRID_API_KEY + SMTP_FROM (HTTPS to api.sendgrid.com).
  * - Or: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
  */
 @Injectable()
 export class MailerService {
+  private readonly brevoApiKey: string | null;
   private readonly sendGridApiKey: string | null;
   private readonly smtpEnabled: boolean;
   private readonly transport: any;
 
   constructor(private configService: ConfigService) {
+    this.brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim() || null;
     this.sendGridApiKey = this.configService.get<string>('SENDGRID_API_KEY')?.trim() || null;
 
     const smtpHost = this.configService.get<string>('SMTP_HOST');
@@ -51,11 +54,12 @@ export class MailerService {
     }
   }
 
-  /** True if we can send (SendGrid API or SMTP). */
+  /** True if we can send (Brevo / SendGrid API or SMTP). */
   mailConfigured(): boolean {
     const from =
       this.configService.get<string>('SMTP_FROM')?.trim() ||
       this.configService.get<string>('SMTP_USER')?.trim();
+    if (this.brevoApiKey && from) return true;
     if (this.sendGridApiKey && from) return true;
     return this.smtpEnabled && !!this.transport;
   }
@@ -73,6 +77,34 @@ export class MailerService {
     const m = raw.match(/^\s*(.+?)\s*<([^>]+)>\s*$/);
     if (m) return { name: m[1].trim(), email: m[2].trim() };
     return { email: raw.trim() };
+  }
+
+  private async sendWithBrevo(to: string, subject: string, text: string, html?: string): Promise<void> {
+    if (!this.brevoApiKey) throw new Error('Brevo API key missing');
+    const from = this.parseFrom();
+    if (!from.email) throw new Error('SMTP_FROM is required for Brevo');
+
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'api-key': this.brevoApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: from.name ? { email: from.email, name: from.name } : { email: from.email },
+        to: [{ email: to }],
+        subject,
+        textContent: text,
+        ...(html ? { htmlContent: html } : {}),
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Brevo API ${res.status}: ${body.slice(0, 800)}`);
+    }
   }
 
   private async sendWithSendGrid(to: string, subject: string, text: string, html?: string): Promise<void> {
@@ -106,6 +138,10 @@ export class MailerService {
 
   async send(to: string, subject: string, text: string, html?: string): Promise<void> {
     if (!this.mailConfigured()) return;
+    if (this.brevoApiKey) {
+      await this.sendWithBrevo(to, subject, text, html);
+      return;
+    }
     if (this.sendGridApiKey) {
       await this.sendWithSendGrid(to, subject, text, html);
       return;
@@ -133,7 +169,7 @@ export class MailerService {
     await this.send(to, subject, text);
   }
 
-  /** Password reset email. Uses SendGrid API when SENDGRID_API_KEY is set; else SMTP. */
+  /** Password reset email. Uses Brevo or SendGrid API when configured; else SMTP. */
   async sendPasswordResetEmail(to: string, resetUrl: string): Promise<boolean> {
     if (!this.mailConfigured()) {
       return false;
