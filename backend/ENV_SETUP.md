@@ -68,15 +68,23 @@ FRONTEND_URL=http://localhost:3001
 # ============================================
 # Email — Brevo / SendGrid HTTP API (recommended on Render) OR SMTP
 # ============================================
-# Brevo (Transactional → API key; verify sender domain or address in Brevo):
+# Brevo SMTP relay (matches Brevo dashboard “SMTP” tab — same variable names):
+# SMTP_HOST=smtp-relay.brevo.com
+# SMTP_PORT=587
+# SMTP_USER=your_smtp_login
+# SMTP_PASS=your_smtp_key
+# SMTP_SECURE=false          # default; use STARTTLS on 587 (omit or false)
+# SMTP_FROM="App <verified@yourdomain.com>"   # recommended; if omitted, From = SMTP_USER
+#
+# Brevo REST API instead of SMTP (optional; do not set BREVO_API_KEY if you only use SMTP above):
 # BREVO_API_KEY=xkeysib-xxx
-# SMTP_FROM=verified@yourdomain.com   (required with API; must match a verified sender in Brevo)
+# SMTP_FROM=verified@yourdomain.com
 #
 # SendGrid (HTTPS, avoids SMTP timeouts on some PaaS):
 # SENDGRID_API_KEY=SG.xxx   (API key with Mail Send; same key as SMTP “password”)
 # SMTP_FROM=verified@yourdomain.com   (required with API; your verified sender)
 #
-# Alternative: full SMTP (often flaky from PaaS):
+# Other SMTP providers:
 # Apply supabase-migrations/118_password_reset_tokens.sql (or TypeORM migration
 # 1700000000006) for the password_reset_tokens table + get_user_id_by_email_ci.
 #

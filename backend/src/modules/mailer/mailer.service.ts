@@ -7,7 +7,13 @@ import { ConfigService } from '@nestjs/config';
  * Password reset / notifications:
  * - Prefer: BREVO_API_KEY + SMTP_FROM (HTTPS to api.brevo.com).
  * - Or: SENDGRID_API_KEY + SMTP_FROM (HTTPS to api.sendgrid.com).
- * - Or: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+ * - Or SMTP (e.g. Brevo relay — same env names Brevo shows in their UI):
+ *     SMTP_HOST=smtp-relay.brevo.com
+ *     SMTP_PORT=587
+ *     SMTP_USER=<Brevo SMTP login>
+ *     SMTP_PASS=<Brevo SMTP key>
+ *     Optional: SMTP_FROM="Name <verified@domain.com>" (else From falls back to SMTP_USER)
+ *     Port 587: leave SMTP_SECURE unset or false (STARTTLS).
  */
 @Injectable()
 export class MailerService {
