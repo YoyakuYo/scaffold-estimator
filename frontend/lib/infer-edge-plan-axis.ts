@@ -1,5 +1,5 @@
 /** Signed run (mm) along `axis` for edge edgeIndex → next (closed polygon). */
-export function signedAxisRunMmFromVertices(
+function signedAxisRunMmFromVertices(
   verts: Array<{ x: number; y: number }>,
   edgeIndex: number,
   axis: 'X' | 'Y',
@@ -14,7 +14,7 @@ export function signedAxisRunMmFromVertices(
 }
 
 /** Signed run (mm) on the stronger axis for edge i → i+1 (closed polygon). */
-export function inferEdgePlanAxisFromVertices(
+function inferEdgePlanAxisFromVertices(
   verts: Array<{ x: number; y: number }>,
   edgeIndex: number,
   closed: boolean,
@@ -28,3 +28,5 @@ export function inferEdgePlanAxisFromVertices(
   if (Math.abs(dx) >= Math.abs(dy)) return { axis: 'X', mm: dx };
   return { axis: 'Y', mm: dy };
 }
+
+export { signedAxisRunMmFromVertices, inferEdgePlanAxisFromVertices };
