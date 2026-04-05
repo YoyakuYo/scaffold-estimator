@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
 import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
@@ -16,6 +16,17 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { inferEdgePlanAxisFromVertices, signedAxisRunMmFromVertices } from '@/lib/infer-edge-plan-axis';
+import {
+  normalizeScaffoldWallCfKey,
+  SCAFFOLD_WALL_CF_KEYS,
+  type ScaffoldWallCfKey,
+} from '@/lib/scaffold-wall-cf-options';
+
+const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
+  reflex: 'wallCfReflex',
+  c: 'wallCfC',
+};
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -111,10 +122,39 @@ export interface QuickShapeBuilderDraft {
   structureType: '改修工事' | 'S造' | 'RC造';
   kaidanPerSide: Record<string, KaidanConfig>;
   scaffoldWidthPerSide: Record<string, number | undefined>;
+  /** Plan axis + signed run (mm) per edge label — same role as drawing upload XY column. */
+  edgePlanByLabel?: Record<string, { axis: 'X' | 'Y'; mm: number }>;
+  /** Per-edge CF (R/C) — same as drawing upload CF column. */
+  cfNoteByLabel?: Record<string, ScaffoldWallCfKey>;
 }
 
 function isShapeType(v: unknown): v is ShapeType {
   return v === 'rectangle' || v === 'l-shape' || v === 'custom';
+}
+
+function parseEdgePlanByLabel(
+  raw: unknown,
+): Record<string, { axis: 'X' | 'Y'; mm: number }> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, { axis: 'X' | 'Y'; mm: number }> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue;
+    const axis = (v as { axis?: string }).axis;
+    const mm = Number((v as { mm?: unknown }).mm);
+    if (axis !== 'X' && axis !== 'Y') continue;
+    if (!Number.isFinite(mm)) continue;
+    out[k] = { axis, mm: Math.round(mm) };
+  }
+  return out;
+}
+
+function parseCfNoteByLabel(raw: unknown): Record<string, ScaffoldWallCfKey> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, ScaffoldWallCfKey> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k] = normalizeScaffoldWallCfKey(String(v));
+  }
+  return out;
 }
 
 function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShapeBuilderDraft | null {
@@ -163,6 +203,8 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     kaidanPerSide: d.kaidanPerSide && typeof d.kaidanPerSide === 'object' ? d.kaidanPerSide : {},
     scaffoldWidthPerSide:
       d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object' ? d.scaffoldWidthPerSide : {},
+    edgePlanByLabel: parseEdgePlanByLabel(d.edgePlanByLabel),
+    cfNoteByLabel: parseCfNoteByLabel(d.cfNoteByLabel),
   };
 }
 
@@ -244,6 +286,12 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
   const [scaffoldWidthPerSide, setScaffoldWidthPerSide] = useState<Record<string, number | undefined>>(
     () => mergedInitial?.scaffoldWidthPerSide ?? {},
   );
+  const [edgePlanByLabel, setEdgePlanByLabel] = useState<
+    Record<string, { axis: 'X' | 'Y'; mm: number }>
+  >(() => mergedInitial?.edgePlanByLabel ?? {});
+  const [cfNoteByLabel, setCfNoteByLabel] = useState<Record<string, ScaffoldWallCfKey>>(
+    () => mergedInitial?.cfNoteByLabel ?? {},
+  );
 
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
@@ -270,6 +318,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         structureType,
         kaidanPerSide,
         scaffoldWidthPerSide,
+        edgePlanByLabel,
+        cfNoteByLabel,
       });
     }, 400);
     return () => window.clearTimeout(t);
@@ -292,9 +342,11 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     structureType,
     kaidanPerSide,
     scaffoldWidthPerSide,
+    edgePlanByLabel,
+    cfNoteByLabel,
   ]);
 
-  const getSides = useCallback((): SideDefinition[] => {
+  const sidesList = useMemo((): SideDefinition[] => {
     if (shapeType === 'rectangle') {
       return [
         { label: 'AB', lengthMm: rectNorth },
@@ -337,11 +389,21 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     );
   };
 
+  const updateEdgeLengthAtIndex = (index: number, lengthMm: number) => {
+    const mm = Math.max(600, Math.round(lengthMm));
+    if (shapeType === 'rectangle') {
+      if (index === 0) setRectNorth(mm);
+      else if (index === 1) setRectEast(mm);
+      else if (index === 2) setRectSouth(mm);
+      else setRectWest(mm);
+    } else if (shapeType === 'l-shape') updateLSegment(index, mm);
+    else updateCustomSegment(index, mm);
+  };
+
   const handleSubmit = () => {
-    const sides = getSides();
     onSubmit({
       shapeType,
-      sides,
+      sides: sidesList,
       buildingHeightMm,
       scaffoldType,
       scaffoldWidthMm,
@@ -376,10 +438,29 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
   const sectionTitleClass =
     'flex items-center gap-2 text-base font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4';
 
-  const previewFootprintMm = useMemo(() => {
-    const sides = getSides();
-    return buildQuickShapeFootprintMm(shapeType, sides);
-  }, [getSides, shapeType, rectNorth, rectEast, rectSouth, rectWest, lSegments, customSegments]);
+  const previewFootprintMm = useMemo(
+    () => buildQuickShapeFootprintMm(shapeType, sidesList),
+    [shapeType, sidesList],
+  );
+
+  const updateEdgePlanAxisForRow = (label: string, edgeIndex: number, axis: 'X' | 'Y') => {
+    const verts = previewFootprintMm;
+    const closed = verts.length >= 3;
+    const mm = signedAxisRunMmFromVertices(verts, edgeIndex, axis, closed);
+    setEdgePlanByLabel((prev) => ({ ...prev, [label]: { axis, mm } }));
+  };
+
+  const updateEdgePlanMmForRow = (label: string, mm: number) => {
+    setEdgePlanByLabel((prev) => {
+      const cur = prev[label];
+      if (!cur) return prev;
+      return { ...prev, [label]: { ...cur, mm: Math.round(mm) } };
+    });
+  };
+
+  const updateCfNoteForRow = (label: string, v: ScaffoldWallCfKey) => {
+    setCfNoteByLabel((prev) => ({ ...prev, [label]: v }));
+  };
 
   const previewFootprintKey = useMemo(
     () =>
@@ -388,6 +469,48 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         : '',
     [previewFootprintMm],
   );
+
+  useEffect(() => {
+    const verts = previewFootprintMm;
+    const closed = verts.length >= 3;
+    if (!closed || sidesList.length === 0) return;
+
+    setEdgePlanByLabel((prev) => {
+      const next: Record<string, { axis: 'X' | 'Y'; mm: number }> = {};
+      for (let i = 0; i < sidesList.length; i++) {
+        const s = sidesList[i]!;
+        const inf = inferEdgePlanAxisFromVertices(verts, i, closed);
+        const old = prev[s.label];
+        if (old) {
+          next[s.label] = {
+            axis: old.axis,
+            mm: signedAxisRunMmFromVertices(verts, i, old.axis, closed),
+          };
+        } else if (inf) {
+          next[s.label] = { axis: inf.axis, mm: inf.mm };
+        }
+      }
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    });
+
+    setCfNoteByLabel((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const s of sidesList) {
+        if (next[s.label] == null) {
+          next[s.label] = 'reflex';
+          changed = true;
+        }
+      }
+      for (const k of Object.keys(next)) {
+        if (!sidesList.some((s) => s.label === k)) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [previewFootprintKey, previewFootprintMm, sidesList]);
 
   const [qbPreviewZoom, setQbPreviewZoom] = useState(1);
   const [qbPreviewPan, setQbPreviewPan] = useState({ x: 0, y: 0 });
@@ -438,15 +561,13 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
 
         <div className="w-full lg:min-w-[320px] lg:max-w-xl lg:flex-1 border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto max-h-[88vh]">
           <div className="p-6 space-y-10">
-        {/* Shape + dimensions */}
-        <section aria-labelledby="qb-section-shape">
-          <h3 id="qb-section-shape" className={sectionTitleClass}>
+        {/* Footprint type */}
+        <section aria-labelledby="qb-section-footprint">
+          <h3 id="qb-section-footprint" className={sectionTitleClass}>
             <Square className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
-            {t('quickBuilder', 'stepShape')}
+            {t('quickBuilder', 'stepFootprint')}
           </h3>
-          <p className="text-sm text-gray-600 mb-4">{t('quickBuilder', 'selectShape')}</p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { type: 'rectangle' as ShapeType, label: t('quickBuilder', 'rectangle'), icon: Square },
               { type: 'l-shape' as ShapeType, label: t('quickBuilder', 'lShape'), icon: CornerDownRight },
@@ -467,88 +588,171 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
               </button>
             ))}
           </div>
+        </section>
 
-          {shapeType === 'rectangle' && (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'AB', value: rectNorth, setter: setRectNorth },
-                { label: 'BC', value: rectEast, setter: setRectEast },
-                { label: 'CD', value: rectSouth, setter: setRectSouth },
-                { label: 'DA', value: rectWest, setter: setRectWest },
-              ].map((input) => (
-                <div key={input.label}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{input.label}</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={input.value || ''}
-                      onChange={(e) => input.setter(Number(e.target.value) || 0)}
-                      className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      min={600}
-                      step={100}
-                    />
-                    <span className="text-sm text-gray-500 w-8">mm</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
+        {/* One row per edge: length, XY, CF, width override, stairs (no duplicate length block) */}
+        <section aria-labelledby="qb-section-edges">
+          <h3 id="qb-section-edges" className={sectionTitleClass}>
+            <Ruler className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
+            {t('quickBuilder', 'stepEdges')}
+          </h3>
           {shapeType === 'l-shape' && (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'lShapeHint')}</p>
-              {lSegments.map((seg, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
-                  <input
-                    type="number"
-                    value={seg.lengthMm || ''}
-                    onChange={(e) => updateLSegment(i, Number(e.target.value) || 0)}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    min={600}
-                    step={100}
-                  />
-                  <span className="text-sm text-gray-500">mm</span>
-                </div>
-              ))}
-            </div>
+            <p className="text-sm text-gray-500 mb-3">{t('quickBuilder', 'lShapeHint')}</p>
           )}
+          {shapeType === 'custom' && (
+            <p className="text-sm text-gray-500 mb-3">{t('quickBuilder', 'customHint')}</p>
+          )}
+
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-medium text-gray-600">
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeSideColumn')}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeLengthMm')}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('scaffoldExtra', 'edgeXYRun') || 'XY'}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planRunMm')}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">CF</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'scaffoldWidth')}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'stairAccess')}</th>
+                  {shapeType === 'custom' ? <th className="py-2 px-2 w-10" aria-label="Remove" /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {sidesList.map((side, i) => {
+                  const closed = previewFootprintMm.length >= 3;
+                  const inferred = inferEdgePlanAxisFromVertices(previewFootprintMm, i, closed);
+                  const plan =
+                    edgePlanByLabel[side.label] ??
+                    inferred ?? { axis: 'X' as const, mm: 0 };
+                  const cfVal = normalizeScaffoldWallCfKey(cfNoteByLabel[side.label]);
+                  return (
+                    <tr key={`${side.label}-${i}`} className="border-b border-gray-100 last:border-0 align-middle">
+                      <td className="py-2 px-2 font-medium text-gray-800 whitespace-nowrap">{side.label}</td>
+                      <td className="py-2 px-2">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={side.lengthMm || ''}
+                            onChange={(e) => updateEdgeLengthAtIndex(i, Number(e.target.value) || 0)}
+                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
+                            min={600}
+                            step={100}
+                          />
+                          <span className="text-xs text-gray-500">mm</span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-2">
+                        <select
+                          value={plan.axis}
+                          onChange={(e) =>
+                            updateEdgePlanAxisForRow(side.label, i, e.target.value as 'X' | 'Y')
+                          }
+                          className="w-[4.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
+                        >
+                          <option value="X">X</option>
+                          <option value="Y">Y</option>
+                        </select>
+                      </td>
+                      <td className="py-2 px-2">
+                        <input
+                          type="number"
+                          value={plan.mm}
+                          onChange={(e) => updateEdgePlanMmForRow(side.label, Number(e.target.value) || 0)}
+                          className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
+                          step={100}
+                        />
+                      </td>
+                      <td className="py-2 px-2">
+                        <select
+                          value={cfVal}
+                          onChange={(e) =>
+                            updateCfNoteForRow(side.label, normalizeScaffoldWallCfKey(e.target.value))
+                          }
+                          className="w-[5.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
+                        >
+                          {SCAFFOLD_WALL_CF_KEYS.map((cfKey) => (
+                            <option key={cfKey} value={cfKey}>
+                              {t('scaffoldExtra', CF_LABEL_I18N_KEYS[cfKey]) || cfKey}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-2 px-2">
+                        <select
+                          value={scaffoldWidthPerSide[side.label] ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setScaffoldWidthPerSide((prev) => ({
+                              ...prev,
+                              [side.label]: v ? Number(v) : undefined,
+                            }));
+                          }}
+                          className="w-[4.75rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
+                        >
+                          <option value="">{scaffoldWidthMm}mm</option>
+                          {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
+                            <option key={w} value={w}>
+                              {w}mm
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-2 px-2">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={kaidanPerSide[side.label]?.enabled || false}
+                              onChange={() => toggleKaidan(side.label)}
+                              className="h-3.5 w-3.5 text-blue-600 rounded"
+                            />
+                            <span className="text-xs text-gray-600">On</span>
+                          </label>
+                          {kaidanPerSide[side.label]?.enabled ? (
+                            <select
+                              value={kaidanPerSide[side.label]?.count || 1}
+                              onChange={(e) => updateKaidanCount(side.label, Number(e.target.value))}
+                              className="rounded border border-gray-300 px-1 py-0.5 text-xs bg-white"
+                            >
+                              {[1, 2, 3, 4].map((n) => (
+                                <option key={n} value={n}>
+                                  {n}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </div>
+                      </td>
+                      {shapeType === 'custom' ? (
+                        <td className="py-2 px-2">
+                          {customSegments.length > 3 ? (
+                            <button
+                              type="button"
+                              onClick={() => removeCustomSegment(i)}
+                              className="p-1 text-red-400 hover:text-red-600"
+                              aria-label="Remove segment"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          ) : null}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {shapeType === 'custom' && (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500 mb-2">{t('quickBuilder', 'customHint')}</p>
-              {customSegments.map((seg, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-700 w-12">{seg.label}</span>
-                  <input
-                    type="number"
-                    value={seg.lengthMm || ''}
-                    onChange={(e) => updateCustomSegment(i, Number(e.target.value) || 0)}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    min={600}
-                    step={100}
-                  />
-                  <span className="text-sm text-gray-500">mm</span>
-                  {customSegments.length > 3 && (
-                    <button
-                      type="button"
-                      onClick={() => removeCustomSegment(i)}
-                      className="p-1.5 text-red-400 hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={addCustomSegment}
-                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg border border-dashed border-blue-300 hover:bg-blue-50"
-              >
-                <Plus className="h-4 w-4" />
-                {t('quickBuilder', 'addSegment')}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={addCustomSegment}
+              className="mt-3 flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg border border-dashed border-blue-300 hover:bg-blue-50"
+            >
+              <Plus className="h-4 w-4" />
+              {t('quickBuilder', 'addSegment')}
+            </button>
           )}
         </section>
 
@@ -746,7 +950,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('quickBuilder', 'perSideWidthStairs') || '各辺：足場幅・階段'}</h4>
               <div className="space-y-2">
-                {getSides().map((side) => (
+                {sidesList.map((side) => (
                   <div key={side.label} className="flex items-center gap-4 bg-white rounded-lg px-4 py-2.5 border border-gray-200 flex-wrap">
                     <span className="text-sm font-medium text-gray-700 min-w-[80px]">{side.label}</span>
                     <span className="text-xs text-gray-500">{side.lengthMm.toLocaleString()}mm</span>
@@ -816,7 +1020,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                 </div>
                 <div>
                   <span className="text-blue-600">{t('quickBuilder', 'sidesLabel')}:</span>
-                  <span className="ml-1 font-medium text-blue-900">{getSides().length}{t('quickBuilder', 'sidesUnit')}</span>
+                  <span className="ml-1 font-medium text-blue-900">{sidesList.length}{t('quickBuilder', 'sidesUnit')}</span>
                 </div>
               </div>
             </div>

@@ -3,7 +3,10 @@ import Cookies from 'js-cookie';
 
 // Set NEXT_PUBLIC_BACKEND_URL to your backend URL when deployed separately (e.g. https://your-api.onrender.com/api/v1).
 // If unset in production, we use relative /api/v1 (same-origin; use a reverse proxy to your backend).
-const API_BASE_URL =
+//
+// Important: Next.js replaces process.env.NEXT_PUBLIC_* at **build** time in the browser bundle.
+// Changing the var on the host without a new frontend build leaves the old URL in the deployed JS.
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === 'production' ? '/api/v1' : 'http://localhost:3000/api/v1');

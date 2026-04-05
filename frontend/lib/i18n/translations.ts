@@ -103,6 +103,11 @@ export const translations = {
       en: 'Cannot reach the API. Set NEXT_PUBLIC_BACKEND_URL on your frontend host to your backend URL (e.g. https://your-api.onrender.com/api/v1) and redeploy.',
       fr: 'Impossible de joindre l’API. Définissez NEXT_PUBLIC_BACKEND_URL sur l’URL du backend (ex. https://votre-api.onrender.com/api/v1) et redéployez le frontend.',
     },
+    forgotNetworkErrorBuildHint: {
+      ja: 'Next.js はビルド時に NEXT_PUBLIC_* を埋め込みます。変数を変えたらフロントを必ず再ビルド・再デプロイしてください。下の URL が実際に使われているベースです。',
+      en: 'Next.js bakes NEXT_PUBLIC_* into the JS at build time—redeploy the frontend after changing env vars. The line below is the API base this page is actually using.',
+      fr: 'Next.js intègre NEXT_PUBLIC_* au moment du build : redéployez le frontend après modification. La ligne ci-dessous est la base API réellement utilisée.',
+    },
     backToLogin: { ja: 'ログインに戻る', en: 'Back to sign in', fr: 'Retour à la connexion' },
     resetTitle: { ja: '新しいパスワードを設定', en: 'Choose a new password', fr: 'Choisissez un nouveau mot de passe' },
     resetSubtitle: {
@@ -1313,6 +1318,8 @@ export const translations = {
   // ─── Quick Shape Builder ─────────────────────────────────────
   quickBuilder: {
     stepShape: { ja: '形状選択', en: 'Shape Selection', fr: 'Shape Selection' },
+    stepFootprint: { ja: '外形', en: 'Footprint', fr: 'Empreinte' },
+    stepEdges: { ja: '辺ごとの寸法・XY・CF', en: 'Edges: length, XY run & CF', fr: 'Arêtes : longueur, course XY et CF' },
     stepHeight: { ja: '建物高さ', en: 'Building Height', fr: 'Building Height' },
     stepConfig: { ja: '足場設定', en: 'Scaffold Config', fr: 'Scaffold Config' },
     selectShape: { ja: '形状を選択', en: 'Select Shape', fr: 'Select Shape' },
@@ -1356,6 +1363,9 @@ export const translations = {
     endStopperFrame: { ja: '枠タイプ', en: 'Frame Type', fr: 'Frame Type' },
     stairAccess: { ja: '階段配置', en: 'Stair Access', fr: 'Stair Access' },
     perSideWidthStairs: { ja: '各辺：足場幅・階段', en: 'Per side: scaffold width & stairs', fr: 'Per side: scaffold width & stairs' },
+    edgeSideColumn: { ja: '辺', en: 'Edge', fr: 'Arête' },
+    edgeLengthMm: { ja: '長さ (mm)', en: 'Length (mm)', fr: 'Longueur (mm)' },
+    planRunMm: { ja: '走行 (mm)', en: 'Run (mm)', fr: 'Course (mm)' },
     stairUnits: { ja: '台数', en: 'Units', fr: 'Units' },
     summaryTitle: { ja: '設定概要', en: 'Configuration Summary', fr: 'Configuration Summary' },
     shapeLabel: { ja: '形状', en: 'Shape', fr: 'Shape' },

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
+import { API_BASE_URL } from '@/lib/api/client';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { Globe, Loader2, AlertTriangle } from 'lucide-react';
 
@@ -72,21 +73,42 @@ export default function ForgotPasswordPage() {
         {mutation.isError && (
           <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
             <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-            <span>
+            <div className="min-w-0 flex-1 space-y-2">
               {(() => {
                 const err = mutation.error as {
                   response?: { data?: { message?: string | string[] } };
                   message?: string;
+                  code?: string;
                 };
                 if (!err?.response) {
-                  return t('passwordReset', 'forgotNetworkError');
+                  const extra =
+                    err?.code === 'ECONNABORTED'
+                      ? ' (timeout)'
+                      : err?.message === 'Network Error'
+                        ? ' (network/CORS/blocked)'
+                        : '';
+                  return (
+                    <>
+                      <p>
+                        {t('passwordReset', 'forgotNetworkError')}
+                        {extra}
+                      </p>
+                      <p className="text-xs text-red-600/90">{t('passwordReset', 'forgotNetworkErrorBuildHint')}</p>
+                      <p className="text-xs font-mono break-all bg-red-100/60 rounded px-2 py-1.5 text-red-900">
+                        {API_BASE_URL}
+                        <span className="block mt-1 font-sans text-red-700">
+                          → POST {API_BASE_URL.replace(/\/$/, '')}/auth/forgot-password
+                        </span>
+                      </p>
+                    </>
+                  );
                 }
                 const m = err.response.data?.message;
-                if (Array.isArray(m)) return m.filter(Boolean).join(' ');
-                if (typeof m === 'string' && m.trim()) return m;
-                return t('passwordReset', 'forgotError');
+                if (Array.isArray(m)) return <p>{m.filter(Boolean).join(' ')}</p>;
+                if (typeof m === 'string' && m.trim()) return <p>{m}</p>;
+                return <p>{t('passwordReset', 'forgotError')}</p>;
               })()}
-            </span>
+            </div>
           </div>
         )}
 
