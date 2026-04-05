@@ -13,6 +13,7 @@
 import {
   SizeOption,
   AnchiLayout,
+  cornerTerminalSpanMmKusabi,
   expandMiddleSpansToTargetCount,
   exactSumWithStandardSpans,
   SPAN_OPTIONS,
@@ -220,12 +221,9 @@ export function fitSpansToWallLengthWakugumi(
  * 1829 → middle → terminal (= catalog 610 / 914 / 1219 per 足場幅 600 / 900 / 1200); run = wall + 300mm.
  * Short walls fall back to [t, …middle…, t].
  */
+/** Same catalog corner terminals as くさび式 (`cornerTerminalSpanMmKusabi`). */
 export function cornerTerminalSpanMmWakugumi(scaffoldWidthMm: number): number {
-  const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return WAKUGUMI_CORNER_SPAN_MM;
-  if (w <= 600) return 610;
-  if (w <= 900) return 914;
-  return 1219;
+  return cornerTerminalSpanMmKusabi(scaffoldWidthMm);
 }
 
 export function fitSpansToWallLengthWithCornerWakugumi(

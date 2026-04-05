@@ -16,7 +16,7 @@ export const AI_BIM_RULES = {
   LEVEL_HEIGHT_MM: 1800,
   CORNER_OVERRUN_MM: 300,
   /** Terminal span into the turn (kusabi) — nominal 足場幅 600 / 900 / 1200 mm. */
-  CORNER_SPAN_MM: 600,
+  CORNER_SPAN_MM: 610,
   /** First span along each wall after the turn (kusabi) — 6尺. */
   CORNER_START_SPAN_MM: 1829,
   MIN_WALL_LENGTH_MM: 600,

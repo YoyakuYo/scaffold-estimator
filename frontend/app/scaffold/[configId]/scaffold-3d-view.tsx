@@ -40,23 +40,19 @@ const GROUND_Y = 0;
 const LEVEL_H_KUSABI = 1.8;
 const JACK_H = 0.3;
 // Corner detail base rule (足場コーナー詳細図): 300mm overrun past building corner + corner span.
-// Corner bay into the turn: nominal 足場幅 600 / 900 / 1200 mm (+ 300 mm overrun in layout rules).
+// Corner bay into the turn: catalog 610 / 914 / 1219 per nominal 足場幅 (+ 300 mm overrun in layout rules).
 const CORNER_OVERRUN_M = 0.3;
-/** Match backend `cornerTerminalSpanMmKusabi` / detailed corner width-module bay. */
+/** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
-  const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return 600;
-  if (w <= 600) return 600;
-  if (w <= 900) return 900;
-  return 1200;
-}
-/** Match backend `cornerTerminalSpanMmWakugumi` (catalog 610 / 914 / 1219). */
-function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
   if (!Number.isFinite(w) || w <= 0) return 610;
   if (w <= 600) return 610;
   if (w <= 900) return 914;
   return 1219;
+}
+/** Match backend `cornerTerminalSpanMmWakugumi`. */
+function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
+  return cornerTerminalSpanMmKusabi3d(scaffoldWidthMm);
 }
 
 type CornerStartMode = 'none' | 'convex-overrun' | 'reflex-share';
@@ -826,7 +822,7 @@ export default function Scaffold3DView({
         const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Closed polygon: [1829, …middle…, terminal = nominal 600/900/1200]; sum = wallLength+300+terminal.
+        // Closed polygon: [1829, …middle…, terminal = catalog 610/914/1219]; sum = wallLength+300+terminal.
         const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? capSpansFor3dPreview(allSpans, maxSpans)

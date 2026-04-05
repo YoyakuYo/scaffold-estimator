@@ -73,7 +73,7 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
   });
 
   it('rectangle long-edge hint: prefers all–corner-start middle when arithmetically possible', () => {
-    // 10674 + 300 + 600 − 1829 − 600 = 9145 = 5 × 1829
+    // 10674 + 300 + 610 − 1829 − 610 = 9145 = 5 × 1829
     const spans = fitSpansToWallLengthWithCorner(10_674, 600, { rectangleEdgeRole: 'long' });
     const mid = spans.slice(1, -1);
     expect(spans[0]).toBe(CORNER_START_SPAN_MM);
@@ -150,13 +150,13 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(spans[0]).toBe(CORNER_SPAN_MM);
     expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(2419);
-    expect(spans).toEqual([CORNER_SPAN_MM, 1219, CORNER_SPAN_MM]);
+    expect(sum).toBe(2134);
+    expect(spans).toEqual([CORNER_SPAN_MM, 914, CORNER_SPAN_MM]);
   });
 
   it('reflex end (Rule 1): last span = width-module; total run = wall − 300 (walk joint)', () => {
-    // eff = 5777 − 300 = 5477 = 1829 + 1829 + 1219 + 600 (corner start + middle + terminal)
-    const wallMm = 5777;
+    /** Facade 5181 = 1829 + 914×3 + 610; wall = facade + 300 (reflex inset at end). */
+    const wallMm = 5481;
     const spans = fitSpansToWallLengthWithCorner(wallMm, 600, {
       startCornerKind: 'convex',
       endCornerKind: 'reflex',

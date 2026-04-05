@@ -107,8 +107,8 @@ function formatWallSide(
   return side;
 }
 
-/** Legacy nominal mm saved on older configs → wakugumi catalog (610 / 914 / …). */
-const WAKUGUMI_LEGACY_NOMINAL_TO_CATALOG_MM: Record<number, number> = {
+/** Legacy round nominal mm → shared span catalog (kusabi & wakugumi use the same bay sizes). */
+const LEGACY_NOMINAL_SPAN_MM_TO_CATALOG: Record<number, number> = {
   600: 610,
   900: 914,
   1200: 1219,
@@ -116,20 +116,20 @@ const WAKUGUMI_LEGACY_NOMINAL_TO_CATALOG_MM: Record<number, number> = {
   1800: 1829,
 };
 
-function normalizeSpanMmForSummary(mm: number, scaffoldType: 'kusabi' | 'wakugumi'): number {
-  if (scaffoldType !== 'wakugumi' || !Number.isFinite(mm)) return mm;
-  return WAKUGUMI_LEGACY_NOMINAL_TO_CATALOG_MM[mm] ?? mm;
+function normalizeSpanMmForSummary(mm: number): number {
+  if (!Number.isFinite(mm)) return mm;
+  return LEGACY_NOMINAL_SPAN_MM_TO_CATALOG[mm] ?? mm;
 }
 
 /**
  * Per-wall span summary: aggregate counts by length (e.g. four 610 bays → `610×4`),
  * sort **longest first** (1219 before 610).
  */
-function formatSpanLengthsSummaryMm(spans: number[], scaffoldType: 'kusabi' | 'wakugumi'): string {
+function formatSpanLengthsSummaryMm(spans: number[]): string {
   if (!Array.isArray(spans) || spans.length === 0) return '—';
   const counts = new Map<number, number>();
   for (const raw of spans) {
-    const mm = normalizeSpanMmForSummary(raw, scaffoldType);
+    const mm = normalizeSpanMmForSummary(raw);
     counts.set(mm, (counts.get(mm) ?? 0) + 1);
   }
   const entries = [...counts.entries()].sort((a, b) => b[0] - a[0]);
@@ -142,7 +142,6 @@ function buildWallSpanSummaryLines(
   polygonVertices: unknown[] | undefined,
   locale: string | undefined,
   spansWord: string,
-  scaffoldType: 'kusabi' | 'wakugumi',
 ): string[] {
   const wallCount = walls.length;
   if (wallCount === 0) return [];
@@ -161,7 +160,7 @@ function buildWallSpanSummaryLines(
       w.side,
       w.postPositions,
     );
-    const spanGroups = formatSpanLengthsSummaryMm(w.spans ?? [], scaffoldType);
+    const spanGroups = formatSpanLengthsSummaryMm(w.spans ?? []);
     const n = w.totalSpans ?? w.spans?.length ?? 0;
     if (range) {
       return `${chord} / ${range} (${n} ${spansWord} ${spanGroups})`;
@@ -278,8 +277,7 @@ function ScaffoldResultPage() {
     const edgeLabeling = (base as { edgeHashiraLabeling?: EdgeHashiraLabeling }).edgeHashiraLabeling;
     const poly = (base as { polygonVertices?: unknown[] }).polygonVertices;
     const spansWord = t('result', 'spansLabel');
-    const st = (base.scaffoldType ?? 'kusabi') as 'kusabi' | 'wakugumi';
-    return buildWallSpanSummaryLines(walls, edgeLabeling, poly, locale, spansWord, st);
+    return buildWallSpanSummaryLines(walls, edgeLabeling, poly, locale, spansWord);
   }, [result, resultMergedForViz, locale, t]);
 
   const resultFor3D = useMemo(() => {
