@@ -50,13 +50,13 @@ function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   if (w <= 900) return 900;
   return 1200;
 }
-/** Match backend `cornerTerminalSpanMmWakugumi`. */
+/** Match backend `cornerTerminalSpanMmWakugumi` (catalog 610 / 914 / 1219). */
 function cornerTerminalSpanMmWakugumi3d(scaffoldWidthMm: number): number {
   const w = Number(scaffoldWidthMm);
-  if (!Number.isFinite(w) || w <= 0) return 600;
-  if (w <= 600) return 600;
-  if (w <= 900) return 900;
-  return 1200;
+  if (!Number.isFinite(w) || w <= 0) return 610;
+  if (w <= 600) return 610;
+  if (w <= 900) return 914;
+  return 1219;
 }
 
 type CornerStartMode = 'none' | 'convex-overrun' | 'reflex-share';

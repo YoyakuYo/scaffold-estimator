@@ -189,7 +189,7 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
 });
 
 describe('fitSpansToWallLengthWithCornerWakugumi', () => {
-  it('uses 1829 first, 600 last @ 600 width; total run >= wall+300', () => {
+  it('uses 1829 first, 610 last @ 600 width; total run >= wall+300', () => {
     const wallMm = 10_000;
     const spans = fitSpansToWallLengthWithCornerWakugumi(wallMm, 600);
     expect(spans[0]).toBe(WAKUGUMI_CORNER_START_SPAN_MM);
@@ -199,7 +199,7 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
     expect(sum).toBeLessThanOrEqual(wallMm + WAKUGUMI_CORNER_OVERRUN_MM + 2000);
   });
 
-  it('exact two-span when wallLength fits 1829+600+300', () => {
+  it('exact two-span when wallLength fits 1829+610+300', () => {
     const wallMm =
       WAKUGUMI_CORNER_START_SPAN_MM +
       WAKUGUMI_CORNER_SPAN_MM -
@@ -211,13 +211,14 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
     ]);
   });
 
-  it('terminal span 900mm when scaffold width 900mm', () => {
+  it('terminal span 914mm when scaffold width 900mm', () => {
     const spans = fitSpansToWallLengthWithCornerWakugumi(8000, 900);
-    expect(spans[spans.length - 1]).toBe(900);
+    expect(spans[spans.length - 1]).toBe(914);
   });
 
   it('reflex end: last span = width-module when exact packing exists', () => {
-    const wallMm = 5777;
+    /** Facade 5181 = 1829 + 914×3 + 610; wall = facade + 300 (reflex inset at end). */
+    const wallMm = 5481;
     const terminal = cornerTerminalSpanMmWakugumi(600);
     const spans = fitSpansToWallLengthWithCornerWakugumi(wallMm, 600, {
       startCornerKind: 'convex',
