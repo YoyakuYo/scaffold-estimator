@@ -1,5 +1,7 @@
 import apiClient from './client';
 import Cookies from 'js-cookie';
+import { clearScaffoldWizardDraft } from '@/lib/scaffold-wizard-draft-storage';
+import { clearDrawingUploadSession } from '@/lib/drawing-upload-persist';
 
 export interface LoginCredentials {
   email: string;
@@ -69,6 +71,10 @@ export const authApi = {
   },
 
   logout: () => {
+    if (typeof window !== 'undefined') {
+      clearScaffoldWizardDraft();
+      void clearDrawingUploadSession();
+    }
     // Use same path (and domain in production) as when the cookie was set, so it is actually removed
     const options: { path: string; domain?: string } = { path: '/' };
     if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {

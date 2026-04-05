@@ -61,6 +61,11 @@ import {
   type ScaffoldWallCfKey,
 } from '@/lib/scaffold-wall-cf-options';
 import { EDGE_HASHIRA_STATION_SELECT_MAX } from '@/lib/edge-hashira-labels';
+import {
+  SCAFFOLD_WIZARD_DRAFT_KEY,
+  WIZARD_DRAFT_MAX_AGE_MS,
+  WIZARD_DRAFT_SAVE_VERSION,
+} from '@/lib/scaffold-wizard-draft-storage';
 import { footprintVerticesForWallPreview } from '@/lib/footprint-preview';
 import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
 import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
@@ -108,8 +113,6 @@ const HASHIRA_STATION_OPTIONS = Array.from(
   { length: EDGE_HASHIRA_STATION_SELECT_MAX },
   (_, i) => i + 1,
 );
-
-const SCAFFOLD_WIZARD_DRAFT_KEY = 'scaffold-wizard-draft-v1';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -822,10 +825,9 @@ type AiBimWizardPreview = {
   dto: CreateScaffoldConfigDto;
 };
 
-const WIZARD_DRAFT_SAVE_VERSION = 2;
-
 interface RawWizardDraft {
   v?: number;
+  savedAt?: number;
   walls?: WallState[];
   polygonVertices?: Array<{ x: number; y: number }>;
   hashiraRows?: EdgeHashiraFormRow[];
@@ -882,7 +884,18 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
     const raw = sessionStorage.getItem(SCAFFOLD_WIZARD_DRAFT_KEY);
     if (!raw) return d;
     const parsed = JSON.parse(raw) as RawWizardDraft;
-    if (parsed.v !== 1 && parsed.v !== WIZARD_DRAFT_SAVE_VERSION) return d;
+    if (parsed.v !== WIZARD_DRAFT_SAVE_VERSION) {
+      sessionStorage.removeItem(SCAFFOLD_WIZARD_DRAFT_KEY);
+      return d;
+    }
+    if (
+      typeof parsed.savedAt !== 'number' ||
+      Number.isNaN(parsed.savedAt) ||
+      Date.now() - parsed.savedAt > WIZARD_DRAFT_MAX_AGE_MS
+    ) {
+      sessionStorage.removeItem(SCAFFOLD_WIZARD_DRAFT_KEY);
+      return d;
+    }
 
     let mode: WizardSessionBootstrap['inputMode'] =
       parsed.inputMode === 'ai_extract' ||
@@ -1212,6 +1225,7 @@ function ScaffoldPageContent() {
           SCAFFOLD_WIZARD_DRAFT_KEY,
           JSON.stringify({
             v: WIZARD_DRAFT_SAVE_VERSION,
+            savedAt: Date.now(),
             walls,
             polygonVertices,
             hashiraRows,

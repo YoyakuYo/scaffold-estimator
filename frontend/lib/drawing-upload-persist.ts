@@ -7,6 +7,9 @@ const STORE = 'drawing-upload-session';
 const DB_VERSION = 1;
 const KEY = 'v1';
 
+/** Match scaffold wizard draft: do not restore file/editor state from long-idle tabs. */
+const DRAWING_UPLOAD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 export type PersistedFileKind = 'dxf' | 'cad' | 'pdf' | 'image';
 
 export interface PersistedVertex {
@@ -63,6 +66,14 @@ export async function loadDrawingUploadSession(): Promise<PersistedDrawingSessio
     });
     db.close();
     if (!data || data.v !== 1 || !data.blob || !data.fileName) return null;
+    if (
+      typeof data.savedAt !== 'number' ||
+      Number.isNaN(data.savedAt) ||
+      Date.now() - data.savedAt > DRAWING_UPLOAD_MAX_AGE_MS
+    ) {
+      await clearDrawingUploadSession();
+      return null;
+    }
     return data;
   } catch {
     return null;
