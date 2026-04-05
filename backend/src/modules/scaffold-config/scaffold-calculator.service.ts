@@ -15,6 +15,8 @@ import {
   freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
   cornerTerminalSpanMmKusabi,
+  meshSheetVerticalRowsForHeightMm,
+  MESH_SHEET_VERTICAL_LENGTH_MM,
 } from './scaffold-rules';
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -324,7 +326,7 @@ export class ScaffoldCalculatorService {
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
     const L = levelCalc.fullLevels;
-    /** Top guard band: habaki / end stopper / sokan / mesh extend one level like the upper safety row. */
+    /** Top guard band: habaki / end stopper / sokan extend one level like the upper safety row. Mesh: height ÷ 3.6m sheet length. */
     const Lsafety = L + 1;
 
     // ─── Convert kaidan offsets to span indices ──────────────
@@ -695,8 +697,9 @@ export class ScaffoldCalculatorService {
       });
     }
 
+    const meshVerticalRows = meshSheetVerticalRowsForHeightMm(levelCalc.totalScaffoldHeightMm);
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
-      const meshQty = Number(count) * Lsafety;
+      const meshQty = Number(count) * meshVerticalRows;
       if (meshQty <= 0) continue;
       sortOrder++;
       components.push({
@@ -705,7 +708,7 @@ export class ScaffoldCalculatorService {
         categoryEn: CAT.safety.en,
         name: 'Mesh sheet',
         nameJp: 'メッシュシート',
-        sizeSpec: `${spanSizeMm}mm`,
+        sizeSpec: `${spanSizeMm}×${MESH_SHEET_VERTICAL_LENGTH_MM}mm (幅×縦)`,
         unit: '枚',
         quantity: meshQty,
         sortOrder,

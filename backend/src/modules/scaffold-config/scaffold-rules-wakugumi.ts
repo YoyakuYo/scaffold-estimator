@@ -157,6 +157,7 @@ export const WAKUGUMI_CALC_RULES = {
    * - Tesuri: 0 (NOT used in wakugumi)
    * - Habaki: 1 or 2 per span (user-selectable)
    * 相間ブラケット・装間ネットは枠組では使用しない（BOM に出さない）。
+   * メッシュシート: 幅=スパン、縦寸・枚数は scaffold-rules の MESH_SHEET_VERTICAL_LENGTH_MM / meshSheetVerticalRowsForHeightMm。
    */
   bracePerSpanPerLevel: 2,       // 1 per face × 2 faces
   shitasanPerSpanPerLevel: 2,   // 1 per face × 2 faces

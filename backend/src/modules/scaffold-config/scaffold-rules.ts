@@ -192,6 +192,12 @@ export const LEVEL_HEIGHT_MM = 1800;
 
 // ─── Calculation Constants ───────────────────────────────────
 
+/**
+ * メッシュシートの縦寸（長さ方向、被せる高さ）。幅はスパン長（BOM はスパン別行）。
+ * 縦方向枚数/スパン = ceil(totalScaffoldHeightMm / この値) — 段ごと 1 枚ではない。
+ */
+export const MESH_SHEET_VERTICAL_LENGTH_MM = 3600;
+
 export const CALC_RULES = {
   /** Level height is always 1800mm */
   levelHeightMm: 1800,
@@ -213,6 +219,9 @@ export const CALC_RULES = {
   bracePerSpanPerLevel: 1,        // outer face only
   tesuriPerSpanPerLevel: 2,       // inner face, two rail heights
   habakiPerSpanPerLevel: 2,       // front + back
+
+  /** @see MESH_SHEET_VERTICAL_LENGTH_MM — mesh quantity uses height ÷ this, not per-level. */
+  meshSheetVerticalLengthMm: MESH_SHEET_VERTICAL_LENGTH_MM,
 
   /**
    * Stopper at **free** scaffold ends (端部手摺) — 2 bars per end per level (2 heights).
@@ -247,6 +256,12 @@ export const CALC_RULES = {
    * - Count only, no size
    */
 };
+
+/** メッシュシート: 同一スパン幅の各スパンに掛ける縦方向の枚数（被せ高÷シート縦寸、切り上げ）。 */
+export function meshSheetVerticalRowsForHeightMm(heightMm: number): number {
+  if (heightMm <= 0) return 0;
+  return Math.ceil(heightMm / MESH_SHEET_VERTICAL_LENGTH_MM);
+}
 
 /**
  * Scaffold **dead ends** that need 端部材 / 端部手摺 (workers cannot walk past).

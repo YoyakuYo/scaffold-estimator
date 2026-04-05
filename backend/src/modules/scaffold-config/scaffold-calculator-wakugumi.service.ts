@@ -12,7 +12,12 @@ import {
   cornerTerminalSpanMmWakugumi,
   type WakugumiFrameSeriesCode,
 } from './scaffold-rules-wakugumi';
-import { freeScaffoldEndCountForWall, reflexCornerInsetTotalMm } from './scaffold-rules';
+import {
+  freeScaffoldEndCountForWall,
+  reflexCornerInsetTotalMm,
+  meshSheetVerticalRowsForHeightMm,
+  MESH_SHEET_VERTICAL_LENGTH_MM,
+} from './scaffold-rules';
 import {
   WallCalculationInput,
   CalculatedComponent,
@@ -435,9 +440,10 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── メッシュシート（スパン長ベース、段=Ltot ＝最上ガード帯含む）──
+    // ─── メッシュシート: 幅=スパン、縦=3.6m/枚。枚数/スパン=ceil(被せ高÷縦寸)（totalScaffoldHeightMm、最上ガード込み）──
+    const meshVerticalRowsW = meshSheetVerticalRowsForHeightMm(levelCalc.totalScaffoldHeightMm);
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
-      const meshQtyW = Number(count) * Ltot;
+      const meshQtyW = Number(count) * meshVerticalRowsW;
       if (meshQtyW <= 0) continue;
       sortOrder++;
       components.push({
@@ -446,7 +452,7 @@ export class ScaffoldCalculatorWakugumiService {
         categoryEn: CAT.safety.en,
         name: 'Mesh sheet',
         nameJp: 'メッシュシート',
-        sizeSpec: `${spanSizeMm}mm`,
+        sizeSpec: `${spanSizeMm}×${MESH_SHEET_VERTICAL_LENGTH_MM}mm (幅×縦)`,
         unit: '枚',
         quantity: meshQtyW,
         sortOrder,
