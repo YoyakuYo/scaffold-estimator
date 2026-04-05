@@ -68,7 +68,14 @@ FRONTEND_URL=http://localhost:3001
 # ============================================
 # Email — Brevo / SendGrid HTTP API (recommended on Render) OR SMTP
 # ============================================
-# Brevo SMTP relay (matches Brevo dashboard “SMTP” tab — same variable names):
+# On Render and many PaaS hosts, outbound SMTP (port 587/465) often times out or is blocked.
+# Use HTTPS transactional APIs instead of smtp-relay.brevo.com when deploying in the cloud.
+#
+# Brevo over HTTPS (preferred on Render — same account as Brevo SMTP, different key type):
+# BREVO_API_KEY=xkeysib-xxx   # Brevo → Transactional → API keys (not the SMTP password)
+# SMTP_FROM="App <verified@yourdomain.com>"
+#
+# Brevo SMTP relay (OK on your own server/VPS; may fail on Render with “Connection timeout”):
 # SMTP_HOST=smtp-relay.brevo.com
 # SMTP_PORT=587
 # SMTP_USER=your_smtp_login
@@ -76,9 +83,7 @@ FRONTEND_URL=http://localhost:3001
 # SMTP_SECURE=false          # default; use STARTTLS on 587 (omit or false)
 # SMTP_FROM="App <verified@yourdomain.com>"   # recommended; if omitted, From = SMTP_USER
 #
-# Brevo REST API instead of SMTP (optional; do not set BREVO_API_KEY if you only use SMTP above):
-# BREVO_API_KEY=xkeysib-xxx
-# SMTP_FROM=verified@yourdomain.com
+# If you use both BREVO_API_KEY and SMTP, the app sends via HTTPS first (API), not SMTP.
 #
 # SendGrid (HTTPS, avoids SMTP timeouts on some PaaS):
 # SENDGRID_API_KEY=SG.xxx   (API key with Mail Send; same key as SMTP “password”)

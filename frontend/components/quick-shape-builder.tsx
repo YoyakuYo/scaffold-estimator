@@ -14,6 +14,7 @@ import {
   Building2,
   Ruler,
   ArrowRight,
+  LayoutList,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { inferEdgePlanAxisFromVertices, signedAxisRunMmFromVertices } from '@/lib/infer-edge-plan-axis';
@@ -593,7 +594,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         {/* One row per edge: length, XY, CF, width override, stairs (no duplicate length block) */}
         <section aria-labelledby="qb-section-edges">
           <h3 id="qb-section-edges" className={sectionTitleClass}>
-            <Ruler className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
+            <LayoutList className="h-5 w-5 text-gray-500 shrink-0" aria-hidden />
             {t('quickBuilder', 'stepEdges')}
           </h3>
           {shapeType === 'l-shape' && (
@@ -699,14 +700,17 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                       </td>
                       <td className="py-2 px-2">
                         <div className="flex flex-wrap items-center gap-1">
-                          <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap">
+                          <label
+                            className="flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                            title={t('quickBuilder', 'stairAccess')}
+                          >
                             <input
                               type="checkbox"
                               checked={kaidanPerSide[side.label]?.enabled || false}
                               onChange={() => toggleKaidan(side.label)}
                               className="h-3.5 w-3.5 text-blue-600 rounded"
+                              aria-label={t('quickBuilder', 'stairAccess')}
                             />
-                            <span className="text-xs text-gray-600">On</span>
                           </label>
                           {kaidanPerSide[side.label]?.enabled ? (
                             <select
@@ -944,60 +948,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   </div>
                 </>
               )}
-            </div>
-
-            {/* Per side: scaffold width & stairs */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('quickBuilder', 'perSideWidthStairs') || '各辺：足場幅・階段'}</h4>
-              <div className="space-y-2">
-                {sidesList.map((side) => (
-                  <div key={side.label} className="flex items-center gap-4 bg-white rounded-lg px-4 py-2.5 border border-gray-200 flex-wrap">
-                    <span className="text-sm font-medium text-gray-700 min-w-[80px]">{side.label}</span>
-                    <span className="text-xs text-gray-500">{side.lengthMm.toLocaleString()}mm</span>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-500">{t('quickBuilder', 'scaffoldWidth') || '足場幅'}:</label>
-                      <select
-                        value={scaffoldWidthPerSide[side.label] ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setScaffoldWidthPerSide((prev) => ({
-                            ...prev,
-                            [side.label]: v ? Number(v) : undefined,
-                          }));
-                        }}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs"
-                      >
-                        <option value="">{scaffoldWidthMm}mm</option>
-                        {[600, 900, 1200].filter((w) => w !== scaffoldWidthMm).map((w) => (
-                          <option key={w} value={w}>{w}mm</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={kaidanPerSide[side.label]?.enabled || false}
-                          onChange={() => toggleKaidan(side.label)}
-                          className="h-4 w-4 text-blue-600 rounded"
-                        />
-                        <span className="text-xs text-gray-500">{t('quickBuilder', 'stairAccess') || '階段'}</span>
-                      </label>
-                      {kaidanPerSide[side.label]?.enabled && (
-                        <select
-                          value={kaidanPerSide[side.label]?.count || 1}
-                          onChange={(e) => updateKaidanCount(side.label, Number(e.target.value))}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs"
-                        >
-                          {[1, 2, 3, 4].map((n) => (
-                            <option key={n} value={n}>{n}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* Summary */}

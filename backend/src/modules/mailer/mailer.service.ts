@@ -154,7 +154,26 @@ export class MailerService {
     }
     if (!this.transport) return;
     const from = this.resolveFromHeader();
-    await this.transport.sendMail({ from, to, subject, text, html: html || text });
+    const smtpHost = this.configService.get<string>('SMTP_HOST')?.trim() || '';
+    try {
+      await this.transport.sendMail({ from, to, subject, text, html: html || text });
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      const isTimeout = /timeout|ETIMEDOUT|ECONNRESET|Connection timeout/i.test(msg);
+      const brevoSmtp = /brevo|sendinblue/i.test(smtpHost);
+      if (isTimeout && brevoSmtp) {
+        throw new Error(
+          `${msg} — Outbound SMTP to Brevo is often blocked or times out on cloud hosts (e.g. Render). ` +
+            'Set BREVO_API_KEY (Brevo → Transactional → API keys) and SMTP_FROM to send over HTTPS instead of smtp-relay.brevo.com.',
+        );
+      }
+      if (isTimeout) {
+        throw new Error(
+          `${msg} — SMTP frequently times out from PaaS. Prefer BREVO_API_KEY, SENDGRID_API_KEY, or another HTTPS email API instead of raw SMTP.`,
+        );
+      }
+      throw e;
+    }
   }
 
   async sendApprovalEmail(to: string): Promise<void> {
