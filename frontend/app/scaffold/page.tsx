@@ -71,7 +71,7 @@ import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
 import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
 import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
-import { formatMmAsMetersLabel, mToMm, mmToM } from '@/lib/dimension-meters';
+import { formatMmAsMetersLabel, formatMmLabel, mToMm, mmToM } from '@/lib/dimension-meters';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 import type { ScaffoldWidthCatalogMm } from '@/lib/scaffold-width-catalog';
@@ -2250,9 +2250,9 @@ function ScaffoldPageContent() {
                                   }}
                                   className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
                                 >
-                                  <option value="">{formatMmAsMetersLabel(aiBimPreview.dto.scaffoldWidthMm)}</option>
+                                  <option value="">{formatMmLabel(aiBimPreview.dto.scaffoldWidthMm)}</option>
                                   {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((wmm) => wmm !== aiBimPreview.dto.scaffoldWidthMm).map((wmm) => (
-                                    <option key={wmm} value={wmm}>{formatMmAsMetersLabel(wmm)}</option>
+                                    <option key={wmm} value={wmm}>{formatMmLabel(wmm)}</option>
                                   ))}
                                 </select>
                               </td>
@@ -2509,7 +2509,7 @@ function ScaffoldPageContent() {
                             >
                               {[...SCAFFOLD_WIDTH_CATALOG_MM].map((w) => (
                                 <option key={w} value={w}>
-                                  {formatMmAsMetersLabel(w)}
+                                  {formatMmLabel(w)}
                                 </option>
                               ))}
                             </select>
@@ -2572,7 +2572,7 @@ function ScaffoldPageContent() {
                               >
                                 {[1800, 2700, 3600].map((v) => (
                                   <option key={v} value={v}>
-                                    {formatMmAsMetersLabel(v)}
+                                    {formatMmLabel(v)}
                                   </option>
                                 ))}
                               </select>
@@ -2968,9 +2968,9 @@ function ScaffoldPageContent() {
                       className="w-[4.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <option value="">{formatMmAsMetersLabel(scaffoldWidthMm)}</option>
+                      <option value="">{formatMmLabel(scaffoldWidthMm)}</option>
                       {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((w) => w !== scaffoldWidthMm).map((w) => (
-                        <option key={w} value={w}>{formatMmAsMetersLabel(w)}</option>
+                        <option key={w} value={w}>{formatMmLabel(w)}</option>
                       ))}
                     </select>
                   </div>
@@ -3054,7 +3054,7 @@ function ScaffoldPageContent() {
                   {!wall.scaffoldWidthMm && (
                     <span className="text-[10px] text-gray-400">
                       {t('scaffold', 'defaultScaffoldWidthTag')}
-                      {formatMmAsMetersLabel(scaffoldWidthMm)}
+                      {formatMmLabel(scaffoldWidthMm)}
                     </span>
                   )}
                 </div>
