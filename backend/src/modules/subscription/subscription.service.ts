@@ -192,6 +192,7 @@ export class SubscriptionService {
   /**
    * `subscriptions.plan` can stay `free_trial` while Stripe rows are updated (webhook drift).
    * Use `stripe_price_id` so company caps, seat sync, and invitees see the real tier.
+   * If `stripe_subscription_id` is set and status is live, treat as paid even when `plan` lags.
    */
   private effectivePaidPlanFromRow(sub: Subscription): string | null {
     let p = sub.plan;
@@ -199,8 +200,28 @@ export class SubscriptionService {
       const fromPrice = this.planFromStripePriceId(sub.stripePriceId);
       if (fromPrice && fromPrice !== 'free_trial') p = fromPrice;
     }
+    if ((!p || p === 'free_trial') && sub.stripeSubscriptionId) {
+      const st = sub.status;
+      if (st === 'active' || st === 'trialing') {
+        if (sub.stripePriceId) {
+          const fromPrice = this.planFromStripePriceId(sub.stripePriceId);
+          if (fromPrice && fromPrice !== 'free_trial') return fromPrice;
+        }
+        return 'professional';
+      }
+    }
     if (!p || p === 'free_trial') return null;
     return p;
+  }
+
+  /** True if this row is (or appears to be) the organization's Stripe customer / paid subscriber. */
+  private subscriptionRowLooksLikeCompanyPayer(s: Subscription): boolean {
+    if (s.stripeCustomerId || s.stripeSubscriptionId) return true;
+    return this.effectivePaidPlanFromRow(s) != null;
+  }
+
+  private companyHasPeerBillingAnchor(companySubs: Subscription[], userId: string): boolean {
+    return companySubs.some((x) => x.userId !== userId && this.subscriptionRowLooksLikeCompanyPayer(x));
   }
 
   private mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
@@ -633,17 +654,30 @@ export class SubscriptionService {
         : 0;
     const ownsStripeAfter = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
     let peerPaidSnap: { plan: PlanTier } | null = null;
+    let companySubsForPeers: Subscription[] = [];
     if (user.companyId) {
-      const companySubs = await this.getSubscriptionsForCompany(user.companyId);
-      peerPaidSnap = await this.bestCompanyPaidSeatSnapshot(companySubs.filter((s) => s.userId !== userId));
+      companySubsForPeers = await this.getSubscriptionsForCompany(user.companyId);
+      peerPaidSnap = await this.bestCompanyPaidSeatSnapshot(
+        companySubsForPeers.filter((s) => s.userId !== userId),
+      );
     }
+    /**
+     * Another teammate must look like the payer: `bestCompanyPaidSeatSnapshot` OR any peer row with
+     * Stripe ids / effective paid plan. Without this, invitees see `managesBilling: true` when the
+     * payer row still has `plan: free_trial` and empty `stripe_price_id` but a live subscription id.
+     */
+    const peerAnchorsBilling =
+      peerPaidSnap != null ||
+      (user.companyId !== null &&
+        user.companyId !== '' &&
+        this.companyHasPeerBillingAnchor(companySubsForPeers, userId));
     /** False when this user inherits a paid company seat and should not use Stripe checkout/portal themselves. */
     const managesBilling =
       exempt ||
       user.role === 'superadmin' ||
       !user.companyId ||
       ownsStripeAfter ||
-      !peerPaidSnap ||
+      !peerAnchorsBilling ||
       !hasAccess;
 
     const subPayload = exempt
