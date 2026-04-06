@@ -43,7 +43,6 @@ import {
   Table2,
   Shapes,
   FolderOutput,
-  Info,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -633,21 +632,11 @@ function UserDashboard() {
             className="rounded-3xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/90 to-white p-6 sm:p-8 shadow-sm flex flex-col"
             aria-labelledby="corner-legend-heading"
           >
-            <div className="flex items-start gap-2">
-              <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" aria-hidden />
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700/90">
-                  {t('dashboard', 'cornerLegendBadge')}
-                </p>
-                <h2 id="corner-legend-heading" className="mt-1 text-base font-bold text-slate-900">
-                  {t('dashboard', 'manualGuideCfTitle')}
-                </h2>
-              </div>
-            </div>
-            <p className="mt-3 text-sm font-medium text-indigo-950/90 rounded-xl bg-white/80 border border-indigo-100 px-3 py-2.5">
-              {t('dashboard', 'cornerLegendNoF')}
-            </p>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 flex-1">
+            <h2 id="corner-legend-heading" className="text-lg font-bold text-slate-900">
+              {t('dashboard', 'manualGuideCfTitle')}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 leading-relaxed">{t('dashboard', 'manualGuideCfBody')}</p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 flex-1">
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <p className="text-xs font-bold text-emerald-800 tracking-wide">{t('dashboard', 'cornerCName')}</p>
                 <p className="mt-2 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'cornerCExplain')}</p>
@@ -661,9 +650,6 @@ function UserDashboard() {
               <p className="text-xs font-semibold text-slate-800">{t('dashboard', 'cornerWhenTitle')}</p>
               <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'cornerWhenBody')}</p>
             </div>
-            <p className="mt-4 text-xs text-slate-500 leading-relaxed border-t border-slate-200/80 pt-4">
-              {t('dashboard', 'manualGuideCfBody')}
-            </p>
           </section>
         </div>
 

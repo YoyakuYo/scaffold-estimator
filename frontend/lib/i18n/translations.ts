@@ -206,9 +206,9 @@ export const translations = {
       fr: 'Types de coins : C et R',
     },
     manualGuideCfBody: {
-      ja: '略号は「C」と「R」です（「F」ではありません）。C＝凸（外角）、R＝凹（内角・反射）。平面の角と一致させてください。',
-      en: 'Letters are **C** and **R** — not “F”. **C** = convex (outer corner); **R** = reflex (inner / re-entrant). Match each vertex to your plan.',
-      fr: 'Les lettres sont **C** et **R**, pas « F ». **C** = convexe (coin extérieur) ; **R** = rentrant (intérieur). Alignez chaque sommet sur le plan.',
+      ja: 'C は凸（外角）、R は凹（内角・反射）を表します。各頂点を平面図と一致させ、壁行に保存します。コーナー配列の前提となります。',
+      en: 'C marks a convex (outer) corner; R marks a reflex (inner / re-entrant) corner. Set each vertex to match the plan; values are stored on the wall rows and inform corner layout.',
+      fr: 'C indique un coin convexe (extérieur) ; R un coin rentrant (intérieur). Réglez chaque sommet selon le plan ; les valeurs sont enregistrées par mur et servent au tracé des coins.',
     },
     flowTitle: {
       ja: '積算の流れ',
@@ -249,16 +249,6 @@ export const translations = {
       ja: '見積表・Excel・2D/3D・見積ウィザードから共有・印刷します。',
       en: 'Use quotation tables, Excel, 2D/3D views, and the quotation wizard to share or print.',
       fr: 'Tableaux de devis, Excel, vues 2D/3D, assistant devis pour partage et impression.',
-    },
-    cornerLegendBadge: {
-      ja: '用語の整理',
-      en: 'Naming',
-      fr: 'Vocabulaire',
-    },
-    cornerLegendNoF: {
-      ja: '「F」という記号は使いません。内角は **R**（反射・reflex）です。',
-      en: 'There is no **“F”** for corners. Inner corners are **R** (reflex).',
-      fr: 'Pas de **« F »** pour les coins. Les angles intérieurs sont **R** (reflex).',
     },
     cornerCName: { ja: 'C — 凸（外角）', en: 'C — convex (outer corner)', fr: 'C — convexe (coin extérieur)' },
     cornerCExplain: {
