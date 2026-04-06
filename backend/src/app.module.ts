@@ -16,6 +16,7 @@ import { MailerModule } from './modules/mailer/mailer.module';
 import { CompanyModule } from './modules/company/company.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
+import { TeamChatModule } from './modules/team-chat/team-chat.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
     CompanyModule,
     SubscriptionModule,
     VisionBimModule,
+    TeamChatModule,
   ],
 })
 export class AppModule {}

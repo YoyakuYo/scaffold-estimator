@@ -13,6 +13,8 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   companyId: string;
+  /** Org primary contact: invites, roster management, billing UI when applicable. Only one per company. */
+  isCompanyAdmin?: boolean;
   /** True for team-invite / org seats: no personal billing (profile + nav). */
   isCompanySeat?: boolean;
   companyName?: string;
@@ -149,6 +151,12 @@ export const usersApi = {
   /** List all companies with user count and branches (super admin only) */
   listCompanies: async (): Promise<Array<{ id: string; name: string; userCount: number; branches: Array<{ id: string; name: string; isHeadquarters: boolean }> }>> => {
     const res = await apiClient.get('/auth/admin/companies');
+    return res.data;
+  },
+
+  /** Transfer company admin to another member (current admin or superadmin). */
+  transferCompanyAdmin: async (payload: { targetUserId: string; companyId?: string }): Promise<{ success: boolean }> => {
+    const res = await apiClient.post<{ success: boolean }>('/auth/company/transfer-admin', payload);
     return res.data;
   },
 };

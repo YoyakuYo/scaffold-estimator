@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Inject,
   forwardRef,
   Logger,
@@ -18,6 +19,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ApproveUserDto } from './dto/approve-user.dto';
+import { TransferCompanyAdminDto } from './dto/transfer-company-admin.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -40,6 +42,62 @@ export class AuthService {
   ) {}
 
   /** Create trial subscription when user is approved/created. Non-blocking so register never fails. */
+  /** Superadmin bypasses; company users need `is_company_admin` for org user list, invites, and direct user creation. */
+  async assertCompanyUserManagementAccess(actor: { id: string; role: string }): Promise<void> {
+    if (actor.role === 'superadmin') return;
+    const { data: row } = await this.supabase.getClient().from('users').select('is_company_admin').eq('id', actor.id).maybeSingle();
+    const ok = row && (row as { is_company_admin: boolean }).is_company_admin === true;
+    if (!ok) {
+      throw new ForbiddenException('Only the company admin can manage users and invitations for your organization.');
+    }
+  }
+
+  /** If the company has no admin, promote this user (e.g. first approved registration). */
+  private async ensureCompanyHasAdminIfMissing(companyId: string | null | undefined, userId: string): Promise<void> {
+    if (!companyId) return;
+    const client = this.supabase.getClient();
+    const { data: existing } = await client
+      .from('users')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('is_company_admin', true)
+      .limit(1);
+    if (existing && existing.length > 0) return;
+    await client
+      .from('users')
+      .update(mapPayloadToSnake({ isCompanyAdmin: true, isCompanySeat: false }))
+      .eq('id', userId);
+  }
+
+  /** After the last company admin is removed (e.g. superadmin deactivation), promote the earliest member. */
+  private async promoteEarliestUserToAdminIfNone(companyId: string): Promise<void> {
+    const client = this.supabase.getClient();
+    const { data: has } = await client
+      .from('users')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('is_company_admin', true)
+      .eq('is_active', true)
+      .limit(1);
+    if (has && has.length > 0) return;
+    const { data: next } = await client
+      .from('users')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .eq('approval_status', 'approved')
+      .neq('role', 'superadmin')
+      .order('created_at', { ascending: true })
+      .limit(1);
+    const nid = next?.[0] ? (next[0] as { id: string }).id : null;
+    if (nid) {
+      await client
+        .from('users')
+        .update(mapPayloadToSnake({ isCompanyAdmin: true, isCompanySeat: false }))
+        .eq('id', nid);
+    }
+  }
+
   private async ensureTrialSubscriptionForUser(user: User): Promise<void> {
     if (!user || user.role === 'superadmin') return;
     try {
@@ -250,12 +308,21 @@ export class AuthService {
 
   // ─── User Management ─────────────────────────────────────
 
-  async createUser(dto: CreateUserDto, adminCompanyId: string): Promise<any> {
+  async createUser(
+    dto: CreateUserDto,
+    actor: { id: string; role: string; companyId: string },
+  ): Promise<any> {
+    if (actor.role !== 'superadmin') {
+      await this.assertCompanyUserManagementAccess(actor);
+    }
     const client = this.supabase.getClient();
     const { data: existing } = await client.from('users').select('id').eq('email', dto.email).maybeSingle();
     if (existing) throw new ConflictException('このメールアドレスは既に使用されています。');
 
-    const targetCompanyId = dto.companyId || adminCompanyId;
+    const targetCompanyId = dto.companyId || actor.companyId;
+    if (actor.role !== 'superadmin' && targetCompanyId !== actor.companyId) {
+      throw new ForbiddenException();
+    }
     const caps = await this.subscriptionService.resolveEffectiveCapabilitiesForCompany(targetCompanyId);
     if (caps.maxSeats > 0 && caps.maxSeats < 9000) {
       const used = await this.subscriptionService.countCompanySeatPressure(targetCompanyId);
@@ -274,9 +341,12 @@ export class AuthService {
       role: dto.role || 'viewer',
       firstName: dto.firstName || '',
       lastName: dto.lastName || '',
-      companyId: dto.companyId || adminCompanyId,
+      companyId: targetCompanyId,
       isActive: true,
       approvalStatus: 'approved',
+      /** Superadmin-created accounts are org-primary style; company-admin-created are seat members. */
+      isCompanySeat: actor.role !== 'superadmin',
+      isCompanyAdmin: false,
     });
     const { data: saved, error } = await client.from('users').insert(userIns).select().single();
     if (error || !saved) {
@@ -285,6 +355,7 @@ export class AuthService {
     }
     const user = mapRowToCamel<User>(saved as Record<string, unknown>);
     if (user) await this.ensureTrialSubscriptionForUser(user);
+    if (user) await this.ensureCompanyHasAdminIfMissing(user.companyId, user.id);
     const { passwordHash: _pw, bankActivationCodeHash: _bah, ...result } = user || saved;
     return result;
   }
@@ -323,11 +394,18 @@ export class AuthService {
     return result;
   }
 
-  async updateUser(userId: string, dto: UpdateUserDto): Promise<any> {
+  async updateUser(
+    userId: string,
+    dto: UpdateUserDto,
+    actor?: { role: string; companyId?: string },
+  ): Promise<any> {
     const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
     if (!row) throw new NotFoundException('ユーザーが見つかりません。');
     const user = mapRowToCamel<User>(row as Record<string, unknown>);
     if (!user) throw new NotFoundException('ユーザーが見つかりません。');
+    if (actor && actor.role !== 'superadmin' && user.companyId !== actor.companyId) {
+      throw new ForbiddenException();
+    }
 
     const updates: Record<string, unknown> = {};
     if (dto.email !== undefined && dto.email !== user.email) {
@@ -363,9 +441,16 @@ export class AuthService {
     return { success: true };
   }
 
-  async adminResetPassword(userId: string, newPassword: string): Promise<{ success: boolean }> {
-    const { data: row } = await this.supabase.getClient().from('users').select('id').eq('id', userId).maybeSingle();
+  async adminResetPassword(
+    userId: string,
+    newPassword: string,
+    actor?: { role: string; companyId?: string },
+  ): Promise<{ success: boolean }> {
+    const { data: row } = await this.supabase.getClient().from('users').select('company_id').eq('id', userId).maybeSingle();
     if (!row) throw new NotFoundException('ユーザーが見つかりません。');
+    if (actor && actor.role !== 'superadmin' && (row as { company_id: string }).company_id !== actor.companyId) {
+      throw new ForbiddenException();
+    }
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(newPassword, salt);
     await this.supabase.getClient().from('users').update(mapPayloadToSnake({ passwordHash: hash })).eq('id', userId);
@@ -503,10 +588,70 @@ export class AuthService {
     return { success: true };
   }
 
-  async deactivateUser(userId: string): Promise<{ success: boolean }> {
-    const { data: row } = await this.supabase.getClient().from('users').select('id').eq('id', userId).maybeSingle();
+  async deactivateUser(
+    userId: string,
+    actor?: { id: string; role: string; companyId?: string },
+  ): Promise<{ success: boolean }> {
+    const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
     if (!row) throw new NotFoundException('ユーザーが見つかりません。');
+    const target = mapRowToCamel<User>(row as Record<string, unknown>);
+    if (!target) throw new NotFoundException('ユーザーが見つかりません。');
+    if (actor && actor.role !== 'superadmin' && target.companyId !== actor.companyId) {
+      throw new ForbiddenException();
+    }
+    if (target.isCompanyAdmin && actor?.role !== 'superadmin') {
+      throw new BadRequestException(
+        'Transfer the company admin role to another member before deactivating this account.',
+      );
+    }
     await this.supabase.getClient().from('users').update({ is_active: false }).eq('id', userId);
+    if (target.isCompanyAdmin && target.companyId && actor?.role === 'superadmin') {
+      await this.promoteEarliestUserToAdminIfNone(target.companyId);
+    }
+    return { success: true };
+  }
+
+  async transferCompanyAdmin(
+    actor: { id: string; role: string; companyId?: string },
+    dto: TransferCompanyAdminDto,
+  ): Promise<{ success: boolean }> {
+    const client = this.supabase.getClient();
+    let companyId: string;
+    if (actor.role === 'superadmin') {
+      if (!dto.companyId) {
+        throw new BadRequestException('companyId is required when transferring company admin as platform superadmin.');
+      }
+      companyId = dto.companyId;
+    } else {
+      const { data: arow } = await client.from('users').select('*').eq('id', actor.id).maybeSingle();
+      const au = mapRowToCamel<User>(arow as Record<string, unknown>);
+      if (!au?.isCompanyAdmin) {
+        throw new ForbiddenException('Only the company admin can transfer this role.');
+      }
+      companyId = au.companyId;
+    }
+
+    const { data: trow } = await client.from('users').select('*').eq('id', dto.targetUserId).maybeSingle();
+    const target = mapRowToCamel<User>(trow as Record<string, unknown>);
+    if (!target || target.companyId !== companyId) {
+      throw new BadRequestException('Target user is not a member of this company.');
+    }
+    if (target.role === 'superadmin') {
+      throw new BadRequestException('Invalid target.');
+    }
+    if (target.approvalStatus !== 'approved' || !target.isActive) {
+      throw new BadRequestException('Target user must be active and approved.');
+    }
+
+    await client.from('users').update({ is_company_admin: false }).eq('company_id', companyId);
+    const { error } = await client
+      .from('users')
+      .update(mapPayloadToSnake({ isCompanyAdmin: true, isCompanySeat: false }))
+      .eq('id', target.id);
+    if (error) {
+      this.logger.error(`transferCompanyAdmin update failed: ${error.message}`);
+      throw new BadRequestException('Could not transfer company admin.');
+    }
     return { success: true };
   }
 
@@ -555,6 +700,7 @@ export class AuthService {
         .sendBankTransferActivationEmail(user.email, code, dto.planTier, activateUrl)
         .catch(() => {});
       const { passwordHash: _p, bankActivationCodeHash: _h, ...result } = updated || (saved as User);
+      await this.ensureCompanyHasAdminIfMissing(updated?.companyId, userId);
       return result;
     }
 
@@ -573,6 +719,7 @@ export class AuthService {
       .catch(() => {});
     await this.mailerService.sendApprovalEmail(user.email).catch(() => {});
     const { passwordHash: _p, bankActivationCodeHash: _h, ...result } = updated || (saved as User);
+    await this.ensureCompanyHasAdminIfMissing(updated?.companyId, userId);
     return result;
   }
 

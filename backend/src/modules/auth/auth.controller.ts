@@ -29,6 +29,7 @@ import { ApproveUserDto } from './dto/approve-user.dto';
 import { VerifyBankActivationDto } from './dto/verify-bank-activation.dto';
 import { CreateTeamInviteDto } from './dto/create-team-invite.dto';
 import { AcceptTeamInviteSignupDto, AcceptTeamInviteSessionDto } from './dto/accept-team-invite.dto';
+import { TransferCompanyAdminDto } from './dto/transfer-company-admin.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -121,7 +122,7 @@ export class AuthController {
     if (!cid) {
       throw new BadRequestException('companyId query parameter is required when listing invites as superadmin.');
     }
-    return this.teamInviteService.listInvites(cid);
+    return this.teamInviteService.listInvites(user, cid);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -191,12 +192,13 @@ export class AuthController {
     return this.authService.heartbeat(user.id);
   }
 
-  // ─── User Management: Super Admin (all) or Estimator (list/edit company users); team invites also for Viewer ─
+  // ─── User Management: Super Admin (all) or company admin (org roster / CRUD) ─
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Get('users')
   async listUsers(@CurrentUser() user: any) {
+    await this.authService.assertCompanyUserManagementAccess(user);
     const companyId = user.role === 'superadmin' ? undefined : user.companyId;
     return this.authService.listUsers(companyId);
   }
@@ -224,44 +226,60 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin')
+  @Get('users/pending/count')
+  async getPendingUsersCount() {
+    const count = await this.authService.getPendingUsersCount();
+    return { count };
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
   @Get('users/:id/login-history')
   async getLoginHistory(@Param('id') id: string) {
     return this.authService.getLoginHistory(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Get('users/:id')
-  async getUser(@Param('id') id: string) {
-    return this.authService.getUser(id, { withCompany: true });
+  async getUser(@CurrentUser() admin: any, @Param('id') id: string) {
+    await this.authService.assertCompanyUserManagementAccess(admin);
+    const u = await this.authService.getUser(id, { withCompany: true });
+    if (admin.role !== 'superadmin' && u.companyId !== admin.companyId) {
+      throw new ForbiddenException();
+    }
+    return u;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Post('users')
   async createUser(@CurrentUser() admin: any, @Body() dto: CreateUserDto) {
-    return this.authService.createUser(dto, admin.companyId);
+    return this.authService.createUser(dto, admin);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Put('users/:id')
-  async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.authService.updateUser(id, dto);
+  async updateUser(@CurrentUser() admin: any, @Param('id') id: string, @Body() dto: UpdateUserDto) {
+    await this.authService.assertCompanyUserManagementAccess(admin);
+    return this.authService.updateUser(id, dto, admin);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Post('users/:id/reset-password')
-  async adminResetPassword(@Param('id') id: string, @Body() dto: AdminResetPasswordDto) {
-    return this.authService.adminResetPassword(id, dto.newPassword);
+  async adminResetPassword(@CurrentUser() admin: any, @Param('id') id: string, @Body() dto: AdminResetPasswordDto) {
+    await this.authService.assertCompanyUserManagementAccess(admin);
+    return this.authService.adminResetPassword(id, dto.newPassword, admin);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Delete('users/:id')
-  async deactivateUser(@Param('id') id: string) {
-    return this.authService.deactivateUser(id);
+  async deactivateUser(@CurrentUser() admin: any, @Param('id') id: string) {
+    await this.authService.assertCompanyUserManagementAccess(admin);
+    return this.authService.deactivateUser(id, admin);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -278,11 +296,9 @@ export class AuthController {
     return this.authService.rejectUser(id);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin')
-  @Get('users/pending/count')
-  async getPendingUsersCount() {
-    const count = await this.authService.getPendingUsersCount();
-    return { count };
+  @UseGuards(JwtAuthGuard)
+  @Post('company/transfer-admin')
+  async transferCompanyAdmin(@CurrentUser() user: any, @Body() dto: TransferCompanyAdminDto) {
+    return this.authService.transferCompanyAdmin(user, dto);
   }
 }

@@ -35,6 +35,10 @@ export class User {
   @Column({ name: 'is_company_seat', default: false })
   isCompanySeat: boolean;
 
+  /** Exactly one per company: invites, org user management, and billing checkout when applicable. */
+  @Column({ name: 'is_company_admin', default: false })
+  isCompanyAdmin: boolean;
+
   @ManyToOne(() => Company, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'company_id' })
   company?: Company;

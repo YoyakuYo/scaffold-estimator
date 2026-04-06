@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
-import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Users, User, MessageSquare, CreditCard, Menu, X } from 'lucide-react';
+import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Users, UsersRound, User, MessageSquare, CreditCard, Menu, X } from 'lucide-react';
 import { NotificationBell } from '@/components/notification-bell';
 import { useI18n, type Locale } from '@/lib/i18n';
 
@@ -41,7 +41,8 @@ export function Navigation() {
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
-  const isAdmin = currentUser?.role === 'superadmin';
+  const isPlatformSuperAdmin = currentUser?.role === 'superadmin';
+  const showUsersAdminLink = isPlatformSuperAdmin || currentUser?.isCompanyAdmin === true;
 
   const { data: mySubscription, isFetched: subscriptionNavFetched } = useQuery({
     queryKey: ['my-subscription'],
@@ -74,7 +75,10 @@ export function Navigation() {
     { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
     ...(showBillingNav ? [{ path: '/billing', label: t('nav2', 'billing'), icon: CreditCard }] : []),
     { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
-    ...(isAdmin ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
+    ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
+      ? [{ path: '/team', label: t('nav2', 'team'), icon: UsersRound }]
+      : []),
+    ...(showUsersAdminLink ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
     { path: '/settings', label: t('nav', 'settings'), icon: Settings },
   ];
 

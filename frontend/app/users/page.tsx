@@ -87,8 +87,7 @@ function UsersPage() {
   });
 
   const isSuperAdmin = currentUser?.role === 'superadmin';
-  const isEstimator = currentUser?.role === 'estimator';
-  const canManageUsers = isSuperAdmin || isEstimator;
+  const canManageUsers = isSuperAdmin || currentUser?.isCompanyAdmin === true;
 
   const { data: users, isLoading, isError, error } = useQuery<UserProfile[]>({
     queryKey: ['users'],
@@ -125,7 +124,7 @@ function UsersPage() {
   const { data: estimatorBranches } = useQuery({
     queryKey: ['company-branches'],
     queryFn: companyApi.listBranches,
-    enabled: !!canManageUsers && isEstimator,
+    enabled: !!canManageUsers && !isSuperAdmin,
   });
 
   const branchOptions =
@@ -136,7 +135,7 @@ function UsersPage() {
   const { data: teamInvites } = useQuery({
     queryKey: ['team-invites', effectiveInviteCompanyId],
     queryFn: () => teamInvitesApi.list(isSuperAdmin ? effectiveInviteCompanyId : undefined),
-    enabled: !!canManageUsers && !!effectiveInviteCompanyId,
+    enabled: isSuperAdmin && !!effectiveInviteCompanyId,
   });
 
   const createInviteMutation = useMutation({
@@ -331,13 +330,13 @@ function UsersPage() {
             <p className="text-gray-500 mt-1">
               {isSuperAdmin
                 ? t('usersAdmin', 'subtitleSuperadmin')
-                : t('usersAdmin', 'subtitleEstimator')}
+                : t('usersAdmin', 'subtitleCompanyAdmin')}
             </p>
           </div>
         </div>
 
-        {/* Team invites (estimator + superadmin) */}
-        {canManageUsers && (
+        {/* Team invites (platform superadmin only; company admins use /team) */}
+        {isSuperAdmin && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
             <div className="px-6 py-3 border-b border-gray-200 flex items-center gap-2">
               <UserPlus className="h-5 w-5 text-blue-600" />

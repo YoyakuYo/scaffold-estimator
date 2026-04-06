@@ -712,13 +712,18 @@ export class SubscriptionService {
       user.role !== 'superadmin' &&
       (peerAnchorsBilling || user.isCompanySeat === true);
     /** False when this user inherits a paid company seat and should not use Stripe checkout/portal themselves. */
-    const managesBilling =
+    let managesBilling =
       exempt ||
       user.role === 'superadmin' ||
       !user.companyId ||
       ownsStripeAfter ||
       !hasAccess ||
       !orgSeat;
+
+    /** Only the designated company admin may pay or open the customer portal for the organization. */
+    const companyMayUseBillingUi =
+      !user.companyId || user.role === 'superadmin' || exempt || user.isCompanyAdmin === true;
+    managesBilling = managesBilling && companyMayUseBillingUi;
 
     const isCompanySeatViewer =
       !exempt && user.role !== 'superadmin' && !!user.companyId && hasAccess && !managesBilling;

@@ -133,10 +133,19 @@ export class TeamInviteService {
     };
   }
 
+  private async assertCompanyAdminForInvites(actor: { id: string; role: string }): Promise<void> {
+    if (actor.role === 'superadmin') return;
+    const { data } = await this.supabase.getClient().from('users').select('is_company_admin').eq('id', actor.id).maybeSingle();
+    if (!data || (data as { is_company_admin: boolean }).is_company_admin !== true) {
+      throw new ForbiddenException('Only the company admin can manage team invitations.');
+    }
+  }
+
   async createInvite(
     actor: { id: string; role: string; companyId: string; email?: string },
     dto: CreateTeamInviteDto,
   ): Promise<{ id: string; joinUrl: string; emailSent: boolean }> {
+    await this.assertCompanyAdminForInvites(actor);
     const companyId = this.resolveCompanyIdForInvite(actor, dto);
     await this.assertBranchBelongsToCompany(dto.branchId, companyId);
 
@@ -234,7 +243,8 @@ export class TeamInviteService {
     return { id: (saved as { id: string }).id, joinUrl, emailSent };
   }
 
-  async listInvites(companyId: string): Promise<unknown[]> {
+  async listInvites(actor: { id: string; role: string }, companyId: string): Promise<unknown[]> {
+    await this.assertCompanyAdminForInvites(actor);
     const { data, error } = await this.supabase
       .getClient()
       .from('company_invites')
@@ -246,7 +256,8 @@ export class TeamInviteService {
     return (data || []).map((row: Record<string, unknown>) => mapRowToCamel<Record<string, unknown>>(row));
   }
 
-  async revokeInvite(actor: { role: string; companyId: string }, inviteId: string, companyId: string): Promise<{ success: boolean }> {
+  async revokeInvite(actor: { id: string; role: string; companyId: string }, inviteId: string, companyId: string): Promise<{ success: boolean }> {
+    await this.assertCompanyAdminForInvites(actor);
     const targetCompany = actor.role === 'superadmin' ? companyId : actor.companyId;
     if (actor.role !== 'superadmin' && companyId !== actor.companyId) {
       throw new ForbiddenException();
@@ -321,6 +332,7 @@ export class TeamInviteService {
       approvalStatus: 'approved',
       /** Always set for join-via-invite; subscription sync may lag — billing UI keys off this. */
       isCompanySeat: true,
+      isCompanyAdmin: false,
     });
 
     const { data: saved, error } = await client.from('users').insert(userIns).select('*').single();

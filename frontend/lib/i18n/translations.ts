@@ -1514,12 +1514,21 @@ export const translations = {
       en: 'Open user management (roles, passwords)',
       fr: 'Ouvrir la gestion des utilisateurs (rôles, mots de passe)',
     },
+    teamLinkCardTitle: { ja: 'チーム', en: 'Team', fr: 'Équipe' },
+    teamLinkCardBody: {
+      ja: '社内チャットと（管理者の場合）メンバー管理はこちら。',
+      en: 'Team chat and member management (for the company admin) are on the Team page.',
+      fr: 'Chat interne et gestion des membres (admin) sur la page Équipe.',
+    },
+    teamLinkCta: { ja: 'チームページを開く →', en: 'Open Team →', fr: 'Ouvrir Équipe →' },
+    companyAdminBadge: { ja: '会社管理者', en: 'Company admin', fr: 'Administrateur entreprise' },
   },
 
   // ─── Navigation Extras ──────────────────────────────────────
   nav2: {
     billing: { ja: '請求', en: 'Billing', fr: 'Facturation' },
     support: { ja: 'サポート', en: 'Support', fr: 'Assistance' },
+    team: { ja: 'チーム', en: 'Team', fr: 'Équipe' },
     users: { ja: 'ユーザー', en: 'Users', fr: 'Users' },
     profileTooltip: { ja: 'プロフィール', en: 'Profile', fr: 'Profile' },
   },
@@ -2018,6 +2027,36 @@ export const translations = {
     },
   },
 
+  teamPage: {
+    title: { ja: 'チーム', en: 'Team', fr: 'Équipe' },
+    subtitle: {
+      ja: '同じ会社のメンバーとメッセージのやり取りができます。管理者は席の管理と招待もここから行えます。',
+      en: 'Message teammates in your company. The company admin manages seats and invitations here.',
+      fr: 'Échangez avec les membres de votre entreprise. L’administrateur gère les sièges et les invitations ici.',
+    },
+    backDashboard: { ja: 'ダッシュボードへ戻る', en: 'Back to dashboard', fr: 'Retour au tableau de bord' },
+    chatTitle: { ja: '社内チャット', en: 'Team chat', fr: 'Chat interne' },
+    noMessages: { ja: 'まだメッセージはありません。', en: 'No messages yet.', fr: 'Aucun message pour le moment.' },
+    messagePlaceholder: { ja: 'メッセージを入力…', en: 'Type a message…', fr: 'Écrire un message…' },
+    send: { ja: '送信', en: 'Send', fr: 'Envoyer' },
+    seatsTitle: { ja: 'メンバーと席', en: 'Members & seats', fr: 'Membres et sièges' },
+    badgeAdmin: { ja: '管理者', en: 'Admin', fr: 'Admin' },
+    badgeSeat: { ja: '招待席', en: 'Seat', fr: 'Siège' },
+    makeAdmin: { ja: '管理者に移す', en: 'Make admin', fr: 'Transférer le rôle admin' },
+    confirmTransfer: {
+      ja: '{name} を会社の管理者にしますか？あなたは管理者権限を失います（1社につき1名）。',
+      en: 'Make {name} the company admin? You will lose admin rights (one admin per company).',
+      fr: 'Nommer {name} administrateur de l’entreprise ? Vous perdrez le rôle admin (un seul admin par entreprise).',
+    },
+    invitesTitle: { ja: 'メンバーを招待', en: 'Invite members', fr: 'Inviter des membres' },
+    memberAsideTitle: { ja: 'メンバー', en: 'Member', fr: 'Membre' },
+    memberAsideBody: {
+      ja: '社内チャットは左のパネルからご利用ください。席の管理や招待は会社の管理者のみが行えます。',
+      en: 'Use team chat on the left. Seat management and invitations are limited to your company admin.',
+      fr: 'Utilisez le chat à gauche. La gestion des sièges et les invitations sont réservées à l’administrateur.',
+    },
+  },
+
   // ─── Notifications ──────────────────────────────────────────
   notifications: {
     title: { ja: 'お知らせ', en: 'Notifications', fr: 'Notifications' },
@@ -2135,9 +2174,9 @@ export const translations = {
   usersAdmin: {
     accessDenied: { ja: 'アクセス権限がありません', en: 'Access Denied', fr: 'Accès refusé' },
     accessDeniedDesc: {
-      ja: 'ユーザー一覧の管理は積算担当以上です。閲覧者はプロフィールページの「チーム招待」から同僚を招待できます。',
-      en: 'The full user list is for estimators and above. Viewers can invite teammates from Profile → Invite teammates.',
-      fr: "La liste complète des utilisateurs est réservée aux estimateurs et plus. Les lecteurs peuvent inviter depuis Profil → Inviter l'équipe.",
+      ja: 'ユーザー一覧とメンバー管理は会社の管理者のみです。チームページはナビの「チーム」から開けます。',
+      en: 'The user list is for your company admin only. Open Team from the navigation for chat and (if you are admin) invites.',
+      fr: "La liste des utilisateurs est réservée à l'administrateur de l'entreprise. Ouvrez Équipe dans la navigation.",
     },
     currentRole: { ja: '現在の権限', en: 'Current role', fr: 'Rôle actuel' },
     redirecting: { ja: 'ダッシュボードにリダイレクトします...', en: 'Redirecting to dashboard...', fr: 'Redirection vers le tableau de bord...' },
@@ -2145,6 +2184,11 @@ export const translations = {
     pendingBadge: { ja: '件の承認待ち', en: 'pending', fr: 'en attente' },
     subtitleSuperadmin: { ja: '会社・ユーザー一覧・承認・権限管理', en: 'Companies, users, approval and permissions', fr: 'Entreprises, utilisateurs, approbations et permissions' },
     subtitleEstimator: { ja: '自社ユーザー一覧・招待', en: 'Company users and invites', fr: "Utilisateurs et invitations de l'entreprise" },
+    subtitleCompanyAdmin: {
+      ja: '自社ユーザー一覧（管理者）',
+      en: 'Company users (admin)',
+      fr: "Utilisateurs de l'entreprise (admin)",
+    },
     confirmDeactivate: { ja: '{email} を無効化しますか？', en: 'Deactivate {email}?', fr: 'Désactiver {email} ?' },
     confirmApprove: { ja: '{email} を承認しますか？', en: 'Approve {email}?', fr: 'Approuver {email} ?' },
     confirmReject: { ja: '{email} を拒否しますか？', en: 'Reject {email}?', fr: 'Refuser {email} ?' },
