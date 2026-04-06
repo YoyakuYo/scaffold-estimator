@@ -1944,6 +1944,11 @@ export const translations = {
     planTierStandard: { ja: 'スタンダード', en: 'Standard', fr: 'Standard' },
     choosePlanStripe: { ja: 'プランを選んでお支払い', en: 'Choose a plan to pay with card', fr: 'Choisissez un forfait (carte)' },
     seatUsage: { ja: 'ユーザー枠: {used} / {limit}', en: 'Seats in use: {used} / {limit}', fr: 'Places utilisées : {used} / {limit}' },
+    companySeatBillingNote: {
+      ja: 'このアカウントは会社の契約プランに含まれるシートです。お支払いや Stripe の管理は、契約担当者のアカウントから行ってください。',
+      en: 'Your access is included in your organization’s paid plan. Payment and the Stripe customer portal are managed by the teammate who subscribed.',
+      fr: 'Votre accès est inclus dans l’abonnement de l’entreprise. Le paiement et le portail Stripe sont gérés par le collègue qui a souscrit.',
+    },
     planCardSubscribe: { ja: 'カードで申し込む', en: 'Subscribe with card', fr: 'S’abonner par carte' },
     planCardStandardBlurb: {
       ja: '単一の標準プラン（管理者が設定した価格）。詳細はチェックアウトでご確認ください。',

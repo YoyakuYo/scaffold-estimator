@@ -51,6 +51,8 @@ export interface SubscriptionInfo {
   cancelAt: string | null;
   canceledAt: string | null;
   hasAccess: boolean;
+  /** False for invited seats on a paid company plan (no personal Stripe customer). */
+  managesBilling?: boolean;
   trialDaysRemaining: number;
   trialLengthDays: number;
   /** While trialing: drawing file uploads used vs max (Quick Shape does not count). */

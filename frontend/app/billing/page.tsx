@@ -34,6 +34,7 @@ function PlanTierPricingGrid({
   checkoutMutation,
   portalMutation,
   isActive,
+  managesBilling,
   t,
 }: {
   subscription: SubscriptionInfo;
@@ -43,6 +44,7 @@ function PlanTierPricingGrid({
   };
   portalMutation: { mutate: () => void; isPending: boolean };
   isActive: boolean;
+  managesBilling: boolean;
   t: BillingT;
 }) {
   const plans = (subscription.checkoutPlans ?? [])
@@ -97,9 +99,16 @@ function PlanTierPricingGrid({
     };
   };
 
+  const canSelfServeStripe = managesBilling;
+
   return (
     <>
-      {plans.length > 1 && (
+      {!canSelfServeStripe && subscription.hasAccess && (
+        <p className="text-sm text-blue-900 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-4">
+          {t('billing', 'companySeatBillingNote')}
+        </p>
+      )}
+      {plans.length > 1 && canSelfServeStripe && (
         <p className="text-sm text-gray-600 mb-4">{t('billing', 'choosePlanStripe')}</p>
       )}
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
@@ -109,7 +118,9 @@ function PlanTierPricingGrid({
             <button
               type="button"
               onClick={() => checkoutMutation.mutate()}
-              disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+              disabled={
+                checkoutMutation.isPending || !subscription.isStripeConfigured || !canSelfServeStripe
+              }
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
             >
               {checkoutMutation.isPending ? (
@@ -140,7 +151,9 @@ function PlanTierPricingGrid({
                 <button
                   type="button"
                   onClick={() => checkoutMutation.mutate(tier)}
-                  disabled={checkoutMutation.isPending || !subscription.isStripeConfigured}
+                  disabled={
+                    checkoutMutation.isPending || !subscription.isStripeConfigured || !canSelfServeStripe
+                  }
                   className="mt-auto w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
                 >
                   {checkoutMutation.isPending ? (
@@ -155,7 +168,7 @@ function PlanTierPricingGrid({
           })
         )}
       </div>
-      {isActive && (
+      {isActive && canSelfServeStripe && (
         <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
@@ -300,7 +313,9 @@ export default function BillingPage() {
     );
   }
 
-  const isTrial = subscription.status === 'trialing';
+  const managesBilling = subscription.managesBilling !== false;
+  const isTrial =
+    subscription.status === 'trialing' && subscription.plan === 'free_trial';
   const isActive = subscription.status === 'active' || subscription.plan === 'enterprise';
 
   const bankTransfer =
@@ -502,6 +517,7 @@ export default function BillingPage() {
                   checkoutMutation={checkoutMutation}
                   portalMutation={portalMutation}
                   isActive={isActive}
+                  managesBilling={managesBilling}
                   t={t}
                 />
                 {!subscription.isStripeConfigured && (
@@ -606,6 +622,7 @@ export default function BillingPage() {
               checkoutMutation={checkoutMutation}
               portalMutation={portalMutation}
               isActive={isActive}
+              managesBilling={managesBilling}
               t={t}
             />
             {!subscription.isStripeConfigured && (

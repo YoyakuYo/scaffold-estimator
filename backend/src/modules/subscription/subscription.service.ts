@@ -570,7 +570,14 @@ export class SubscriptionService {
     const user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
     if (user.companyId && user.role !== 'superadmin' && !user.subscriptionExempt) {
-      await this.reconcileSeatMemberTrialShadow(userId);
+      const ownsStripe = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
+      // Seat holders often have no Stripe customer; full sync aligns their row with the company plan.
+      // Billing owners keep reconcile-only so we never strip their Stripe ids.
+      if (!ownsStripe) {
+        await this.syncSubscriptionRowForCompanyMember(userId);
+      } else {
+        await this.reconcileSeatMemberTrialShadow(userId);
+      }
       const { data: rowAfter } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
       if (rowAfter) sub = mapRowToCamel<Subscription>(rowAfter as Record<string, unknown>)!;
     }
@@ -588,16 +595,32 @@ export class SubscriptionService {
       user.companyId && user.role !== 'superadmin'
         ? await this.countCompanySeats(user.companyId)
         : 0;
+    const ownsStripeAfter = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
+    let peerPaidSnap: { plan: PlanTier } | null = null;
+    if (user.companyId) {
+      const companySubs = await this.getSubscriptionsForCompany(user.companyId);
+      peerPaidSnap = await this.bestCompanyPaidSeatSnapshot(companySubs.filter((s) => s.userId !== userId));
+    }
+    /** False when this user inherits a paid company seat and should not use Stripe checkout/portal themselves. */
+    const managesBilling =
+      exempt ||
+      user.role === 'superadmin' ||
+      !user.companyId ||
+      ownsStripeAfter ||
+      !peerPaidSnap ||
+      !hasAccess;
+
     const subPayload = exempt
       ? { ...sub, plan: 'enterprise' as const, status: 'active' as const, trialStart: null, trialEnd: null }
       : sub;
     return {
       ...subPayload,
       hasAccess,
+      managesBilling,
       trialDaysRemaining,
       trialLengthDays: TRIAL_DAYS,
       trialFileUploads:
-        exempt || sub.status !== 'trialing'
+        exempt || sub.status !== 'trialing' || sub.plan !== 'free_trial'
           ? undefined
           : {
               used: sub.trialDocumentsUsed ?? 0,

@@ -3047,6 +3047,7 @@ function ScaffoldPageContent() {
       )}
       {showDrawingUpload &&
         subscriptionInfo?.status === 'trialing' &&
+        subscriptionInfo?.plan === 'free_trial' &&
         subscriptionInfo.trialFileUploads && (
           <div className="max-w-[1600px] mx-auto px-4 mb-3">
             <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
