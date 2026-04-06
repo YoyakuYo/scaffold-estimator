@@ -31,6 +31,7 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import {
@@ -38,7 +39,13 @@ import {
   type QuickShapeConfig,
   type QuickShapeBuilderDraft,
 } from '@/components/quick-shape-builder';
-import { visionBimApi, type VisionFootprintResult, type VisionMassingTier } from '@/lib/api/vision-bim';
+import {
+  visionBimApi,
+  type IfcPremiumMetadata,
+  type PremiumScheduleImportResult,
+  type VisionFootprintResult,
+  type VisionMassingTier,
+} from '@/lib/api/vision-bim';
 import { ScaffoldManager } from '@/lib/scaffold-manager';
 import { getAiBimDefaults } from '@/lib/ai-bim-rules';
 import {
@@ -831,7 +838,60 @@ type AiBimWizardPreview = {
     | { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number }
   >;
   dto: CreateScaffoldConfigDto;
+  /** Present when last extraction was from IFC (Premium semantic metadata). */
+  ifcPremiumMetadata?: IfcPremiumMetadata;
+  /** Last applied Premium schedule import (optional). */
+  premiumScheduleLast?: PremiumScheduleImportResult;
 };
+
+function applyPremiumScheduleToAiPreview(
+  preview: AiBimWizardPreview,
+  schedule: PremiumScheduleImportResult,
+): AiBimWizardPreview {
+  const n = preview.walls.length;
+  const closed = n >= 3;
+  if (schedule.wallLengthsMm.length !== n) {
+    throw new Error(
+      `Wall count mismatch: building has ${n} edges but schedule has ${schedule.wallLengthsMm.length}.`,
+    );
+  }
+
+  const labelMap =
+    schedule.edgeLabels && schedule.edgeLabels.length === schedule.wallLengthsMm.length
+      ? new Map(
+          schedule.edgeLabels.map((lbl, i) => [lbl.toUpperCase(), schedule.wallLengthsMm[i]!] as const),
+        )
+      : null;
+
+  const lengths: number[] = [];
+  if (labelMap && labelMap.size > 0) {
+    for (let i = 0; i < n; i++) {
+      const chord = edgeChordName(i, n, closed).toUpperCase();
+      const mm = labelMap.get(chord);
+      if (mm == null) {
+        throw new Error(
+          `Schedule has no length for wall ${chord}. Use CSV/JSON rows for every chord shown in the table.`,
+        );
+      }
+      lengths.push(mm);
+    }
+  } else {
+    for (let i = 0; i < n; i++) lengths.push(schedule.wallLengthsMm[i]!);
+  }
+
+  const newWalls = preview.walls.map((w, i) => ({
+    ...w,
+    wallLengthMm: Math.max(600, lengths[i]!),
+  }));
+
+  return {
+    ...preview,
+    walls: newWalls,
+    wallLengthsFromDimText: true,
+    dto: { ...preview.dto, walls: newWalls },
+    premiumScheduleLast: schedule,
+  };
+}
 
 interface RawWizardDraft {
   v?: number;
@@ -981,6 +1041,8 @@ function ScaffoldPageContent() {
   );
   const [aiBimUploading, setAiBimUploading] = useState(false);
   const [aiBimError, setAiBimError] = useState<string | null>(null);
+  const [premiumScheduleError, setPremiumScheduleError] = useState<string | null>(null);
+  const [premiumScheduleInfo, setPremiumScheduleInfo] = useState<string | null>(null);
   /** After AI extract: show for double-check before creating config. */
   const [aiBimPreview, setAiBimPreview] = useState<AiBimWizardPreview | null>(() => initialWizard.aiBimPreview);
   const [aiBimConfirming, setAiBimConfirming] = useState(false);
@@ -1882,6 +1944,8 @@ function ScaffoldPageContent() {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   setAiBimError(null);
+                  setPremiumScheduleError(null);
+                  setPremiumScheduleInfo(null);
                   setAiBimUploading(true);
                   try {
                     const [raw, bimFacadeColors] = await Promise.all([
@@ -2018,6 +2082,7 @@ function ScaffoldPageContent() {
                       isStepped,
                       obstacles,
                       dto,
+                      ...(footprint.ifcPremiumMetadata && { ifcPremiumMetadata: footprint.ifcPremiumMetadata }),
                     });
                     setAiBimExtractOutline(
                       buildingOutline.map((p) => ({ xFrac: p.xFrac, yFrac: p.yFrac })),
@@ -2057,6 +2122,66 @@ function ScaffoldPageContent() {
                       {t('scaffoldExtra', 'extractionComplete')}
                     </p>
                   </div>
+                  {aiBimPreview.ifcPremiumMetadata && (
+                    <div className="text-xs rounded-lg border border-slate-200 bg-white p-3 space-y-1.5 shrink-0 max-h-44 overflow-y-auto">
+                      <div className="font-semibold text-slate-800">
+                        {t('scaffoldExtra', 'ifcPremiumMetaTitle')}
+                      </div>
+                      {(() => {
+                        const m = aiBimPreview.ifcPremiumMetadata!;
+                        return (
+                          <div className="text-slate-600 space-y-1">
+                            {m.projectName && (
+                              <p>
+                                <span className="text-slate-500">{t('scaffoldExtra', 'ifcPremiumProject')}: </span>
+                                {m.projectName}
+                              </p>
+                            )}
+                            {m.ifcSchema && (
+                              <p>
+                                <span className="text-slate-500">{t('scaffoldExtra', 'ifcPremiumSchema')}: </span>
+                                {m.ifcSchema}
+                              </p>
+                            )}
+                            <p>
+                              <span className="text-slate-500">{t('scaffoldExtra', 'ifcPremiumStoreys')}: </span>
+                              {m.storeys.length}
+                              {m.storeys.length > 0 && m.storeys[0]?.elevationMm != null && (
+                                <span className="text-slate-400">
+                                  {' '}
+                                  ( …{m.storeys.slice(0, 3).map((s) => (s.elevationMm != null ? `${s.elevationMm}mm` : '—')).join(', ')}
+                                  {m.storeys.length > 3 ? '…' : ''})
+                                </span>
+                              )}
+                            </p>
+                            <p>
+                              <span className="text-slate-500">{t('scaffoldExtra', 'ifcPremiumGrids')}: </span>
+                              {m.grids.length}
+                              {m.grids[0] && (
+                                <span className="text-slate-400">
+                                  {' '}
+                                  —
+                                  {[
+                                    ...m.grids[0].uAxes.map((a) => a.axisTag).filter(Boolean),
+                                    ...m.grids[0].vAxes.map((a) => a.axisTag).filter(Boolean),
+                                  ]
+                                    .slice(0, 8)
+                                    .join(', ') || '—'}
+                                </span>
+                              )}
+                            </p>
+                            {m.propertySetNameSample.length > 0 && (
+                              <p className="break-words">
+                                <span className="text-slate-500">{t('scaffoldExtra', 'ifcPremiumPsets')}: </span>
+                                {m.propertySetNameSample.slice(0, 12).join(', ')}
+                                {m.propertySetNameSample.length > 12 ? '…' : ''}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                   <div
                     className="relative flex-1 min-h-[280px] rounded-lg border border-gray-200 bg-white overflow-hidden"
                     onWheel={(e) => {
@@ -2091,6 +2216,8 @@ function ScaffoldPageContent() {
                         setAiBimExtractOutline(null);
                         setAiBimCompareExtract(false);
                         setAiBimError(null);
+                        setPremiumScheduleError(null);
+                        setPremiumScheduleInfo(null);
                       }}
                       className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50"
                     >
@@ -2101,6 +2228,64 @@ function ScaffoldPageContent() {
                 </div>
                 <div className="flex-1 min-w-0 border-t lg:border-t-0 lg:border-l border-gray-200 p-5 bg-gray-50/50 space-y-4 overflow-y-auto max-h-[85vh]">
                   <h3 className="text-sm font-semibold text-gray-800">{t('scaffold', 'aiBimReviewTitle')}</h3>
+                  {canAi && (
+                    <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 space-y-2">
+                      <div className="text-xs font-semibold text-violet-900 flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        {t('scaffoldExtra', 'premiumScheduleImportTitle')}
+                      </div>
+                      <p className="text-[11px] text-violet-900/85 leading-snug">
+                        {t('scaffoldExtra', 'premiumScheduleImportHint')}
+                      </p>
+                      <label className="flex flex-col items-center justify-center w-full py-2 px-2 border border-dashed border-violet-300 rounded-lg cursor-pointer bg-white/80 hover:bg-white text-center">
+                        <span className="text-[11px] text-violet-700 font-medium">
+                          JSON · CSV · .txt
+                        </span>
+                        <input
+                          type="file"
+                          accept=".json,.csv,.txt,application/json,text/csv,text/plain"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setPremiumScheduleError(null);
+                            setPremiumScheduleInfo(null);
+                            try {
+                              const schedule = await visionBimApi.importPremiumSchedule(f);
+                              setAiBimPreview((prev) => {
+                                if (!prev) return prev;
+                                return applyPremiumScheduleToAiPreview(prev, schedule);
+                              });
+                              const w = schedule.warnings.filter(Boolean);
+                              setPremiumScheduleInfo(
+                                w.length > 0
+                                  ? `${t('scaffoldExtra', 'premiumScheduleApplied')} (${w.join(' ')})`
+                                  : t('scaffoldExtra', 'premiumScheduleApplied'),
+                              );
+                            } catch (err: unknown) {
+                              const msg =
+                                err && typeof err === 'object' && 'message' in err
+                                  ? String((err as { message: string }).message)
+                                  : t('scaffoldExtra', 'premiumScheduleImportFailed');
+                              setPremiumScheduleError(msg);
+                            } finally {
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                      {premiumScheduleError && (
+                        <p className="text-[11px] text-red-700 bg-red-50 border border-red-100 rounded px-2 py-1">
+                          {premiumScheduleError}
+                        </p>
+                      )}
+                      {premiumScheduleInfo && (
+                        <p className="text-[11px] text-green-800 bg-green-50 border border-green-100 rounded px-2 py-1">
+                          {premiumScheduleInfo}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       {aiBimPreview.isStepped ? t('scaffold', 'aiBimMaxBuildingHeight') : t('scaffold', 'aiBimBuildingHeight')}

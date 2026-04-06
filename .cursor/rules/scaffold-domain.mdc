@@ -148,9 +148,10 @@ At every polygon corner where two walls meet:
 
 ## Input Modes (3 sections on scaffold/page.tsx)
 
-### 1. AI Extraction (AI抽出)
-- Upload image (PNG/JPEG/WebP/GIF/BMP), PDF, or DXF
-- AI (Claude Vision via Anthropic SDK) analyzes drawing and extracts:
+### 1. AI Extraction (AI抽出) — Premium subscription (`aiExtract` capability)
+- Upload image (PNG/JPEG/WebP/GIF/BMP), PDF, DXF, or **IFC (`.ifc`)**
+- **IFC**: deterministic parse via `web-ifc` (mesh → footprint, height, massing tiers; plus **Premium metadata**: storeys, grids, project name, sample property-set names)
+- AI (Claude Vision via Anthropic SDK) analyzes **non-IFC** rasters and extracts:
   - Building exterior footprint polygon (vertices)
   - Wall dimensions (wallLengthsMm)
   - Building height (buildingHeightMm)
@@ -159,9 +160,9 @@ At every polygon corner where two walls meet:
 - **Backend Service**: [vision-bim.service.ts](mdc:backend/src/modules/vision-bim/vision-bim.service.ts)
 - **Backend Controller**: [vision-bim.controller.ts](mdc:backend/src/modules/vision-bim/vision-bim.controller.ts)
 - **API**: `POST /api/v1/vision-bim/analyze` (multipart file upload)
+- **Premium companion schedule**: `POST /api/v1/vision-bim/import-premium-schedule` — JSON v1 manifest, CSV (`edge,length`), or span-configuration `.txt`
 - **API Client**: [vision-bim.ts](mdc:frontend/lib/api/vision-bim.ts)
-- Requires `ANTHROPIC_API_KEY` environment variable
-- IFC/BIM files are NOT supported (removed)
+- Requires `ANTHROPIC_API_KEY` for vision raster/PDF paths (IFC-only upload does not call Anthropic)
 - PDF files are converted to images via Sharp before AI analysis
 - DXF files are parsed deterministically (no AI needed)
 - Silent fallbacks are NOT used — errors are thrown clearly

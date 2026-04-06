@@ -1633,6 +1633,32 @@ export const translations = {
     cadDrawTitle: { ja: '手描きCAD — 図面作成', en: 'Manual CAD Drawing — Create Plan', fr: 'Dessin CAO manuel — Creer un plan' },
     cadDrawDescription: { ja: 'ポリラインツールで建物の外形を描画し、寸法を入力してください。基準寸法ボタンで1辺の実寸を設定すると自動でスケール計算されます。', en: 'Draw the building outline using the polyline tool and enter dimensions. Use the calibration button to set a real-world distance for one edge to auto-calculate scale.', fr: 'Dessinez le contour du batiment avec l\'outil polyligne et entrez les dimensions. Utilisez le bouton de calibration pour definir une distance reelle sur un cote afin de calculer l\'echelle automatiquement.' },
     extractionComplete: { ja: 'AI抽出完了 — 下のテーブルで寸法を確認・修正してください', en: 'AI extraction complete — Review and edit dimensions in the table below', fr: 'Extraction IA terminee — Verifiez et modifiez les dimensions dans le tableau ci-dessous' },
+    premiumScheduleImportTitle: {
+      ja: 'Premium — 壁スケジュール（JSON / CSV / スパン設定テキスト）',
+      en: 'Premium — Wall schedule (JSON, CSV, or span text)',
+      fr: 'Premium — planning des murs (JSON, CSV ou texte de travees)',
+    },
+    premiumScheduleImportHint: {
+      ja: '抽出後の辺数と一致するファイルを選びます。辺ラベル（AB など）があればテーブルと自動照合します。',
+      en: 'Use after extraction; edge count must match. If rows include edge labels (AB, …), lengths align to the chord names in the table.',
+      fr: 'Apres extraction : le nombre de cotes doit correspondre. Avec etiquettes (AB, …), les longueurs sont alignees sur les cordes du tableau.',
+    },
+    premiumScheduleApplied: {
+      ja: '壁寸法をスケジュールで更新しました',
+      en: 'Wall lengths updated from schedule',
+      fr: 'Longueurs de murs mises a jour depuis le planning',
+    },
+    premiumScheduleImportFailed: {
+      ja: 'スケジュールの読み込みに失敗しました',
+      en: 'Schedule import failed',
+      fr: 'Echec de l’import du planning',
+    },
+    ifcPremiumMetaTitle: { ja: 'IFC モデル情報（Premium）', en: 'IFC model data (Premium)', fr: 'Donnees IFC (Premium)' },
+    ifcPremiumProject: { ja: 'プロジェクト', en: 'Project', fr: 'Projet' },
+    ifcPremiumSchema: { ja: 'スキーマ', en: 'Schema', fr: 'Schema' },
+    ifcPremiumStoreys: { ja: '階（IfcBuildingStorey）', en: 'Storeys', fr: 'Niveaux' },
+    ifcPremiumGrids: { ja: '軸グリッド', en: 'Grids', fr: 'Grilles' },
+    ifcPremiumPsets: { ja: 'プロパティセット例', en: 'Sample property sets', fr: 'Exemples de jeux de proprietes' },
     uploadAnotherFile: { ja: '別のファイルをアップロード', en: 'Upload another file', fr: 'Televerser un autre fichier' },
     drawingUploadResetTraceKeepFile: {
       ja: '外形・下の寸法のみクリア（ファイルはそのまま）',

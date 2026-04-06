@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-仮設材積算システム — a deterministic scaffold material quantity estimation system for Japanese construction companies. Supports two scaffold types: **くさび式 (kusabi)** and **枠組 (wakugumi)**. Calculations are rule-based and deterministic (same input → same output), with no AI in the calculation path. AI (Claude via Anthropic SDK) is used only in the `vision-bim` module for plan image/PDF analysis. IFC/BIM files are NOT supported. Accepted file types: images (PNG/JPEG/WebP/GIF/BMP), PDF, and DXF only.
+仮設材積算システム — a deterministic scaffold material quantity estimation system for Japanese construction companies. Supports two scaffold types: **くさび式 (kusabi)** and **枠組 (wakugumi)**. Calculations are rule-based and deterministic (same input → same output), with no AI in the calculation path. AI (Claude via Anthropic SDK) is used in the `vision-bim` module for plan image/PDF raster analysis. **IFC (`.ifc`)** is also accepted: processed deterministically via `web-ifc` (footprint + optional Premium metadata: storeys, grids, project, property-set sample). **Premium** users can additionally import companion **wall schedules** as JSON v1, CSV (`edge,length`), or span-configuration text. Other accepted types: images (PNG/JPEG/WebP/GIF/BMP), PDF, and DXF.
 
 ## Architecture
 

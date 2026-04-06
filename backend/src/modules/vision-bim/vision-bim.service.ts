@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
+import { extractIfcSemanticMetadata, type IfcPremiumMetadata } from './ifc-semantic-extract';
+import { parsePremiumScheduleBuffer, type PremiumScheduleImportResult } from './premium-schedule-import';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const DxfParser = require('dxf-parser');
+
+export type { IfcPremiumMetadata, PremiumScheduleImportResult };
 
 /** Structured footprint output from vision or CAD (2D polygon + height). */
 export interface VisionMassingTier {
@@ -91,6 +95,8 @@ export interface VisionFootprintResult {
         widthMm?: number;
       }
   >;
+  /** Premium: IFC storeys, grids, project name, property-set sample (IFC uploads only). */
+  ifcPremiumMetadata?: IfcPremiumMetadata;
 }
 
 /** Supported file extensions (lowercase). */
@@ -2191,6 +2197,8 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         throw new Error('IFC にジオメトリが見つかりません / No geometry found in IFC');
       }
 
+      const ifcPremiumMetadata = await extractIfcSemanticMetadata(ifcApi, modelID);
+
       const spanX = maxX - minX;
       const spanY = maxY - minY;
       const spanZ = maxZ - minZ;
@@ -2324,6 +2332,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           ...(massingTiers && massingTiers.length > 0 && { massingTiers }),
           wallLengthsFromDimText: true,
           confidence: 0.85,
+          ...(ifcPremiumMetadata && { ifcPremiumMetadata }),
         };
       }
 
@@ -2352,6 +2361,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
         wallHeightsMm: [buildingHeightMm, buildingHeightMm, buildingHeightMm, buildingHeightMm],
         wallLengthsFromDimText: true,
         confidence: 0.9,
+        ...(ifcPremiumMetadata && { ifcPremiumMetadata }),
       };
     } catch (err) {
       const msg = (err as Error)?.message || String(err);
@@ -3558,6 +3568,13 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
     const pts = verts.map(getCoord);
     const n = pts.length;
 
+    // Only strictly convex loops may be perspective/BIM silhouette garbage.
+    // L / U / T footprints have ≥1 reflex corner — collapsing them to a bbox
+    // rectangle was the #1 cause of "AI shape completely different from the plan".
+    if (!this.isStrictlyConvexPolygon2D(pts)) {
+      return verts;
+    }
+
     const edges: number[] = [];
     for (let i = 0; i < n; i++) {
       const a = pts[i];
@@ -3718,5 +3735,12 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
       buildingHeightMm: 3000,
       confidence: 0,
     };
+  }
+
+  /**
+   * Premium: companion wall schedule (JSON v1 manifest, CSV edge/length, or span-configuration .txt).
+   */
+  importPremiumSchedule(buffer: Buffer, filename?: string): PremiumScheduleImportResult {
+    return parsePremiumScheduleBuffer(buffer, filename);
   }
 }

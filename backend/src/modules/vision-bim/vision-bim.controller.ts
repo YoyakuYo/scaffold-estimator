@@ -12,7 +12,11 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 import { SubscriptionAiGuard } from '../../common/guards/subscription-ai.guard';
-import { VisionBimService, VisionFootprintResult } from './vision-bim.service';
+import {
+  VisionBimService,
+  VisionFootprintResult,
+  type PremiumScheduleImportResult,
+} from './vision-bim.service';
 
 @Controller('vision-bim')
 @UseGuards(JwtAuthGuard, SubscriptionActiveGuard, SubscriptionAiGuard)
@@ -87,6 +91,28 @@ export class VisionBimController {
         throw new InternalServerErrorException(msg);
       }
       throw new BadRequestException(msg);
+    }
+  }
+
+  /**
+   * Premium: Import companion wall schedule (JSON v1, CSV edge/length, or span-configuration .txt).
+   * Same subscription guard as AI extraction (Premium tier).
+   */
+  @Post('import-premium-schedule')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  importPremiumSchedule(@UploadedFile() file: Express.Multer.File): PremiumScheduleImportResult {
+    if (!file) throw new BadRequestException('No file uploaded');
+    const buffer = (file as any).buffer as Buffer | undefined;
+    if (!buffer?.length) throw new BadRequestException('File has no content');
+    try {
+      return this.visionBim.importPremiumSchedule(buffer, file.originalname);
+    } catch (err: any) {
+      throw new BadRequestException(err?.message || 'Schedule import failed');
     }
   }
 }
