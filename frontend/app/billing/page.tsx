@@ -10,6 +10,8 @@ type BillingT = <S extends TranslationSection>(section: S, key: keyof Translatio
 import {
   subscriptionsApi,
   type SubscriptionInfo,
+  type SubscriptionPlan,
+  type SubscriptionStatus,
   type CheckoutPlanTier,
 } from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
@@ -28,6 +30,24 @@ import {
 } from 'lucide-react';
 
 const CHECKOUT_TIER_ORDER: CheckoutPlanTier[] = ['basic', 'medium', 'premium', 'standard'];
+
+/** Align billing header with company capabilities when `plan`/`status` rows lag Stripe or seat sync. */
+function billingDisplayPlan(sub: SubscriptionInfo): SubscriptionPlan {
+  if (sub.plan !== 'free_trial' || sub.status !== 'trialing') return sub.plan;
+  const c = sub.capabilities;
+  if (!c) return sub.plan;
+  if (c.aiExtract) return 'premium';
+  if (c.cadDraw || c.view3d || c.maxSeats > 2) return 'medium';
+  return sub.plan;
+}
+
+function billingDisplayStatus(sub: SubscriptionInfo): SubscriptionStatus {
+  if (sub.status !== 'trialing' || sub.plan !== 'free_trial') return sub.status;
+  const c = sub.capabilities;
+  if (!c) return sub.status;
+  if (c.maxSeats > 2 || c.cadDraw || c.aiExtract || c.view3d) return 'active';
+  return sub.status;
+}
 
 function PlanTierPricingGrid({
   subscription,
@@ -314,9 +334,10 @@ export default function BillingPage() {
   }
 
   const managesBilling = subscription.managesBilling !== false;
-  const isTrial =
-    subscription.status === 'trialing' && subscription.plan === 'free_trial';
-  const isActive = subscription.status === 'active' || subscription.plan === 'enterprise';
+  const displayPlan = billingDisplayPlan(subscription);
+  const displayStatus = billingDisplayStatus(subscription);
+  const isTrial = displayStatus === 'trialing' && displayPlan === 'free_trial';
+  const isActive = displayStatus === 'active' || displayPlan === 'enterprise';
 
   const bankTransfer =
     subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
@@ -356,13 +377,13 @@ export default function BillingPage() {
             <div>
               <p className="text-sm text-gray-500">{t('billing', 'currentStatus')}</p>
               <p className="text-xl font-semibold text-gray-900">
-                {subscriptionStatusLabel(subscription.status, t)}
+                {subscriptionStatusLabel(displayStatus, t)}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-500">{t('billing', 'currentPlan')}</p>
               <p className="text-xl font-semibold text-gray-900">
-                {subscriptionPlanForBillingCard(subscription.plan, subscription.status, t)}
+                {subscriptionPlanForBillingCard(displayPlan, displayStatus, t)}
               </p>
             </div>
             <div className="flex items-center gap-2">

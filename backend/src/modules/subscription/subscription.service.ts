@@ -189,6 +189,20 @@ export class SubscriptionService {
     return 'professional';
   }
 
+  /**
+   * `subscriptions.plan` can stay `free_trial` while Stripe rows are updated (webhook drift).
+   * Use `stripe_price_id` so company caps, seat sync, and invitees see the real tier.
+   */
+  private effectivePaidPlanFromRow(sub: Subscription): string | null {
+    let p = sub.plan;
+    if (p === 'free_trial' && sub.stripePriceId) {
+      const fromPrice = this.planFromStripePriceId(sub.stripePriceId);
+      if (fromPrice && fromPrice !== 'free_trial') p = fromPrice;
+    }
+    if (!p || p === 'free_trial') return null;
+    return p;
+  }
+
   private mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
     if (status === 'active') return 'active';
     if (status === 'trialing') return 'trialing';
@@ -290,14 +304,15 @@ export class SubscriptionService {
     let best: { plan: PlanTier; score: number } | null = null;
     for (const raw of subs) {
       let s = await this.expireTrialIfNeeded({ ...raw });
-      if (!s.plan || s.plan === 'free_trial') continue;
+      const paidPlan = this.effectivePaidPlanFromRow(s);
+      if (!paidPlan) continue;
       const accessOk =
         s.status === 'active' ||
         (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now);
       if (!accessOk) continue;
-      const score = this.planTierScore(s.plan);
+      const score = this.planTierScore(paidPlan);
       if (score === 0) continue;
-      if (!best || score > best.score) best = { plan: s.plan as PlanTier, score };
+      if (!best || score > best.score) best = { plan: paidPlan as PlanTier, score };
     }
     return best ? { plan: best.plan } : null;
   }
@@ -410,9 +425,8 @@ export class SubscriptionService {
       for (const sub of subs) {
         const s = await this.expireTrialIfNeeded(sub);
         if (s.status === 'active') return true;
-        if (s.status === 'trialing' && s.plan && s.plan !== 'free_trial' && s.trialEnd && new Date(s.trialEnd) > now) {
-          return true;
-        }
+        const paidPlan = this.effectivePaidPlanFromRow(s);
+        if (paidPlan && s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) return true;
         if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) return true;
       }
       return false;
@@ -422,6 +436,8 @@ export class SubscriptionService {
     let sub = await this.ensureSubscriptionForUser(userId);
     sub = await this.expireTrialIfNeeded(sub);
     if (sub.status === 'active') return true;
+    const paidSolo = this.effectivePaidPlanFromRow(sub);
+    if (paidSolo && sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) return true;
     if (sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) return true;
     return false;
   }
@@ -435,26 +451,21 @@ export class SubscriptionService {
     let hasValidTrial = false;
     for (const sub of subs) {
       const s = await this.expireTrialIfNeeded(sub);
-      if (s.status === 'active' && s.plan && s.plan !== 'free_trial') {
-        const c = capabilitiesForPlan(s.plan);
+      const paidPlan = this.effectivePaidPlanFromRow(s);
+      if (s.status === 'active' && paidPlan) {
+        const c = capabilitiesForPlan(paidPlan);
         if (c.maxSeats > 0) {
           paidMerge = paidMerge ? mergeCapabilitiesMax(paidMerge, c) : c;
         }
       }
-      if (
-        s.status === 'trialing' &&
-        s.plan &&
-        s.plan !== 'free_trial' &&
-        s.trialEnd &&
-        new Date(s.trialEnd) > now
-      ) {
-        const c = capabilitiesForPlan(s.plan);
+      if (paidPlan && s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) {
+        const c = capabilitiesForPlan(paidPlan);
         if (c.maxSeats > 0) {
           paidMerge = paidMerge ? mergeCapabilitiesMax(paidMerge, c) : c;
         }
       }
-      if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) {
-        if (!s.plan || s.plan === 'free_trial') hasValidTrial = true;
+      if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now && !paidPlan) {
+        hasValidTrial = true;
       }
     }
     if (paidMerge && paidMerge.maxSeats > 0) return paidMerge;
@@ -486,8 +497,12 @@ export class SubscriptionService {
     let sub = await this.ensureSubscriptionForUser(userId);
     sub = await this.expireTrialIfNeeded(sub);
     const now = new Date();
-    if (sub.status === 'active' && sub.plan && sub.plan !== 'free_trial') {
-      return capabilitiesForPlan(sub.plan);
+    const paidPlan = this.effectivePaidPlanFromRow(sub);
+    if (sub.status === 'active' && paidPlan) {
+      return capabilitiesForPlan(paidPlan);
+    }
+    if (paidPlan && sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) {
+      return capabilitiesForPlan(paidPlan);
     }
     if (sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) {
       return capabilitiesForTrial();
@@ -582,6 +597,27 @@ export class SubscriptionService {
       if (rowAfter) sub = mapRowToCamel<Subscription>(rowAfter as Record<string, unknown>)!;
     }
     sub = await this.expireTrialIfNeeded(sub);
+    const ownsStripeAfterReload = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
+    const fullCompanyPaidSnap =
+      user.companyId && user.role !== 'superadmin' && !user.subscriptionExempt
+        ? await this.bestCompanyPaidSeatSnapshot(await this.getSubscriptionsForCompany(user.companyId))
+        : null;
+    if (
+      fullCompanyPaidSnap &&
+      !ownsStripeAfterReload &&
+      sub.plan === 'free_trial' &&
+      sub.status === 'trialing'
+    ) {
+      sub = {
+        ...sub,
+        plan: fullCompanyPaidSnap.plan,
+        status: 'active' as SubscriptionStatus,
+        trialStart: null,
+        trialEnd: null,
+        trialDocumentsUsed: 0,
+      };
+      void this.syncSubscriptionRowForCompanyMember(userId);
+    }
     const now = Date.now();
     const exempt = user.subscriptionExempt;
     const trialDaysRemaining =
