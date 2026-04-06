@@ -1497,6 +1497,17 @@ export const translations = {
     passwordChangeFailed: { ja: 'パスワード変更に失敗しました', en: 'Password change failed', fr: 'Password change failed' },
     subscriptionTitle: { ja: 'サブスクリプション', en: 'Subscription', fr: 'Abonnement' },
     subscriptionLoading: { ja: '読み込み中…', en: 'Loading…', fr: 'Chargement…' },
+    teamInvitesTitle: { ja: 'チーム招待', en: 'Invite teammates', fr: 'Inviter l’équipe' },
+    seatUsageLine: {
+      ja: 'シート: {{used}} / {{limit}}（本人・同僚・保留中の招待を含む）',
+      en: 'Seats: {{used}} / {{limit}} (you, colleagues, and pending invites count toward this limit).',
+      fr: 'Places : {{used}} / {{limit}} (vous, collègues et invitations en attente inclus).',
+    },
+    openUserManagement: {
+      ja: 'ユーザー管理ページ（権限・パスワード）を開く',
+      en: 'Open user management (roles, passwords)',
+      fr: 'Ouvrir la gestion des utilisateurs (rôles, mots de passe)',
+    },
   },
 
   // ─── Navigation Extras ──────────────────────────────────────
@@ -2112,7 +2123,11 @@ export const translations = {
   // ─── Users Admin ───────────────────────────────────────────
   usersAdmin: {
     accessDenied: { ja: 'アクセス権限がありません', en: 'Access Denied', fr: 'Accès refusé' },
-    accessDeniedDesc: { ja: 'ユーザー管理は管理者または積算担当（招待のみ）が利用できます。', en: 'User management is available to administrators or estimators (invite only).', fr: "La gestion des utilisateurs est réservée aux administrateurs ou estimateurs (invitation uniquement)." },
+    accessDeniedDesc: {
+      ja: 'ユーザー一覧の管理は積算担当以上です。閲覧者はプロフィールページの「チーム招待」から同僚を招待できます。',
+      en: 'The full user list is for estimators and above. Viewers can invite teammates from Profile → Invite teammates.',
+      fr: "La liste complète des utilisateurs est réservée aux estimateurs et plus. Les lecteurs peuvent inviter depuis Profil → Inviter l'équipe.",
+    },
     currentRole: { ja: '現在の権限', en: 'Current role', fr: 'Rôle actuel' },
     redirecting: { ja: 'ダッシュボードにリダイレクトします...', en: 'Redirecting to dashboard...', fr: 'Redirection vers le tableau de bord...' },
     title: { ja: 'ユーザー管理', en: 'User Management', fr: 'Gestion des utilisateurs' },

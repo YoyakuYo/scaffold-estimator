@@ -107,14 +107,14 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Post('team-invites')
   async createTeamInvite(@CurrentUser() user: any, @Body() dto: CreateTeamInviteDto) {
     return this.teamInviteService.createInvite(user, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Get('team-invites')
   async listTeamInvites(@CurrentUser() user: any, @Query('companyId') companyId?: string) {
     const cid = user.role === 'superadmin' ? companyId : user.companyId;
@@ -125,7 +125,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator')
+  @Roles('superadmin', 'estimator', 'viewer')
   @Delete('team-invites/:inviteId')
   async revokeTeamInvite(
     @CurrentUser() user: any,
@@ -191,7 +191,7 @@ export class AuthController {
     return this.authService.heartbeat(user.id);
   }
 
-  // ─── User Management: Super Admin (all) or Estimator (invite + list company users) ────────────────────────
+  // ─── User Management: Super Admin (all) or Estimator (list/edit company users); team invites also for Viewer ─
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin', 'estimator')
