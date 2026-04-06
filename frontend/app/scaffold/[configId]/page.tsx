@@ -136,7 +136,8 @@ function formatSpanLengthsSummaryMm(spans: number[]): string {
     counts.set(mm, (counts.get(mm) ?? 0) + 1);
   }
   const entries = [...counts.entries()].sort((a, b) => b[0] - a[0]);
-  return entries.map(([mm, n]) => `${(mm / 1000).toFixed(3).replace(/\.?0+$/, '') || '0'}m×${n}`).join(' ');
+  /** Catalog bay sizes — show in mm (same as scaffold width / materials), not meters. */
+  return entries.map(([mm, n]) => `${Math.round(mm)}mm×${n}`).join(' ');
 }
 
 function buildWallSpanSummaryLines(
