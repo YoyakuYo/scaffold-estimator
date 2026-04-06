@@ -319,6 +319,8 @@ export class TeamInviteService {
       branchId,
       isActive: true,
       approvalStatus: 'approved',
+      /** Always set for join-via-invite; subscription sync may lag — billing UI keys off this. */
+      isCompanySeat: true,
     });
 
     const { data: saved, error } = await client.from('users').insert(userIns).select('*').single();
@@ -367,10 +369,14 @@ export class TeamInviteService {
 
     if (current.companyId === companyId) {
       await client
+        .from('users')
+        .update(mapPayloadToSnake({ isCompanySeat: true }))
+        .eq('id', current.id);
+      await client
         .from('company_invites')
         .update(mapPayloadToSnake({ status: 'accepted', acceptedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))
         .eq('id', (invite as { id: string }).id);
-      const { passwordHash: _p, bankActivationCodeHash: _h, ...safe } = current;
+      const { passwordHash: _p, bankActivationCodeHash: _h, ...safe } = { ...current, isCompanySeat: true };
       return this.buildAuthPayload(safe as User);
     }
 
@@ -387,6 +393,7 @@ export class TeamInviteService {
           pendingBankPlan: null,
           bankActivationCodeHash: null,
           bankActivationCodeExpiresAt: null,
+          isCompanySeat: true,
         }),
       )
       .eq('id', userRow.id)

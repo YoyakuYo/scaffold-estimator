@@ -329,6 +329,14 @@ export default function BillingPage() {
     );
   }
 
+  if (profile.isCompanySeat === true) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -348,7 +356,15 @@ export default function BillingPage() {
     );
   }
 
-  const managesBilling = subscription.managesBilling !== false;
+  if (subscription.companySeat === true || subscription.managesBilling === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  const managesBilling = true;
   const displayPlan = billingDisplayPlan(subscription);
   const displayStatus = billingDisplayStatus(subscription);
   const isTrial = displayStatus === 'trialing' && displayPlan === 'free_trial';

@@ -33,7 +33,7 @@ export function Navigation() {
   }, []);
 
   // Check current user's role to conditionally show Users link
-  const { data: currentUser } = useQuery({
+  const { data: currentUser, isFetched: profileNavFetched } = useQuery({
     queryKey: ['profile'],
     queryFn: usersApi.getProfile,
     enabled: !!authApi.getToken(),
@@ -59,7 +59,8 @@ export function Navigation() {
     currentUser?.isCompanySeat === true ||
     (subscriptionNavFetched && mySubscription?.companySeat === true) ||
     (subscriptionNavFetched && mySubscription?.managesBilling === false);
-  const showBillingNav = !hideBillingNav;
+  /** Do not show Billing until profile is known — avoids flashing the tab before `isCompanySeat` is read. */
+  const showBillingNav = profileNavFetched && !!currentUser && !hideBillingNav;
 
   const handleLogout = () => {
     authApi.logout();
