@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger, InternalServerErrorException } from '@nestjs/common';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -6,17 +6,10 @@ import { MailerService } from '../mailer/mailer.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
-/** PostgREST embeds related `users` under key `users`; clients expect `user` / `sender`. */
-function embedUsersAs(row: Record<string, unknown>, targetKey: 'user' | 'sender'): void {
-  const embedded = row.users;
-  if (embedded != null && !Array.isArray(embedded) && row[targetKey] == null) {
-    row[targetKey] = embedded;
-    delete row.users;
-  }
-}
-
 @Injectable()
 export class MessagingService {
+  private readonly logger = new Logger(MessagingService.name);
+
   constructor(
     private readonly supabase: SupabaseService,
     private notificationsService: NotificationsService,
@@ -33,28 +26,82 @@ export class MessagingService {
   }
 
   async getMyConversation(userId: string): Promise<Conversation | null> {
-    const { data: row } = await this.supabase.getClient().from('conversations').select('*, users(*)').eq('user_id', userId).maybeSingle();
+    const { data: row, error } = await this.supabase
+      .getClient()
+      .from('conversations')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) {
+      this.logger.error(`getMyConversation Supabase: ${error.message}`);
+      throw new InternalServerErrorException('Failed to load conversation');
+    }
     if (!row) return null;
-    const mapped = mapRowToCamel<Conversation>(row as Record<string, unknown>)!;
-    embedUsersAs(mapped as unknown as Record<string, unknown>, 'user');
-    return mapped;
+    return mapRowToCamel<Conversation>(row as Record<string, unknown>)!;
   }
 
-  async getAllConversations(): Promise<(Conversation & { unreadCount?: number; lastMessage?: Message })[]> {
-    const { data: convRows } = await this.supabase.getClient().from('conversations').select('*, users(*)').order('updated_at', { ascending: false });
-    const convs = mapRowsToCamel<Conversation>(convRows || []);
-    const result: (Conversation & { unreadCount?: number; lastMessage?: Message })[] = [];
+  async getAllConversations(): Promise<(Conversation & { unreadCount?: number; lastMessage?: Message; user?: Record<string, unknown> })[]> {
     const client = this.supabase.getClient();
+    const { data: convRows, error: convErr } = await client
+      .from('conversations')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    if (convErr) {
+      this.logger.error(`getAllConversations list: ${convErr.message}`);
+      throw new InternalServerErrorException('Failed to load conversations');
+    }
+    const convs = mapRowsToCamel<Conversation>(convRows || []);
+    const userIds = [...new Set(convs.map((c) => c.userId).filter(Boolean))];
+    const userById = new Map<string, Record<string, unknown>>();
+    if (userIds.length > 0) {
+      const { data: userRows, error: usersErr } = await client
+        .from('users')
+        .select('id, email, first_name, last_name, role')
+        .in('id', userIds);
+      if (usersErr) {
+        this.logger.error(`getAllConversations users: ${usersErr.message}`);
+        throw new InternalServerErrorException('Failed to load conversation users');
+      }
+      for (const u of userRows || []) {
+        const camel = mapRowToCamel(u as Record<string, unknown>);
+        if (!camel) continue;
+        const id = (camel as { id?: string }).id;
+        if (id) userById.set(id, camel as Record<string, unknown>);
+      }
+    }
+    const result: (Conversation & { unreadCount?: number; lastMessage?: Message; user?: Record<string, unknown> })[] = [];
     for (const c of convs) {
-      embedUsersAs(c as unknown as Record<string, unknown>, 'user');
-      const { data: msgRows } = await client.from('messages').select('*, users!sender_id(*)').eq('conversation_id', c.id).order('created_at', { ascending: false }).limit(1);
+      const user = userById.get(c.userId);
+      const { data: msgRows, error: msgErr } = await client
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', c.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (msgErr) {
+        this.logger.error(`getAllConversations lastMessage: ${msgErr.message}`);
+        throw new InternalServerErrorException('Failed to load messages');
+      }
       let lastMsg: Message | undefined;
       if (msgRows?.[0]) {
         lastMsg = mapRowToCamel<Message>(msgRows[0] as Record<string, unknown>)!;
-        embedUsersAs(lastMsg as unknown as Record<string, unknown>, 'sender');
       }
-      const { count } = await client.from('messages').select('*', { count: 'exact', head: true }).eq('conversation_id', c.id).is('read_at', null).neq('sender_id', c.userId);
-      result.push({ ...c, unreadCount: count ?? 0, lastMessage: lastMsg ?? undefined });
+      const { count } = await client
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('conversation_id', c.id)
+        .is('read_at', null)
+        .neq('sender_id', c.userId);
+      result.push({
+        ...c,
+        user,
+        unreadCount: count ?? 0,
+        lastMessage: lastMsg ?? undefined,
+      } as Conversation & {
+        unreadCount?: number;
+        lastMessage?: Message;
+        user?: Record<string, unknown>;
+      });
     }
     return result;
   }
@@ -64,12 +111,17 @@ export class MessagingService {
     if (!convRow) throw new NotFoundException('Conversation not found');
     const conv = mapRowToCamel<Conversation>(convRow as Record<string, unknown>)!;
     if (!isAdmin && conv.userId !== userId) throw new ForbiddenException('Access denied');
-    const { data: rows } = await this.supabase.getClient().from('messages').select('*, users!sender_id(*)').eq('conversation_id', conversationId).order('created_at', { ascending: true });
-    const messages = mapRowsToCamel<Message>(rows || []);
-    for (const m of messages) {
-      embedUsersAs(m as unknown as Record<string, unknown>, 'sender');
+    const { data: rows, error } = await this.supabase
+      .getClient()
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+    if (error) {
+      this.logger.error(`getMessages Supabase: ${error.message}`);
+      throw new InternalServerErrorException('Failed to load messages');
     }
-    return messages;
+    return mapRowsToCamel<Message>(rows || []);
   }
 
   async sendMessage(conversationId: string, senderId: string, body: string): Promise<Message> {

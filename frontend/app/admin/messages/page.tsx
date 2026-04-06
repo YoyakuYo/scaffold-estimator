@@ -377,14 +377,18 @@ export default function AdminMessagesPage() {
                     </div>
                   ) : (
                     messages?.map((msg: Message) => {
-                      const isAdminMsg = msg.sender?.role === 'superadmin';
+                      const isAdminMsg = currentUser != null && msg.senderId === currentUser.id;
+                      const peerLabel =
+                        selectedConv?.user?.firstName || selectedConv?.user?.lastName
+                          ? [selectedConv.user.lastName, selectedConv.user.firstName].filter(Boolean).join(' ')
+                          : selectedConv?.user?.email || 'User';
                       return (
                         <div key={msg.id} className={`flex ${isAdminMsg ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
                             isAdminMsg ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'
                           }`}>
                             <p className="text-sm font-medium opacity-80">
-                              {isAdminMsg ? t('messaging', 'you') : (msg.sender?.firstName || msg.sender?.lastName || msg.sender?.email || 'User')}
+                              {isAdminMsg ? t('messaging', 'you') : peerLabel}
                             </p>
                             <p className="whitespace-pre-wrap">{msg.body}</p>
                             <p className="text-xs opacity-70 mt-1">
