@@ -11,6 +11,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MessagingService } from './messaging.service';
+import { SendMessageDto } from './dto/send-message.dto';
+import { AdminStartConversationDto } from './dto/admin-start-conversation.dto';
 
 @Controller('messages')
 export class MessagingController {
@@ -37,8 +39,8 @@ export class MessagingController {
   /** Send a message as current user (user support page). */
   @UseGuards(JwtAuthGuard)
   @Post('send')
-  async sendAsUser(@CurrentUser() user: any, @Body() body: { body: string }) {
-    const msg = await this.messagingService.sendMessageByUser(user.id, body.body || '');
+  async sendAsUser(@CurrentUser() user: any, @Body() dto: SendMessageDto) {
+    const msg = await this.messagingService.sendMessageByUser(user.id, dto.body);
     return msg;
   }
 
@@ -76,12 +78,12 @@ export class MessagingController {
   async adminReply(
     @CurrentUser() admin: any,
     @Param('id') conversationId: string,
-    @Body() body: { body: string },
+    @Body() dto: SendMessageDto,
   ) {
     const msg = await this.messagingService.sendMessage(
       conversationId,
       admin.id,
-      body.body || '',
+      dto.body,
     );
     return msg;
   }
@@ -92,12 +94,12 @@ export class MessagingController {
   @Post('admin/new')
   async adminCreateConversation(
     @CurrentUser() admin: any,
-    @Body() body: { userId: string; body: string },
+    @Body() dto: AdminStartConversationDto,
   ) {
     return this.messagingService.createConversationAndSend(
       admin.id,
-      body.userId,
-      body.body || '',
+      dto.userId,
+      dto.body,
     );
   }
 

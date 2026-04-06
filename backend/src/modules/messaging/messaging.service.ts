@@ -6,6 +6,15 @@ import { MailerService } from '../mailer/mailer.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
+/** PostgREST embeds related `users` under key `users`; clients expect `user` / `sender`. */
+function embedUsersAs(row: Record<string, unknown>, targetKey: 'user' | 'sender'): void {
+  const embedded = row.users;
+  if (embedded != null && !Array.isArray(embedded) && row[targetKey] == null) {
+    row[targetKey] = embedded;
+    delete row.users;
+  }
+}
+
 @Injectable()
 export class MessagingService {
   constructor(
@@ -26,7 +35,9 @@ export class MessagingService {
   async getMyConversation(userId: string): Promise<Conversation | null> {
     const { data: row } = await this.supabase.getClient().from('conversations').select('*, users(*)').eq('user_id', userId).maybeSingle();
     if (!row) return null;
-    return mapRowToCamel<Conversation>(row as Record<string, unknown>);
+    const mapped = mapRowToCamel<Conversation>(row as Record<string, unknown>)!;
+    embedUsersAs(mapped as unknown as Record<string, unknown>, 'user');
+    return mapped;
   }
 
   async getAllConversations(): Promise<(Conversation & { unreadCount?: number; lastMessage?: Message })[]> {
@@ -35,8 +46,13 @@ export class MessagingService {
     const result: (Conversation & { unreadCount?: number; lastMessage?: Message })[] = [];
     const client = this.supabase.getClient();
     for (const c of convs) {
+      embedUsersAs(c as unknown as Record<string, unknown>, 'user');
       const { data: msgRows } = await client.from('messages').select('*, users!sender_id(*)').eq('conversation_id', c.id).order('created_at', { ascending: false }).limit(1);
-      const lastMsg = msgRows?.[0] ? mapRowToCamel<Message>(msgRows[0] as Record<string, unknown>) : undefined;
+      let lastMsg: Message | undefined;
+      if (msgRows?.[0]) {
+        lastMsg = mapRowToCamel<Message>(msgRows[0] as Record<string, unknown>)!;
+        embedUsersAs(lastMsg as unknown as Record<string, unknown>, 'sender');
+      }
       const { count } = await client.from('messages').select('*', { count: 'exact', head: true }).eq('conversation_id', c.id).is('read_at', null).neq('sender_id', c.userId);
       result.push({ ...c, unreadCount: count ?? 0, lastMessage: lastMsg ?? undefined });
     }
@@ -49,7 +65,11 @@ export class MessagingService {
     const conv = mapRowToCamel<Conversation>(convRow as Record<string, unknown>)!;
     if (!isAdmin && conv.userId !== userId) throw new ForbiddenException('Access denied');
     const { data: rows } = await this.supabase.getClient().from('messages').select('*, users!sender_id(*)').eq('conversation_id', conversationId).order('created_at', { ascending: true });
-    return mapRowsToCamel<Message>(rows || []);
+    const messages = mapRowsToCamel<Message>(rows || []);
+    for (const m of messages) {
+      embedUsersAs(m as unknown as Record<string, unknown>, 'sender');
+    }
+    return messages;
   }
 
   async sendMessage(conversationId: string, senderId: string, body: string): Promise<Message> {
@@ -62,11 +82,28 @@ export class MessagingService {
     if (error || !saved) throw new Error(error?.message || 'Failed to send message');
     await client.from('conversations').update(mapPayloadToSnake({ updatedAt: new Date() })).eq('id', conversationId);
     const { data: senderRow } = await client.from('users').select('role').eq('id', senderId).maybeSingle();
-    if (senderRow && (senderRow as any).role === 'superadmin') {
-      await this.notificationsService.create(conv.userId, 'new_message', 'New message from support', { body: body.trim().slice(0, 100) + (body.length > 100 ? '…' : ''), link: '/support' }).catch(() => {});
+    const senderRole = (senderRow as { role?: string } | null)?.role;
+    const trimmed = body.trim();
+    if (senderRole === 'superadmin') {
+      await this.notificationsService
+        .create(conv.userId, 'new_message', 'New message from support', {
+          body: trimmed.slice(0, 100) + (trimmed.length > 100 ? '…' : ''),
+          link: '/support',
+        })
+        .catch(() => {});
       const { data: recipientRow } = await client.from('users').select('email').eq('id', conv.userId).maybeSingle();
-      if (recipientRow && (recipientRow as any).email) {
-        await this.mailerService.sendNewMessageFromSupportEmail((recipientRow as any).email, body.trim()).catch(() => {});
+      const email = (recipientRow as { email?: string } | null)?.email;
+      if (email) {
+        await this.mailerService.sendNewMessageFromSupportEmail(email, trimmed).catch(() => {});
+      }
+    } else if (senderRole) {
+      const { data: admins } = await client.from('users').select('id').eq('role', 'superadmin');
+      const preview = trimmed.slice(0, 120) + (trimmed.length > 120 ? '…' : '');
+      for (const row of admins || []) {
+        const aid = (row as { id: string }).id;
+        await this.notificationsService
+          .create(aid, 'new_message', 'New support message from user', { body: preview, link: '/admin/messages' })
+          .catch(() => {});
       }
     }
     const msg = mapRowToCamel<Message>(saved as Record<string, unknown>)!;
