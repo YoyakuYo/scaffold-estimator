@@ -20,7 +20,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  const noNavPages = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
+  const noNavPages = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/join-team'];
   const isPublicPage = noNavPages.includes(pathname);
   const isSuperAdminLogin = pathname === '/superadmin';
 

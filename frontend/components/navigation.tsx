@@ -35,6 +35,7 @@ export function Navigation() {
   const { data: currentUser } = useQuery({
     queryKey: ['profile'],
     queryFn: usersApi.getProfile,
+    enabled: !!authApi.getToken(),
     retry: false,
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
