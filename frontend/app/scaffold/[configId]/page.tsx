@@ -44,6 +44,8 @@ import { normalizeScaffoldResultForQuotation } from '@/lib/scaffold-quotation-no
 import { SiteContactFields } from '@/components/scaffold/building-scaffold-settings-panel';
 import { buildWallMapsForScaffoldLevel, distributeByScaffoldLevel } from '@/lib/scaffold-per-level-distribute';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
+import { subscriptionsApi } from '@/lib/api/subscriptions';
+import { formatMmAsMetersLabel } from '@/lib/dimension-meters';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -134,7 +136,7 @@ function formatSpanLengthsSummaryMm(spans: number[]): string {
     counts.set(mm, (counts.get(mm) ?? 0) + 1);
   }
   const entries = [...counts.entries()].sort((a, b) => b[0] - a[0]);
-  return entries.map(([mm, n]) => `${mm}×${n}`).join(' ');
+  return entries.map(([mm, n]) => `${(mm / 1000).toFixed(3).replace(/\.?0+$/, '') || '0'}m×${n}`).join(' ');
 }
 
 function buildWallSpanSummaryLines(
@@ -210,6 +212,14 @@ function ScaffoldResultPage() {
     queryKey: ['scaffold-config', configId],
     queryFn: () => scaffoldConfigsApi.get(configId),
   });
+
+  const { data: subscription, isLoading: subscriptionLoading } = useQuery({
+    queryKey: ['my-subscription'],
+    queryFn: subscriptionsApi.getMine,
+    retry: false,
+    staleTime: 1000 * 60 * 2,
+  });
+  const canView3d = subscription?.capabilities?.view3d === true;
 
   useEffect(() => {
     if (!config) return;
@@ -609,12 +619,17 @@ function ScaffoldResultPage() {
           <SummaryCard
             icon={<Building2 className="h-5 w-5" />}
             label={t('result', 'maxHeight') || 'Max Height'}
-            value={`${Math.max(...result.walls.map((w: WallCalculationResult) => w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm), 0).toLocaleString()}mm`}
+            value={formatMmAsMetersLabel(
+              Math.max(
+                ...result.walls.map((w: WallCalculationResult) => w.levelCalc.topPlankHeightMm + w.levelCalc.topGuardHeightMm),
+                0,
+              ),
+            )}
           />
           <SummaryCard
             icon={<Ruler className="h-5 w-5" />}
             label={t('result', 'scaffoldWidth')}
-            value={`${result.scaffoldWidthMm}mm`}
+            value={formatMmAsMetersLabel(result.scaffoldWidthMm)}
           />
           <SummaryCard
             icon={<Layers className="h-5 w-5" />}
@@ -626,7 +641,7 @@ function ScaffoldResultPage() {
               <SummaryCard
                 icon={<Ruler className="h-5 w-5" />}
                 label={t('result', 'frameSize')}
-                value={`${result.frameSizeMm}mm`}
+                value={formatMmAsMetersLabel(result.frameSizeMm ?? 0)}
               />
               <SummaryCard
                 icon={<Ruler className="h-5 w-5" />}
@@ -647,7 +662,7 @@ function ScaffoldResultPage() {
             <SummaryCard
               icon={<Ruler className="h-5 w-5" />}
               label={t('result', 'postSize')}
-              value={`${result.preferredMainTatejiMm}mm`}
+              value={formatMmAsMetersLabel(result.preferredMainTatejiMm ?? 0)}
             />
           )}
         </div>
@@ -659,9 +674,10 @@ function ScaffoldResultPage() {
             {result.scaffoldType === 'wakugumi' ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort')}
           </span>
           <span>
-            {t('result', 'specWidth')} {result.scaffoldWidthMm}mm
+            {t('result', 'specWidth')} {formatMmAsMetersLabel(result.scaffoldWidthMm)}
             {result.scaffoldType === 'wakugumi'
-              ? (result.frameSizeMm != null && ` · ${t('result', 'specFrame')} ${result.frameSizeMm}mm`) +
+              ? (result.frameSizeMm != null &&
+                  ` · ${t('result', 'specFrame')} ${formatMmAsMetersLabel(result.frameSizeMm)}`) +
                   (result.endStopperType
                     ? ` · ${t('result', 'endStopperType')} ${
                         result.endStopperType === 'frame'
@@ -669,7 +685,8 @@ function ScaffoldResultPage() {
                           : t('result', 'endStopperSpecShortNuno')
                       }`
                     : '')
-              : result.preferredMainTatejiMm != null && ` · ${t('result', 'specMainPost')} ${result.preferredMainTatejiMm}mm`}
+              : result.preferredMainTatejiMm != null &&
+                  ` · ${t('result', 'specMainPost')} ${formatMmAsMetersLabel(result.preferredMainTatejiMm)}`}
           </span>
         </div>
 
@@ -709,12 +726,14 @@ function ScaffoldResultPage() {
             {t('result', 'tabPlan')}
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('3d')}
+            title={!subscriptionLoading && !canView3d ? t('result', 'view3dRequiresPlan') : undefined}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === '3d'
                 ? 'bg-white text-blue-600 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+            } ${!subscriptionLoading && !canView3d ? 'ring-1 ring-amber-200/80' : ''}`}
           >
             <Box className="h-4 w-4" />
             {t('result', 'tab3d')}
@@ -752,11 +771,30 @@ function ScaffoldResultPage() {
           <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
             {t('result', 'tab3d')}
           </h2>
-          <Scaffold3DView
-            result={resultForViz ?? resultFor3D ?? resultMergedForViz ?? result}
-            totalLevels={maxLevels}
-            complianceMode={isAiBim ? 'ai_bim' : 'default'}
-          />
+          {subscriptionLoading ? (
+            <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white py-24">
+              <Loader2 className="h-10 w-10 animate-spin text-blue-500" aria-hidden />
+            </div>
+          ) : canView3d ? (
+            <Scaffold3DView
+              result={resultForViz ?? resultFor3D ?? resultMergedForViz ?? result}
+              totalLevels={maxLevels}
+              complianceMode={isAiBim ? 'ai_bim' : 'default'}
+            />
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-8 text-center max-w-lg mx-auto">
+              <Box className="h-12 w-12 text-amber-600 mx-auto mb-4" aria-hidden />
+              <p className="text-slate-800 font-medium mb-2">{t('result', 'view3dRequiresPlan')}</p>
+              <p className="text-sm text-slate-600 mb-6">{t('result', 'view3dUpgradeHint')}</p>
+              <button
+                type="button"
+                onClick={() => router.push('/billing')}
+                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                {t('result', 'view3dUpgradeCta')}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ─── Review & Approve Section ──────────────────────── */}

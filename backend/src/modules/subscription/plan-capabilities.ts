@@ -8,6 +8,8 @@ export interface EffectivePlanCapabilities {
   quickShape: boolean;
   cadDraw: boolean;
   aiExtract: boolean;
+  /** Interactive 3D view + 3D exports (Medium / Premium tiers; legacy Professional matches Medium). */
+  view3d: boolean;
 }
 
 export const SUPERADMIN_CAPABILITIES: EffectivePlanCapabilities = {
@@ -16,6 +18,7 @@ export const SUPERADMIN_CAPABILITIES: EffectivePlanCapabilities = {
   quickShape: true,
   cadDraw: true,
   aiExtract: true,
+  view3d: true,
 };
 
 /** No valid subscription — scaffold / AI blocked */
@@ -25,6 +28,7 @@ export const NO_ACCESS_CAPABILITIES: EffectivePlanCapabilities = {
   quickShape: false,
   cadDraw: false,
   aiExtract: false,
+  view3d: false,
 };
 
 export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
@@ -37,6 +41,7 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
         quickShape: true,
         cadDraw: false,
         aiExtract: false,
+        view3d: false,
       };
     case 'medium':
     case 'professional':
@@ -46,6 +51,7 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
         quickShape: true,
         cadDraw: true,
         aiExtract: false,
+        view3d: true,
       };
     case 'premium':
       return {
@@ -54,6 +60,7 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
         quickShape: true,
         cadDraw: true,
         aiExtract: true,
+        view3d: true,
       };
     case 'enterprise':
       return { ...SUPERADMIN_CAPABILITIES };
@@ -70,6 +77,7 @@ export function capabilitiesForTrial(): EffectivePlanCapabilities {
     quickShape: true,
     cadDraw: false,
     aiExtract: false,
+    view3d: false,
   };
 }
 
@@ -83,5 +91,6 @@ export function mergeCapabilitiesMax(
     quickShape: a.quickShape || b.quickShape,
     cadDraw: a.cadDraw || b.cadDraw,
     aiExtract: a.aiExtract || b.aiExtract,
+    view3d: a.view3d || b.view3d,
   };
 }

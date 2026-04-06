@@ -4,6 +4,7 @@ import { Building2, MapPin } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { CreateScaffoldConfigDto, ScaffoldRules } from '@/lib/api/scaffold-configs';
 import type { ScaffoldWidthCatalogMm } from '@/lib/scaffold-width-catalog';
+import { formatMmAsMetersLabel } from '@/lib/dimension-meters';
 
 const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
 
@@ -160,7 +161,7 @@ export function BuildingScaffoldSettingsPanel({
   setEndStopperType,
   setFrameSizeMm,
 }: BuildingScaffoldSettingsPanelProps) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
 
   return (
     <div className="max-w-[1600px] mx-auto px-4 mb-4">
@@ -288,7 +289,7 @@ export function BuildingScaffoldSettingsPanel({
                   { value: 1219, label: '1219mm' },
                 ]).map((opt) => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {formatMmAsMetersLabel(opt.value)}
                   </option>
                 ))}
               </select>
@@ -313,14 +314,18 @@ export function BuildingScaffoldSettingsPanel({
                   { value: 'FT617' as const, label: 'FT-617 (610mm)', labelJp: 'FT-617（幅610mm）' },
                   { value: 'FT917' as const, label: 'FT-917 (914mm)', labelJp: 'FT-917（幅914mm）' },
                   { value: 'FT1217' as const, label: 'FT-1217 (1219mm)', labelJp: 'FT-1217（幅1219mm）' },
-                ]).map((opt) => (
+                ]).map((opt) => {
+                  const w =
+                    opt.value === 'FT617' ? 610 : opt.value === 'FT917' ? 914 : 1219;
+                  return (
                   <option key={opt.value} value={opt.value}>
-                    {locale === 'ja' ? opt.labelJp : opt.label}
+                    {opt.value} — {formatMmAsMetersLabel(w)}
                   </option>
-                ))}
+                  );
+                })}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                {t('scaffold', 'scaffoldWidth')}: {scaffoldWidthMm}mm
+                {t('scaffold', 'scaffoldWidth')}: {formatMmAsMetersLabel(scaffoldWidthMm)}
               </p>
             </div>
           )}
@@ -339,7 +344,7 @@ export function BuildingScaffoldSettingsPanel({
                   { value: 3600, label: '3600mm' },
                 ]).map((opt) => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {formatMmAsMetersLabel(opt.value)}
                   </option>
                 ))}
               </select>
@@ -351,7 +356,7 @@ export function BuildingScaffoldSettingsPanel({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffoldExtra', 'frameSize')}</label>
                 <div className="w-full rounded-lg border border-orange-200 px-3 py-2 text-sm bg-orange-50/30 text-gray-800">
-                  {WAKUGUMI_FIXED_FRAME_HEIGHT_MM}mm (FT-17)
+                  {formatMmAsMetersLabel(WAKUGUMI_FIXED_FRAME_HEIGHT_MM)} (FT-17)
                 </div>
                 <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'frameHeightFixed1700')}</p>
               </div>

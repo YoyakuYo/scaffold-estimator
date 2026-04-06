@@ -71,6 +71,7 @@ import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
 import { buildQuickShapeFootprintMm } from '@/lib/quick-shape-footprint';
 import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
+import { formatMmAsMetersLabel, mToMm, mmToM } from '@/lib/dimension-meters';
 import { inferVertexCornerKindsFromPolygonMm } from '@/lib/corner-kinds';
 import { VertexCornerKindsPanel } from '@/components/scaffold/vertex-corner-kinds-panel';
 import type { ScaffoldWidthCatalogMm } from '@/lib/scaffold-width-catalog';
@@ -2104,28 +2105,33 @@ function ScaffoldPageContent() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       {aiBimPreview.isStepped ? t('scaffold', 'aiBimMaxBuildingHeight') : t('scaffold', 'aiBimBuildingHeight')}
                     </label>
-                    <input
-                      type="number"
-                      value={aiBimPreview.buildingHeightMm}
-                      onChange={(e) => {
-                        const h = Math.max(1000, Number(e.target.value) || 1000);
-                        const newWalls = aiBimPreview.isStepped
-                          ? aiBimPreview.walls.map((w) => w)
-                          : aiBimPreview.walls.map((w) => ({ ...w, wallHeightMm: h }));
-                        setAiBimPreview({
-                          ...aiBimPreview,
-                          buildingHeightMm: h,
-                          walls: newWalls,
-                          dto: { ...aiBimPreview.dto, walls: newWalls },
-                        });
-                      }}
-                      min={1000}
-                      step={100}
-                      className="w-full max-w-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-violet-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {(aiBimPreview.buildingHeightMm / 1000).toFixed(1)} m
-                    </p>
+                    <div className="flex items-center gap-2 max-w-[220px]">
+                      <input
+                        type="number"
+                        value={
+                          aiBimPreview.buildingHeightMm >= 1000
+                            ? Math.round(mmToM(aiBimPreview.buildingHeightMm) * 10000) / 10000
+                            : ''
+                        }
+                        onChange={(e) => {
+                          const m = parseFloat(e.target.value);
+                          const h = Math.max(1000, Number.isFinite(m) ? mToMm(m) : 1000);
+                          const newWalls = aiBimPreview.isStepped
+                            ? aiBimPreview.walls.map((w) => w)
+                            : aiBimPreview.walls.map((w) => ({ ...w, wallHeightMm: h }));
+                          setAiBimPreview({
+                            ...aiBimPreview,
+                            buildingHeightMm: h,
+                            walls: newWalls,
+                            dto: { ...aiBimPreview.dto, walls: newWalls },
+                          });
+                        }}
+                        min={1}
+                        step={0.01}
+                        className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-violet-500"
+                      />
+                      <span className="text-xs text-gray-500 shrink-0">m</span>
+                    </div>
                     {aiBimPreview.heightConfidence === 'low' && (
                       <div className="mt-1.5 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 border border-amber-200">
                         <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -2181,9 +2187,10 @@ function ScaffoldPageContent() {
                               <td className="py-2 px-3 text-right">
                                 <input
                                   type="number"
-                                  value={w.wallLengthMm}
+                                  value={w.wallLengthMm > 0 ? Math.round(mmToM(w.wallLengthMm) * 10000) / 10000 : ''}
                                   onChange={(e) => {
-                                    const len = Math.max(600, Number(e.target.value) || 600);
+                                    const m = parseFloat(e.target.value);
+                                    const len = Math.max(600, Number.isFinite(m) ? mToMm(m) : 600);
                                     const newWalls = aiBimPreview.walls.map((wall, j) =>
                                       j === i ? { ...wall, wallLengthMm: len } : wall,
                                     );
@@ -2193,17 +2200,21 @@ function ScaffoldPageContent() {
                                       dto: { ...aiBimPreview.dto, walls: newWalls },
                                     });
                                   }}
-                                  min={600}
-                                  step={100}
+                                  min={0.6}
+                                  step={0.01}
                                   className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right font-mono focus:ring-2 focus:ring-violet-500"
                                 />
                               </td>
                               <td className="py-2 px-3 text-right">
                                 <input
                                   type="number"
-                                  value={w.wallHeightMm ?? aiBimPreview.buildingHeightMm}
+                                  value={(() => {
+                                    const hMm = w.wallHeightMm ?? aiBimPreview.buildingHeightMm;
+                                    return hMm >= 1000 ? Math.round(mmToM(hMm) * 10000) / 10000 : '';
+                                  })()}
                                   onChange={(e) => {
-                                    const h = Math.max(1000, Number(e.target.value) || 1000);
+                                    const m = parseFloat(e.target.value);
+                                    const h = Math.max(1000, Number.isFinite(m) ? mToMm(m) : 1000);
                                     const newWalls = aiBimPreview.walls.map((wall, j) =>
                                       j === i ? { ...wall, wallHeightMm: h } : wall,
                                     );
@@ -2217,8 +2228,8 @@ function ScaffoldPageContent() {
                                       dto: { ...aiBimPreview.dto, walls: newWalls },
                                     });
                                   }}
-                                  min={1000}
-                                  step={100}
+                                  min={1}
+                                  step={0.01}
                                   className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right font-mono focus:ring-2 focus:ring-violet-500"
                                 />
                               </td>
@@ -2239,9 +2250,9 @@ function ScaffoldPageContent() {
                                   }}
                                   className="rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-violet-500"
                                 >
-                                  <option value="">{aiBimPreview.dto.scaffoldWidthMm}mm</option>
+                                  <option value="">{formatMmAsMetersLabel(aiBimPreview.dto.scaffoldWidthMm)}</option>
                                   {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((wmm) => wmm !== aiBimPreview.dto.scaffoldWidthMm).map((wmm) => (
-                                    <option key={wmm} value={wmm}>{wmm}mm</option>
+                                    <option key={wmm} value={wmm}>{formatMmAsMetersLabel(wmm)}</option>
                                   ))}
                                 </select>
                               </td>
@@ -2498,7 +2509,7 @@ function ScaffoldPageContent() {
                             >
                               {[...SCAFFOLD_WIDTH_CATALOG_MM].map((w) => (
                                 <option key={w} value={w}>
-                                  {w}mm
+                                  {formatMmAsMetersLabel(w)}
                                 </option>
                               ))}
                             </select>
@@ -2561,7 +2572,7 @@ function ScaffoldPageContent() {
                               >
                                 {[1800, 2700, 3600].map((v) => (
                                   <option key={v} value={v}>
-                                    {v}mm
+                                    {formatMmAsMetersLabel(v)}
                                   </option>
                                 ))}
                               </select>
@@ -2957,9 +2968,9 @@ function ScaffoldPageContent() {
                       className="w-[4.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <option value="">{scaffoldWidthMm}mm</option>
+                      <option value="">{formatMmAsMetersLabel(scaffoldWidthMm)}</option>
                       {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((w) => w !== scaffoldWidthMm).map((w) => (
-                        <option key={w} value={w}>{w}mm</option>
+                        <option key={w} value={w}>{formatMmAsMetersLabel(w)}</option>
                       ))}
                     </select>
                   </div>
@@ -3041,7 +3052,10 @@ function ScaffoldPageContent() {
                     <span className="text-xs text-gray-400">m</span>
                   </div>
                   {!wall.scaffoldWidthMm && (
-                    <span className="text-[10px] text-gray-400">{t('scaffold', 'defaultScaffoldWidthTag')}{scaffoldWidthMm}mm</span>
+                    <span className="text-[10px] text-gray-400">
+                      {t('scaffold', 'defaultScaffoldWidthTag')}
+                      {formatMmAsMetersLabel(scaffoldWidthMm)}
+                    </span>
                   )}
                 </div>
 
@@ -3188,18 +3202,20 @@ function ScaffoldPageContent() {
                       </label>
                       {wall.isMultiSegment && (
                         <span className="text-xs text-orange-600 font-medium ml-auto">
-                          Total: {calcTotalFromSegments(wall.segments).toLocaleString()}mm
+                          Total: {formatMmAsMetersLabel(calcTotalFromSegments(wall.segments))}
                           {wall.segments.length > 1 && (
                             <span className="text-gray-400 ml-1">
-                              ({wall.segments.length} segments + {
-                                  wall.segments.reduce(
-                                    (sum, _, idx) =>
-                                      idx > 0
-                                        ? sum + Math.abs(wall.segments[idx].offsetMm - wall.segments[idx - 1].offsetMm)
-                                        : sum,
-                                    0,
-                                ).toLocaleString()
-                              }mm returns)
+                              ({wall.segments.length} segments +{' '}
+                              {formatMmAsMetersLabel(
+                                wall.segments.reduce(
+                                  (sum, _, idx) =>
+                                    idx > 0
+                                      ? sum + Math.abs(wall.segments[idx].offsetMm - wall.segments[idx - 1].offsetMm)
+                                      : sum,
+                                  0,
+                                ),
+                              )}{' '}
+                              returns)
                             </span>
                           )}
                         </span>
@@ -3267,39 +3283,41 @@ function ScaffoldPageContent() {
                             >
                               <span className="text-xs font-medium text-orange-700 w-6">{segIdx + 1}.</span>
                             <div className="flex items-center gap-1">
-                              <label className="text-xs text-gray-600">L:</label>
+                              <label className="text-xs text-gray-600">L (m):</label>
                               <input
                                 type="number"
-                                value={seg.lengthMm || ''}
+                                value={seg.lengthMm > 0 ? Math.round(mmToM(seg.lengthMm) * 10000) / 10000 : ''}
                                 onChange={(e) => {
+                                  const m = parseFloat(e.target.value);
+                                  const lenMm = Number.isFinite(m) ? mToMm(m) : 0;
                                   const newSegs = [...wall.segments];
-                                  newSegs[segIdx] = { ...newSegs[segIdx], lengthMm: Number(e.target.value) || 0 };
+                                  newSegs[segIdx] = { ...newSegs[segIdx], lengthMm: lenMm };
                                   const total = calcTotalFromSegments(newSegs);
                                   updateWall(i, { segments: newSegs, lengthMm: total });
                                 }}
-                                placeholder="5000"
+                                placeholder="5"
                                 className="w-24 rounded border border-orange-300 px-2 py-1 text-xs focus:ring-1 focus:ring-orange-500"
-                                min={600}
-                                step={100}
+                                min={0.6}
+                                step={0.01}
                               />
-                              <span className="text-xs text-gray-400">mm</span>
                             </div>
                             <div className="flex items-center gap-1">
-                              <label className="text-xs text-gray-600">Offset:</label>
+                              <label className="text-xs text-gray-600">Offset (m):</label>
                               <input
                                 type="number"
-                                value={seg.offsetMm}
+                                value={Math.round(mmToM(seg.offsetMm) * 10000) / 10000}
                                 onChange={(e) => {
+                                  const m = parseFloat(e.target.value);
+                                  const offMm = Number.isFinite(m) ? mToMm(m) : 0;
                                   const newSegs = [...wall.segments];
-                                  newSegs[segIdx] = { ...newSegs[segIdx], offsetMm: Number(e.target.value) || 0 };
+                                  newSegs[segIdx] = { ...newSegs[segIdx], offsetMm: offMm };
                                   const total = calcTotalFromSegments(newSegs);
                                   updateWall(i, { segments: newSegs, lengthMm: total });
                                 }}
                                 placeholder="0"
                                 className="w-20 rounded border border-orange-300 px-2 py-1 text-xs focus:ring-1 focus:ring-orange-500"
-                                step={100}
+                                step={0.01}
                               />
-                              <span className="text-xs text-gray-400">mm</span>
                             </div>
                             <button
                               type="button"

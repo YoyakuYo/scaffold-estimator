@@ -28,6 +28,7 @@ import {
   SCAFFOLD_WIDTH_CATALOG_MM,
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
+import { formatMmAsMetersLabel, mToMm, mmToM } from '@/lib/dimension-meters';
 
 const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
   reflex: 'wallCfReflex',
@@ -236,6 +237,7 @@ interface Props {
 
 export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDraftChange }: Props) {
   const { t } = useI18n();
+  const mUnit = t('common', 'metersShort') || 'm';
   const mergedInitial = useMemo(() => draftToInitial(initialDraft ?? null), [initialDraft]);
 
   const [shapeType, setShapeType] = useState<ShapeType>(() => mergedInitial?.shapeType ?? 'rectangle');
@@ -649,13 +651,16 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
-                            value={side.lengthMm || ''}
-                            onChange={(e) => updateEdgeLengthAtIndex(i, Number(e.target.value) || 0)}
+                            value={side.lengthMm > 0 ? Math.round(mmToM(side.lengthMm) * 10000) / 10000 : ''}
+                            onChange={(e) => {
+                              const m = parseFloat(e.target.value);
+                              updateEdgeLengthAtIndex(i, Number.isFinite(m) ? mToMm(m) : 0);
+                            }}
                             className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
-                            min={600}
-                            step={100}
+                            min={0.6}
+                            step={0.01}
                           />
-                          <span className="text-xs text-gray-500">mm</span>
+                          <span className="text-xs text-gray-500">{mUnit}</span>
                         </div>
                       </td>
                       <td className="py-2 px-2">
@@ -671,13 +676,19 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                         </select>
                       </td>
                       <td className="py-2 px-2">
-                        <input
-                          type="number"
-                          value={plan.mm}
-                          onChange={(e) => updateEdgePlanMmForRow(side.label, Number(e.target.value) || 0)}
-                          className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
-                          step={100}
-                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={Math.round(mmToM(plan.mm) * 10000) / 10000}
+                            onChange={(e) => {
+                              const m = parseFloat(e.target.value);
+                              updateEdgePlanMmForRow(side.label, Number.isFinite(m) ? mToMm(m) : 0);
+                            }}
+                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
+                            step={0.01}
+                          />
+                          <span className="text-xs text-gray-500">{mUnit}</span>
+                        </div>
                       </td>
                       <td className="py-2 px-2">
                         <select
@@ -706,10 +717,10 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                           }}
                           className="w-[4.75rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
                         >
-                          <option value="">{scaffoldWidthMm}mm</option>
+                          <option value="">{formatMmAsMetersLabel(scaffoldWidthMm)}</option>
                           {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((w) => w !== scaffoldWidthMm).map((w) => (
                             <option key={w} value={w}>
-                              {w}mm
+                              {formatMmAsMetersLabel(w)}
                             </option>
                           ))}
                         </select>
@@ -785,27 +796,32 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
 
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
-            <input
-              type="number"
-              value={buildingHeightMm || ''}
-              onChange={(e) => setBuildingHeightMm(Number(e.target.value) || 0)}
-              className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              min={1000}
-              step={100}
-              placeholder="9900"
-            />
-            <p className="text-xs text-gray-500 mt-1">{(buildingHeightMm / 1000).toFixed(1)}m</p>
+            <div className="flex items-center gap-2 max-w-xs">
+              <input
+                type="number"
+                value={buildingHeightMm >= 1000 ? Math.round(mmToM(buildingHeightMm) * 10000) / 10000 : ''}
+                onChange={(e) => {
+                  const m = parseFloat(e.target.value);
+                  setBuildingHeightMm(Number.isFinite(m) ? Math.max(1000, mToMm(m)) : 1000);
+                }}
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                min={1}
+                step={0.01}
+                placeholder={t('scaffoldExtra', 'heightPlaceholderM') || '9.9'}
+              />
+              <span className="text-sm text-gray-500 shrink-0">{mUnit}</span>
+            </div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <p className="text-xs font-medium text-blue-800 mb-2">{t('quickBuilder', 'floorPresets')}</p>
             <div className="flex flex-wrap gap-2">
               {[
-                { label: '1F (3,900mm)', value: 3900 },
-                { label: '2F (6,900mm)', value: 6900 },
-                { label: '3F (9,900mm)', value: 9900 },
-                { label: '4F (12,900mm)', value: 12900 },
-                { label: '5F (15,900mm)', value: 15900 },
+                { label: '1F (3.9 m)', value: 3900 },
+                { label: '2F (6.9 m)', value: 6900 },
+                { label: '3F (9.9 m)', value: 9900 },
+                { label: '4F (12.9 m)', value: 12900 },
+                { label: '5F (15.9 m)', value: 15900 },
               ].map((p) => (
                 <button
                   key={p.label}
@@ -878,9 +894,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value={610}>610mm</option>
-                  <option value={914}>914mm</option>
-                  <option value={1219}>1219mm</option>
+                  <option value={610}>{formatMmAsMetersLabel(610)}</option>
+                  <option value={914}>{formatMmAsMetersLabel(914)}</option>
+                  <option value={1219}>{formatMmAsMetersLabel(1219)}</option>
                 </select>
               </div>
 
@@ -908,9 +924,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                       onChange={(e) => setPreferredMainTatejiMm(Number(e.target.value))}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value={1800}>1800mm</option>
-                      <option value={2700}>2700mm</option>
-                      <option value={3600}>3600mm</option>
+                      <option value={1800}>{formatMmAsMetersLabel(1800)}</option>
+                      <option value={2700}>{formatMmAsMetersLabel(2700)}</option>
+                      <option value={3600}>{formatMmAsMetersLabel(3600)}</option>
                     </select>
                   </div>
                 </>
@@ -921,7 +937,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'frameSize')}</label>
-                    <p className="text-sm text-gray-800 mb-2">1700mm (FT-17)</p>
+                    <p className="text-sm text-gray-800 mb-2">{formatMmAsMetersLabel(1700)} (FT-17)</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'wakugumiFrameSeries')}</label>
@@ -935,9 +951,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                       }}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="FT617">FT-617 (610mm)</option>
-                      <option value="FT917">FT-917 (914mm)</option>
-                      <option value="FT1217">FT-1217 (1219mm)</option>
+                      <option value="FT617">FT-617 — {formatMmAsMetersLabel(610)}</option>
+                      <option value="FT917">FT-917 — {formatMmAsMetersLabel(914)}</option>
+                      <option value="FT1217">FT-1217 — {formatMmAsMetersLabel(1219)}</option>
                     </select>
                   </div>
                   <div>
@@ -978,7 +994,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                 </div>
                 <div>
                   <span className="text-blue-600">{t('quickBuilder', 'heightLabel')}:</span>
-                  <span className="ml-1 font-medium text-blue-900">{buildingHeightMm.toLocaleString()}mm</span>
+                  <span className="ml-1 font-medium text-blue-900">{formatMmAsMetersLabel(buildingHeightMm)}</span>
                 </div>
                 <div>
                   <span className="text-blue-600">{t('quickBuilder', 'levelsLabel')}:</span>

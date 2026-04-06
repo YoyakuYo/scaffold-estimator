@@ -11,6 +11,7 @@ import {
   UseGuards,
   Logger,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -26,6 +27,7 @@ import { ScaffoldExcelService } from './scaffold-excel.service';
 import { ScaffoldPdfService } from './scaffold-pdf.service';
 import { ScaffoldCadService } from './scaffold-cad.service';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 @Controller('scaffold-configs')
 @UseGuards(JwtAuthGuard, SubscriptionActiveGuard)
@@ -37,6 +39,7 @@ export class ScaffoldConfigController {
     private readonly excelService: ScaffoldExcelService,
     private readonly pdfService: ScaffoldPdfService,
     private readonly cadService: ScaffoldCadService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   /**
@@ -282,7 +285,12 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Body() body: { imageBase64: string },
     @Res() res: Response,
+    @CurrentUser() user: { id: string; role?: string },
   ) {
+    const caps = await this.subscriptionService.resolveEffectiveCapabilities(user.id, user.role);
+    if (!caps.view3d) {
+      throw new ForbiddenException('3D export requires a Medium or Premium subscription.');
+    }
     const config = await this.configService.getConfig(configId);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
@@ -334,7 +342,12 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Query('wall') wallSide: string,
     @Res() res: Response,
+    @CurrentUser() user: { id: string; role?: string },
   ) {
+    const caps = await this.subscriptionService.resolveEffectiveCapabilities(user.id, user.role);
+    if (!caps.view3d) {
+      throw new ForbiddenException('3D export requires a Medium or Premium subscription.');
+    }
     const config = await this.configService.getConfig(configId);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });

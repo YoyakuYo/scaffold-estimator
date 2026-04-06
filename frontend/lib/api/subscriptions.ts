@@ -71,6 +71,8 @@ export interface PlanCapabilities {
   quickShape: boolean;
   cadDraw: boolean;
   aiExtract: boolean;
+  /** Medium / Premium (and legacy Professional); false on Basic, Starter, trial. */
+  view3d?: boolean;
 }
 
 export interface SubscriberRow {

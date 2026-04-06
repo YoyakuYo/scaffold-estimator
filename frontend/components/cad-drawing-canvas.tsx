@@ -28,6 +28,7 @@ import {
 } from '@/lib/edge-hashira-labels';
 import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
+import { mToMm, mmToM } from '@/lib/dimension-meters';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ const HASHIRA_STATION_OPTIONS = Array.from(
 function parseMetersInputToMm(s: string): number | null {
   const v = parseFloat(String(s).trim().replace(',', '.'));
   if (!Number.isFinite(v) || v <= 0) return null;
-  return Math.round(v * 1000);
+  return mToMm(v);
 }
 
 type Tool = 'select' | 'polyline' | 'rectangle' | 'pan';
@@ -389,7 +390,7 @@ export function CadDrawingCanvas({
       ctx.font = '12px monospace';
       const midX = (lastPt.x + mousePos.x) / 2;
       const midY = (lastPt.y + mousePos.y) / 2;
-      ctx.fillText(`${len}mm`, midX + 5, midY - 5);
+      ctx.fillText(`${mmToM(len).toFixed(3)}m`, midX + 5, midY - 5);
     }
 
     // Draw dimension labels on edges
@@ -473,7 +474,7 @@ export function CadDrawingCanvas({
       ctx.font = '10px monospace';
       ctx.textAlign = 'left';
       ctx.fillText(
-        `(${Math.round(wp.x * mmPerPixel)}mm, ${Math.round(wp.y * mmPerPixel)}mm)`,
+        `(${mmToM(Math.round(wp.x * mmPerPixel)).toFixed(3)}m, ${mmToM(Math.round(wp.y * mmPerPixel)).toFixed(3)}m)`,
         mousePos.x + 10,
         mousePos.y - 10,
       );
@@ -641,15 +642,17 @@ export function CadDrawingCanvas({
   const handleEdgeClick = useCallback(
     (edgeIndex: number) => {
       setEditingEdge(edgeIndex);
-      setEditValue(String(edgeLengthMm(points[edgeIndex], points[(edgeIndex + 1) % points.length])));
+      const lenMm = edgeLengthMm(points[edgeIndex], points[(edgeIndex + 1) % points.length]);
+      setEditValue(String(Math.round(mmToM(lenMm) * 10000) / 10000));
     },
     [points, edgeLengthMm],
   );
 
   const applyEdgeLength = useCallback(() => {
     if (editingEdge === null) return;
-    const newLen = parseFloat(editValue);
-    if (isNaN(newLen) || newLen < 600) return;
+    const newLenM = parseFloat(editValue);
+    if (isNaN(newLenM) || newLenM < 0.6) return;
+    const newLen = mToMm(newLenM);
 
     const i = editingEdge;
     const j = (i + 1) % points.length;
@@ -770,13 +773,18 @@ export function CadDrawingCanvas({
               <span className="text-sm text-amber-800">{t('viewer', 'cadRealDimension')}</span>
               <input
                 type="number"
-                value={calibrationMm ?? ''}
-                onChange={(e) => setCalibrationMm(Number(e.target.value) || null)}
-                placeholder={t('common', 'mm')}
+                value={calibrationMm != null && calibrationMm > 0 ? Math.round(mmToM(calibrationMm) * 100000) / 100000 : ''}
+                onChange={(e) => {
+                  const m = parseFloat(e.target.value);
+                  setCalibrationMm(Number.isFinite(m) && m > 0 ? mToMm(m) : null);
+                }}
+                placeholder={mUnit}
+                min={0.001}
+                step={0.001}
                 className="w-28 px-2 py-1 rounded border border-amber-300 text-sm"
                 autoFocus
               />
-              <span className="text-xs text-amber-600">{t('common', 'mm')}</span>
+              <span className="text-xs text-amber-600">{mUnit}</span>
               <button
                 onClick={applyCalibration}
                 disabled={!calibrationMm || calibrationMm <= 0}
@@ -908,7 +916,7 @@ export function CadDrawingCanvas({
               <span>
                 {t('viewer', 'cadCanvasScaleHint')
                   .replace('{z}', String(Math.round(zoom * 100)))
-                  .replace('{v}', mmPerPixel.toFixed(1))}
+                  .replace('{v}', mmToM(mmPerPixel).toFixed(4))}
               </span>
             </div>
           </div>
@@ -1002,7 +1010,8 @@ export function CadDrawingCanvas({
                                 onKeyDown={(e) => e.key === 'Enter' && applyEdgeLength()}
                                 className="w-full px-1.5 py-0.5 border border-blue-300 rounded text-[11px] font-mono"
                                 autoFocus
-                                min={600}
+                                min={0.6}
+                                step={0.001}
                               />
                               <button type="button" onClick={applyEdgeLength} className="text-green-600 shrink-0">
                                 <Check className="h-3.5 w-3.5" />

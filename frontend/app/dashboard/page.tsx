@@ -6,6 +6,7 @@ import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-co
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { messagesApi, ConversationWithUser } from '@/lib/api/messages';
 import { useI18n } from '@/lib/i18n';
+import { formatMmAsMetersLabel } from '@/lib/dimension-meters';
 import Link from 'next/link';
 import {
   Calculator,
@@ -36,7 +37,6 @@ import {
   Send,
   CheckCircle,
   XCircle,
-  CreditCard,
   HardHat,
   Sparkles,
 } from 'lucide-react';
@@ -555,70 +555,31 @@ function UserDashboard() {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          <div className="lg:col-span-2 relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-8 sm:p-10 shadow-sm">
-            <div
-              className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.06),transparent_65%)]"
-              aria-hidden
-            />
-            <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8">
-              <div>
-                <div className="inline-flex items-center gap-2 text-blue-600 mb-3">
-                  <Sparkles className="h-4 w-4" aria-hidden />
-                  <span className="text-xs font-bold uppercase tracking-widest">{t('dashboard', 'quickStartTitle')}</span>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-                  {t('nav', 'scaffold')}
-                </h2>
-                <p className="mt-3 text-slate-600 max-w-lg leading-relaxed">{t('dashboard', 'quickStartDesc')}</p>
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-8 sm:p-10 shadow-sm">
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.06),transparent_65%)]"
+            aria-hidden
+          />
+          <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8">
+            <div>
+              <div className="inline-flex items-center gap-2 text-blue-600 mb-3">
+                <Sparkles className="h-4 w-4" aria-hidden />
+                <span className="text-xs font-bold uppercase tracking-widest">{t('dashboard', 'quickStartTitle')}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => router.push('/scaffold')}
-                disabled={!hasBillingAccess}
-                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-blue-600 px-8 py-4 text-base font-semibold text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
-              >
-                <Calculator className="h-6 w-6" aria-hidden />
-                {t('dashboard', 'quickStartButton')}
-                <ArrowRight className="h-5 w-5 opacity-90" aria-hidden />
-              </button>
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+                {t('nav', 'scaffold')}
+              </h2>
+              <p className="mt-3 text-slate-600 max-w-lg leading-relaxed">{t('dashboard', 'quickStartDesc')}</p>
             </div>
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400 px-1">
-              {t('dashboard', 'quickAccess')}
-            </p>
-            <Link
-              href="/quotations"
-              className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-                <Receipt className="h-5 w-5" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">
-                  {t('nav', 'quotations')}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutQuotationsDesc')}</p>
-              </div>
-              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
-            </Link>
             <button
               type="button"
-              onClick={() => router.push('/billing')}
-              className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
+              onClick={() => router.push('/scaffold')}
+              disabled={!hasBillingAccess}
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-blue-600 px-8 py-4 text-base font-semibold text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
-                <CreditCard className="h-5 w-5" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">
-                  {t('dashboard', 'manageBilling')}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutBillingDesc')}</p>
-              </div>
-              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
+              <Calculator className="h-6 w-6" aria-hidden />
+              {t('dashboard', 'quickStartButton')}
+              <ArrowRight className="h-5 w-5 opacity-90" aria-hidden />
             </button>
           </div>
         </div>
@@ -750,8 +711,8 @@ function UserDashboard() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-slate-800 truncate">
-                                  {t('dashboard', 'buildingHeight')}: {cfg.buildingHeightMm.toLocaleString()}mm |{' '}
-                                  {t('dashboard', 'scaffoldWidth')}: {cfg.scaffoldWidthMm}mm
+                                  {t('dashboard', 'buildingHeight')}: {formatMmAsMetersLabel(cfg.buildingHeightMm)} |{' '}
+                                  {t('dashboard', 'scaffoldWidth')}: {formatMmAsMetersLabel(cfg.scaffoldWidthMm)}
                                 </div>
                                 <div className="text-sm text-slate-500 truncate">
                                   {wallNames || '—'} |{' '}
