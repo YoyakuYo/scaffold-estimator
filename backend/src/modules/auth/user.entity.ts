@@ -28,6 +28,13 @@ export class User {
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId: string | null;
 
+  /**
+   * True when this account is an org seat (e.g. accepted team invite) and must not manage Stripe checkout.
+   * Cleared when the user becomes the Stripe customer on their subscription row.
+   */
+  @Column({ name: 'is_company_seat', default: false })
+  isCompanySeat: boolean;
+
   @ManyToOne(() => Company, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'company_id' })
   company?: Company;

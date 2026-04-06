@@ -138,6 +138,9 @@ export default function ProfilePage() {
     );
   }
 
+  const hidePersonalBillingOnProfile =
+    profile?.isCompanySeat === true || subscription?.managesBilling === false;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -153,12 +156,12 @@ export default function ProfilePage() {
         </div>
 
         {profile?.role !== 'superadmin' &&
-          (subscriptionLoading ? (
+          (hidePersonalBillingOnProfile ? null : subscriptionLoading ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6 flex items-center gap-2 text-sm text-gray-500">
               <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
               {t('profile', 'subscriptionLoading')}
             </div>
-          ) : subscription?.managesBilling === false ? null : (
+          ) : (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <CreditCard className="h-5 w-5 text-gray-400" />

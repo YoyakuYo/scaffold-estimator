@@ -787,11 +787,11 @@ function ScaffoldResultPage() {
               <Box className="h-12 w-12 text-amber-600 mx-auto mb-4" aria-hidden />
               <p className="text-slate-800 font-medium mb-2">{t('result', 'view3dRequiresPlan')}</p>
               <p className="text-sm text-slate-600 mb-6">
-                {subscription?.managesBilling === false
+                {subscription?.companySeat || subscription?.managesBilling === false
                   ? t('result', 'view3dSeatHolderHint')
                   : t('result', 'view3dUpgradeHint')}
               </p>
-              {subscription?.managesBilling !== false && (
+              {subscription?.companySeat !== true && subscription?.managesBilling !== false && (
                 <button
                   type="button"
                   onClick={() => router.push('/billing')}

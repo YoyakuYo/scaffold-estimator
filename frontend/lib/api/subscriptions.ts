@@ -53,6 +53,8 @@ export interface SubscriptionInfo {
   hasAccess: boolean;
   /** False for invited seats on a paid company plan (no personal Stripe customer). */
   managesBilling?: boolean;
+  /** True when this session is an org seat (hide billing / pricing). */
+  companySeat?: boolean;
   trialDaysRemaining: number;
   trialLengthDays: number;
   /** While trialing: drawing file uploads used vs max (Quick Shape does not count). */

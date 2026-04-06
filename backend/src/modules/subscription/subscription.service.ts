@@ -384,9 +384,17 @@ export class SubscriptionService {
         }
       }
       const { data: out } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
-      if (out) return mapRowToCamel<Subscription>(out as Record<string, unknown>)!;
+      if (out) {
+        await client
+          .from('users')
+          .update(mapPayloadToSnake({ isCompanySeat: true }))
+          .eq('id', userId);
+        return mapRowToCamel<Subscription>(out as Record<string, unknown>)!;
+      }
       return this.ensureSubscriptionForUser(userId);
     }
+
+    await client.from('users').update(mapPayloadToSnake({ isCompanySeat: false })).eq('id', userId);
 
     if (!existingRow) {
       return this.ensureSubscriptionForUser(userId);
@@ -428,6 +436,7 @@ export class SubscriptionService {
         }),
       )
       .eq('user_id', userId);
+    await client.from('users').update(mapPayloadToSnake({ isCompanySeat: true })).eq('id', userId);
   }
 
   async hasActiveAccess(userId: string, role?: string): Promise<boolean> {
@@ -580,6 +589,7 @@ export class SubscriptionService {
    */
   private async isInvitedCompanySeatTrialShadow(userId: string, sub: Subscription): Promise<boolean> {
     const user = await this.getUserOrFail(userId);
+    if (user.isCompanySeat === true) return true;
     if (!user.companyId || user.role === 'superadmin' || user.subscriptionExempt) return false;
     if (sub.stripeCustomerId || sub.stripeSubscriptionId) return false;
     if (!(sub.plan === 'free_trial' && sub.status === 'trialing')) return false;
@@ -626,7 +636,7 @@ export class SubscriptionService {
   }
 
   async getMySubscription(userId: string): Promise<any> {
-    const user = await this.getUserOrFail(userId);
+    let user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
     if (user.companyId && user.role !== 'superadmin' && !user.subscriptionExempt) {
       const ownsStripe = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
@@ -640,6 +650,7 @@ export class SubscriptionService {
       const { data: rowAfter } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
       if (rowAfter) sub = mapRowToCamel<Subscription>(rowAfter as Record<string, unknown>)!;
     }
+    user = await this.getUserOrFail(userId);
     sub = await this.expireTrialIfNeeded(sub);
     const ownsStripeAfterReload = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
     const fullCompanyPaidSnap =
@@ -689,14 +700,25 @@ export class SubscriptionService {
       (user.companyId !== null &&
         user.companyId !== '' &&
         this.companyHasPeerBillingAnchor(companySubsForPeers, userId));
+    /**
+     * Org seat: invited / mirrored member with no personal Stripe — includes `users.is_company_seat`
+     * so existing invitees keep billing hidden even when peer detection regresses.
+     */
+    const orgSeat =
+      !!user.companyId &&
+      hasAccess &&
+      !ownsStripeAfter &&
+      !exempt &&
+      user.role !== 'superadmin' &&
+      (peerAnchorsBilling || user.isCompanySeat === true);
     /** False when this user inherits a paid company seat and should not use Stripe checkout/portal themselves. */
     const managesBilling =
       exempt ||
       user.role === 'superadmin' ||
       !user.companyId ||
       ownsStripeAfter ||
-      !peerAnchorsBilling ||
-      !hasAccess;
+      !hasAccess ||
+      !orgSeat;
 
     const isCompanySeatViewer =
       !exempt && user.role !== 'superadmin' && !!user.companyId && hasAccess && !managesBilling;
@@ -732,6 +754,7 @@ export class SubscriptionService {
       ...subPayload,
       hasAccess,
       managesBilling,
+      companySeat: isCompanySeatViewer,
       trialDaysRemaining: trialDaysRemainingOut,
       trialLengthDays: TRIAL_DAYS,
       trialFileUploads:
@@ -785,6 +808,11 @@ export class SubscriptionService {
       customerId = customer.id;
       await this.supabase.getClient().from('subscriptions').update(mapPayloadToSnake({ stripeCustomerId: customer.id })).eq('id', sub.id);
       sub = { ...sub, stripeCustomerId: customer.id };
+      await this.supabase
+        .getClient()
+        .from('users')
+        .update(mapPayloadToSnake({ isCompanySeat: false }))
+        .eq('id', user.id);
     }
 
     const tier = this.resolveCheckoutTier(dto);
@@ -901,6 +929,7 @@ export class SubscriptionService {
       canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null,
     });
     await client.from('subscriptions').update(updates).eq('id', sub.id);
+    await client.from('users').update(mapPayloadToSnake({ isCompanySeat: false })).eq('id', sub.userId);
   }
 
   async handleWebhook(signature: string | undefined, rawBody: Buffer): Promise<{ received: true }> {

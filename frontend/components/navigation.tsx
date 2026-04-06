@@ -51,8 +51,10 @@ export function Navigation() {
     retry: false,
   });
 
-  /** Invited company seats must not see billing in the main nav. */
-  const showBillingNav = mySubscription == null || mySubscription.managesBilling !== false;
+  /** Invited company seats must not see billing in the main nav (DB flag + subscription managesBilling). */
+  const showBillingNav =
+    currentUser?.isCompanySeat !== true &&
+    (mySubscription == null || mySubscription.managesBilling !== false);
 
   const handleLogout = () => {
     authApi.logout();

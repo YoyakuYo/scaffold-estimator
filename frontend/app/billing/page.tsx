@@ -261,6 +261,10 @@ export default function BillingPage() {
 
   useEffect(() => {
     if (!profile || profile.role === 'superadmin') return;
+    if (profile.isCompanySeat === true) {
+      router.replace('/profile');
+      return;
+    }
     if (isLoading || !subscription) return;
     if (subscription.managesBilling === false) {
       router.replace('/profile');

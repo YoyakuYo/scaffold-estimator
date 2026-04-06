@@ -13,6 +13,8 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   companyId: string;
+  /** True for team-invite / org seats: no personal billing (profile + nav). */
+  isCompanySeat?: boolean;
   companyName?: string;
   firstName: string | null;
   lastName: string | null;
