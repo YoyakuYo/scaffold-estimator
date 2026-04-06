@@ -708,6 +708,11 @@ export const translations = {
       fr: 'Passez à une offre supérieure dans la facturation pour débloquer la vue 3D et les exports PDF/OBJ 3D.',
     },
     view3dUpgradeCta: { ja: 'プランを見る', en: 'View plans', fr: 'Voir les offres' },
+    view3dSeatHolderHint: {
+      ja: '3D表示は会社の契約プランに含まれます。必要な場合は、請求を管理している担当者にご相談ください。',
+      en: '3D view depends on your organization’s plan. Ask the teammate who manages billing if an upgrade is needed.',
+      fr: 'La vue 3D dépend du forfait de votre organisation. Demandez au collègue qui gère la facturation si un changement d’offre est nécessaire.',
+    },
     noResult: { ja: '計算結果が見つかりません', en: 'No calculation results found', fr: 'Aucun résultat de calcul' },
     spanConfig: { ja: 'スパン構成', en: 'Span Configuration', fr: 'Configuration des travées' },
     scaffoldLevelsHeader: { ja: '足場レベル', en: 'Levels', fr: 'Niveaux' },
@@ -1503,6 +1508,7 @@ export const translations = {
       en: 'Seats: {{used}} / {{limit}} (you, colleagues, and pending invites count toward this limit).',
       fr: 'Places : {{used}} / {{limit}} (vous, collègues et invitations en attente inclus).',
     },
+    seatUnlimited: { ja: '無制限', en: 'Unlimited', fr: 'Illimité' },
     openUserManagement: {
       ja: 'ユーザー管理ページ（権限・パスワード）を開く',
       en: 'Open user management (roles, passwords)',

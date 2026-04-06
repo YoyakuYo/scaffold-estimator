@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import type { Locale, TranslationKeys, TranslationSection } from '@/lib/i18n/translations';
@@ -17,6 +18,7 @@ import {
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
 import { subscriptionPlanForBillingCard, subscriptionStatusLabel } from '@/lib/billing/subscription-labels';
 import { localizedBankField } from '@/lib/billing/bank-transfer-display';
+import { effectiveSeatCap, isUnlimitedSeatCap } from '@/lib/billing/effective-seat-cap';
 import { usersApi } from '@/lib/api/users';
 import {
   Loader2,
@@ -233,6 +235,7 @@ function BankDd({
 
 export default function BillingPage() {
   const { locale, t } = useI18n();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [isLocalhost, setIsLocalhost] = useState(false);
 
@@ -255,6 +258,14 @@ export default function BillingPage() {
     refetchInterval: 30000,
     enabled: profile?.role !== 'superadmin',
   });
+
+  useEffect(() => {
+    if (!profile || profile.role === 'superadmin') return;
+    if (isLoading || !subscription) return;
+    if (subscription.managesBilling === false) {
+      router.replace('/profile');
+    }
+  }, [profile, subscription, isLoading, router]);
 
   const checkoutMutation = useMutation({
     mutationFn: subscriptionsApi.createCheckoutSession,
@@ -473,13 +484,16 @@ export default function BillingPage() {
             </p>
           )}
 
-          {subscription.seatUsage &&
-            subscription.seatUsage.limit > 0 &&
-            subscription.seatUsage.limit < 9000 && (
+          {subscription.seatUsage && effectiveSeatCap(subscription) > 0 && (
               <p className="text-sm text-gray-600 mt-3">
                 {t('billing', 'seatUsage')
                   .replace('{used}', String(subscription.seatUsage.used))
-                  .replace('{limit}', String(subscription.seatUsage.limit))}
+                  .replace(
+                    '{limit}',
+                    isUnlimitedSeatCap(effectiveSeatCap(subscription))
+                      ? t('profile', 'seatUnlimited')
+                      : String(effectiveSeatCap(subscription)),
+                  )}
               </p>
             )}
         </div>

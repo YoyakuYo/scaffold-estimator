@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
 import { usersApi } from '@/lib/api/users';
+import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Users, User, MessageSquare, CreditCard, Menu, X } from 'lucide-react';
 import { NotificationBell } from '@/components/notification-bell';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -42,6 +43,17 @@ export function Navigation() {
 
   const isAdmin = currentUser?.role === 'superadmin';
 
+  const { data: mySubscription } = useQuery({
+    queryKey: ['my-subscription'],
+    queryFn: subscriptionsApi.getMine,
+    enabled: !!authApi.getToken() && !!currentUser && currentUser.role !== 'superadmin',
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  /** Invited company seats must not see billing in the main nav. */
+  const showBillingNav = mySubscription == null || mySubscription.managesBilling !== false;
+
   const handleLogout = () => {
     authApi.logout();
   };
@@ -52,7 +64,7 @@ export function Navigation() {
     { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
     { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
     { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
-    { path: '/billing', label: t('nav2', 'billing'), icon: CreditCard },
+    ...(showBillingNav ? [{ path: '/billing', label: t('nav2', 'billing'), icon: CreditCard }] : []),
     { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
     ...(isAdmin ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
     { path: '/settings', label: t('nav', 'settings'), icon: Settings },

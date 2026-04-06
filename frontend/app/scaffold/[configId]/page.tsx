@@ -786,14 +786,20 @@ function ScaffoldResultPage() {
             <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-8 text-center max-w-lg mx-auto">
               <Box className="h-12 w-12 text-amber-600 mx-auto mb-4" aria-hidden />
               <p className="text-slate-800 font-medium mb-2">{t('result', 'view3dRequiresPlan')}</p>
-              <p className="text-sm text-slate-600 mb-6">{t('result', 'view3dUpgradeHint')}</p>
-              <button
-                type="button"
-                onClick={() => router.push('/billing')}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                {t('result', 'view3dUpgradeCta')}
-              </button>
+              <p className="text-sm text-slate-600 mb-6">
+                {subscription?.managesBilling === false
+                  ? t('result', 'view3dSeatHolderHint')
+                  : t('result', 'view3dUpgradeHint')}
+              </p>
+              {subscription?.managesBilling !== false && (
+                <button
+                  type="button"
+                  onClick={() => router.push('/billing')}
+                  className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  {t('result', 'view3dUpgradeCta')}
+                </button>
+              )}
             </div>
           )}
         </div>

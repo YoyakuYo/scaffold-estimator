@@ -22,6 +22,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { ChangePasswordForm } from '@/components/change-password-form';
+import { effectiveSeatCap, isUnlimitedSeatCap } from '@/lib/billing/effective-seat-cap';
 
 export default function ProfilePage() {
   const { locale, t } = useI18n();
@@ -53,7 +54,8 @@ export default function ProfilePage() {
     profile.role !== 'superadmin' &&
     !!profile.companyId &&
     !!subscription &&
-    subscription.hasAccess;
+    subscription.hasAccess &&
+    subscription.managesBilling !== false;
 
   const { data: branchOptions = [] } = useQuery({
     queryKey: ['company-branches-profile'],
@@ -150,42 +152,43 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {profile?.role !== 'superadmin' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-gray-400" />
-              {t('profile', 'subscriptionTitle')}
-            </h2>
-            {subscriptionLoading ? (
-              <p className="text-sm text-gray-500 flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                {t('profile', 'subscriptionLoading')}
-              </p>
-            ) : subscription ? (
-              <>
-                <p className="text-sm font-medium text-gray-900 leading-snug">
-                  {subscriptionCombinedSummary(subscription.plan, subscription.status, t)}
-                </p>
-                <p
-                  className={`text-xs font-medium mt-2 ${
-                    subscription.hasAccess ? 'text-green-700' : 'text-amber-800'
-                  }`}
-                >
-                  {subscription.hasAccess ? t('billing', 'accessEnabled') : t('billing', 'accessDisabled')}
-                </p>
-                <Link
-                  href="/billing"
-                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  {t('dashboard', 'manageBilling')}
-                </Link>
-              </>
-            ) : (
-              <p className="text-sm text-gray-500">{t('billing', 'unavailable')}</p>
-            )}
-          </div>
-        )}
+        {profile?.role !== 'superadmin' &&
+          (subscriptionLoading ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6 flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+              {t('profile', 'subscriptionLoading')}
+            </div>
+          ) : subscription?.managesBilling === false ? null : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-gray-400" />
+                {t('profile', 'subscriptionTitle')}
+              </h2>
+              {subscription ? (
+                <>
+                  <p className="text-sm font-medium text-gray-900 leading-snug">
+                    {subscriptionCombinedSummary(subscription.plan, subscription.status, t)}
+                  </p>
+                  <p
+                    className={`text-xs font-medium mt-2 ${
+                      subscription.hasAccess ? 'text-green-700' : 'text-amber-800'
+                    }`}
+                  >
+                    {subscription.hasAccess ? t('billing', 'accessEnabled') : t('billing', 'accessDisabled')}
+                  </p>
+                  <Link
+                    href="/billing"
+                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    {t('dashboard', 'manageBilling')}
+                  </Link>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">{t('billing', 'unavailable')}</p>
+              )}
+            </div>
+          ))}
 
         {showTeamInvites && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -194,11 +197,16 @@ export default function ProfilePage() {
               {t('profile', 'teamInvitesTitle')}
             </h2>
             <p className="text-sm text-gray-600 mb-3">{t('usersAdmin', 'teamInvitesHint')}</p>
-            {subscription?.seatUsage && (
+            {subscription?.seatUsage && effectiveSeatCap(subscription) > 0 && (
               <p className="text-sm font-medium text-gray-800 mb-4">
                 {t('profile', 'seatUsageLine')
                   .replace('{{used}}', String(subscription.seatUsage.used))
-                  .replace('{{limit}}', String(subscription.seatUsage.limit))}
+                  .replace(
+                    '{{limit}}',
+                    isUnlimitedSeatCap(effectiveSeatCap(subscription))
+                      ? t('profile', 'seatUnlimited')
+                      : String(effectiveSeatCap(subscription)),
+                  )}
               </p>
             )}
             {profile?.role === 'estimator' && (
