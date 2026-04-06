@@ -329,9 +329,9 @@ export class TeamInviteService {
 
     const user = mapRowToCamel<User>(saved as Record<string, unknown>)!;
     try {
-      await this.subscriptionService.ensureSubscriptionForUser(user.id);
+      await this.subscriptionService.syncSubscriptionRowForCompanyMember(user.id);
     } catch (e) {
-      this.logger.warn(`ensureSubscriptionForUser: ${(e as Error).message}`);
+      this.logger.warn(`syncSubscriptionRowForCompanyMember: ${(e as Error).message}`);
     }
 
     await client
@@ -400,9 +400,9 @@ export class TeamInviteService {
 
     const user = mapRowToCamel<User>(updated as Record<string, unknown>)!;
     try {
-      await this.subscriptionService.ensureSubscriptionForUser(user.id);
+      await this.subscriptionService.syncSubscriptionRowForCompanyMember(user.id);
     } catch (e) {
-      this.logger.warn(`ensureSubscriptionForUser: ${(e as Error).message}`);
+      this.logger.warn(`syncSubscriptionRowForCompanyMember: ${(e as Error).message}`);
     }
 
     await client

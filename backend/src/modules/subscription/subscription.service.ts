@@ -242,6 +242,157 @@ export class SubscriptionService {
     return subscription;
   }
 
+  /**
+   * All subscription rows that belong to a company billing scope: by `company_id` on the row **or**
+   * by `user_id` of anyone in the company (covers payers whose row predates company_id backfill).
+   */
+  async getSubscriptionsForCompany(companyId: string): Promise<Subscription[]> {
+    const client = this.supabase.getClient();
+    const { data: userRows } = await client.from('users').select('id').eq('company_id', companyId);
+    const userIds = (userRows || []).map((r: { id: string }) => r.id);
+    const byId = new Map<string, Subscription>();
+
+    const { data: rowsCo } = await client.from('subscriptions').select('*').eq('company_id', companyId);
+    for (const row of rowsCo || []) {
+      const s = mapRowToCamel<Subscription>(row as Record<string, unknown>);
+      if (s) byId.set(s.id, s);
+    }
+    if (userIds.length > 0) {
+      const { data: rowsU } = await client.from('subscriptions').select('*').in('user_id', userIds);
+      for (const row of rowsU || []) {
+        const s = mapRowToCamel<Subscription>(row as Record<string, unknown>);
+        if (s) byId.set(s.id, s);
+      }
+    }
+    return [...byId.values()];
+  }
+
+  private planTierScore(plan: string): number {
+    switch (plan) {
+      case 'enterprise':
+        return 5;
+      case 'premium':
+        return 4;
+      case 'medium':
+      case 'professional':
+        return 3;
+      case 'basic':
+      case 'starter':
+        return 2;
+      default:
+        return 0;
+    }
+  }
+
+  /** Strongest paid (non–free_trial) plan among company peers — used to seat invited users without a personal trial. */
+  private async bestCompanyPaidSeatSnapshot(subs: Subscription[]): Promise<{ plan: PlanTier } | null> {
+    const now = new Date();
+    let best: { plan: PlanTier; score: number } | null = null;
+    for (const raw of subs) {
+      let s = await this.expireTrialIfNeeded({ ...raw });
+      if (!s.plan || s.plan === 'free_trial') continue;
+      const accessOk =
+        s.status === 'active' ||
+        (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now);
+      if (!accessOk) continue;
+      const score = this.planTierScore(s.plan);
+      if (score === 0) continue;
+      if (!best || score > best.score) best = { plan: s.plan as PlanTier, score };
+    }
+    return best ? { plan: best.plan } : null;
+  }
+
+  /**
+   * Team invite / company switch: one row per user — mirror the company's paid plan as a seat (no Stripe ids, no personal trial).
+   * If the company has no paid (or Stripe-trial) anchor, falls back to normal free trial creation.
+   */
+  async syncSubscriptionRowForCompanyMember(userId: string): Promise<Subscription> {
+    const user = await this.getUserOrFail(userId);
+    if (user.role === 'superadmin') {
+      return this.ensureSubscriptionForUser(userId);
+    }
+    if (!user.companyId) {
+      return this.ensureSubscriptionForUser(userId);
+    }
+    const client = this.supabase.getClient();
+    const companySubs = await this.getSubscriptionsForCompany(user.companyId);
+    const others = companySubs.filter((s) => s.userId !== userId);
+    const snap = await this.bestCompanyPaidSeatSnapshot(others);
+    const { data: existingRow } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+
+    if (snap) {
+      const seatPayload = {
+        companyId: user.companyId,
+        plan: snap.plan,
+        status: 'active' as SubscriptionStatus,
+        trialStart: null as Date | null,
+        trialEnd: null as Date | null,
+        trialDocumentsUsed: 0,
+        stripeCustomerId: null as string | null,
+        stripeSubscriptionId: null as string | null,
+        stripePriceId: null as string | null,
+        currentPeriodStart: null as Date | null,
+        currentPeriodEnd: null as Date | null,
+      };
+      const patch = mapPayloadToSnake(seatPayload);
+      if (existingRow) {
+        const { error } = await client.from('subscriptions').update(patch).eq('user_id', userId);
+        if (error) this.logger.warn(`syncSubscriptionRowForCompanyMember update: ${error.message}`);
+      } else {
+        const ins = mapPayloadToSnake({ userId, ...seatPayload });
+        const { error } = await client.from('subscriptions').insert(ins);
+        if (error) {
+          this.logger.warn(`syncSubscriptionRowForCompanyMember insert: ${error.message}`);
+          return this.ensureSubscriptionForUser(userId);
+        }
+      }
+      const { data: out } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+      if (out) return mapRowToCamel<Subscription>(out as Record<string, unknown>)!;
+      return this.ensureSubscriptionForUser(userId);
+    }
+
+    if (!existingRow) {
+      return this.ensureSubscriptionForUser(userId);
+    }
+    await client.from('subscriptions').update(mapPayloadToSnake({ companyId: user.companyId })).eq('user_id', userId);
+    const { data: refreshed } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    if (!refreshed) return this.ensureSubscriptionForUser(userId);
+    return mapRowToCamel<Subscription>(refreshed as Record<string, unknown>)!;
+  }
+
+  /** If this user still has a personal free_trial row but teammates carry a paid plan, upgrade the row in place. */
+  async reconcileSeatMemberTrialShadow(userId: string): Promise<void> {
+    const user = await this.getUserOrFail(userId);
+    if (!user.companyId || user.role === 'superadmin' || user.subscriptionExempt) return;
+    const client = this.supabase.getClient();
+    const { data: row } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    if (!row) return;
+    let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
+    sub = await this.expireTrialIfNeeded(sub);
+    if (!(sub.plan === 'free_trial' && sub.status === 'trialing')) return;
+    const companySubs = await this.getSubscriptionsForCompany(user.companyId);
+    const others = companySubs.filter((s) => s.userId !== userId);
+    const snap = await this.bestCompanyPaidSeatSnapshot(others);
+    if (!snap) return;
+    await client
+      .from('subscriptions')
+      .update(
+        mapPayloadToSnake({
+          plan: snap.plan,
+          status: 'active' as SubscriptionStatus,
+          trialStart: null,
+          trialEnd: null,
+          trialDocumentsUsed: 0,
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+          stripePriceId: null,
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+        }),
+      )
+      .eq('user_id', userId);
+  }
+
   async hasActiveAccess(userId: string, role?: string): Promise<boolean> {
     if (role === 'superadmin') return true;
     const user = await this.getUserOrFail(userId);
@@ -251,16 +402,17 @@ export class SubscriptionService {
     const now = new Date();
 
     if (companyId) {
-      let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-      let subs = mapRowsToCamel<Subscription>(rows || []);
+      let subs = await this.getSubscriptionsForCompany(companyId);
       if (subs.length === 0) {
         await this.ensureSubscriptionForUser(userId);
-        const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-        subs = mapRowsToCamel<Subscription>(res.data || []);
+        subs = await this.getSubscriptionsForCompany(companyId);
       }
       for (const sub of subs) {
         const s = await this.expireTrialIfNeeded(sub);
         if (s.status === 'active') return true;
+        if (s.status === 'trialing' && s.plan && s.plan !== 'free_trial' && s.trialEnd && new Date(s.trialEnd) > now) {
+          return true;
+        }
         if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) return true;
       }
       return false;
@@ -289,8 +441,20 @@ export class SubscriptionService {
           paidMerge = paidMerge ? mergeCapabilitiesMax(paidMerge, c) : c;
         }
       }
+      if (
+        s.status === 'trialing' &&
+        s.plan &&
+        s.plan !== 'free_trial' &&
+        s.trialEnd &&
+        new Date(s.trialEnd) > now
+      ) {
+        const c = capabilitiesForPlan(s.plan);
+        if (c.maxSeats > 0) {
+          paidMerge = paidMerge ? mergeCapabilitiesMax(paidMerge, c) : c;
+        }
+      }
       if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now) {
-        hasValidTrial = true;
+        if (!s.plan || s.plan === 'free_trial') hasValidTrial = true;
       }
     }
     if (paidMerge && paidMerge.maxSeats > 0) return paidMerge;
@@ -299,8 +463,7 @@ export class SubscriptionService {
   }
 
   async resolveEffectiveCapabilitiesForCompany(companyId: string): Promise<EffectivePlanCapabilities> {
-    const { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-    const subs = mapRowsToCamel<Subscription>(rows || []);
+    const subs = await this.getSubscriptionsForCompany(companyId);
     return this.aggregateCompanyCapabilities(subs);
   }
 
@@ -312,12 +475,10 @@ export class SubscriptionService {
     const companyId = user.companyId;
 
     if (companyId) {
-      let { data: rows } = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-      let subs = mapRowsToCamel<Subscription>(rows || []);
+      let subs = await this.getSubscriptionsForCompany(companyId);
       if (subs.length === 0) {
         await this.ensureSubscriptionForUser(userId);
-        const res = await this.supabase.getClient().from('subscriptions').select('*').eq('company_id', companyId);
-        subs = mapRowsToCamel<Subscription>(res.data || []);
+        subs = await this.getSubscriptionsForCompany(companyId);
       }
       return this.aggregateCompanyCapabilities(subs);
     }
@@ -408,6 +569,11 @@ export class SubscriptionService {
   async getMySubscription(userId: string): Promise<any> {
     const user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
+    if (user.companyId && user.role !== 'superadmin' && !user.subscriptionExempt) {
+      await this.reconcileSeatMemberTrialShadow(userId);
+      const { data: rowAfter } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+      if (rowAfter) sub = mapRowToCamel<Subscription>(rowAfter as Record<string, unknown>)!;
+    }
     sub = await this.expireTrialIfNeeded(sub);
     const now = Date.now();
     const exempt = user.subscriptionExempt;
