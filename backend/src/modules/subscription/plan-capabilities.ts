@@ -81,6 +81,15 @@ export function capabilitiesForTrial(): EffectivePlanCapabilities {
   };
 }
 
+/** Maps merged company capabilities to a plan label for API responses (invited seats inherit org tier). */
+export function inferDisplayPlanFromCapabilities(caps: EffectivePlanCapabilities): string {
+  if (caps.maxSeats <= 0) return 'free_trial';
+  if (caps.maxSeats >= 9000) return 'enterprise';
+  if (caps.aiExtract) return 'premium';
+  if (caps.cadDraw || caps.view3d || caps.maxSeats > 2) return 'medium';
+  return 'basic';
+}
+
 export function mergeCapabilitiesMax(
   a: EffectivePlanCapabilities,
   b: EffectivePlanCapabilities,

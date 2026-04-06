@@ -18,6 +18,7 @@ import {
   capabilitiesForPlan,
   capabilitiesForTrial,
   mergeCapabilitiesMax,
+  inferDisplayPlanFromCapabilities,
   type EffectivePlanCapabilities,
 } from './plan-capabilities';
 
@@ -468,6 +469,7 @@ export class SubscriptionService {
    */
   async aggregateCompanyCapabilities(subs: Subscription[]): Promise<EffectivePlanCapabilities> {
     const now = new Date();
+    const companyHasBillingAnchor = subs.some((s) => this.subscriptionRowLooksLikeCompanyPayer(s));
     let paidMerge: EffectivePlanCapabilities | null = null;
     let hasValidTrial = false;
     for (const sub of subs) {
@@ -486,6 +488,12 @@ export class SubscriptionService {
         }
       }
       if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now && !paidPlan) {
+        const orphanInviteTrial =
+          companyHasBillingAnchor &&
+          !s.stripeCustomerId &&
+          !s.stripeSubscriptionId &&
+          s.plan === 'free_trial';
+        if (orphanInviteTrial) continue;
         hasValidTrial = true;
       }
     }
@@ -566,6 +574,19 @@ export class SubscriptionService {
     return active + pending;
   }
 
+  /**
+   * Personal row may still be `free_trial` / trialing after join while a teammate is the Stripe customer;
+   * that must not consume "personal trial" upload quota.
+   */
+  private async isInvitedCompanySeatTrialShadow(userId: string, sub: Subscription): Promise<boolean> {
+    const user = await this.getUserOrFail(userId);
+    if (!user.companyId || user.role === 'superadmin' || user.subscriptionExempt) return false;
+    if (sub.stripeCustomerId || sub.stripeSubscriptionId) return false;
+    if (!(sub.plan === 'free_trial' && sub.status === 'trialing')) return false;
+    const peers = await this.getSubscriptionsForCompany(user.companyId);
+    return this.companyHasPeerBillingAnchor(peers, userId);
+  }
+
   /** Blocks POST /drawings/upload when trialing and upload quota exhausted. */
   async assertTrialDrawingUploadAllowed(userId: string): Promise<void> {
     const user = await this.getUserOrFail(userId);
@@ -576,6 +597,7 @@ export class SubscriptionService {
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
     sub = await this.expireTrialIfNeeded(sub);
     if (sub.status !== 'trialing') return;
+    if (await this.isInvitedCompanySeatTrialShadow(userId, sub)) return;
     const used = sub.trialDocumentsUsed ?? 0;
     if (used >= TRIAL_MAX_DRAWING_UPLOADS) {
       throw new BadRequestException(
@@ -594,6 +616,7 @@ export class SubscriptionService {
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
     sub = await this.expireTrialIfNeeded(sub);
     if (sub.status !== 'trialing') return;
+    if (await this.isInvitedCompanySeatTrialShadow(userId, sub)) return;
     const used = sub.trialDocumentsUsed ?? 0;
     await this.supabase
       .getClient()
@@ -639,12 +662,7 @@ export class SubscriptionService {
       };
       void this.syncSubscriptionRowForCompanyMember(userId);
     }
-    const now = Date.now();
     const exempt = user.subscriptionExempt;
-    const trialDaysRemaining =
-      exempt || !sub.trialEnd || sub.status !== 'trialing'
-        ? 0
-        : Math.max(0, Math.ceil((new Date(sub.trialEnd).getTime() - now) / (1000 * 60 * 60 * 24)));
     const hasAccess = await this.hasActiveAccess(userId, user.role);
     const checkoutTiers = this.getAvailableCheckoutTiers();
     const capabilities = await this.resolveEffectiveCapabilities(userId, user.role);
@@ -680,25 +698,55 @@ export class SubscriptionService {
       !peerAnchorsBilling ||
       !hasAccess;
 
-    const subPayload = exempt
+    const isCompanySeatViewer =
+      !exempt && user.role !== 'superadmin' && !!user.companyId && hasAccess && !managesBilling;
+
+    let subPayload: Subscription = exempt
       ? { ...sub, plan: 'enterprise' as const, status: 'active' as const, trialStart: null, trialEnd: null }
       : sub;
+
+    if (isCompanySeatViewer && capabilities.maxSeats > 0) {
+      const inferred = inferDisplayPlanFromCapabilities(capabilities) as PlanTier;
+      subPayload = {
+        ...subPayload,
+        plan: inferred,
+        status: 'active',
+        trialStart: null,
+        trialEnd: null,
+        trialDocumentsUsed: 0,
+      };
+    }
+
+    const trialDaysRemainingOut =
+      exempt ||
+      isCompanySeatViewer ||
+      !subPayload.trialEnd ||
+      subPayload.status !== 'trialing'
+        ? 0
+        : Math.max(
+            0,
+            Math.ceil((new Date(subPayload.trialEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+          );
+
     return {
       ...subPayload,
       hasAccess,
       managesBilling,
-      trialDaysRemaining,
+      trialDaysRemaining: trialDaysRemainingOut,
       trialLengthDays: TRIAL_DAYS,
       trialFileUploads:
-        exempt || sub.status !== 'trialing' || sub.plan !== 'free_trial'
+        exempt ||
+        isCompanySeatViewer ||
+        subPayload.status !== 'trialing' ||
+        subPayload.plan !== 'free_trial'
           ? undefined
           : {
-              used: sub.trialDocumentsUsed ?? 0,
+              used: subPayload.trialDocumentsUsed ?? 0,
               max: TRIAL_MAX_DRAWING_UPLOADS,
             },
-      isStripeConfigured: !!this.stripe && checkoutTiers.length > 0,
-      checkoutPlans: checkoutTiers,
-      bankTransfer: this.getBankTransferInstructions(user.email),
+      isStripeConfigured: managesBilling && !!this.stripe && checkoutTiers.length > 0,
+      checkoutPlans: managesBilling ? checkoutTiers : [],
+      bankTransfer: managesBilling ? this.getBankTransferInstructions(user.email) : null,
       capabilities,
       pendingBankPlan: user.pendingBankPlan ?? null,
       bankActivationCodeExpiresAt: user.bankActivationCodeExpiresAt ?? null,
@@ -719,6 +767,12 @@ export class SubscriptionService {
     }
     if (user.subscriptionExempt) {
       throw new ForbiddenException('This account has full access without a paid subscription.');
+    }
+    const billingState = await this.getMySubscription(userId);
+    if (!billingState.managesBilling) {
+      throw new ForbiddenException(
+        'Your seat is included in your organization’s subscription. Billing changes must be made by the teammate who manages payment.',
+      );
     }
 
     let customerId = sub.stripeCustomerId;
@@ -801,6 +855,12 @@ export class SubscriptionService {
 
   async createPortalSession(userId: string): Promise<{ url: string }> {
     const stripe = this.requireStripe();
+    const billingState = await this.getMySubscription(userId);
+    if (!billingState.managesBilling) {
+      throw new ForbiddenException(
+        'Your seat is included in your organization’s subscription. The Stripe customer portal is only available to the teammate who manages payment.',
+      );
+    }
     const sub = await this.ensureSubscriptionForUser(userId);
     if (!sub.stripeCustomerId) throw new BadRequestException('No Stripe customer found for this account.');
     const session = await stripe.billingPortal.sessions.create({
@@ -942,6 +1002,12 @@ export class SubscriptionService {
    * - TRIAL_RESTART_SECRET is set and x-trial-restart-secret header matches.
    */
   async selfServiceRestartFreshTrial(userId: string, secretHeader?: string): Promise<Subscription> {
+    const billingState = await this.getMySubscription(userId);
+    if (!billingState.managesBilling) {
+      throw new ForbiddenException(
+        'Organization seats cannot restart a personal trial. Use features included with your company plan.',
+      );
+    }
     const nodeEnv = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
     const devRestart = ['true', '1', 'yes'].includes(
       (this.configService.get<string>('ALLOW_DEV_TRIAL_RESTART') || '').toLowerCase(),
