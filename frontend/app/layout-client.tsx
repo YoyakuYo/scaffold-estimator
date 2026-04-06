@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
@@ -13,6 +13,7 @@ import { AppTitlebar } from '@/components/app-titlebar';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -32,7 +33,23 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   });
 
   const isSuperAdmin = profile?.role === 'superadmin';
-  const showNav = mounted && !isPublicPage && !isSuperAdminLogin;
+  const needsBankActivation = !!(profile && profile.role !== 'superadmin' && profile.pendingBankPlan);
+  const bankActivationAllowlist = ['/activate-bank-subscription', '/billing', '/profile'];
+  const onBankActivationAllowlist =
+    bankActivationAllowlist.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  useEffect(() => {
+    if (!mounted || !hasToken || isPublicPage || isSuperAdminLogin) return;
+    if (!needsBankActivation) return;
+    if (onBankActivationAllowlist) return;
+    router.replace('/activate-bank-subscription');
+  }, [mounted, hasToken, isPublicPage, isSuperAdminLogin, needsBankActivation, onBankActivationAllowlist, router]);
+
+  const showNav =
+    mounted &&
+    !isPublicPage &&
+    !isSuperAdminLogin &&
+    pathname !== '/activate-bank-subscription';
 
   return (
     <>

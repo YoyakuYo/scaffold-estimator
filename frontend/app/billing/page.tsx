@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -322,6 +323,18 @@ export default function BillingPage() {
             {t('billing', 'subtitle')}
           </p>
         </div>
+
+        {subscription.pendingBankPlan && (
+          <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-amber-900">{t('bankActivation', 'billingBanner')}</p>
+            <Link
+              href="/activate-bank-subscription"
+              className="text-sm font-semibold text-amber-900 underline hover:no-underline"
+            >
+              {t('bankActivation', 'billingBannerLink')}
+            </Link>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">

@@ -133,7 +133,8 @@ function UsersPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: usersApi.approveUser,
+    mutationFn: ({ id, payload }: { id: string; payload?: import('@/lib/api/users').ApproveUserPayload }) =>
+      usersApi.approveUser(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
@@ -166,10 +167,23 @@ function UsersPage() {
     }
   };
 
-  const handleApprove = (user: UserProfile) => {
+  const handleApproveTrial = (user: UserProfile) => {
     const msg = t('usersAdmin', 'confirmApprove').replace('{email}', user.email);
     if (window.confirm(msg)) {
-      approveMutation.mutate(user.id);
+      approveMutation.mutate({ id: user.id, payload: {} });
+    }
+  };
+
+  const handleApproveBank = (user: UserProfile, tier: 'basic' | 'medium' | 'premium') => {
+    const planWord =
+      tier === 'basic'
+        ? t('billing', 'planTierBasic')
+        : tier === 'medium'
+          ? t('billing', 'planTierMedium')
+          : t('billing', 'planTierPremium');
+    const msg = t('usersAdmin', 'confirmApproveBank').replace('{email}', user.email).replace('{plan}', planWord);
+    if (window.confirm(msg)) {
+      approveMutation.mutate({ id: user.id, payload: { paymentActivation: 'bank_transfer', planTier: tier } });
     }
   };
 
@@ -446,12 +460,36 @@ function UsersPage() {
                               {isSuperAdmin && user.approvalStatus === 'pending' && (
                                 <>
                                   <button
-                                    onClick={() => { handleApprove(user); setOpenMenuId(null); }}
+                                    onClick={() => { handleApproveTrial(user); setOpenMenuId(null); }}
                                     disabled={approveMutation.isPending}
                                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
                                   >
                                     <CheckCircle className="h-4 w-4" />
-                                    {t('usersAdmin', 'approve')}
+                                    {t('usersAdmin', 'approveTrial')}
+                                  </button>
+                                  <button
+                                    onClick={() => { handleApproveBank(user, 'basic'); setOpenMenuId(null); }}
+                                    disabled={approveMutation.isPending}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-800 hover:bg-green-50 disabled:opacity-50"
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                    {t('usersAdmin', 'approveBankBasic')}
+                                  </button>
+                                  <button
+                                    onClick={() => { handleApproveBank(user, 'medium'); setOpenMenuId(null); }}
+                                    disabled={approveMutation.isPending}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-800 hover:bg-green-50 disabled:opacity-50"
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                    {t('usersAdmin', 'approveBankMedium')}
+                                  </button>
+                                  <button
+                                    onClick={() => { handleApproveBank(user, 'premium'); setOpenMenuId(null); }}
+                                    disabled={approveMutation.isPending}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-800 hover:bg-green-50 disabled:opacity-50"
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                    {t('usersAdmin', 'approveBankPremium')}
                                   </button>
                                   <button
                                     onClick={() => { handleReject(user); setOpenMenuId(null); }}

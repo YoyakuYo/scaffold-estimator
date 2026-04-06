@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { Subscription, SubscriptionStatus } from './subscription.entity';
+import { PlanTier, Subscription, SubscriptionStatus } from './subscription.entity';
 import { User } from '../auth/user.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
@@ -246,6 +246,7 @@ export class SubscriptionService {
     if (role === 'superadmin') return true;
     const user = await this.getUserOrFail(userId);
     if (user.subscriptionExempt) return true;
+    if (user.pendingBankPlan) return false;
     const companyId = user.companyId;
     const now = new Date();
 
@@ -307,6 +308,7 @@ export class SubscriptionService {
     if (role === 'superadmin') return SUPERADMIN_CAPABILITIES;
     const user = await this.getUserOrFail(userId);
     if (user.subscriptionExempt) return SUPERADMIN_CAPABILITIES;
+    if (user.pendingBankPlan) return NO_ACCESS_CAPABILITIES;
     const companyId = user.companyId;
 
     if (companyId) {
@@ -416,6 +418,8 @@ export class SubscriptionService {
       checkoutPlans: checkoutTiers,
       bankTransfer: this.getBankTransferInstructions(user.email),
       capabilities,
+      pendingBankPlan: user.pendingBankPlan ?? null,
+      bankActivationCodeExpiresAt: user.bankActivationCodeExpiresAt ?? null,
       seatUsage:
         user.role === 'superadmin' || exempt
           ? undefined
@@ -687,5 +691,90 @@ export class SubscriptionService {
     const { data: saved, error } = await this.supabase.getClient().from('subscriptions').update(mapPayloadToSnake(updates)).eq('id', sub.id).select().single();
     if (error || !saved) throw new BadRequestException('Update failed.');
     return mapRowToCamel<Subscription>(saved as Record<string, unknown>)!;
+  }
+
+  /**
+   * After superadmin bank-transfer approval: subscription must not grant access until code verification.
+   */
+  async ensureInactiveSubscriptionForPendingBank(userId: string): Promise<void> {
+    const user = await this.getUserOrFail(userId);
+    const client = this.supabase.getClient();
+    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).maybeSingle();
+    const inactive = mapPayloadToSnake({
+      plan: 'free_trial' as PlanTier,
+      status: 'expired' as SubscriptionStatus,
+      trialStart: null,
+      trialEnd: null,
+      trialDocumentsUsed: 0,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+    });
+    if (existing) {
+      const { error } = await client.from('subscriptions').update(inactive).eq('user_id', userId);
+      if (error) throw new BadRequestException('Failed to prepare subscription for bank activation.');
+      return;
+    }
+    const ins = mapPayloadToSnake({
+      userId,
+      companyId: user.companyId ?? null,
+      plan: 'free_trial' as PlanTier,
+      status: 'expired' as SubscriptionStatus,
+      trialStart: null,
+      trialEnd: null,
+      trialDocumentsUsed: 0,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+    });
+    const { error: insErr } = await client.from('subscriptions').insert(ins);
+    if (insErr) throw new BadRequestException('Failed to create subscription for bank activation.');
+  }
+
+  /** Apply paid tier after user verifies bank-transfer code (no Stripe). */
+  async activateBankVerifiedPlan(userId: string, planTier: 'basic' | 'medium' | 'premium'): Promise<void> {
+    const user = await this.getUserOrFail(userId);
+    const raw = this.configService.get<string>('BANK_SUBSCRIPTION_PERIOD_DAYS')?.trim() || '365';
+    const periodDays = Math.max(1, parseInt(raw, 10) || 365);
+    const start = new Date();
+    const end = new Date(start.getTime() + periodDays * 86_400_000);
+    const client = this.supabase.getClient();
+    const updates = mapPayloadToSnake({
+      plan: planTier as PlanTier,
+      status: 'active' as SubscriptionStatus,
+      currentPeriodStart: start,
+      currentPeriodEnd: end,
+      trialStart: null,
+      trialEnd: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+    });
+    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).maybeSingle();
+    if (!existing) {
+      const ins = mapPayloadToSnake({
+        userId,
+        companyId: user.companyId ?? null,
+        plan: planTier as PlanTier,
+        status: 'active' as SubscriptionStatus,
+        trialStart: null,
+        trialEnd: null,
+        trialDocumentsUsed: 0,
+        currentPeriodStart: start,
+        currentPeriodEnd: end,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        stripePriceId: null,
+      });
+      const { error: insErr } = await client.from('subscriptions').insert(ins);
+      if (insErr) throw new BadRequestException('Failed to activate subscription.');
+      return;
+    }
+    const { error } = await client.from('subscriptions').update(updates).eq('user_id', userId);
+    if (error) throw new BadRequestException('Failed to activate subscription.');
   }
 }

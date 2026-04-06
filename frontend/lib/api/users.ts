@@ -6,6 +6,8 @@ export type UserRole = 'superadmin' | 'estimator' | 'viewer';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
+export type BankPendingPlanTier = 'basic' | 'medium' | 'premium';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -16,8 +18,16 @@ export interface UserProfile {
   lastName: string | null;
   isActive: boolean;
   approvalStatus: ApprovalStatus;
+  /** After bank-transfer approval: user must verify code before app access. */
+  pendingBankPlan?: BankPendingPlanTier | null;
+  bankActivationCodeExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApproveUserPayload {
+  paymentActivation?: 'standard' | 'bank_transfer';
+  planTier?: BankPendingPlanTier;
 }
 
 export interface CreateUserPayload {
@@ -98,9 +108,9 @@ export const usersApi = {
     return res.data;
   },
 
-  /** Approve a pending user (admin only) */
-  approveUser: async (id: string): Promise<UserProfile> => {
-    const res = await apiClient.post<UserProfile>(`/auth/users/${id}/approve`, {});
+  /** Approve a pending user (superadmin only). Omit payload for standard free trial. */
+  approveUser: async (id: string, payload?: ApproveUserPayload): Promise<UserProfile> => {
+    const res = await apiClient.post<UserProfile>(`/auth/users/${id}/approve`, payload ?? {});
     return res.data;
   },
 

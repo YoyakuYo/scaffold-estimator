@@ -53,6 +53,16 @@ export class User {
   @Column({ name: 'subscription_exempt', default: false })
   subscriptionExempt: boolean;
 
+  /** After bank-transfer approval: tier to apply once user verifies code. */
+  @Column({ name: 'pending_bank_plan', type: 'text', nullable: true })
+  pendingBankPlan: 'basic' | 'medium' | 'premium' | null;
+
+  @Column({ name: 'bank_activation_code_hash', type: 'text', nullable: true })
+  bankActivationCodeHash: string | null;
+
+  @Column({ name: 'bank_activation_code_expires_at', type: 'timestamptz', nullable: true })
+  bankActivationCodeExpiresAt: Date | null;
+
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
   lastActiveAt: Date | null;
 

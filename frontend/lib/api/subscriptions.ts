@@ -63,6 +63,9 @@ export interface SubscriptionInfo {
   /** Company-wide feature gates from paid/trial plan (from API). */
   capabilities?: PlanCapabilities;
   seatUsage?: { used: number; limit: number };
+  /** Set while waiting for bank-transfer activation code entry. */
+  pendingBankPlan?: 'basic' | 'medium' | 'premium' | null;
+  bankActivationCodeExpiresAt?: string | null;
 }
 
 export interface PlanCapabilities {

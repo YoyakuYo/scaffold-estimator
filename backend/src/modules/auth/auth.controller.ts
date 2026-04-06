@@ -21,6 +21,8 @@ import { RegisterDto } from './dto/register.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ChangePasswordDto, AdminResetPasswordDto } from './dto/update-user.dto';
 import { ForgotPasswordDto, ResetPasswordWithTokenDto } from './dto/forgot-password.dto';
+import { ApproveUserDto } from './dto/approve-user.dto';
+import { VerifyBankActivationDto } from './dto/verify-bank-activation.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -99,6 +101,13 @@ export class AuthController {
   @Post('change-password')
   async changePassword(@CurrentUser() user: any, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(user.id, dto);
+  }
+
+  /** After bank-transfer approval: enter one-time code to unlock subscription (no SubscriptionActiveGuard). */
+  @UseGuards(JwtAuthGuard)
+  @Post('verify-bank-activation')
+  async verifyBankActivation(@CurrentUser() user: any, @Body() dto: VerifyBankActivationDto) {
+    return this.authService.verifyBankActivation(user.id, dto.code);
   }
 
   // ─── Heartbeat (presence) ─────────────────────────────────
@@ -185,8 +194,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin')
   @Post('users/:id/approve')
-  async approveUser(@Param('id') id: string) {
-    return this.authService.approveUser(id);
+  async approveUser(@Param('id') id: string, @Body() dto: ApproveUserDto) {
+    return this.authService.approveUser(id, dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

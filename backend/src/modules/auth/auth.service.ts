@@ -17,6 +17,7 @@ import { LoginHistory } from './login-history.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ApproveUserDto } from './dto/approve-user.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -284,7 +285,7 @@ export class AuthService {
     }
     const user = mapRowToCamel<User>(saved as Record<string, unknown>);
     if (user) await this.ensureTrialSubscriptionForUser(user);
-    const { passwordHash: _pw, ...result } = user || saved;
+    const { passwordHash: _pw, bankActivationCodeHash: _bah, ...result } = user || saved;
     return result;
   }
 
@@ -296,7 +297,7 @@ export class AuthService {
     const users = (rows || []).map((r: Record<string, unknown>) => {
       const u = mapRowToCamel<User & { companies?: { name: string } | null }>(r);
       if (!u) return null;
-      const { passwordHash, companies, ...rest } = u;
+      const { passwordHash, bankActivationCodeHash: _bah, companies, ...rest } = u;
       const out: any = rest;
       if (companies && typeof companies === 'object' && 'name' in companies) out.companyName = (companies as { name: string }).name;
       return out;
@@ -316,7 +317,7 @@ export class AuthService {
     if (error || !row) throw new NotFoundException('ユーザーが見つかりません。');
     const u = mapRowToCamel<User & { companies?: { name: string } | null }>(row as unknown as Record<string, unknown>);
     if (!u) throw new NotFoundException('ユーザーが見つかりません。');
-    const { passwordHash, companies, ...rest } = u;
+    const { passwordHash, bankActivationCodeHash: _bah, companies, ...rest } = u;
     const result: any = rest;
     if (companies && typeof companies === 'object' && 'name' in companies) result.companyName = (companies as { name: string }).name;
     return result;
@@ -343,7 +344,7 @@ export class AuthService {
     const { data: saved, error } = await this.supabase.getClient().from('users').update(snake).eq('id', userId).select().single();
     if (error || !saved) throw new BadRequestException('Update failed.');
     const out = mapRowToCamel<User>(saved as Record<string, unknown>);
-    const { passwordHash: _p, ...result } = out || (saved as User);
+    const { passwordHash: _p, bankActivationCodeHash: _h, ...result } = out || (saved as User);
     return result;
   }
 
@@ -373,6 +374,24 @@ export class AuthService {
 
   private hashPasswordResetToken(token: string): string {
     return createHash('sha256').update(token, 'utf8').digest('hex');
+  }
+
+  private hashBankActivationCode(userId: string, code: string): string {
+    const pepper =
+      this.configService.get<string>('BANK_ACTIVATION_CODE_PEPPER')?.trim() || 'set-bank-activation-pepper-in-env';
+    const normalized = code.trim().toUpperCase().replace(/\s+/g, '');
+    return createHash('sha256').update(`${pepper}:${userId}:${normalized}`, 'utf8').digest('hex');
+  }
+
+  /** One-time code; unique per approval (not a shared secret per plan). */
+  private generateBankActivationCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const bytes = randomBytes(12);
+    let out = '';
+    for (let i = 0; i < 12; i++) {
+      out += chars[bytes[i]! % chars.length];
+    }
+    return out;
   }
 
   private async resolveUserIdByEmail(email: string): Promise<string | null> {
@@ -495,22 +514,96 @@ export class AuthService {
     return this.getUser(userId, { withCompany: true });
   }
 
-  async approveUser(userId: string): Promise<any> {
+  async approveUser(userId: string, dto?: ApproveUserDto): Promise<any> {
     const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
     if (!row) throw new NotFoundException('ユーザーが見つかりません。');
     const user = mapRowToCamel<User>(row as Record<string, unknown>);
     if (!user) throw new NotFoundException('ユーザーが見つかりません。');
     if (user.approvalStatus === 'approved') throw new BadRequestException('このユーザーは既に承認されています。');
 
-    const snake = mapPayloadToSnake({ approvalStatus: 'approved' });
+    const mode = dto?.paymentActivation ?? 'standard';
+    if (mode === 'bank_transfer') {
+      if (!dto?.planTier) {
+        throw new BadRequestException(
+          'planTier is required when paymentActivation is bank_transfer (basic, medium, or premium).',
+        );
+      }
+      await this.subscriptionService.ensureInactiveSubscriptionForPendingBank(userId);
+      const code = this.generateBankActivationCode();
+      const hash = this.hashBankActivationCode(userId, code);
+      const ttlRaw = this.configService.get<string>('BANK_ACTIVATION_CODE_TTL_HOURS')?.trim() || '168';
+      const ttlHours = Math.max(1, parseInt(ttlRaw, 10) || 168);
+      const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+      const snake = mapPayloadToSnake({
+        approvalStatus: 'approved' as const,
+        pendingBankPlan: dto.planTier,
+        bankActivationCodeHash: hash,
+        bankActivationCodeExpiresAt: expiresAt.toISOString(),
+      });
+      const { data: saved, error } = await this.supabase.getClient().from('users').update(snake).eq('id', userId).select().single();
+      if (error || !saved) throw new BadRequestException('Update failed.');
+      const updated = mapRowToCamel<User>(saved as Record<string, unknown>);
+      const frontendUrl = (this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001').replace(/\/$/, '');
+      const activateUrl = `${frontendUrl}/activate-bank-subscription`;
+      await this.notificationsService
+        .create(userId, 'system', 'Enter your subscription code', {
+          body: `Plan: ${dto.planTier}. Your code: ${code}. Open ${activateUrl} to confirm.`,
+          link: '/activate-bank-subscription',
+        })
+        .catch(() => {});
+      await this.mailerService
+        .sendBankTransferActivationEmail(user.email, code, dto.planTier, activateUrl)
+        .catch(() => {});
+      const { passwordHash: _p, bankActivationCodeHash: _h, ...result } = updated || (saved as User);
+      return result;
+    }
+
+    const snake = mapPayloadToSnake({
+      approvalStatus: 'approved' as const,
+      pendingBankPlan: null,
+      bankActivationCodeHash: null,
+      bankActivationCodeExpiresAt: null,
+    });
     const { data: saved, error } = await this.supabase.getClient().from('users').update(snake).eq('id', userId).select().single();
     if (error || !saved) throw new BadRequestException('Update failed.');
     const updated = mapRowToCamel<User>(saved as Record<string, unknown>);
     if (updated) await this.ensureTrialSubscriptionForUser(updated);
-    await this.notificationsService.create(userId, 'approval', 'Account approved', { body: 'Your account has been approved. You can now log in.', link: '/login' }).catch(() => {});
+    await this.notificationsService
+      .create(userId, 'approval', 'Account approved', { body: 'Your account has been approved. You can now log in.', link: '/login' })
+      .catch(() => {});
     await this.mailerService.sendApprovalEmail(user.email).catch(() => {});
-    const { passwordHash, ...result } = updated || (saved as User);
+    const { passwordHash: _p, bankActivationCodeHash: _h, ...result } = updated || (saved as User);
     return result;
+  }
+
+  async verifyBankActivation(userId: string, code: string): Promise<{ ok: true; plan: string }> {
+    const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
+    if (!row) throw new NotFoundException('User not found');
+    const user = mapRowToCamel<User>(row as Record<string, unknown>);
+    if (!user?.pendingBankPlan || !user.bankActivationCodeHash) {
+      throw new BadRequestException('No bank transfer activation is pending for this account.');
+    }
+    if (user.bankActivationCodeExpiresAt && new Date(user.bankActivationCodeExpiresAt) < new Date()) {
+      throw new BadRequestException('This activation code has expired. Contact support for a new code.');
+    }
+    const hash = this.hashBankActivationCode(userId, code);
+    if (hash !== user.bankActivationCodeHash) {
+      throw new BadRequestException('Invalid activation code.');
+    }
+    const planTier = user.pendingBankPlan;
+    await this.supabase
+      .getClient()
+      .from('users')
+      .update(
+        mapPayloadToSnake({
+          pendingBankPlan: null,
+          bankActivationCodeHash: null,
+          bankActivationCodeExpiresAt: null,
+        }),
+      )
+      .eq('id', userId);
+    await this.subscriptionService.activateBankVerifiedPlan(userId, planTier);
+    return { ok: true, plan: planTier };
   }
 
   async rejectUser(userId: string): Promise<any> {

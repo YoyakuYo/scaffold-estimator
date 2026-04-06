@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { usersApi } from '@/lib/api/users';
+import { usersApi, type UserProfile } from '@/lib/api/users';
 import { useI18n } from '@/lib/i18n';
 import Link from 'next/link';
 import {
@@ -26,6 +26,7 @@ export function SuperAdminDashboardContent() {
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [approvalModeByUser, setApprovalModeByUser] = useState<Record<string, string>>({});
 
   const { data: currentUser } = useQuery({
     queryKey: ['profile'],
@@ -56,7 +57,8 @@ export function SuperAdminDashboardContent() {
   const pendingUsers = allUsers?.filter((u) => u.approvalStatus === 'pending') ?? [];
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => usersApi.approveUser(id),
+    mutationFn: ({ id, payload }: { id: string; payload?: import('@/lib/api/users').ApproveUserPayload }) =>
+      usersApi.approveUser(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
@@ -64,6 +66,26 @@ export function SuperAdminDashboardContent() {
       setApprovingId(null);
     },
   });
+
+  const runApprove = (u: UserProfile) => {
+    const mode = approvalModeByUser[u.id] ?? 'trial';
+    if (mode === 'trial') {
+      setApprovingId(u.id);
+      approveMutation.mutate({ id: u.id, payload: {} });
+      return;
+    }
+    const tier = mode.replace('bank_', '') as 'basic' | 'medium' | 'premium';
+    const planWord =
+      tier === 'basic'
+        ? t('billing', 'planTierBasic')
+        : tier === 'medium'
+          ? t('billing', 'planTierMedium')
+          : t('billing', 'planTierPremium');
+    const msg = t('adminDashboard', 'confirmApproveBank').replace('{email}', u.email).replace('{plan}', planWord);
+    if (!window.confirm(msg)) return;
+    setApprovingId(u.id);
+    approveMutation.mutate({ id: u.id, payload: { paymentActivation: 'bank_transfer', planTier: tier } });
+  };
   const rejectMutation = useMutation({
     mutationFn: (id: string) => usersApi.rejectUser(id),
     onSuccess: () => {
@@ -205,7 +227,7 @@ export function SuperAdminDashboardContent() {
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {pendingUsers.slice(0, 10).map((u) => (
-                    <li key={u.id} className="px-6 py-3 flex items-center justify-between gap-2">
+                    <li key={u.id} className="px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-gray-900 truncate">
                           {u.firstName || u.lastName
@@ -213,13 +235,25 @@ export function SuperAdminDashboardContent() {
                             : u.email}
                         </p>
                         <p className="text-sm text-gray-500 truncate">{u.email}</p>
+                        <label className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                          <span className="shrink-0">{t('adminDashboard', 'approvalModeLabel')}</span>
+                          <select
+                            value={approvalModeByUser[u.id] ?? 'trial'}
+                            onChange={(e) =>
+                              setApprovalModeByUser((m) => ({ ...m, [u.id]: e.target.value }))
+                            }
+                            className="border border-gray-200 rounded-md px-2 py-1 text-gray-800 max-w-[200px]"
+                          >
+                            <option value="trial">{t('adminDashboard', 'approvalModeTrial')}</option>
+                            <option value="bank_basic">{t('adminDashboard', 'approvalModeBankBasic')}</option>
+                            <option value="bank_medium">{t('adminDashboard', 'approvalModeBankMedium')}</option>
+                            <option value="bank_premium">{t('adminDashboard', 'approvalModeBankPremium')}</option>
+                          </select>
+                        </label>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
-                          onClick={() => {
-                            setApprovingId(u.id);
-                            approveMutation.mutate(u.id);
-                          }}
+                          onClick={() => runApprove(u)}
                           disabled={approvingId === u.id}
                           className="p-2 rounded-lg text-green-600 hover:bg-green-50 disabled:opacity-50"
                           title={t('adminDashboard', 'approve')}

@@ -226,6 +226,28 @@ export class MailerService implements OnModuleInit {
     await this.send(to, subject, text);
   }
 
+  /** Bank transfer: plaintext code emailed once; not returned in approve API response. */
+  async sendBankTransferActivationEmail(
+    to: string,
+    code: string,
+    planTier: string,
+    activateUrl: string,
+  ): Promise<void> {
+    const subject = 'Your subscription activation code';
+    const text = [
+      'Your account is approved.',
+      `Selected plan: ${planTier}.`,
+      'Enter this activation code in the app to unlock your subscription:',
+      '',
+      code,
+      '',
+      `Activation page: ${activateUrl}`,
+      '',
+      'If you did not register or pay by bank transfer, you can ignore this email.',
+    ].join('\n');
+    await this.send(to, subject, text);
+  }
+
   async sendRejectionEmail(to: string): Promise<void> {
     const subject = 'Account request update';
     const text = 'Your account request was not approved. Please contact support if you have questions.';

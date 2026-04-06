@@ -108,13 +108,34 @@ function AdminDashboard() {
   const unreadConvs = conversations?.filter((c) => (c.unreadCount ?? 0) > 0) ?? [];
   const totalUnread = unreadConvs.reduce((s, c) => s + (c.unreadCount ?? 0), 0);
 
+  const [approvalModeByUser, setApprovalModeByUser] = useState<Record<string, string>>({});
+
   const approveMutation = useMutation({
-    mutationFn: usersApi.approveUser,
+    mutationFn: ({ id, payload }: { id: string; payload?: import('@/lib/api/users').ApproveUserPayload }) =>
+      usersApi.approveUser(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['platform-stats'] });
     },
   });
+
+  const runApprove = (u: UserProfile) => {
+    const mode = approvalModeByUser[u.id] ?? 'trial';
+    if (mode === 'trial') {
+      approveMutation.mutate({ id: u.id, payload: {} });
+      return;
+    }
+    const tier = mode.replace('bank_', '') as 'basic' | 'medium' | 'premium';
+    const planWord =
+      tier === 'basic'
+        ? t('billing', 'planTierBasic')
+        : tier === 'medium'
+          ? t('billing', 'planTierMedium')
+          : t('billing', 'planTierPremium');
+    const msg = t('adminDashboard', 'confirmApproveBank').replace('{email}', u.email).replace('{plan}', planWord);
+    if (!window.confirm(msg)) return;
+    approveMutation.mutate({ id: u.id, payload: { paymentActivation: 'bank_transfer', planTier: tier } });
+  };
   const rejectMutation = useMutation({
     mutationFn: usersApi.rejectUser,
     onSuccess: () => {
@@ -194,16 +215,31 @@ function AdminDashboard() {
                 </div>
                 <div className="divide-y divide-gray-100">
                   {pendingUsers.slice(0, 5).map((u) => (
-                    <div key={u.id} className="px-5 py-3 flex items-center justify-between">
+                    <div key={u.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-slate-900 truncate">
                           {[u.lastName, u.firstName].filter(Boolean).join(' ') || u.email}
                         </p>
                         <p className="text-xs text-slate-500">{u.email}</p>
+                        <label className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                          <span className="shrink-0">{t('adminDashboard', 'approvalModeLabel')}</span>
+                          <select
+                            value={approvalModeByUser[u.id] ?? 'trial'}
+                            onChange={(e) =>
+                              setApprovalModeByUser((m) => ({ ...m, [u.id]: e.target.value }))
+                            }
+                            className="border border-slate-200 rounded-md px-2 py-1 text-slate-800 max-w-[200px] text-xs"
+                          >
+                            <option value="trial">{t('adminDashboard', 'approvalModeTrial')}</option>
+                            <option value="bank_basic">{t('adminDashboard', 'approvalModeBankBasic')}</option>
+                            <option value="bank_medium">{t('adminDashboard', 'approvalModeBankMedium')}</option>
+                            <option value="bank_premium">{t('adminDashboard', 'approvalModeBankPremium')}</option>
+                          </select>
+                        </label>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
-                          onClick={() => approveMutation.mutate(u.id)}
+                          onClick={() => runApprove(u)}
                           disabled={approveMutation.isPending}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                         >

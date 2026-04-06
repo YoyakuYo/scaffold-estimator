@@ -1974,6 +1974,38 @@ export const translations = {
     install: { ja: 'インストール', en: 'Install', fr: 'Installer' },
   },
 
+  // ─── Bank subscription activation (after wire transfer) ────────
+  bankActivation: {
+    title: { ja: 'サブスクリプション確認', en: 'Confirm your subscription', fr: 'Confirmer votre abonnement' },
+    subtitle: {
+      ja: '管理者が入金を確認したあとに送られたコードを入力してプランを有効にしてください。',
+      en: 'Enter the activation code from your email to unlock the plan your administrator assigned after confirming your bank transfer.',
+      fr: "Saisissez le code reçu par e-mail pour activer le forfait attribué après confirmation de votre virement.",
+    },
+    pendingPlan: { ja: '割当プラン: {plan}', en: 'Assigned plan: {plan}', fr: 'Forfait attribué : {plan}' },
+    codeLabel: { ja: '確認コード', en: 'Activation code', fr: "Code d'activation" },
+    codePlaceholder: { ja: 'コードを入力', en: 'Enter code', fr: 'Saisir le code' },
+    submit: { ja: '確認して有効化', en: 'Confirm and activate', fr: 'Confirmer et activer' },
+    submitting: { ja: '処理中…', en: 'Verifying…', fr: 'Vérification…' },
+    success: { ja: '有効化しました。プラン: {plan}', en: 'Activated. Plan: {plan}', fr: 'Activé. Forfait : {plan}' },
+    goToBilling: { ja: '請求ページへ', en: 'Go to Billing', fr: 'Aller à la facturation' },
+    goToDashboard: { ja: 'ダッシュボードへ', en: 'Go to dashboard', fr: 'Tableau de bord' },
+    logout: { ja: 'ログアウト', en: 'Log out', fr: 'Déconnexion' },
+    expiresHint: { ja: 'コードの有効期限: {date}', en: 'Code expires: {date}', fr: 'Expiration du code : {date}' },
+    noPending: {
+      ja: '入力が必要な確認はありません。ダッシュボードへ進めます。',
+      en: 'No activation is required. You can go to the dashboard.',
+      fr: "Aucune activation requise. Vous pouvez accéder au tableau de bord.",
+    },
+    billingBanner: {
+      ja: '銀行振込の確認コードを入力してプランを有効にしてください。',
+      en: 'Enter your bank-transfer activation code to enable your plan.',
+      fr: "Saisissez le code d'activation du virement pour activer votre forfait.",
+    },
+    billingBannerLink: { ja: 'コードを入力', en: 'Enter code', fr: 'Saisir le code' },
+    errorGeneric: { ja: '確認に失敗しました。コードをご確認ください。', en: 'Verification failed. Check your code.', fr: 'Échec de la vérification. Vérifiez le code.' },
+  },
+
   // ─── Super Admin Navigation ────────────────────────────────
   superadminNav: {
     dashboard: { ja: 'ダッシュボード', en: 'Dashboard', fr: 'Tableau de bord' },
@@ -2006,6 +2038,16 @@ export const translations = {
     subscribers: { ja: '購読者', en: 'Subscribers', fr: 'Abonnés' },
     totalCalculations: { ja: '総計算数', en: 'Total Calculations', fr: 'Nombre total de calculs' },
     approve: { ja: '承認', en: 'Approve', fr: 'Approuver' },
+    approvalModeLabel: { ja: '承認の種類', en: 'Approval type', fr: "Type d'approbation" },
+    approvalModeTrial: { ja: '無料トライアル', en: 'Free trial', fr: 'Essai gratuit' },
+    approvalModeBankBasic: { ja: '銀行振込 — Basic', en: 'Bank transfer — Basic', fr: 'Virement — Basic' },
+    approvalModeBankMedium: { ja: '銀行振込 — Medium', en: 'Bank transfer — Medium', fr: 'Virement — Medium' },
+    approvalModeBankPremium: { ja: '銀行振込 — Premium', en: 'Bank transfer — Premium', fr: 'Virement — Premium' },
+    confirmApproveBank: {
+      ja: '{email} を銀行振込プラン（{plan}）で承認しますか？ユーザーに確認コードが送信されます。',
+      en: 'Approve {email} for bank-transfer plan ({plan})? A one-time code will be emailed.',
+      fr: 'Approuver {email} pour le forfait par virement ({plan}) ? Un code unique sera envoyé par e-mail.',
+    },
     reject: { ja: '拒否', en: 'Reject', fr: 'Refuser' },
     openInbox: { ja: '受信箱を開く', en: 'Open Inbox', fr: 'Ouvrir la boîte de réception' },
     noConversations: { ja: 'まだ会話はありません', en: 'No conversations yet', fr: 'Aucune conversation pour le moment' },
@@ -2067,6 +2109,15 @@ export const translations = {
     active: { ja: '有効', en: 'Active', fr: 'Actif' },
     inactive: { ja: '無効', en: 'Inactive', fr: 'Inactif' },
     approve: { ja: '承認', en: 'Approve', fr: 'Approuver' },
+    approveTrial: { ja: '承認（トライアル）', en: 'Approve (trial)', fr: 'Approuver (essai)' },
+    approveBankBasic: { ja: '承認（銀行 / Basic）', en: 'Approve (bank / Basic)', fr: 'Approuver (virement / Basic)' },
+    approveBankMedium: { ja: '承認（銀行 / Medium）', en: 'Approve (bank / Medium)', fr: 'Approuver (virement / Medium)' },
+    approveBankPremium: { ja: '承認（銀行 / Premium）', en: 'Approve (bank / Premium)', fr: 'Approuver (virement / Premium)' },
+    confirmApproveBank: {
+      ja: '{email} を銀行振込（{plan}）で承認しますか？確認コードが送信されます。',
+      en: 'Approve {email} for bank transfer ({plan})? A code will be sent.',
+      fr: 'Approuver {email} par virement ({plan}) ? Un code sera envoyé.',
+    },
     reject: { ja: '拒否', en: 'Reject', fr: 'Refuser' },
     edit: { ja: '編集', en: 'Edit', fr: 'Modifier' },
     resetPassword: { ja: 'パスワードリセット', en: 'Reset Password', fr: 'Réinitialiser le mot de passe' },

@@ -138,6 +138,13 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # If production API is not redeployed yet, you can set the same fields on the
 # frontend host as NEXT_PUBLIC_BANK_TRANSFER_* (see frontend/.env.example) and
 # redeploy the Next.js app; /billing will show 銀行振込 from the client env.
+#
+# After superadmin approves a pending user with “bank transfer + Basic/Medium/Premium”,
+# a one-time activation code is emailed (and shown in-app). Hashing uses:
+# BANK_ACTIVATION_CODE_PEPPER=change-to-a-long-random-secret
+# Optional:
+# BANK_ACTIVATION_CODE_TTL_HOURS=168
+# BANK_SUBSCRIPTION_PERIOD_DAYS=365
 
 # ============================================
 # STRIPE (optional — card checkout + webhooks)

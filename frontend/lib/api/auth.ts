@@ -105,4 +105,9 @@ export const authApi = {
     const response = await apiClient.post<{ success: boolean }>('/auth/reset-password', payload);
     return response.data;
   },
+
+  verifyBankActivation: async (code: string): Promise<{ ok: true; plan: string }> => {
+    const response = await apiClient.post<{ ok: true; plan: string }>('/auth/verify-bank-activation', { code });
+    return response.data;
+  },
 };
