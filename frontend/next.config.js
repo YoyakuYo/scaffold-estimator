@@ -36,6 +36,27 @@ const nextConfig = {
     }
     return config;
   },
+  /**
+   * When the browser uses same-origin API URLs (`/api/v1/...`, production default if
+   * NEXT_PUBLIC_BACKEND_URL is unset), Next.js must proxy to the NestJS host.
+   * Set BACKEND_PROXY_TARGET (or INTERNAL_API_URL) on the frontend host, e.g.:
+   *   http://localhost:3000  or  https://your-api.onrender.com
+   * Do not include /api/v1 — it is appended automatically.
+   */
+  async rewrites() {
+    const raw = process.env.BACKEND_PROXY_TARGET || process.env.INTERNAL_API_URL;
+    if (!raw) {
+      return [];
+    }
+    const base = String(raw).replace(/\/$/, '');
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${base}/api/v1/:path*`,
+      },
+    ];
+  },
+
   // PWA headers for service worker and manifest
   async headers() {
     return [

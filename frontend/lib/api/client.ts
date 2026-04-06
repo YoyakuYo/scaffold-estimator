@@ -1,8 +1,9 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-// Set NEXT_PUBLIC_BACKEND_URL to your backend URL when deployed separately (e.g. https://your-api.onrender.com/api/v1).
-// If unset in production, we use relative /api/v1 (same-origin; use a reverse proxy to your backend).
+// Set NEXT_PUBLIC_BACKEND_URL to your API base including /api/v1 (e.g. https://your-api.onrender.com/api/v1).
+// If unset in production, the browser uses same-origin /api/v1 — set BACKEND_PROXY_TARGET on the Next host (see next.config.js)
+// or set NEXT_PUBLIC_BACKEND_URL at build time so requests reach Nest.
 //
 // Important: Next.js replaces process.env.NEXT_PUBLIC_* at **build** time in the browser bundle.
 // Changing the var on the host without a new frontend build leaves the old URL in the deployed JS.

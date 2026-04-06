@@ -26,7 +26,7 @@ export default function AdminMessagesPage() {
   });
   const isAdmin = currentUser?.role === 'superadmin';
 
-  const { data: conversations, isLoading: convLoading } = useQuery({
+  const { data: conversations, isLoading: convLoading, isError: convQueryError, error: convLoadError } = useQuery({
     queryKey: ['admin-conversations'],
     queryFn: messagesApi.listConversations,
     enabled: isAdmin,
@@ -35,7 +35,12 @@ export default function AdminMessagesPage() {
     refetchIntervalInBackground: false,
   });
 
-  const { data: messages, isLoading: msgLoading } = useQuery({
+  const {
+    data: messages,
+    isLoading: msgLoading,
+    isError: msgQueryError,
+    error: msgLoadError,
+  } = useQuery({
     queryKey: ['admin-conversation-messages', selectedConversationId],
     queryFn: () => messagesApi.getConversationMessages(selectedConversationId!),
     enabled: !!selectedConversationId && isAdmin,
@@ -88,6 +93,15 @@ export default function AdminMessagesPage() {
 
   const selectedConv = conversations?.find((c) => c.id === selectedConversationId);
 
+  const axiosMsg = (err: unknown) => {
+    if (!err || typeof err !== 'object') return '';
+    const a = err as { response?: { data?: { message?: string | string[] } }; message?: string };
+    const m = a.response?.data?.message;
+    if (typeof m === 'string') return m;
+    if (Array.isArray(m)) return m.join(', ');
+    return a.message || '';
+  };
+
   const handleReply = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedConversationId || !replyBody.trim() || replyMutation.isPending) return;
@@ -139,6 +153,29 @@ export default function AdminMessagesPage() {
             {t('messaging', 'title')}
           </h1>
         </div>
+
+        {convQueryError ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-medium">{t('messaging', 'actionFailed')}</p>
+            <p className="mt-1 opacity-90">{axiosMsg(convLoadError)}</p>
+          </div>
+        ) : null}
+
+        {msgQueryError && selectedConversationId ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-medium">{t('messaging', 'actionFailed')}</p>
+            <p className="mt-1 opacity-90">{axiosMsg(msgLoadError)}</p>
+          </div>
+        ) : null}
+
+        {(replyMutation.isError || newConvMutation.isError) && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-medium">{t('messaging', 'actionFailed')}</p>
+            <p className="mt-1 opacity-90">
+              {axiosMsg(replyMutation.isError ? replyMutation.error : newConvMutation.error)}
+            </p>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex" style={{ minHeight: '500px' }}>
           {/* Conversation list */}

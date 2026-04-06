@@ -19,7 +19,7 @@ export default function SupportPage() {
     retry: false,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error: loadError } = useQuery({
     queryKey: ['messages-me'],
     queryFn: messagesApi.getMyConversation,
     refetchInterval: 10_000,
@@ -27,6 +27,11 @@ export default function SupportPage() {
     refetchIntervalInBackground: false,
   });
   const messages = data?.messages ?? [];
+
+  const loadErrText =
+    loadError && typeof loadError === 'object' && 'message' in loadError
+      ? String((loadError as Error).message)
+      : '';
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => messagesApi.sendMessage(text),
@@ -68,6 +73,24 @@ export default function SupportPage() {
         <p className="text-gray-500 mb-6">
           {t('supportPage', 'subtitle')}
         </p>
+
+        {isError ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-medium">{t('supportPage', 'loadFailed')}</p>
+            {loadErrText ? <p className="mt-1 opacity-90">{loadErrText}</p> : null}
+          </div>
+        ) : null}
+
+        {sendMutation.isError ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-medium">{t('supportPage', 'sendFailed')}</p>
+            <p className="mt-1 opacity-90">
+              {(sendMutation.error as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+                ?.message ||
+                (sendMutation.error instanceof Error ? sendMutation.error.message : '')}
+            </p>
+          </div>
+        ) : null}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col" style={{ minHeight: '400px' }}>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
