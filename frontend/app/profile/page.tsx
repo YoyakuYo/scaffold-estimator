@@ -52,9 +52,11 @@ export default function ProfilePage() {
   const showTeamInvites =
     !!profile &&
     profile.role !== 'superadmin' &&
+    profile.isCompanySeat !== true &&
     !!profile.companyId &&
     !!subscription &&
     subscription.hasAccess &&
+    subscription.companySeat !== true &&
     subscription.managesBilling !== false;
 
   const { data: branchOptions = [] } = useQuery({
@@ -139,7 +141,9 @@ export default function ProfilePage() {
   }
 
   const hidePersonalBillingOnProfile =
-    profile?.isCompanySeat === true || subscription?.managesBilling === false;
+    profile?.isCompanySeat === true ||
+    subscription?.companySeat === true ||
+    subscription?.managesBilling === false;
 
   return (
     <div className="min-h-screen bg-gray-50">

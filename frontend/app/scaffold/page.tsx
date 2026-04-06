@@ -12,6 +12,7 @@ import {
   type EdgeHashiraLabeling,
 } from '@/lib/api/scaffold-configs';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
+import { usersApi } from '@/lib/api/users';
 import { useI18n } from '@/lib/i18n';
 import { PerimeterModel } from '@/lib/perimeter-model';
 import {
@@ -1470,18 +1471,29 @@ function ScaffoldPageContent() {
   });
   const subscriptionMessage = rulesError && (rulesErrorDetail as Error)?.message;
 
+  const { data: profileForPlan } = useQuery({
+    queryKey: ['profile'],
+    queryFn: usersApi.getProfile,
+    staleTime: 60_000,
+    retry: false,
+  });
   const { data: subscriptionInfo } = useQuery({
     queryKey: ['my-subscription'],
     queryFn: subscriptionsApi.getMine,
     staleTime: 60_000,
     retry: false,
   });
+  /** Invited org seats must inherit company entitlements; do not gate on trial/basic caps from a stale row. */
+  const isOrgSeatOnScaffold =
+    profileForPlan?.isCompanySeat === true ||
+    subscriptionInfo?.companySeat === true ||
+    subscriptionInfo?.managesBilling === false;
   const caps = subscriptionInfo?.capabilities;
-  const planGatesRelaxed = caps === undefined;
-  const canAi = planGatesRelaxed || caps.aiExtract === true;
-  const canCad = planGatesRelaxed || caps.cadDraw === true;
-  const canFile = planGatesRelaxed || caps.fileUpload === true;
-  const canQuick = planGatesRelaxed || caps.quickShape === true;
+  const planGatesRelaxed = caps === undefined || isOrgSeatOnScaffold;
+  const canAi = planGatesRelaxed || caps?.aiExtract === true;
+  const canCad = planGatesRelaxed || caps?.cadDraw === true;
+  const canFile = planGatesRelaxed || caps?.fileUpload === true;
+  const canQuick = planGatesRelaxed || caps?.quickShape === true;
 
   useEffect(() => {
     if (planGatesRelaxed) return;
@@ -1504,6 +1516,7 @@ function ScaffoldPageContent() {
     }
   }, [
     planGatesRelaxed,
+    isOrgSeatOnScaffold,
     canAi,
     canCad,
     canFile,
@@ -3046,6 +3059,7 @@ function ScaffoldPageContent() {
         </div>
       )}
       {showDrawingUpload &&
+        !isOrgSeatOnScaffold &&
         subscriptionInfo?.status === 'trialing' &&
         subscriptionInfo?.plan === 'free_trial' &&
         subscriptionInfo.trialFileUploads && (
