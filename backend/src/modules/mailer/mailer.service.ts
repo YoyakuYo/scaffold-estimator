@@ -1,6 +1,14 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
  * Email via Brevo HTTP API, SendGrid HTTP API, or SMTP (nodemailer).
  *
@@ -224,6 +232,35 @@ export class MailerService implements OnModuleInit {
     const subject = 'Account approved';
     const text = 'Your account has been approved. You can now log in to the platform.';
     await this.send(to, subject, text);
+  }
+
+  async sendTeamInviteEmail(
+    to: string,
+    joinUrl: string,
+    companyName: string,
+    branchName: string,
+    role: string,
+  ): Promise<void> {
+    const subject = `You're invited to join ${companyName}`;
+    const branchLine = branchName ? `Branch: ${branchName}\n` : '';
+    const text = [
+      `You have been invited to join ${companyName} on the scaffold estimation platform.`,
+      branchLine,
+      `Role: ${role}`,
+      '',
+      'Open this link to create your account or sign in and accept:',
+      joinUrl,
+      '',
+      'If you did not expect this email, you can ignore it.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const html = `<p>You have been invited to join <strong>${escapeHtml(companyName)}</strong>.</p>
+${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
+<p>Role: <strong>${escapeHtml(role)}</strong></p>
+<p><a href="${escapeHtml(joinUrl)}">Accept invitation</a></p>
+<p style="color:#666;font-size:12px;">If the button does not work, copy this URL:<br/>${escapeHtml(joinUrl)}</p>`;
+    await this.send(to, subject, text, html);
   }
 
   /** Bank transfer: plaintext code emailed once; not returned in approve API response. */

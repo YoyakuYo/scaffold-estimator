@@ -6,9 +6,12 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
+  Req,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -16,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
+import { TeamInviteService } from './team-invite.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -23,10 +27,15 @@ import { UpdateUserDto, ChangePasswordDto, AdminResetPasswordDto } from './dto/u
 import { ForgotPasswordDto, ResetPasswordWithTokenDto } from './dto/forgot-password.dto';
 import { ApproveUserDto } from './dto/approve-user.dto';
 import { VerifyBankActivationDto } from './dto/verify-bank-activation.dto';
+import { CreateTeamInviteDto } from './dto/create-team-invite.dto';
+import { AcceptTeamInviteSignupDto, AcceptTeamInviteSessionDto } from './dto/accept-team-invite.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private teamInviteService: TeamInviteService,
+  ) {}
 
   // ─── Authentication ───────────────────────────────────────
 
@@ -64,6 +73,70 @@ export class AuthController {
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  // ─── Team invites (join existing company) ─────────────────
+
+  @Get('team-invites/preview')
+  async teamInvitePreview(@Query('token') token: string) {
+    if (!token?.trim()) throw new BadRequestException('token is required');
+    return this.teamInviteService.getPreviewByToken(token.trim());
+  }
+
+  @Post('team-invites/accept-signup')
+  async teamInviteAcceptSignup(@Body() dto: AcceptTeamInviteSignupDto, @Req() req: any) {
+    const out = await this.teamInviteService.acceptSignup(dto);
+    await this.authService.onLoginSuccess(
+      (out.user as { id: string }).id,
+      req.ip || req.connection?.remoteAddress,
+      req.headers?.['user-agent'],
+    );
+    return out;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('team-invites/accept-session')
+  async teamInviteAcceptSession(@CurrentUser() user: any, @Body() dto: AcceptTeamInviteSessionDto, @Req() req: any) {
+    const out = await this.teamInviteService.acceptLoggedIn(user, dto.token);
+    await this.authService.onLoginSuccess(
+      (out.user as { id: string }).id,
+      req.ip || req.connection?.remoteAddress,
+      req.headers?.['user-agent'],
+    );
+    return out;
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'estimator')
+  @Post('team-invites')
+  async createTeamInvite(@CurrentUser() user: any, @Body() dto: CreateTeamInviteDto) {
+    return this.teamInviteService.createInvite(user, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'estimator')
+  @Get('team-invites')
+  async listTeamInvites(@CurrentUser() user: any, @Query('companyId') companyId?: string) {
+    const cid = user.role === 'superadmin' ? companyId : user.companyId;
+    if (!cid) {
+      throw new BadRequestException('companyId query parameter is required when listing invites as superadmin.');
+    }
+    return this.teamInviteService.listInvites(cid);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin', 'estimator')
+  @Delete('team-invites/:inviteId')
+  async revokeTeamInvite(
+    @CurrentUser() user: any,
+    @Param('inviteId') inviteId: string,
+    @Query('companyId') companyId?: string,
+  ) {
+    const cid = user.role === 'superadmin' ? companyId : user.companyId;
+    if (!cid) {
+      throw new BadRequestException('companyId query parameter is required when revoking invites as superadmin.');
+    }
+    return this.teamInviteService.revokeInvite(user, inviteId, cid);
   }
 
   /** Always returns the same shape (no email enumeration). Requires SMTP + migration 118. */

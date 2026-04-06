@@ -23,6 +23,20 @@ export default function LoginPage() {
     mutationFn: (creds: { email: string; password: string }) =>
       authApi.login(creds),
     onSuccess: () => {
+      if (typeof window !== 'undefined') {
+        const raw = new URLSearchParams(window.location.search).get('next');
+        if (raw) {
+          try {
+            const path = decodeURIComponent(raw);
+            if (path.startsWith('/') && !path.startsWith('//')) {
+              router.push(path);
+              return;
+            }
+          } catch {
+            /* fall through */
+          }
+        }
+      }
       router.push('/dashboard');
     },
     onError: (err: any) => {

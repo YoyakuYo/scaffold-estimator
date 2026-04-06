@@ -346,6 +346,29 @@ export class SubscriptionService {
     return count ?? 0;
   }
 
+  /** Pending team invites reserve a seat until they expire or are revoked. */
+  async countPendingTeamInvitesForCompany(companyId: string): Promise<number> {
+    const now = new Date().toISOString();
+    const { count, error } = await this.supabase
+      .getClient()
+      .from('company_invites')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('status', 'pending')
+      .gt('expires_at', now);
+    if (error) return 0;
+    return count ?? 0;
+  }
+
+  /** Active users + non-expired pending invites (for seat limits). */
+  async countCompanySeatPressure(companyId: string): Promise<number> {
+    const [active, pending] = await Promise.all([
+      this.countCompanySeats(companyId),
+      this.countPendingTeamInvitesForCompany(companyId),
+    ]);
+    return active + pending;
+  }
+
   /** Blocks POST /drawings/upload when trialing and upload quota exhausted. */
   async assertTrialDrawingUploadAllowed(userId: string): Promise<void> {
     const user = await this.getUserOrFail(userId);

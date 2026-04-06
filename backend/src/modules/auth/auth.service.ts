@@ -258,10 +258,10 @@ export class AuthService {
     const targetCompanyId = dto.companyId || adminCompanyId;
     const caps = await this.subscriptionService.resolveEffectiveCapabilitiesForCompany(targetCompanyId);
     if (caps.maxSeats > 0 && caps.maxSeats < 9000) {
-      const used = await this.subscriptionService.countCompanySeats(targetCompanyId);
+      const used = await this.subscriptionService.countCompanySeatPressure(targetCompanyId);
       if (used >= caps.maxSeats) {
         throw new BadRequestException(
-          'Seat limit reached for your subscription. Upgrade in Billing or remove a user before adding another.',
+          'Seat limit reached for your subscription. Upgrade in Billing, revoke a pending invite, or remove a user before adding another.',
         );
       }
     }

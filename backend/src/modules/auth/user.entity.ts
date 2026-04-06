@@ -24,6 +24,10 @@ export class User {
   @Column({ name: 'company_id' })
   companyId: string;
 
+  /** Optional branch assignment (team invites, admin). */
+  @Column({ name: 'branch_id', type: 'uuid', nullable: true })
+  branchId: string | null;
+
   @ManyToOne(() => Company, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'company_id' })
   company?: Company;
