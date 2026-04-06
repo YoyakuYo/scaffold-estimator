@@ -45,7 +45,7 @@ import { SiteContactFields } from '@/components/scaffold/building-scaffold-setti
 import { buildWallMapsForScaffoldLevel, distributeByScaffoldLevel } from '@/lib/scaffold-per-level-distribute';
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
-import { formatMmAsMetersLabel } from '@/lib/dimension-meters';
+import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -629,7 +629,7 @@ function ScaffoldResultPage() {
           <SummaryCard
             icon={<Ruler className="h-5 w-5" />}
             label={t('result', 'scaffoldWidth')}
-            value={formatMmAsMetersLabel(result.scaffoldWidthMm)}
+            value={formatMmLabel(result.scaffoldWidthMm)}
           />
           <SummaryCard
             icon={<Layers className="h-5 w-5" />}
@@ -641,7 +641,7 @@ function ScaffoldResultPage() {
               <SummaryCard
                 icon={<Ruler className="h-5 w-5" />}
                 label={t('result', 'frameSize')}
-                value={formatMmAsMetersLabel(result.frameSizeMm ?? 0)}
+                value={formatMmLabel(result.frameSizeMm ?? 0)}
               />
               <SummaryCard
                 icon={<Ruler className="h-5 w-5" />}
@@ -662,7 +662,7 @@ function ScaffoldResultPage() {
             <SummaryCard
               icon={<Ruler className="h-5 w-5" />}
               label={t('result', 'postSize')}
-              value={formatMmAsMetersLabel(result.preferredMainTatejiMm ?? 0)}
+              value={formatMmLabel(result.preferredMainTatejiMm ?? 0)}
             />
           )}
         </div>
@@ -674,10 +674,10 @@ function ScaffoldResultPage() {
             {result.scaffoldType === 'wakugumi' ? t('result', 'scaffoldTypeWakugumiShort') : t('result', 'scaffoldTypeKusabiShort')}
           </span>
           <span>
-            {t('result', 'specWidth')} {formatMmAsMetersLabel(result.scaffoldWidthMm)}
+            {t('result', 'specWidth')} {formatMmLabel(result.scaffoldWidthMm)}
             {result.scaffoldType === 'wakugumi'
               ? (result.frameSizeMm != null &&
-                  ` · ${t('result', 'specFrame')} ${formatMmAsMetersLabel(result.frameSizeMm)}`) +
+                  ` · ${t('result', 'specFrame')} ${formatMmLabel(result.frameSizeMm)}`) +
                   (result.endStopperType
                     ? ` · ${t('result', 'endStopperType')} ${
                         result.endStopperType === 'frame'
@@ -686,7 +686,7 @@ function ScaffoldResultPage() {
                       }`
                     : '')
               : result.preferredMainTatejiMm != null &&
-                  ` · ${t('result', 'specMainPost')} ${formatMmAsMetersLabel(result.preferredMainTatejiMm)}`}
+                  ` · ${t('result', 'specMainPost')} ${formatMmLabel(result.preferredMainTatejiMm)}`}
           </span>
         </div>
 

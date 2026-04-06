@@ -16,3 +16,9 @@ export function formatMmAsMetersLabel(mm: number): string {
   const s = m.toFixed(decimals).replace(/\.?0+$/, '');
   return `${s || '0'} m`;
 }
+
+/** Scaffold catalog / material sizes stored as mm (e.g. width, frame height, post length). */
+export function formatMmLabel(mm: number): string {
+  if (!Number.isFinite(mm)) return '—';
+  return `${Math.round(mm)} mm`;
+}
