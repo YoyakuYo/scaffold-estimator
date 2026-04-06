@@ -46,6 +46,11 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
     router.replace('/activate-bank-subscription');
   }, [mounted, hasToken, isPublicPage, isSuperAdminLogin, needsBankActivation, onBankActivationAllowlist, router]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
   const showNav =
     mounted &&
     !isPublicPage &&

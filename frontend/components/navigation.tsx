@@ -83,7 +83,10 @@ export function Navigation() {
   ];
 
   return (
-    <nav className="bg-slate-900 border-b border-slate-700/50 shadow-sm" ref={menuRef}>
+    <nav
+      className="sticky z-50 bg-slate-900 border-b border-slate-700/50 shadow-sm [top:env(titlebar-area-height,0px)]"
+      ref={menuRef}
+    >
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-12">
           <div className="flex items-center gap-2">

@@ -4,7 +4,13 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 import { WebPushService } from './web-push.service';
 
-export type NotificationType = 'approval' | 'rejection' | 'new_message' | 'system';
+export type NotificationType =
+  | 'approval'
+  | 'rejection'
+  | 'new_message'
+  | 'system'
+  | 'team_group'
+  | 'team_dm';
 
 @Injectable()
 export class NotificationsService {

@@ -32,7 +32,8 @@ export default function TeamPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [body, setBody] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [chatTab, setChatTab] = useState<'group' | 'direct'>('group');
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['profile'],
@@ -65,6 +66,14 @@ export default function TeamPage() {
     staleTime: 5_000,
   });
   const messages = messagesData?.messages ?? [];
+
+  const { data: peersData, isLoading: peersLoading } = useQuery({
+    queryKey: ['team-chat-peers'],
+    queryFn: teamChatApi.listPeers,
+    enabled: !!profile?.companyId,
+    staleTime: 30_000,
+  });
+  const peers = peersData?.peers ?? [];
 
   const { data: members, isLoading: membersLoading } = useQuery({
     queryKey: ['users'],
@@ -105,6 +114,8 @@ export default function TeamPage() {
     mutationFn: (text: string) => teamChatApi.sendMessage(text),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-chat-messages'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
       setBody('');
     },
   });
@@ -141,8 +152,11 @@ export default function TeamPage() {
   });
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (chatTab !== 'group') return;
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages, chatTab]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,66 +191,127 @@ export default function TeamPage() {
           <p className="text-gray-500 mt-1">{t('teamPage', 'subtitle')}</p>
         </div>
 
+        <div className="flex gap-1 mb-4 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setChatTab('group')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              chatTab === 'group'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('teamPage', 'tabGroup')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setChatTab('direct')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              chatTab === 'direct'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t('teamPage', 'tabDirect')}
+          </button>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col" style={{ minHeight: 420 }}>
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">{t('teamPage', 'chatTitle')}</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messagesLoading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-0" style={{ minHeight: 420 }}>
+            {chatTab === 'group' ? (
+              <>
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 shrink-0">
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">{t('teamPage', 'chatTitle')}</h2>
                 </div>
-              ) : messages.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">{t('teamPage', 'noMessages')}</p>
-              ) : (
-                messages.map((m: TeamChatMessage) => {
-                  const mine = m.sender.id === profile.id;
-                  return (
-                    <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                          mine ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'
-                        }`}
-                      >
-                        {!mine && (
-                          <p className="text-xs font-semibold opacity-80 mb-1">{displayName(m.sender)}</p>
-                        )}
-                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                        <p className={`text-[10px] mt-1 ${mine ? 'text-blue-100' : 'text-gray-400'}`}>
-                          {new Date(m.createdAt).toLocaleString(locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US')}
-                        </p>
-                      </div>
+                <div ref={messagesScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                  {messagesLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                     </div>
-                  );
-                })
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-            <form onSubmit={handleSubmit} className="p-3 border-t border-gray-200 flex gap-2">
-              <input
-                type="text"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder={t('teamPage', 'messagePlaceholder')}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                maxLength={5000}
-              />
-              <button
-                type="submit"
-                disabled={sendMutation.isPending || !body.trim()}
-                className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                {t('teamPage', 'send')}
-              </button>
-            </form>
-            {sendMutation.isError && (
-              <p className="px-3 pb-2 text-xs text-red-600">
-                {(sendMutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-                  (sendMutation.error instanceof Error ? sendMutation.error.message : '')}
-              </p>
+                  ) : messages.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-8">{t('teamPage', 'noMessages')}</p>
+                  ) : (
+                    messages.map((m: TeamChatMessage) => {
+                      const mine = m.sender.id === profile.id;
+                      return (
+                        <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                          <div
+                            className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                              mine ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'
+                            }`}
+                          >
+                            {!mine && (
+                              <p className="text-xs font-semibold opacity-80 mb-1">{displayName(m.sender)}</p>
+                            )}
+                            <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                            <p className={`text-[10px] mt-1 ${mine ? 'text-blue-100' : 'text-gray-400'}`}>
+                              {new Date(m.createdAt).toLocaleString(
+                                locale === 'ja' ? 'ja-JP' : locale === 'fr' ? 'fr-FR' : 'en-US',
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <form onSubmit={handleSubmit} className="p-3 border-t border-gray-200 flex gap-2 shrink-0">
+                  <input
+                    type="text"
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder={t('teamPage', 'messagePlaceholder')}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    maxLength={5000}
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendMutation.isPending || !body.trim()}
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {t('teamPage', 'send')}
+                  </button>
+                </form>
+                {sendMutation.isError && (
+                  <p className="px-3 pb-2 text-xs text-red-600 shrink-0">
+                    {(sendMutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+                      (sendMutation.error instanceof Error ? sendMutation.error.message : '')}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 shrink-0">
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">{t('teamPage', 'tabDirect')}</h2>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 min-h-0">
+                  {peersLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                    </div>
+                  ) : peers.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-8">{t('teamPage', 'directEmpty')}</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {peers.map((p) => (
+                        <li key={p.id}>
+                          <Link
+                            href={`/team/messages/${p.id}`}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors"
+                          >
+                            <span className="font-medium text-gray-900 truncate">{displayName(p)}</span>
+                            <MessageSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-xs text-gray-500 mt-4">{t('teamPage', 'directHelp')}</p>
+                </div>
+              </>
             )}
           </div>
 

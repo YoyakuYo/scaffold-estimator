@@ -14,7 +14,19 @@ export interface TeamChatMessage {
   sender: TeamChatSender;
 }
 
+export interface TeamPeer {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
 export const teamChatApi = {
+  listPeers: async (): Promise<{ peers: TeamPeer[] }> => {
+    const res = await apiClient.get<{ peers: TeamPeer[] }>('/team-chat/peers');
+    return res.data;
+  },
+
   listMessages: async (limit = 80): Promise<{ messages: TeamChatMessage[] }> => {
     const res = await apiClient.get<{ messages: TeamChatMessage[] }>('/team-chat/messages', {
       params: { limit },

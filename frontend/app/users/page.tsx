@@ -788,17 +788,19 @@ function UsersPage() {
                                     <Pencil className="h-4 w-4 text-blue-500" />
                                     {t('usersAdmin', 'edit')}
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setResetPasswordUser(user);
-                                      setOpenMenuId(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 text-left"
-                                  >
-                                    <Key className="h-4 w-4 text-amber-500" />
-                                    {t('usersAdmin', 'resetPassword')}
-                                  </button>
+                                  {isSuperAdmin ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setResetPasswordUser(user);
+                                        setOpenMenuId(null);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 text-left"
+                                    >
+                                      <Key className="h-4 w-4 text-amber-500" />
+                                      {t('usersAdmin', 'resetPassword')}
+                                    </button>
+                                  ) : null}
                                   {user.id !== currentUser?.id ? (
                                     <>
                                       <div className="border-t border-slate-100 my-1" />
@@ -1002,13 +1004,18 @@ function UsersPage() {
                                 <Pencil className="h-4 w-4 text-blue-500" />
                                 {t('usersAdmin', 'edit')}
                               </button>
-                              <button
-                                onClick={() => { setResetPasswordUser(user); setOpenMenuId(null); }}
-                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Key className="h-4 w-4 text-amber-500" />
-                                {t('usersAdmin', 'resetPassword')}
-                              </button>
+                              {isSuperAdmin ? (
+                                <button
+                                  onClick={() => {
+                                    setResetPasswordUser(user);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  <Key className="h-4 w-4 text-amber-500" />
+                                  {t('usersAdmin', 'resetPassword')}
+                                </button>
+                              ) : null}
                               <div className="border-t border-gray-100 my-1" />
                               <button
                                 onClick={() => { handleDeactivate(user); setOpenMenuId(null); }}

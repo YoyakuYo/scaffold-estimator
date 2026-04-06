@@ -9,6 +9,11 @@ import { SendTeamChatMessageDto } from './dto/send-team-chat-message.dto';
 export class TeamChatController {
   constructor(private readonly teamChatService: TeamChatService) {}
 
+  @Get('peers')
+  async peers(@CurrentUser() user: { id: string }) {
+    return this.teamChatService.listPeers(user.id);
+  }
+
   @Get('messages')
   async list(@CurrentUser() user: { id: string }, @Query('limit') limit?: string) {
     const n = limit ? parseInt(limit, 10) : 80;

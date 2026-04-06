@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { mapPayloadToSnake, mapRowToCamel } from '../../common/utils/db-mapper';
 import { User } from '../auth/user.entity';
 
@@ -15,9 +16,66 @@ export interface TeamChatMessageOut {
   sender: { id: string; email: string; firstName: string | null; lastName: string | null };
 }
 
+export interface TeamPeerOut {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+}
+
 @Injectable()
 export class TeamChatService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
+  private formatSenderLabel(u: Pick<User, 'email' | 'firstName' | 'lastName'>): string {
+    const n = [u.lastName, u.firstName].filter(Boolean).join(' ').trim();
+    return n || u.email;
+  }
+
+  private messageSnippet(body: string): string {
+    const t = body.trim();
+    return t.length <= 120 ? t : `${t.slice(0, 120)}…`;
+  }
+
+  private async notifyCompanyMembersOfGroupMessage(sender: User, body: string): Promise<void> {
+    if (!sender.companyId) return;
+    const { data: rows, error } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('id')
+      .eq('company_id', sender.companyId)
+      .eq('approval_status', 'approved')
+      .eq('is_active', true)
+      .neq('id', sender.id);
+    if (error || !rows?.length) return;
+    const label = this.formatSenderLabel(sender);
+    const preview = `${label}: ${this.messageSnippet(body)}`;
+    for (const r of rows as { id: string }[]) {
+      try {
+        await this.notificationsService.create(r.id, 'team_group', 'Team chat', {
+          body: preview,
+          link: '/team',
+        });
+      } catch {
+        /* ignore per-user failure */
+      }
+    }
+  }
+
+  private async notifyDmRecipient(recipient: User, sender: User, body: string): Promise<void> {
+    const label = this.formatSenderLabel(sender);
+    try {
+      await this.notificationsService.create(recipient.id, 'team_dm', `DM from ${label}`, {
+        body: this.messageSnippet(body),
+        link: `/team/messages/${sender.id}`,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   private async getUserOrFail(userId: string): Promise<User> {
     const { data: row, error } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
@@ -106,7 +164,42 @@ export class TeamChatService {
     const sender = u
       ? { id: u.id, email: u.email, firstName: u.firstName ?? null, lastName: u.lastName ?? null }
       : { id: user.id, email: user.email, firstName: user.firstName ?? null, lastName: user.lastName ?? null };
+    void this.notifyCompanyMembersOfGroupMessage(user, body).catch(() => {});
     return { id: m.id, body: m.body, createdAt: m.createdAt, sender };
+  }
+
+  async listPeers(userId: string): Promise<{ peers: TeamPeerOut[] }> {
+    const me = await this.getUserOrFail(userId);
+    if (me.role === 'superadmin' || !me.companyId) {
+      throw new BadRequestException('Team directory is only for company accounts.');
+    }
+    if (me.approvalStatus !== 'approved' || !me.isActive) {
+      throw new ForbiddenException();
+    }
+    const { data: rows, error } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('id, email, first_name, last_name, role')
+      .eq('company_id', me.companyId)
+      .eq('approval_status', 'approved')
+      .eq('is_active', true)
+      .neq('id', userId)
+      .neq('role', 'superadmin')
+      .order('last_name', { ascending: true })
+      .order('first_name', { ascending: true });
+    if (error) {
+      throw new BadRequestException('Could not load team directory.');
+    }
+    const peers: TeamPeerOut[] = (rows || []).map((r: Record<string, unknown>) => {
+      const u = mapRowToCamel<User>(r)!;
+      return {
+        id: u.id,
+        email: u.email,
+        firstName: u.firstName ?? null,
+        lastName: u.lastName ?? null,
+      };
+    });
+    return { peers };
   }
 
   /** Minimal profile for DM header; any approved company member may call for a same-company peer. */
@@ -241,6 +334,7 @@ export class TeamChatService {
       firstName: me.firstName ?? null,
       lastName: me.lastName ?? null,
     };
+    void this.notifyDmRecipient(peer, me, body).catch(() => {});
     return { id: m.id, body: m.body, createdAt: m.createdAt, sender };
   }
 }

@@ -17,7 +17,7 @@ export default function AdminMessagesPage() {
   const [newMsgUserId, setNewMsgUserId] = useState<string | null>(null);
   const [newMsgBody, setNewMsgBody] = useState('');
   const [userSearch, setUserSearch] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: currentUser } = useQuery({
     queryKey: ['profile'],
@@ -56,7 +56,9 @@ export default function AdminMessagesPage() {
   });
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   const replyMutation = useMutation({
@@ -370,7 +372,7 @@ export default function AdminMessagesPage() {
                   </p>
                   <p className="text-sm text-gray-500">{selectedConv?.user?.email}</p>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div ref={messagesScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
                   {msgLoading ? (
                     <div className="flex justify-center py-8">
                       <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -399,7 +401,6 @@ export default function AdminMessagesPage() {
                       );
                     })
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
                 <form onSubmit={handleReply} className="p-4 border-t border-gray-200">
                   <div className="flex gap-2">

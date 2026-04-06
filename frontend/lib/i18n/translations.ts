@@ -2036,6 +2036,14 @@ export const translations = {
     },
     backDashboard: { ja: 'ダッシュボードへ戻る', en: 'Back to dashboard', fr: 'Retour au tableau de bord' },
     chatTitle: { ja: '社内チャット', en: 'Team chat', fr: 'Chat interne' },
+    tabGroup: { ja: 'グループ', en: 'Group chat', fr: 'Groupe' },
+    tabDirect: { ja: 'ダイレクト', en: 'Direct messages', fr: 'Messages directs' },
+    directEmpty: { ja: 'メッセージできるメンバーがいません。', en: 'No teammates to message yet.', fr: 'Aucun collègue pour le moment.' },
+    directHelp: {
+      ja: '相手を選ぶと1対1でメッセージできます。',
+      en: 'Choose someone to start a private conversation.',
+      fr: 'Choisissez un membre pour une conversation privée.',
+    },
     noMessages: { ja: 'まだメッセージはありません。', en: 'No messages yet.', fr: 'Aucun message pour le moment.' },
     messagePlaceholder: { ja: 'メッセージを入力…', en: 'Type a message…', fr: 'Écrire un message…' },
     send: { ja: '送信', en: 'Send', fr: 'Envoyer' },
@@ -2051,9 +2059,9 @@ export const translations = {
     invitesTitle: { ja: 'メンバーを招待', en: 'Invite members', fr: 'Inviter des membres' },
     memberAsideTitle: { ja: 'メンバー', en: 'Member', fr: 'Membre' },
     memberAsideBody: {
-      ja: '社内チャットは左のパネルからご利用ください。席の管理や招待は会社の管理者のみが行えます。',
-      en: 'Use team chat on the left. Seat management and invitations are limited to your company admin.',
-      fr: 'Utilisez le chat à gauche. La gestion des sièges et les invitations sont réservées à l’administrateur.',
+      ja: '「グループ」で全員チャット、「ダイレクト」で1対1できます。席の管理や招待は会社の管理者のみが行えます。',
+      en: 'Use Group chat for everyone, or Direct for one-to-one. Seat management and invitations are for your company admin only.',
+      fr: 'Utilisez Groupe pour tout le monde, ou Messages directs en privé. Sièges et invitations : admin entreprise uniquement.',
     },
   },
 

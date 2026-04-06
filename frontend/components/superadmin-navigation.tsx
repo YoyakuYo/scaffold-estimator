@@ -36,7 +36,10 @@ export function SuperAdminNavigation() {
   ];
 
   return (
-    <nav className="bg-slate-950 border-b border-slate-800 relative" ref={menuRef}>
+    <nav
+      className="sticky z-50 bg-slate-950 border-b border-slate-800 relative [top:env(titlebar-area-height,0px)]"
+      ref={menuRef}
+    >
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button

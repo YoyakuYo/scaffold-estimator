@@ -22,7 +22,7 @@ export default function TeamDmPage() {
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [body, setBody] = useState('');
-  const endRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -62,12 +62,16 @@ export default function TeamDmPage() {
     mutationFn: (text: string) => teamChatApi.sendDmMessage(peerId, text),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-dm', peerId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
       setBody('');
     },
   });
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   if (!peerId || !profile?.companyId) {
@@ -111,7 +115,7 @@ export default function TeamDmPage() {
               {peerUser?.email ? <p className="text-xs text-slate-500 truncate">{peerUser.email}</p> : null}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
+          <div ref={messagesScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-white min-h-0">
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
@@ -140,7 +144,6 @@ export default function TeamDmPage() {
                 );
               })
             )}
-            <div ref={endRef} />
           </div>
           <form
             className="p-3 border-t border-slate-100 flex gap-2 bg-slate-50/50"

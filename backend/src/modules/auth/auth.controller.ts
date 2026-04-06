@@ -267,10 +267,9 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('superadmin', 'estimator', 'viewer')
+  @Roles('superadmin')
   @Post('users/:id/reset-password')
   async adminResetPassword(@CurrentUser() admin: any, @Param('id') id: string, @Body() dto: AdminResetPasswordDto) {
-    await this.authService.assertCompanyUserManagementAccess(admin);
     return this.authService.adminResetPassword(id, dto.newPassword, admin);
   }
 

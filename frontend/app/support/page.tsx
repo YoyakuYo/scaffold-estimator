@@ -11,7 +11,7 @@ export default function SupportPage() {
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [body, setBody] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -38,12 +38,16 @@ export default function SupportPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages-me'] });
       queryClient.invalidateQueries({ queryKey: ['messages-unread'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
       setBody('');
     },
   });
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -93,7 +97,7 @@ export default function SupportPage() {
         ) : null}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col" style={{ minHeight: '400px' }}>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={messagesScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -129,7 +133,6 @@ export default function SupportPage() {
                 );
               })
             )}
-            <div ref={messagesEndRef} />
           </div>
           <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200">
             <div className="flex gap-2">

@@ -4,28 +4,36 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsApi, Notification } from '@/lib/api/notifications';
 import { Bell, Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 
 export function NotificationBell() {
   const router = useRouter();
+  const pathname = usePathname();
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  const messagingPollMs =
+    pathname === '/support' ||
+    pathname === '/team' ||
+    pathname.startsWith('/team/messages/')
+      ? 5_000
+      : 30_000;
+
   const { data: notifications, isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn: notificationsApi.list,
-    refetchInterval: 30_000,
-    staleTime: 25_000,
+    refetchInterval: messagingPollMs,
+    staleTime: Math.min(messagingPollMs - 1_000, 25_000),
     refetchIntervalInBackground: false,
   });
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread'],
     queryFn: notificationsApi.getUnreadCount,
-    refetchInterval: 30_000,
-    staleTime: 25_000,
+    refetchInterval: messagingPollMs,
+    staleTime: Math.min(messagingPollMs - 1_000, 25_000),
     refetchIntervalInBackground: false,
   });
   const unreadCount = unreadData?.count ?? 0;
