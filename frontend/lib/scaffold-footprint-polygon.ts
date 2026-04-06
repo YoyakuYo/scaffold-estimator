@@ -244,6 +244,98 @@ function tryOrthogonalFallback(
  * For orthogonal buildings, snaps each edge to the nearest 90° for clean results.
  * Returns null if the stored vertices are degenerate or the result is unusable.
  */
+/**
+ * Find edge lengths L' ≈ L (mm from walls) such that Σ L'_i * u_i ≈ 0 using the
+ * closed-form normal-equation projection (L' = L - Uᵀ(UUᵀ)⁻¹UL). Keeps the
+ * silhouette from stored vertices when dimension text does not orthogonally close.
+ */
+function adjustLengthsForClosedWalk2D(
+  lengthsM: number[],
+  dirs: Array<{ x: number; z: number }>,
+): number[] | null {
+  const n = lengthsM.length;
+  if (n !== dirs.length || n < 3) return null;
+
+  let u00 = 0;
+  let u01 = 0;
+  let u11 = 0;
+  let bl0 = 0;
+  let bl1 = 0;
+  for (let i = 0; i < n; i++) {
+    const ux = dirs[i]!.x;
+    const uz = dirs[i]!.z;
+    const Li = lengthsM[i]!;
+    u00 += ux * ux;
+    u01 += ux * uz;
+    u11 += uz * uz;
+    bl0 += Li * ux;
+    bl1 += Li * uz;
+  }
+  const det = u00 * u11 - u01 * u01;
+  if (Math.abs(det) < 1e-18) return null;
+  const inv00 = u11 / det;
+  const inv01 = -u01 / det;
+  const inv11 = u00 / det;
+  const k0 = inv00 * bl0 + inv01 * bl1;
+  const k1 = inv01 * bl0 + inv11 * bl1;
+
+  const out: number[] = [];
+  const minEdgeM = 0.6;
+  for (let i = 0; i < n; i++) {
+    const ux = dirs[i]!.x;
+    const uz = dirs[i]!.z;
+    const li = lengthsM[i]! - (ux * k0 + uz * k1);
+    if (!Number.isFinite(li) || li < minEdgeM) return null;
+    out.push(li);
+  }
+
+  let cx = 0;
+  let cz = 0;
+  for (let i = 0; i < n; i++) {
+    cx += out[i]! * dirs[i]!.x;
+    cz += out[i]! * dirs[i]!.z;
+  }
+  const perimeter = lengthsM.reduce((s, l) => s + l, 0);
+  const tol = Math.max(1e-4, perimeter * 1e-6);
+  if (Math.hypot(cx, cz) > tol) return null;
+
+  return out;
+}
+
+function buildFromStoredDirectionsLeastSquares(
+  walls: Array<{ wallLengthMm?: number }>,
+  n: number,
+  stored: FootprintVertexXZ[],
+): FootprintVertexXZ[] | null {
+  if (stored.length < n || n < 3) return null;
+  const sv = stored.slice(0, n);
+  const lengths = Array.from({ length: n }, (_, i) => wallLenM(walls, i));
+  const dirs: Array<{ x: number; z: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const p1 = sv[i]!;
+    const p2 = sv[(i + 1) % n]!;
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    const el = Math.hypot(dx, dz);
+    if (el < 1e-9) return null;
+    dirs.push({ x: dx / el, z: dz / el });
+  }
+  const adjusted = adjustLengthsForClosedWalk2D(lengths, dirs);
+  if (!adjusted) return null;
+
+  const verts: FootprintVertexXZ[] = [{ x: 0, z: 0 }];
+  let cx = 0;
+  let cz = 0;
+  for (let i = 0; i < n - 1; i++) {
+    cx += adjusted[i]! * dirs[i]!.x;
+    cz += adjusted[i]! * dirs[i]!.z;
+    verts.push({ x: cx, z: cz });
+  }
+  if (polygonAbsArea(verts) < 0.01) return null;
+  if (!hasPlausiblePolygonEdges(verts, walls)) return null;
+  return verts;
+}
+
 function buildFromStoredDirections(
   walls: Array<{ wallLengthMm?: number }>,
   n: number,
@@ -375,6 +467,13 @@ export function buildFootprintPolygonXZ(
           console.info('[Scaffold] footprint: direction-walk (stored+lengths)', n, 'walls, rot=', rotIdx);
         }
         return dirResult;
+      }
+      const lsResult = buildFromStoredDirectionsLeastSquares(walls, n, svTry);
+      if (lsResult) {
+        if (typeof window !== 'undefined') {
+          console.info('[Scaffold] footprint: LS-closure (stored dirs + wall lengths)', n, 'walls, rot=', rotIdx);
+        }
+        return lsResult;
       }
       rotIdx++;
     }
