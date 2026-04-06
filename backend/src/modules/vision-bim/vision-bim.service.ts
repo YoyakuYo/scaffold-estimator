@@ -176,6 +176,12 @@ STEP 1 — IDENTIFY THE EXTERIOR SHELL:
 - FIND THE OUTERMOST BOUNDARY: the thickest walls at the very edge of the drawing form the exterior shell.
 - EXTERIOR WALLS are drawn thicker/bolder than interior partition walls.
 
+OVERALL-DIMENSION RECTANGLE (apartments / studios — very common error):
+- Many residential floor plans show a **single rectangular structural shell** with **one overall width** and **one overall depth** (often labeled on two opposite sides each, e.g. 6.11m top and 6.11m bottom, 4.70m left and 4.70m right). Inside that shell are bathrooms, kitchens, closets, and furniture — those are INTERIOR partitions, NOT footprint corners.
+- If those **overall** exterior dimensions match on opposite sides (top≈bottom width, left≈right height) and the **thick outer wall** is a continuous rectangle with no actual structural indent/re-entrant corner on the outer line → output **exactly 4 vertices** and **4 wall lengths** = [W, D, W, D].
+- NEVER build a 6-vertex L-shape or notch by chaining **interior** room dimensions (kitchen width + bath width + entry, etc.) along what you think is the perimeter. Those dimensions measure **inside** the envelope; they are NOT alternate exterior edges.
+- A reflex (inward) corner is only valid when the **outermost thick wall line** itself turns inward. A T-junction where an interior partition meets the exterior is NOT an exterior corner — do not add a vertex there.
+
 STEP 2 — DETECT ALL PROTRUDING SECTIONS (CRITICAL — most common extraction error):
 A floor plan may have sections that protrude OUTWARD from the main rectangular body.
 
@@ -223,6 +229,7 @@ For each edge in the polygon, find the dimension line that runs PARALLEL to it o
 
 FLOOR PLAN SELF-CHECK:
 - Does the sum of vertical edges equal the total height shown by the overall structural-wall dimension? If not, re-read the dimensions.
+- If **overall** width on top equals **overall** width on bottom AND **overall** height on left equals **overall** height on right, but you output 6+ vertices, you probably invented a notch from interior dimensions — **collapse to a 4-vertex rectangle** using those overall values unless the thick exterior wall truly steps at the outer line.
 - Are OPEN terraces/decks/patios (no thick enclosing walls on outer edge) EXCLUDED from the polygon? If you included an open deck, remove it.
 - Are ENCLOSED wings (thick walls on all sides) INCLUDED? If not, add them.
 - Is the polygon the outermost silhouette of the STRUCTURAL WALLS — ignoring open decks, railings, and non-structural elements?
@@ -1034,14 +1041,15 @@ If this image shows a building in perspective, isometric, or 3D (you can see wal
 
 CRITICAL — IS THIS A FLOOR PLAN?
 If this image shows rooms, furniture, bathrooms, staircases, or corridors:
-- DO NOT just output a bounding rectangle. MOST floor plans are NOT simple rectangles.
-- CHECK: Do the LEFT side and RIGHT side have DIFFERENT total heights? If YES → NOT a rectangle. It is L-shaped or more complex.
-- CHECK: Does one side have a protruding stairwell, elevator shaft, or wing? If YES → NOT a rectangle.
-- CHECK: Are there thick exterior walls that form a notch, step, or L-shape? If YES → trace ALL corners of that shape.
-- COMMON ERROR: Taking the largest dimension from each axis and making a bounding box. This is ALWAYS WRONG for non-rectangular buildings. Each wall side must use ITS OWN dimension, not the opposite side's dimension.
-- EXAMPLE: If the LEFT side = 15,300mm but the RIGHT side = 11,490mm, this is NOT a rectangle. The right side is shorter because there is a step/notch. Output 6+ vertices for the L-shape.
-- RULE: If opposite sides have DIFFERENT lengths (left ≠ right, or top ≠ bottom), the building is NOT rectangular. Find where the step/notch is and add vertices there.
-- STAIRWELLS: Stairwell enclosures near the building perimeter often protrude outward. Look for stair symbols (parallel lines) inside thick-walled enclosures at the building edge. These create L/T shapes.
+- FIRST: Read **overall exterior** dimensions (long strings/arrows on the OUTSIDE of the thick shell). If top width = bottom width and left height = right height for those **overall** lines, the footprint is a **RECTANGLE (4 vertices)** unless the **thick outer wall** clearly has a structural step/indents at the outside face.
+- DO NOT invent a 6-vertex L-shape by stitching **interior** room dimensions into a perimeter — that is a common failure on studio/apartment plans.
+- DO NOT just output a bounding rectangle when the **true** structural outline is non-rectangular (L/U/Z/T, protruding wings). Use overall dimensions per side; if opposite **structural** sides differ, add vertices for real exterior corners only.
+- CHECK: Do the LEFT and RIGHT **overall structural** heights differ? If YES → likely L-shaped or more complex.
+- CHECK: Does one side have a protruding stairwell, elevator shaft, or wing (thick walls)? If YES → may NOT be a rectangle.
+- CHECK: Do **thick exterior walls** form a real notch/step at the **outer** face? If YES → trace those corners.
+- COMMON ERROR: Taking unrelated maxima from the drawing as opposite sides. Each **exterior** edge needs the dimension that belongs to that **structural** segment.
+- EXAMPLE (true L): LEFT overall = 15,300mm but RIGHT overall = 11,490mm on the structural shell → not a rectangle; find the step.
+- STAIRWELLS: Stairwell enclosures near the building perimeter often protrude outward. Look for stair symbols inside thick-walled enclosures at the building edge.
 
 COORDINATE SYSTEM: x increases RIGHT, y increases DOWNWARD (image pixel coords). Top-left = {x:0,y:0}.
 
@@ -1049,8 +1057,8 @@ JAPANESE SCAFFOLD PLANS (仮設計画図): The blue hatched/filled zone is the S
 
 ANTI-BOUNDING-BOX CHECK: Before outputting, verify:
 1. For a 4-vertex rectangle: wall[0] must equal wall[2], and wall[1] must equal wall[3]. If they don't match, you have the WRONG shape — add vertices.
-2. Read ALL dimension annotations on ALL four sides. If any side has a DIFFERENT dimension from its opposite side, the building is NOT rectangular.
-3. If you see sub-dimensions that add up to LESS than the opposite side (e.g., right side 2.50+6.00+1.83=10.33m vs left side 15.30m), the right side is SHORTER and there must be a step/notch.
+2. Compare **overall exterior** dimensions on opposite sides. Interior room chains do NOT count as "opposite side lengths". Only mismatching **structural shell** overalls imply a non-rectangle.
+3. If **overall** left ≠ **overall** right (or top ≠ bottom) on the thick exterior, find the real exterior step. If overalls match but you still have 6+ vertices, you likely mis-traced interior walls — use 4 vertices.
 
 Read dimension strings for wall lengths. Return raw JSON only. Include vertices, buildingHeightMm, wallLengthsMm (same count as vertices), wallLengthsFromDimText, scaleDenominator, scaffoldTypeHint, spanSizeMm, floorCount, confidence, drawingType, heightConfidence, obstacles (detect ALL exterior doors).`;
 
