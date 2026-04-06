@@ -5,8 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-configs';
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { messagesApi, ConversationWithUser } from '@/lib/api/messages';
-import { subscriptionsApi } from '@/lib/api/subscriptions';
-import { subscriptionCombinedSummary } from '@/lib/billing/subscription-labels';
 import { useI18n } from '@/lib/i18n';
 import Link from 'next/link';
 import {
@@ -424,13 +422,6 @@ function UserDashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const { data: subscription } = useQuery({
-    queryKey: ['my-subscription'],
-    queryFn: subscriptionsApi.getMine,
-    retry: false,
-    refetchInterval: 30000,
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (configId: string) => scaffoldConfigsApi.delete(configId),
     onSuccess: () => {
@@ -504,19 +495,6 @@ function UserDashboard() {
   // Subscription check disabled until work is complete — always allow access
   const hasBillingAccess = true;
 
-  const workflowSteps = [
-    { n: 1, title: t('dashboard', 'quickStep1Title'), hint: t('dashboard', 'quickStep1Desc') },
-    { n: 2, title: t('dashboard', 'quickStep2Title'), hint: t('dashboard', 'quickStep2Desc') },
-    { n: 3, title: t('dashboard', 'quickStep3Title'), hint: t('dashboard', 'quickStep3Desc') },
-  ];
-
-  const subStatus = subscription?.status ?? '';
-  const subAlert =
-    !hasBillingAccess ||
-    subStatus === 'past_due' ||
-    subStatus === 'canceled' ||
-    subStatus === 'expired';
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div
@@ -546,91 +524,36 @@ function UserDashboard() {
               <p className="mt-4 text-base text-slate-600 leading-relaxed">
                 {t('dashboard', 'dashboardIntro')}
               </p>
-              <div className="mt-6 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
-                  <Box className="h-3.5 w-3.5 text-violet-600" aria-hidden />
-                  2D / 3D
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
-                  <Receipt className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
-                  {t('nav', 'quotations')}
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-sky-600" aria-hidden />
-                  Excel
-                </span>
-              </div>
             </div>
 
-            <div className="mt-10 w-full lg:mt-0 lg:max-w-md shrink-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400 mb-4">
-                {t('dashboard', 'workflow')}
+            <div className="mt-10 w-full lg:mt-0 lg:max-w-lg shrink-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400 mb-3">
+                {t('dashboard', 'manualGuideTitle')}
               </p>
-              <ol className="space-y-4">
-                {workflowSteps.map((step) => (
-                  <li key={step.n} className="flex gap-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-sm font-bold text-white shadow-md">
-                      {step.n}
-                    </span>
-                    <div className="min-w-0 pt-0.5 flex-1 border-l border-slate-200 pl-4">
-                      <p className="text-sm font-semibold text-slate-800 leading-snug">{step.title}</p>
-                      <p className="mt-1 text-xs text-slate-500 leading-relaxed line-clamp-2">{step.hint}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+              <p className="text-sm text-slate-600 leading-relaxed">{t('dashboard', 'manualGuideIntro')}</p>
+              <ul className="mt-4 space-y-3 text-sm text-slate-700 leading-snug">
+                <li className="flex gap-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">
+                    1
+                  </span>
+                  <span>{t('dashboard', 'manualGuideStepWall')}</span>
+                </li>
+                <li className="flex gap-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">
+                    2
+                  </span>
+                  <span>{t('dashboard', 'manualGuideStepXy')}</span>
+                </li>
+              </ul>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  {t('dashboard', 'manualGuideCfTitle')}
+                </p>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'manualGuideCfBody')}</p>
+              </div>
             </div>
           </div>
         </section>
-
-        {subscription && (
-          <div
-            className={`rounded-2xl border p-5 sm:p-6 ${
-              subAlert ? 'border-red-200 bg-red-50/90' : 'border-emerald-200 bg-emerald-50/80'
-            }`}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
-                    subAlert ? 'border-red-200 bg-white' : 'border-emerald-200 bg-white'
-                  }`}
-                >
-                  <CreditCard
-                    className={`h-6 w-6 ${subAlert ? 'text-red-600' : 'text-emerald-600'}`}
-                    aria-hidden
-                  />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    {t('dashboard', 'subscription')}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900 leading-snug">
-                    {subscriptionCombinedSummary(subscription.plan, subscription.status, t)}
-                  </p>
-                  {subscription.status === 'trialing' && subscription.trialDaysRemaining != null && (
-                    <p className="mt-2 text-sm text-slate-700">
-                      {t('dashboard', 'trialRemaining').replace('{days}', String(subscription.trialDaysRemaining))}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => router.push('/billing')}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-blue-300 hover:bg-slate-50"
-              >
-                <CreditCard className="h-4 w-4 text-blue-600" />
-                {t('dashboard', 'manageBilling')}
-              </button>
-            </div>
-            {!hasBillingAccess && (
-              <p className="mt-4 text-sm text-red-700 border-t border-red-200 pt-4">
-                {t('dashboard', 'trialEnded')}
-              </p>
-            )}
-          </div>
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-8 sm:p-10 shadow-sm">
@@ -678,21 +601,6 @@ function UserDashboard() {
                   {t('nav', 'quotations')}
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'shortcutQuotationsDesc')}</p>
-              </div>
-              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
-            </Link>
-            <Link
-              href="/scaffold"
-              className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-100">
-                <Calculator className="h-5 w-5" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-900 group-hover:text-blue-700 transition-colors">
-                  {t('nav', 'scaffold')}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{t('dashboard', 'quickStartDesc')}</p>
               </div>
               <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 shrink-0 transition-colors" />
             </Link>

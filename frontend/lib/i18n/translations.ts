@@ -180,6 +180,36 @@ export const translations = {
     quickStep2Desc: { ja: '抽出された寸法を確認し、壁長さ・高さ・足場幅・階段を調整。', en: 'Review extracted dims, adjust wall lengths, heights, scaffold width & stairs.', fr: 'Vérifiez les cotes extraites, réglez longueurs, hauteurs, largeur échafaudage et escaliers.' },
     quickStep3Title: { ja: '積算計算・出力', en: 'Calculate & Export', fr: 'Calculer et exporter' },
     quickStep3Desc: { ja: '材料数量を確定的に計算。見積表・2D/3D図・Excel/PDF/CADで出力。', en: 'Deterministically calculate material quantities. Export as quotation, 2D/3D views, Excel/PDF/CAD.', fr: 'Calcul déterministe des quantités. Export devis, vues 2D/3D, Excel/PDF/CAD.' },
+    manualGuideTitle: {
+      ja: '手動入力の手順',
+      en: 'Manual entry (walls, X/Y, CF)',
+      fr: 'Saisie manuelle (murs, X/Y, CF)',
+    },
+    manualGuideIntro: {
+      ja: '足場積算ページで手描きCAD・クイックシェイプ・図面トレースなどから外形を作り、辺（壁）ごとに数値を整えます。',
+      en: 'On Scaffold Calc, build the footprint with CAD trace, Quick Shape, or upload—then refine each edge in the table.',
+      fr: 'Sur le calculateur, définissez le contour (canevas, forme rapide ou import), puis affinez chaque arête dans le tableau.',
+    },
+    manualGuideStepWall: {
+      ja: '辺（壁）を一覧またはキャンバスで選び、その壁の長さ・高さ・階段などを入力します。',
+      en: 'Select a wall (edge) in the list or on the canvas, then enter length, height, stairs, and other options for that segment.',
+      fr: 'Sélectionnez un mur (arête) dans la liste ou sur le canevas, puis saisissez longueur, hauteur, escaliers et options pour ce segment.',
+    },
+    manualGuideStepXy: {
+      ja: 'X/Y 走行（mm）で平面方向の走りを指定し、寸法表と外形が一致するようにします。',
+      en: 'Set the X / Y run (mm) for each edge—axis plus signed run—so the plan projection matches your dimension table.',
+      fr: 'Pour chaque arête, définissez la course X / Y (mm) : axe et valeur signée, pour aligner la vue plan sur votre tableau de cotes.',
+    },
+    manualGuideCfTitle: {
+      ja: 'CF（コーナー区分）',
+      en: 'CF — corner type per edge',
+      fr: 'CF — type de coin par arête',
+    },
+    manualGuideCfBody: {
+      ja: 'CF はその辺に対応する角の取り方です。R（反射）＝凹み・内角（reflex）、C（凸）＝外角（convex）。平面の形に合わせて辺ごとに選びます。壁行に保存され、作図・入力の整合用です（材料数量は入力した寸法に基づき計算されます）。',
+      en: 'CF marks how the outline turns at that edge: R (reflex) = re-entrant / inner corner; C (convex) = outer corner. Choose per edge to match your plan. It is stored on each wall row with your drawing inputs; quantities follow the lengths and settings you enter.',
+      fr: 'CF indique comment le contour tourne le long de l’arête : R (reflex) = rentrant / intérieur ; C (convex) = convexe / extérieur. Choisissez par arête selon le plan. Enregistré sur chaque ligne de mur avec la saisie ; les quantités suivent les cotes et réglages saisis.',
+    },
     quickStartButton: { ja: '積算を開始', en: 'Start Calculation', fr: 'Démarrer le calcul' },
     manualTitle: { ja: '手動入力モード', en: 'Manual Input Mode', fr: 'Mode saisie manuelle' },
     manualDesc: { ja: '壁の長さ・建物高さを手動で入力', en: 'Enter wall lengths and building height manually', fr: 'Saisir manuellement longueurs des murs et hauteur du bâtiment' },
