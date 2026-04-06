@@ -2057,6 +2057,18 @@ export const translations = {
     },
   },
 
+  teamDmPage: {
+    back: { ja: '戻る', en: 'Back', fr: 'Retour' },
+    backToMembers: { ja: 'メンバー一覧へ', en: 'Back to members', fr: 'Retour aux membres' },
+    peerUnavailable: {
+      ja: 'このユーザーにはメッセージを送れません。',
+      en: 'You cannot message this user.',
+      fr: 'Vous ne pouvez pas envoyer de message à cet utilisateur.',
+    },
+    empty: { ja: 'まだメッセージはありません。', en: 'No messages yet.', fr: 'Aucun message pour le moment.' },
+    placeholder: { ja: 'メッセージ…', en: 'Message…', fr: 'Message…' },
+  },
+
   // ─── Notifications ──────────────────────────────────────────
   notifications: {
     title: { ja: 'お知らせ', en: 'Notifications', fr: 'Notifications' },
@@ -2189,6 +2201,22 @@ export const translations = {
       en: 'Company users (admin)',
       fr: "Utilisateurs de l'entreprise (admin)",
     },
+    companyLabel: { ja: '会社', en: 'Company', fr: 'Entreprise' },
+    companyRosterHint: {
+      ja: 'メンバーにメッセージを送ったり、管理者の移譲・招待・無効化ができます。',
+      en: 'Message members, transfer admin, invite, or deactivate accounts.',
+      fr: 'Messagez les membres, transférez le rôle admin, invitez ou désactivez des comptes.',
+    },
+    inviteMembersShort: { ja: 'メンバーを招待', en: 'Invite members', fr: 'Inviter des membres' },
+    message: { ja: 'メッセージ', en: 'Message', fr: 'Message' },
+    setCompanyAdmin: { ja: '会社管理者にする', en: 'Set as company admin', fr: 'Définir comme admin entreprise' },
+    setCompanyAdminConfirm: {
+      ja: '{name} を会社の管理者にしますか？あなたは管理者ではなくなります。',
+      en: 'Make {name} the company admin? You will no longer be the admin.',
+      fr: 'Nommer {name} administrateur ? Vous ne serez plus admin.',
+    },
+    companyAdminBadge: { ja: '管理者', en: 'Admin', fr: 'Admin' },
+    companySeatBadge: { ja: '招待席', en: 'Seat', fr: 'Siège' },
     confirmDeactivate: { ja: '{email} を無効化しますか？', en: 'Deactivate {email}?', fr: 'Désactiver {email} ?' },
     confirmApprove: { ja: '{email} を承認しますか？', en: 'Approve {email}?', fr: 'Approuver {email} ?' },
     confirmReject: { ja: '{email} を拒否しますか？', en: 'Reject {email}?', fr: 'Refuser {email} ?' },
