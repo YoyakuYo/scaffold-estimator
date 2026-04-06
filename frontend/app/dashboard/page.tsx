@@ -39,6 +39,11 @@ import {
   XCircle,
   HardHat,
   Sparkles,
+  ClipboardList,
+  Table2,
+  Shapes,
+  FolderOutput,
+  Info,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -538,58 +543,129 @@ function UserDashboard() {
         aria-hidden
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10 space-y-8">
-        <section className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-sm shadow-slate-200/60">
-          <div
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.12)_1px,transparent_1px)] bg-[length:40px_40px]"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-blue-400/10 blur-3xl"
-            aria-hidden
-          />
-          <div className="relative p-8 lg:p-10 lg:flex lg:items-start lg:justify-between lg:gap-12">
-            <div className="max-w-xl">
-              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                <HardHat className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
-                {t('dashboard', 'siteHubBadge')}
-              </span>
-              <h1 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                {t('dashboard', 'title')}
-              </h1>
-              <p className="mt-4 text-base text-slate-600 leading-relaxed">
-                {t('dashboard', 'dashboardIntro')}
-              </p>
-            </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10 space-y-10">
+        {/* ── Hero ── */}
+        <header className="text-center sm:text-left max-w-3xl mx-auto sm:mx-0">
+          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+            <HardHat className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+            {t('dashboard', 'siteHubBadge')}
+          </span>
+          <h1 className="mt-4 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
+            {t('dashboard', 'title')}
+          </h1>
+          <p className="mt-3 text-base text-slate-600 leading-relaxed">{t('dashboard', 'dashboardIntro')}</p>
+          <p className="mt-2 text-sm text-slate-500">{t('dashboard', 'subtitle')}</p>
+        </header>
 
-            <div className="mt-10 w-full lg:mt-0 lg:max-w-lg shrink-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400 mb-3">
-                {t('dashboard', 'manualGuideTitle')}
-              </p>
-              <p className="text-sm text-slate-600 leading-relaxed">{t('dashboard', 'manualGuideIntro')}</p>
-              <ul className="mt-4 space-y-3 text-sm text-slate-700 leading-snug">
-                <li className="flex gap-2.5">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">
-                    1
-                  </span>
-                  <span>{t('dashboard', 'manualGuideStepWall')}</span>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">
-                    2
-                  </span>
-                  <span>{t('dashboard', 'manualGuideStepXy')}</span>
-                </li>
-              </ul>
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  {t('dashboard', 'manualGuideCfTitle')}
-                </p>
-                <p className="mt-2 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'manualGuideCfBody')}</p>
-              </div>
-            </div>
+        {/* ── End-to-end flow ── */}
+        <section
+          className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+          aria-labelledby="dashboard-flow-heading"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[length:32px_32px]"
+            aria-hidden
+          />
+          <div className="relative p-6 sm:p-8 lg:p-10">
+            <h2 id="dashboard-flow-heading" className="text-lg sm:text-xl font-bold text-slate-900">
+              {t('dashboard', 'flowTitle')}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 max-w-3xl">{t('dashboard', 'flowSubtitle')}</p>
+            <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 list-none p-0 m-0">
+              {(
+                [
+                  { icon: ClipboardList, titleKey: 'flowStep1Title' as const, bodyKey: 'flowStep1Body' as const },
+                  { icon: Table2, titleKey: 'flowStep2Title' as const, bodyKey: 'flowStep2Body' as const },
+                  { icon: Shapes, titleKey: 'flowStep3Title' as const, bodyKey: 'flowStep3Body' as const },
+                  { icon: Calculator, titleKey: 'flowStep4Title' as const, bodyKey: 'flowStep4Body' as const },
+                  { icon: FolderOutput, titleKey: 'flowStep5Title' as const, bodyKey: 'flowStep5Body' as const },
+                ] as const
+              ).map((step, i) => {
+                const Icon = step.icon;
+                return (
+                  <li
+                    key={step.titleKey}
+                    className="relative flex flex-col rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 sm:p-5 min-h-[140px]"
+                  >
+                    <span
+                      className="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+                      aria-hidden
+                    >
+                      {i + 1}
+                    </span>
+                    <Icon className="h-5 w-5 text-blue-600 mb-3 shrink-0" aria-hidden />
+                    <p className="text-sm font-semibold text-slate-900 pr-8 leading-snug">{t('dashboard', step.titleKey)}</p>
+                    <p className="mt-2 text-xs text-slate-600 leading-relaxed flex-1">{t('dashboard', step.bodyKey)}</p>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
         </section>
+
+        {/* ── Manual tips + C/R legend ── */}
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
+          <section
+            className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm flex flex-col"
+            aria-labelledby="manual-guide-heading"
+          >
+            <h2 id="manual-guide-heading" className="text-base font-bold text-slate-900">
+              {t('dashboard', 'manualGuideTitle')}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600 leading-relaxed">{t('dashboard', 'manualGuideIntro')}</p>
+            <ul className="mt-6 space-y-4 text-sm text-slate-700">
+              <li className="flex gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-bold text-slate-800">
+                  1
+                </span>
+                <span className="leading-snug pt-1">{t('dashboard', 'manualGuideStepWall')}</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-bold text-slate-800">
+                  2
+                </span>
+                <span className="leading-snug pt-1">{t('dashboard', 'manualGuideStepXy')}</span>
+              </li>
+            </ul>
+          </section>
+
+          <section
+            className="rounded-3xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/90 to-white p-6 sm:p-8 shadow-sm flex flex-col"
+            aria-labelledby="corner-legend-heading"
+          >
+            <div className="flex items-start gap-2">
+              <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" aria-hidden />
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700/90">
+                  {t('dashboard', 'cornerLegendBadge')}
+                </p>
+                <h2 id="corner-legend-heading" className="mt-1 text-base font-bold text-slate-900">
+                  {t('dashboard', 'manualGuideCfTitle')}
+                </h2>
+              </div>
+            </div>
+            <p className="mt-3 text-sm font-medium text-indigo-950/90 rounded-xl bg-white/80 border border-indigo-100 px-3 py-2.5">
+              {t('dashboard', 'cornerLegendNoF')}
+            </p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 flex-1">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold text-emerald-800 tracking-wide">{t('dashboard', 'cornerCName')}</p>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'cornerCExplain')}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold text-violet-900 tracking-wide">{t('dashboard', 'cornerRName')}</p>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'cornerRExplain')}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="text-xs font-semibold text-slate-800">{t('dashboard', 'cornerWhenTitle')}</p>
+              <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">{t('dashboard', 'cornerWhenBody')}</p>
+            </div>
+            <p className="mt-4 text-xs text-slate-500 leading-relaxed border-t border-slate-200/80 pt-4">
+              {t('dashboard', 'manualGuideCfBody')}
+            </p>
+          </section>
+        </div>
 
         <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-8 sm:p-10 shadow-sm">
           <div
