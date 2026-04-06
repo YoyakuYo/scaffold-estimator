@@ -1471,25 +1471,28 @@ function ScaffoldPageContent() {
   });
   const subscriptionMessage = rulesError && (rulesErrorDetail as Error)?.message;
 
-  const { data: profileForPlan } = useQuery({
+  const { data: profileForPlan, isFetched: profilePlanFetched } = useQuery({
     queryKey: ['profile'],
     queryFn: usersApi.getProfile,
     staleTime: 60_000,
     retry: false,
   });
-  const { data: subscriptionInfo } = useQuery({
+  const { data: subscriptionInfo, isFetched: subscriptionPlanFetched } = useQuery({
     queryKey: ['my-subscription'],
     queryFn: subscriptionsApi.getMine,
     staleTime: 60_000,
     retry: false,
   });
+  /** Do not apply trial/basic caps until both identity sources have settled (avoids subscription returning before profile → 3s wrong UI). */
+  const planIdentityReady = profilePlanFetched && subscriptionPlanFetched;
   /** Invited org seats must inherit company entitlements; do not gate on trial/basic caps from a stale row. */
   const isOrgSeatOnScaffold =
     profileForPlan?.isCompanySeat === true ||
     subscriptionInfo?.companySeat === true ||
     subscriptionInfo?.managesBilling === false;
   const caps = subscriptionInfo?.capabilities;
-  const planGatesRelaxed = caps === undefined || isOrgSeatOnScaffold;
+  const planGatesRelaxed =
+    !planIdentityReady || caps === undefined || isOrgSeatOnScaffold;
   const canAi = planGatesRelaxed || caps?.aiExtract === true;
   const canCad = planGatesRelaxed || caps?.cadDraw === true;
   const canFile = planGatesRelaxed || caps?.fileUpload === true;
@@ -1516,6 +1519,7 @@ function ScaffoldPageContent() {
     }
   }, [
     planGatesRelaxed,
+    planIdentityReady,
     isOrgSeatOnScaffold,
     canAi,
     canCad,
@@ -3059,7 +3063,7 @@ function ScaffoldPageContent() {
         </div>
       )}
       {showDrawingUpload &&
-        !isOrgSeatOnScaffold &&
+        !planGatesRelaxed &&
         subscriptionInfo?.status === 'trialing' &&
         subscriptionInfo?.plan === 'free_trial' &&
         subscriptionInfo.trialFileUploads && (

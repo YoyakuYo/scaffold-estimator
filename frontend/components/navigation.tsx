@@ -43,7 +43,7 @@ export function Navigation() {
 
   const isAdmin = currentUser?.role === 'superadmin';
 
-  const { data: mySubscription } = useQuery({
+  const { data: mySubscription, isFetched: subscriptionNavFetched } = useQuery({
     queryKey: ['my-subscription'],
     queryFn: subscriptionsApi.getMine,
     enabled: !!authApi.getToken() && !!currentUser && currentUser.role !== 'superadmin',
@@ -51,11 +51,15 @@ export function Navigation() {
     retry: false,
   });
 
-  /** Invited company seats must not see billing in the main nav (DB flag + subscription payload). */
-  const showBillingNav =
-    currentUser?.isCompanySeat !== true &&
-    mySubscription?.companySeat !== true &&
-    (mySubscription == null || mySubscription.managesBilling !== false);
+  /**
+   * Hide Billing for org seats. Prefer profile.isCompanySeat (instant after profile fetch); once
+   * subscription has loaded, also hide on companySeat / managesBilling so we do not flash Billing for ~3s.
+   */
+  const hideBillingNav =
+    currentUser?.isCompanySeat === true ||
+    (subscriptionNavFetched && mySubscription?.companySeat === true) ||
+    (subscriptionNavFetched && mySubscription?.managesBilling === false);
+  const showBillingNav = !hideBillingNav;
 
   const handleLogout = () => {
     authApi.logout();
