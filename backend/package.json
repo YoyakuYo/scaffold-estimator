@@ -67,6 +67,7 @@
     "typeorm": "^0.3.17",
     "uuid": "^9.0.1",
     "web-ifc": "^0.0.75",
+    "web-push": "^3.6.7",
     "winston": "^3.11.0"
   },
   "devDependencies": {
@@ -84,6 +85,7 @@
     "@types/passport-local": "^1.0.38",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^9.0.7",
+    "@types/web-push": "^3.6.4",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "eslint": "^8.57.1",

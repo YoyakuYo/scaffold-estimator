@@ -66,6 +66,21 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:3001
 
 # ============================================
+# Web Push (PWA / installed app notifications)
+# ============================================
+# Required for system notifications on phones and desktops that installed the PWA.
+# Generate keys once:  npx web-push generate-vapid-keys
+# Put the public key in VAPID_PUBLIC_KEY (same value can be copied to the frontend as
+# NEXT_PUBLIC_VAPID_PUBLIC_KEY if you want to skip the runtime GET). Private key stays on the API only.
+#
+# VAPID_PUBLIC_KEY=BGx...
+# VAPID_PRIVATE_KEY=...
+# Contact or app identifier for push services (must be mailto: or https: URL):
+# VAPID_SUBJECT=mailto:support@yourdomain.com
+#
+# After setting keys, apply supabase-migrations/121_push_subscriptions.sql (push_subscriptions table).
+
+# ============================================
 # Email — Brevo / SendGrid HTTP API (recommended on Render) OR SMTP
 # ============================================
 # On Render and many PaaS hosts, outbound SMTP (port 587/465) often times out or is blocked.

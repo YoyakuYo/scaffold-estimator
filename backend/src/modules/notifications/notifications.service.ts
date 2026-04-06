@@ -2,12 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Notification } from './notification.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+import { WebPushService } from './web-push.service';
 
 export type NotificationType = 'approval' | 'rejection' | 'new_message' | 'system';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly webPushService: WebPushService,
+  ) {}
 
   async create(
     userId: string,
@@ -24,7 +28,15 @@ export class NotificationsService {
     });
     const { data: saved, error } = await this.supabase.getClient().from('notifications').insert(ins).select().single();
     if (error || !saved) throw new Error(error?.message || 'Insert failed');
-    return mapRowToCamel<Notification>(saved as Record<string, unknown>)!;
+    const notification = mapRowToCamel<Notification>(saved as Record<string, unknown>)!;
+    void this.webPushService
+      .notifyUser(userId, {
+        title,
+        body: options?.body ?? undefined,
+        link: options?.link ?? undefined,
+      })
+      .catch(() => {});
+    return notification;
   }
 
   async listForUser(userId: string, limit = 50): Promise<Notification[]> {

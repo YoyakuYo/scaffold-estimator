@@ -10,6 +10,7 @@ import { SuperAdminNavigation } from '@/components/superadmin-navigation';
 import { Heartbeat } from '@/components/heartbeat';
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 import { AppTitlebar } from '@/components/app-titlebar';
+import { PushNotificationSetup } from '@/components/push-notification-setup';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -59,6 +60,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
           <>
             {isSuperAdmin ? <SuperAdminNavigation /> : <Navigation />}
             <Heartbeat />
+            <PushNotificationSetup enabled={!!profile?.id} />
           </>
         )}
         {children}

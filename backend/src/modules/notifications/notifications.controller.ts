@@ -1,11 +1,31 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Param, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { NotificationsService } from './notifications.service';
+import { WebPushService } from './web-push.service';
+import { PushSubscribeDto } from './dto/push-subscribe.dto';
 
 @Controller('notifications')
 export class NotificationsController {
-  constructor(private notificationsService: NotificationsService) {}
+  constructor(
+    private notificationsService: NotificationsService,
+    private webPushService: WebPushService,
+  ) {}
+
+  /** Register Web Push subscription (PWA / installed app). Requires VAPID keys on the server. */
+  @UseGuards(JwtAuthGuard)
+  @Post('push/subscribe')
+  async subscribePush(@CurrentUser() user: any, @Body() dto: PushSubscribeDto, @Req() req: Request) {
+    await this.webPushService.saveSubscription(user.id, dto, req.headers['user-agent']);
+    return { ok: true };
+  }
+
+  /** Public (no auth): used by the client to subscribe with `pushManager.subscribe`. */
+  @Get('push/vapid-public-key')
+  vapidPublicKey() {
+    return { publicKey: this.webPushService.getPublicKey() };
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get()

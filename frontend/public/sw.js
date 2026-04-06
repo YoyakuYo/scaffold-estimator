@@ -1,5 +1,5 @@
 /// Service Worker for PWA — 仮設材積算システム
-const CACHE_NAME = 'scaffold-estimator-v6';
+const CACHE_NAME = 'scaffold-estimator-v7';
 const STATIC_ASSETS = [
   '/',
   '/dashboard',
@@ -34,11 +34,67 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('push', (event) => {
+  let payload = { title: '仮設材積算', body: '', url: '/' };
+  try {
+    if (event.data) {
+      const json = event.data.json();
+      if (json.title) payload.title = String(json.title);
+      if (json.body != null) payload.body = String(json.body);
+      if (json.url) payload.url = String(json.url);
+    }
+  } catch (_) {
+    try {
+      const text = event.data && event.data.text();
+      if (text) payload.body = text;
+    } catch (_) {}
+  }
+
+  const url = payload.url.startsWith('http') ? payload.url : new URL(payload.url, self.location.origin).href;
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body || undefined,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/icon-72x72.png',
+      tag: 'zoomen-notification',
+      renotify: true,
+      data: { url },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const raw = event.notification.data && event.notification.data.url;
+  const url = typeof raw === 'string' && raw.startsWith('http') ? raw : new URL(raw || '/', self.location.origin).href;
+  let targetPath = '/';
+  try {
+    targetPath = new URL(url).pathname || '/';
+  } catch (_) {}
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        try {
+          if (new URL(client.url).pathname === targetPath && 'focus' in client) {
+            return client.focus();
+          }
+        } catch (_) {}
+      }
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
+  );
+});
+
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const reqUrl = new URL(event.request.url);
 
   if (event.request.method !== 'GET') return;
-  if (url.pathname.startsWith('/api/')) return;
+  if (reqUrl.pathname.startsWith('/api/')) return;
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
