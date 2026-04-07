@@ -598,6 +598,8 @@ export const translations = {
       fr: 'Cercle trop petit. Augmentez le rayon.',
     },
     buildingSettings: { ja: '建物情報・足場設定', en: 'Building Info & Scaffold Settings', fr: 'Infos bâtiment et réglages échafaudage' },
+    /** Panel below wall table when default height is edited in DrawingUpload — scaffold type/width only */
+    scaffoldSettingsPanelTitle: { ja: '足場設定', en: 'Scaffold settings', fr: 'Réglages échafaudage' },
     siteInfoSection: { ja: '現場・連絡先', en: 'Site & contact', fr: 'Chantier et contact' },
     siteName: { ja: '現場名 / 件名', en: 'Site / job name', fr: 'Nom du chantier' },
     siteNamePlaceholder: { ja: '例: ○○ビル新築工事', en: 'e.g. Project name', fr: 'ex. Nom du projet' },

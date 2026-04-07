@@ -3627,6 +3627,7 @@ function ScaffoldPageContent() {
 
         <BuildingScaffoldSettingsPanel
           showSiteContact={false}
+          showDefaultWallHeight={!showDrawingUpload}
           rules={rules}
           buildingHeightMm={buildingHeightMm}
           setBuildingHeightMm={setBuildingHeightMm}

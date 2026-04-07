@@ -110,6 +110,8 @@ export function SiteContactFields({
 export interface BuildingScaffoldSettingsPanelProps extends Partial<SiteContactFieldsProps> {
   /** When false, hides site/contact fields (collect on result page before Excel). Default true. */
   showSiteContact?: boolean;
+  /** When false, hides default wall height (m) — use when DrawingUpload already collects it. Default true. */
+  showDefaultWallHeight?: boolean;
   rules: ScaffoldRules | undefined;
   buildingHeightMm: number | null;
   setBuildingHeightMm: (v: number | null) => void;
@@ -130,6 +132,7 @@ export interface BuildingScaffoldSettingsPanelProps extends Partial<SiteContactF
 
 export function BuildingScaffoldSettingsPanel({
   showSiteContact = true,
+  showDefaultWallHeight = true,
   siteName = '',
   setSiteName = () => {},
   siteAddress = '',
@@ -164,7 +167,9 @@ export function BuildingScaffoldSettingsPanel({
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
           <Building2 className="h-5 w-5 text-blue-600" />
-          {t('scaffold', 'buildingSettings')}
+          {showSiteContact || showDefaultWallHeight
+            ? t('scaffold', 'buildingSettings')
+            : t('scaffold', 'scaffoldSettingsPanelTitle')}
         </h2>
 
         {showSiteContact ? (
@@ -188,39 +193,41 @@ export function BuildingScaffoldSettingsPanel({
           </div>
         ) : null}
 
-        <div className="mb-6 pb-6 border-b border-gray-200">
-          <div className="md:col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              {t('scaffold', 'defaultHeightForDrawingMm')}
-            </label>
-            <div className="flex items-center gap-2 max-w-xs">
-              <input
-                type="number"
-                min={1}
-                step={0.01}
-                value={
-                  buildingHeightMm != null && buildingHeightMm > 0
-                    ? Math.round((buildingHeightMm / 1000) * 1000) / 1000
-                    : ''
-                }
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === '') {
-                    setBuildingHeightMm(null);
-                    return;
+        {showDefaultWallHeight ? (
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {t('scaffold', 'defaultHeightForDrawingMm')}
+              </label>
+              <div className="flex items-center gap-2 max-w-xs">
+                <input
+                  type="number"
+                  min={1}
+                  step={0.01}
+                  value={
+                    buildingHeightMm != null && buildingHeightMm > 0
+                      ? Math.round((buildingHeightMm / 1000) * 1000) / 1000
+                      : ''
                   }
-                  const m = Number(raw);
-                  if (!Number.isFinite(m) || m <= 0) return;
-                  setBuildingHeightMm(Math.round(m * 1000));
-                }}
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                placeholder="3"
-              />
-              <span className="text-sm text-gray-500 shrink-0">m</span>
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      setBuildingHeightMm(null);
+                      return;
+                    }
+                    const m = Number(raw);
+                    if (!Number.isFinite(m) || m <= 0) return;
+                    setBuildingHeightMm(Math.round(m * 1000));
+                  }}
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="3"
+                />
+                <span className="text-sm text-gray-500 shrink-0">m</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'defaultHeightDrawingHint')}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'defaultHeightDrawingHint')}</p>
           </div>
-        </div>
+        ) : null}
 
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">{t('scaffoldExtra', 'scaffoldType')}</label>
