@@ -96,7 +96,7 @@ function BankPlanGrid({
           t('billing', 'planCardMonthlyRenewal'),
           t('billing', 'planCardMonthlySeats'),
         ],
-        bullets: [t('billing', 'planCardMonthlyF1'), t('billing', 'planCardMonthlyF2')],
+        bullets: [t('billing', 'planCardMonthlyFeatures')],
       };
     }
     return {

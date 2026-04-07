@@ -41,7 +41,7 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
     case 'basic':
     case 'starter':
       return {
-        maxSeats: 2,
+        maxSeats: 1,
         fileUpload: true,
         quickShape: true,
         cadDraw: false,
@@ -58,10 +58,10 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
         aiExtract: false,
         view3d: true,
       };
-    /** Bank per-project wire: full CAD/3D/upload tier except AI; small team, not a 20-seat bundle. */
+    /** Bank per-project wire: full CAD/3D/upload tier except AI; single user. */
     case 'monthly':
       return {
-        maxSeats: 2,
+        maxSeats: 1,
         fileUpload: true,
         quickShape: true,
         cadDraw: true,

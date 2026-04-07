@@ -696,6 +696,52 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ─── Commercial plans (features only; fees on Billing) ─ */}
+        <section
+          className="border-b border-gray-200 bg-slate-100 py-16 md:py-20"
+          aria-labelledby="landing-plans-heading"
+        >
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-700">
+              {t('landing', 'plansEyebrow')}
+            </p>
+            <h2 id="landing-plans-heading" className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
+              {t('landing', 'plansTitle')}
+            </h2>
+            <p className="mt-3 max-w-3xl text-gray-600 leading-relaxed">{t('landing', 'plansIntro')}</p>
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {(
+                [
+                  { title: t('billing', 'planTierBasic'), body: t('landing', 'plansBasicBody') },
+                  { title: t('billing', 'planTierMedium'), body: t('landing', 'plansMediumBody') },
+                  { title: t('billing', 'planTierMonthly'), body: t('landing', 'plansPerProjectBody') },
+                  { title: t('billing', 'planTierPremium'), body: t('landing', 'plansPremiumBody') },
+                ] as const
+              ).map((plan, cardIdx) => (
+                <div
+                  key={cardIdx}
+                  className="flex flex-col rounded-2xl border border-gray-200/90 bg-white p-6 shadow-sm ring-1 ring-gray-900/5"
+                >
+                  <h3 className="text-lg font-bold text-gray-900">{plan.title}</h3>
+                  <ul className="mt-4 flex flex-1 list-none flex-col gap-2.5 p-0 text-sm leading-relaxed text-gray-600">
+                    {plan.body
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean)
+                      .map((line, idx) => (
+                        <li key={`${cardIdx}-${idx}`} className="flex gap-2.5">
+                          <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <p className="mt-8 text-sm text-gray-500 max-w-3xl leading-relaxed">{t('landing', 'plansFootnote')}</p>
+          </div>
+        </section>
+
         {/* ─── Wakugumi / site photography (image + selling points) ─ */}
         <section className="border-b border-gray-200 bg-slate-50 py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
