@@ -996,8 +996,9 @@ export default function Scaffold3DView({
         }
 
         // ── Per-level components: working levels above ground (y = ground + jack + level height), not building floor level ───────────────────────
-        const tzOuter = 0;
-        const tzInner = widthM;
+        // Local +Z maps to polygon outward normal: z=0 = row nearest building, z=widthM = street (outer) row.
+        const tzInner = 0;
+        const tzOuter = widthM;
 
         for (let lv = 1; lv <= levelLoopMax; lv++) {
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
@@ -1050,7 +1051,7 @@ export default function Scaffold3DView({
             const isDoorSpan = doorSpanIndices.has(i) && lv === 1;
 
             // Braces (ブレス) — skip at ground level for door opening spans
-            // Kusabi: 外列のみ (local z=0) ※1800上部と整合。ブラケット: z=0
+            // Kusabi: 外列のみ (local z = widthM / street side). Bracket: single row at z=0.
             // Wakugumi: BOTH faces
             if (!isDoorSpan) {
               const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
@@ -1117,7 +1118,7 @@ export default function Scaffold3DView({
               }
             }
 
-            // Habaki / Toe boards at outer (z=0) and inner (z=widthM). Wakugumi: 1 or 2 per span from result.
+            // Habaki: building-side (z=0) and street-side (z=widthM). Wakugumi: 1 or 2 per span from result.
             // Skip habaki at ground level for door openings
             if (!isDoorSpan) {
               const drawHabakiFront = true;
@@ -1136,11 +1137,11 @@ export default function Scaffold3DView({
               for (let pi = 0; pi < postX.length; pi++) {
                 if (pi < startPostIdx) continue;
                 const px = postX[pi];
-                const skipOuterCorner =
+                const skipInnerRowTopGuardAtCorner =
                   !isBracket &&
-                  pz === tzOuter &&
+                  pz === tzInner &&
                   ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
-                if (skipOuterCorner) continue;
+                if (skipInnerRowTopGuardAtCorner) continue;
                 addPipe(group, px, yDeck, pz, px, yCap, pz, topGuardMat, PIPE_R * 0.7);
               }
               for (let i = startSpanIdx; i < spans.length; i++) {
@@ -2277,7 +2278,7 @@ export default function Scaffold3DView({
 
         // The wall scaffold is built in local space:
         //   local X = along wall length (0 to totalLen)
-        //   local Z = scaffold depth (0 = outer face, widthM = inner face)
+        //   local Z = depth along outward normal (0 = building-near row, widthM = outer / street row)
         //   local Y = height (up)
         //
         // We need to transform so that:
@@ -2452,7 +2453,7 @@ export default function Scaffold3DView({
         return { x: p.x, z: p.z };
       };
 
-      // Rendered wall posts in world XZ, tagged by row (local z=0 = outer, z=width = inner).
+      // Rendered wall posts in world XZ (local z=0 = building-near, z=width = street / outer).
       // Row-agnostic dedup matched outers to inners at corners and skipped real outer standards;
       // larger outer radius (6cm) merges A/B shared nodes without duplicating posts.
       const wallPostWorldXZ: Array<{ x: number; z: number; isOuter: boolean }> = [];
