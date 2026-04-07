@@ -192,6 +192,7 @@ function AdminDashboard() {
             value={stats?.totalUsers ?? '—'}
             color="blue"
             loading={statsLoading}
+            hint={t('adminDashboard', 'totalUsersStatsHint')}
           />
           <KpiCard
             icon={<Building2 className="h-5 w-5" />}
@@ -199,6 +200,13 @@ function AdminDashboard() {
             value={stats?.totalCompanies ?? '—'}
             color="purple"
             loading={statsLoading}
+            hint={
+              stats
+                ? t('adminDashboard', 'companiesStatsBreakdown')
+                    .replace('{userCount}', String(stats.totalUsers))
+                    .replace('{companyCount}', String(stats.totalCompanies))
+                : undefined
+            }
           />
           <KpiCard
             icon={<Activity className="h-5 w-5" />}
@@ -415,6 +423,7 @@ function KpiCard({
   color,
   loading,
   pulse,
+  hint,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -422,6 +431,7 @@ function KpiCard({
   color: 'blue' | 'purple' | 'green' | 'amber';
   loading?: boolean;
   pulse?: boolean;
+  hint?: string;
 }) {
   const bg = { blue: 'bg-blue-50', purple: 'bg-purple-50', green: 'bg-green-50', amber: 'bg-amber-50' }[color];
   const iconColor = { blue: 'text-blue-600', purple: 'text-purple-600', green: 'text-green-600', amber: 'text-amber-600' }[color];
@@ -441,6 +451,7 @@ function KpiCard({
         <div className="text-2xl font-bold text-slate-900">{value}</div>
       )}
       <p className="text-xs text-slate-500 mt-1">{label}</p>
+      {hint ? <p className="text-[11px] text-slate-400 mt-1 leading-snug">{hint}</p> : null}
     </div>
   );
 }

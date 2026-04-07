@@ -827,23 +827,59 @@ export class AuthService {
     return count ?? 0;
   }
 
+  /**
+   * Non-superadmin user count + distinct companies that have at least one such user.
+   * Prefers RPC `admin_platform_tenant_stats` (see supabase-migrations/129_platform_tenant_stats.sql).
+   */
+  private async getTenantUserAndCompanyCounts(): Promise<{ users: number; companies: number }> {
+    const client = this.supabase.getClient();
+    const { data, error } = await client.rpc('admin_platform_tenant_stats');
+    if (!error && data != null) {
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row && typeof row === 'object' && 'tenant_users' in row && 'tenant_companies' in row) {
+        const typed = row as { tenant_users: unknown; tenant_companies: unknown };
+        return {
+          users: Number(typed.tenant_users),
+          companies: Number(typed.tenant_companies),
+        };
+      }
+    }
+    if (error) {
+      this.logger.warn(`admin_platform_tenant_stats RPC failed (${error.message}); using fallback counts`);
+    }
+    const { count: userCount, error: cErr } = await client
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .neq('role', 'superadmin');
+    if (cErr) this.logger.warn(`tenant user count fallback: ${cErr.message}`);
+    const { data: rows, error: rErr } = await client.from('users').select('company_id').neq('role', 'superadmin');
+    if (rErr) {
+      this.logger.warn(`distinct company fallback: ${rErr.message}`);
+      return { users: userCount ?? 0, companies: 0 };
+    }
+    const ids = new Set(
+      (rows || [])
+        .map((r) => (r as { company_id: string | null }).company_id)
+        .filter((id): id is string => id != null && id !== ''),
+    );
+    return { users: userCount ?? 0, companies: ids.size };
+  }
+
   async getPlatformStats(): Promise<{
     totalUsers: number;
     pendingUsers: number;
     totalCompanies: number;
     onlineCount: number;
   }> {
-    const client = this.supabase.getClient();
-    const [totalRes, pendingRes, companiesRes, onlineUsers] = await Promise.all([
-      client.from('users').select('*', { count: 'exact', head: true }),
+    const [tenant, pendingRes, onlineUsers] = await Promise.all([
+      this.getTenantUserAndCompanyCounts(),
       this.getPendingUsersCount(),
-      client.from('companies').select('*', { count: 'exact', head: true }),
       this.getOnlineUsers(),
     ]);
     return {
-      totalUsers: totalRes.count ?? 0,
+      totalUsers: tenant.users,
       pendingUsers: pendingRes,
-      totalCompanies: companiesRes.count ?? 0,
+      totalCompanies: tenant.companies,
       onlineCount: onlineUsers.length,
     };
   }
@@ -867,11 +903,13 @@ export class AuthService {
       if (!branchesByCompany.has(r.company_id)) branchesByCompany.set(r.company_id, []);
       branchesByCompany.get(r.company_id)!.push({ id: r.id, name: r.name, isHeadquarters: r.is_headquarters });
     }
-    return (companiesRows || []).map((c: { id: string; name: string }) => ({
-      id: c.id,
-      name: c.name,
-      userCount: countMap.get(c.id) ?? 0,
-      branches: branchesByCompany.get(c.id) || [],
-    }));
+    return (companiesRows || [])
+      .map((c: { id: string; name: string }) => ({
+        id: c.id,
+        name: c.name,
+        userCount: countMap.get(c.id) ?? 0,
+        branches: branchesByCompany.get(c.id) || [],
+      }))
+      .filter((c) => c.userCount > 0);
   }
 }

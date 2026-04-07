@@ -142,13 +142,16 @@ export const usersApi = {
     return res.data;
   },
 
-  /** Platform stats for super admin dashboard (admin only) */
+  /**
+   * Platform stats (superadmin). `totalUsers` excludes super admins; `totalCompanies` counts
+   * distinct organizations that have at least one non–super-admin user (not raw `companies` row count).
+   */
   getPlatformStats: async (): Promise<{ totalUsers: number; pendingUsers: number; totalCompanies: number; onlineCount: number }> => {
     const res = await apiClient.get('/auth/admin/stats');
     return res.data;
   },
 
-  /** List all companies with user count and branches (super admin only) */
+  /** Companies that have at least one non–super-admin user, with branches (superadmin only). */
   listCompanies: async (): Promise<Array<{ id: string; name: string; userCount: number; branches: Array<{ id: string; name: string; isHeadquarters: boolean }> }>> => {
     const res = await apiClient.get('/auth/admin/companies');
     return res.data;

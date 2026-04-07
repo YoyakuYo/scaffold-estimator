@@ -155,6 +155,7 @@ export function SuperAdminDashboardContent() {
                 {t('adminDashboard', 'totalUsers')}
               </div>
               <p className="mt-2 text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+              <p className="mt-1 text-xs text-gray-500 leading-snug">{t('adminDashboard', 'totalUsersStatsHint')}</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center gap-2 text-gray-500 text-sm">
@@ -176,6 +177,11 @@ export function SuperAdminDashboardContent() {
                 {t('adminDashboard', 'companies')}
               </div>
               <p className="mt-2 text-2xl font-bold text-gray-900">{stats.totalCompanies}</p>
+              <p className="mt-1 text-xs text-gray-500 leading-snug">
+                {t('adminDashboard', 'companiesStatsBreakdown')
+                  .replace('{userCount}', String(stats.totalUsers))
+                  .replace('{companyCount}', String(stats.totalCompanies))}
+              </p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center gap-2 text-gray-500 text-sm">
