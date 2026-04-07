@@ -62,6 +62,8 @@ type CornerStartMode = 'none' | 'convex-overrun' | 'reflex-share';
 const WALL_TO_INNER_POSTS_MM = 300;
 /** Saturated red for 端部 — visible against pipe grey in default and technical palettes. */
 const END_STOPPER_RED = 0xff2020;
+/** Braces (ブレス) — match 2D `scaffold-2d-view` COL.brace `#b91c1c`. */
+const BRACE_COLOR_3D = 0xb91c1c;
 /** Place transverse 端部 slightly past the last post line (m) so it reads at the free end of the terminal bay. */
 const END_STOPPER_FACADE_OUTSET_M = 0.028;
 /** Spans (planks) can overrun toward the wall by this amount (m). */
@@ -80,7 +82,7 @@ type ViewMode = 'all' | 'wall';
 const C_TECH = {
   // User-requested color scheme for 3D clarity
   jack: 0x111827,      // black
-  brace: 0x2563eb,     // blue
+  brace: BRACE_COLOR_3D,
   tesuri: 0x16a34a,    // green
   habaki: 0xef4444,    // red
   plank: 0xf5c842,     // yellow
@@ -100,7 +102,7 @@ const C = {
   post:       BIM_COLORS.pipe,
   plank:      BIM_COLORS.plank,
   tesuri:     BIM_COLORS.tesuri,
-  brace:      BIM_COLORS.pipeDark,
+  brace:      BRACE_COLOR_3D,
   ecoPallet:  BIM_COLORS.ecoPallet,
   ground:     BIM_COLORS.ground,
   bg:         0xf0f0f0,
@@ -589,7 +591,7 @@ export default function Scaffold3DView({
         metalness: metal, roughness: rough,
       });
       const pipeDarkMat = new THREE.MeshStandardMaterial({
-        color: isTech ? C_TECH.brace : BIM_COLORS.pipeDark,
+        color: isTech ? C_TECH.brace : C.brace,
         metalness: metal, roughness: rough + 0.05,
       });
       const plankMat = new THREE.MeshStandardMaterial({
