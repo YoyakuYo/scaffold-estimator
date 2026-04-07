@@ -193,26 +193,11 @@ export class ScaffoldCalculatorService {
   private readonly logger = new Logger(ScaffoldCalculatorService.name);
 
   /**
-   * Pattern-based complexity multipliers
-   * Difficulty: 改修工事 (most complex) → S造 (medium) → RC造 (simplest)
-   */
-  private readonly PATTERN_MULTIPLIERS: Record<'改修工事' | 'S造' | 'RC造', number> = {
-    '改修工事': 1.25,  // Most complex - irregular shapes, existing structure adaptation
-    'S造': 1.0,       // Medium - grid-based steel frame
-    'RC造': 0.9,      // Simplest - formwork-based concrete
-  };
-
-  /**
    * Main calculation entry point.
    * Calculates quantities for each selected wall, then aggregates.
    */
   calculate(input: ScaffoldCalculationInput): ScaffoldCalculationResult {
-    const structureType = input.structureType || '改修工事'; // Default to most complex
-    const complexityMultiplier = this.PATTERN_MULTIPLIERS[structureType];
-    
-    this.logger.log(
-      `Calculating kusabi scaffold for ${input.walls.length} wall(s), pattern: ${structureType} (multiplier: ${complexityMultiplier}x)`
-    );
+    this.logger.log(`Calculating kusabi scaffold for ${input.walls.length} wall(s)`);
 
     const wallResults: WallCalculationResult[] = [];
     const rectangleCornerRoles =
@@ -231,7 +216,6 @@ export class ScaffoldCalculatorService {
         wall,
         input,
         levelCalc,
-        complexityMultiplier,
         wallIndex,
         rectangleCornerRoles?.[wallIndex] ?? null,
       );
@@ -303,7 +287,6 @@ export class ScaffoldCalculatorService {
     wall: WallCalculationInput,
     input: ScaffoldCalculationInput,
     levelCalc: LevelCalcResult,
-    complexityMultiplier: number = 1.0,
     wallIndex: number = 0,
     rectangleCornerRole: KusabiRectangleCornerEdgeRole | null = null,
   ): WallCalculationResult {
@@ -778,13 +761,6 @@ export class ScaffoldCalculatorService {
           sortOrder,
           materialCode: `HARIWAKU-${spanCount}SPAN`,
         });
-      }
-    }
-
-    // Apply pattern-based complexity multiplier to all quantities
-    if (complexityMultiplier !== 1.0) {
-      for (const comp of components) {
-        comp.quantity = Math.ceil(comp.quantity * complexityMultiplier);
       }
     }
 

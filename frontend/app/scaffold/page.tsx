@@ -1133,7 +1133,6 @@ function ScaffoldPageContent() {
 
   // ─── Form state ─────────────────────────────────────────
   const [scaffoldType, setScaffoldType] = useState<'kusabi' | 'wakugumi'>('kusabi');
-  const [structureType, setStructureType] = useState<'改修工事' | 'S造' | 'RC造'>('改修工事');
   const [scaffoldWidthMm, setScaffoldWidthMm] = useState(() => initialWizard.scaffoldWidthMm);
   // Kusabi-specific
   const [preferredMainTatejiMm, setPreferredMainTatejiMm] = useState(1800);
@@ -1178,7 +1177,6 @@ function ScaffoldPageContent() {
   useEffect(() => {
     if (!editConfigId || !editConfig) return;
     setScaffoldType(editConfig.scaffoldType);
-    setStructureType(editConfig.structureType || '改修工事');
     const baseW = normalizeScaffoldWidthMmToCatalog(editConfig.scaffoldWidthMm ?? SCAFFOLD_WIDTH_NARROW_MM);
     if (editConfig.scaffoldType === 'wakugumi') {
       const s = editConfig.wakugumiFrameSeries;
@@ -1754,7 +1752,6 @@ function ScaffoldPageContent() {
       projectId: editConfig?.projectId ?? 'default-project',
       mode: 'manual',
       scaffoldType,
-      structureType,
       walls: enabledWalls,
       scaffoldWidthMm,
       siteName: '',
@@ -1809,7 +1806,6 @@ function ScaffoldPageContent() {
       projectId: 'default-project',
       mode: 'manual',
       scaffoldType: qConfig.scaffoldType,
-      structureType: qConfig.structureType,
       walls: wallInputs,
       scaffoldWidthMm: qConfig.scaffoldWidthMm,
       buildingOutline,
@@ -2123,7 +2119,6 @@ function ScaffoldPageContent() {
                       projectId: 'default-project',
                       mode: 'manual',
                       scaffoldType,
-                      structureType: '改修工事',
                       walls,
                       scaffoldWidthMm: defaults.scaffoldWidthMm,
                       preferredMainTatejiMm: defaults.preferredMainTatejiMm,
@@ -2677,25 +2672,6 @@ function ScaffoldPageContent() {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-violet-700">{t('scaffold', 'aiBimConditionsTitle')}</span>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">{t('scaffold', 'structureType')}</label>
-                          <select
-                            value={aiBimPreview.dto.structureType ?? '改修工事'}
-                            onChange={(e) => {
-                              const v = e.target.value as '改修工事' | 'S造' | 'RC造';
-                              setAiBimPreview({
-                                ...aiBimPreview,
-                                dto: { ...aiBimPreview.dto, structureType: v },
-                              });
-                            }}
-                            className="w-full max-w-md rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500 bg-white"
-                          >
-                            <option value="改修工事">{t('scaffold', 'structureTypeRenovation')} (1.25x)</option>
-                            <option value="S造">{t('scaffold', 'structureTypeSteel')} (1.0x)</option>
-                            <option value="RC造">{t('scaffold', 'structureTypeConcrete')} (0.9x)</option>
-                          </select>
-                          <p className="text-[10px] text-gray-500 mt-0.5">{t('scaffold', 'structureTypeHint')}</p>
-                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">{t('scaffold', 'scaffoldTypeLabel')}</label>
@@ -2933,6 +2909,7 @@ function ScaffoldPageContent() {
                         // to prevent the 3D view from creating erroneous tier groups.
                         const wallsWereDecomposed = finalWalls !== aiBimPreview.dto.walls && finalWalls !== aiBimPreview.walls;
                         const dtoBase = { ...aiBimPreview.dto };
+                        delete (dtoBase as Partial<CreateScaffoldConfigDto>).structureType;
                         if (!wallsWereDecomposed) {
                           delete (dtoBase as any).massingTiers;
                         }
@@ -3645,8 +3622,6 @@ function ScaffoldPageContent() {
           setBuildingHeightMm={setBuildingHeightMm}
           scaffoldType={scaffoldType}
           setScaffoldType={setScaffoldType}
-          structureType={structureType}
-          setStructureType={setStructureType}
           scaffoldWidthMm={scaffoldWidthMm}
           setScaffoldWidthMm={setScaffoldWidthMm}
           wakugumiFrameSeries={wakugumiFrameSeries}

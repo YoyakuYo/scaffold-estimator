@@ -80,18 +80,9 @@ function getSideLabel(side: string): string {
 export class ScaffoldCalculatorWakugumiService {
   private readonly logger = new Logger(ScaffoldCalculatorWakugumiService.name);
 
-  private readonly PATTERN_MULTIPLIERS: Record<'改修工事' | 'S造' | 'RC造', number> = {
-    '改修工事': 1.25,
-    'S造': 1.0,
-    'RC造': 0.9,
-  };
-
   calculate(input: WakugumiCalculationInput): ScaffoldCalculationResult {
-    const structureType = input.structureType || '改修工事';
-    const complexityMultiplier = this.PATTERN_MULTIPLIERS[structureType];
     this.logger.log(
-      `Calculating wakugumi scaffold for ${input.walls.length} wall(s), ` +
-      `frame: ${input.frameSizeMm}mm, pattern: ${structureType} (${complexityMultiplier}x)`
+      `Calculating wakugumi scaffold for ${input.walls.length} wall(s), frame: ${input.frameSizeMm}mm`,
     );
 
     const wallResults: WallCalculationResult[] = [];
@@ -99,7 +90,7 @@ export class ScaffoldCalculatorWakugumiService {
     for (let wallIndex = 0; wallIndex < input.walls.length; wallIndex++) {
       const wall = input.walls[wallIndex];
       const levelCalc = calculateLevelsWakugumi(wall.wallHeightMm, input.frameSizeMm);
-      const result = this.calculateWall(wall, input, levelCalc, complexityMultiplier, wallIndex);
+      const result = this.calculateWall(wall, input, levelCalc, wallIndex);
       wallResults.push(result);
     }
 
@@ -163,7 +154,6 @@ export class ScaffoldCalculatorWakugumiService {
     wall: WallCalculationInput,
     input: WakugumiCalculationInput,
     levelCalc: WakugumiLevelCalcResult,
-    complexityMultiplier: number,
     wallIndex: number = 0,
   ): WallCalculationResult {
     const widthMm = wall.scaffoldWidthMm ?? input.scaffoldWidthMm;
@@ -522,13 +512,6 @@ export class ScaffoldCalculatorWakugumiService {
           sortOrder,
           materialCode: `HARIWAKU-${spanCount}SPAN`,
         });
-      }
-    }
-
-    // Apply complexity multiplier
-    if (complexityMultiplier !== 1.0) {
-      for (const comp of components) {
-        comp.quantity = Math.ceil(comp.quantity * complexityMultiplier);
       }
     }
 

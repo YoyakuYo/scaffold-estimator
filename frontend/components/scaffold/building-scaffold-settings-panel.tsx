@@ -115,8 +115,6 @@ export interface BuildingScaffoldSettingsPanelProps extends Partial<SiteContactF
   setBuildingHeightMm: (v: number | null) => void;
   scaffoldType: 'kusabi' | 'wakugumi';
   setScaffoldType: (v: 'kusabi' | 'wakugumi') => void;
-  structureType: '改修工事' | 'S造' | 'RC造';
-  setStructureType: (v: '改修工事' | 'S造' | 'RC造') => void;
   scaffoldWidthMm: number;
   setScaffoldWidthMm: (v: number) => void;
   wakugumiFrameSeries: WakugumiFrameSeriesId;
@@ -147,8 +145,6 @@ export function BuildingScaffoldSettingsPanel({
   setBuildingHeightMm,
   scaffoldType,
   setScaffoldType,
-  structureType,
-  setStructureType,
   scaffoldWidthMm,
   setScaffoldWidthMm,
   wakugumiFrameSeries,
@@ -260,21 +256,7 @@ export function BuildingScaffoldSettingsPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffold', 'structureType')}</label>
-            <select
-              value={structureType}
-              onChange={(e) => setStructureType(e.target.value as '改修工事' | 'S造' | 'RC造')}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="改修工事">{t('scaffold', 'structureTypeRenovation')} (1.25x)</option>
-              <option value="S造">{t('scaffold', 'structureTypeSteel')} (1.0x)</option>
-              <option value="RC造">{t('scaffold', 'structureTypeConcrete')} (0.9x)</option>
-            </select>
-            <p className="text-xs text-gray-500 mt-1">{t('scaffold', 'structureTypeHint')}</p>
-          </div>
-
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {scaffoldType === 'kusabi' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffold', 'scaffoldWidth')}</label>

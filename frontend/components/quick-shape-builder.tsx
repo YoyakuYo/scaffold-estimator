@@ -105,7 +105,6 @@ export interface QuickShapeConfig {
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
   endStopperType: 'nuno' | 'frame';
-  structureType: '改修工事' | 'S造' | 'RC造';
   kaidanPerSide: Record<string, KaidanConfig>;
 }
 
@@ -126,7 +125,6 @@ export interface QuickShapeBuilderDraft {
   wakugumiFrameSeries: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
   endStopperType: 'nuno' | 'frame';
-  structureType: '改修工事' | 'S造' | 'RC造';
   kaidanPerSide: Record<string, KaidanConfig>;
   scaffoldWidthPerSide: Record<string, number | undefined>;
   /** Plan axis + signed run (mm) per edge label — same role as drawing upload XY column. */
@@ -169,8 +167,6 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
   const series = d.wakugumiFrameSeries;
   const wakugumiFrameSeries =
     series === 'FT617' || series === 'FT917' || series === 'FT1217' ? series : 'FT917';
-  const st = d.structureType;
-  const structureType = st === '改修工事' || st === 'S造' || st === 'RC造' ? st : '改修工事';
   const est = d.endStopperType;
   const endStopperType = est === 'nuno' || est === 'frame' ? est : 'nuno';
   const sct = d.scaffoldType;
@@ -208,7 +204,6 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     wakugumiFrameSeries,
     habakiCountPerSpan: habaki,
     endStopperType,
-    structureType,
     kaidanPerSide: d.kaidanPerSide && typeof d.kaidanPerSide === 'object' ? d.kaidanPerSide : {},
     scaffoldWidthPerSide:
       d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object'
@@ -293,9 +288,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
   const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>(
     () => mergedInitial?.endStopperType ?? 'nuno',
   );
-  const [structureType, setStructureType] = useState<'改修工事' | 'S造' | 'RC造'>(
-    () => mergedInitial?.structureType ?? '改修工事',
-  );
 
   // Kaidan per side
   const [kaidanPerSide, setKaidanPerSide] = useState<Record<string, KaidanConfig>>(
@@ -334,7 +326,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         wakugumiFrameSeries,
         habakiCountPerSpan,
         endStopperType,
-        structureType,
         kaidanPerSide,
         scaffoldWidthPerSide,
         edgePlanByLabel,
@@ -358,7 +349,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     wakugumiFrameSeries,
     habakiCountPerSpan,
     endStopperType,
-    structureType,
     kaidanPerSide,
     scaffoldWidthPerSide,
     edgePlanByLabel,
@@ -432,7 +422,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
       ...(scaffoldType === 'wakugumi' ? { wakugumiFrameSeries } : {}),
       habakiCountPerSpan,
       endStopperType,
-      structureType,
       kaidanPerSide,
     });
   };
@@ -897,20 +886,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   <option value={610}>{formatMmLabel(610)}</option>
                   <option value={914}>{formatMmLabel(914)}</option>
                   <option value={1219}>{formatMmLabel(1219)}</option>
-                </select>
-              </div>
-
-              {/* Structure Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'structurePattern')}</label>
-                <select
-                  value={structureType}
-                  onChange={(e) => setStructureType(e.target.value as typeof structureType)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="改修工事">改修工事 (1.25x)</option>
-                  <option value="S造">S造 (1.0x)</option>
-                  <option value="RC造">RC造 (0.9x)</option>
                 </select>
               </div>
 
