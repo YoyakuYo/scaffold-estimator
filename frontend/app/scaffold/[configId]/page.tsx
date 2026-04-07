@@ -834,6 +834,9 @@ function ScaffoldResultPage() {
                     ).toLocaleString()}
                   </div>
                   <div className="text-xs text-gray-500">{t('result', 'totalParts')}</div>
+                  <p className="text-[10px] text-gray-400 mt-1.5 leading-snug text-left px-0.5">
+                    {t('result', 'totalPartsHint')}
+                  </p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-gray-900">{result.walls.length}</div>

@@ -824,7 +824,12 @@ export const translations = {
     approved: { ja: '確認済み — 見積作成へ進めます', en: 'Approved — You can now create a quotation', fr: 'Approuvé — Vous pouvez créer le devis' },
     recalculate: { ja: '再計算する', en: 'Recalculate', fr: 'Recalculer' },
     totalComponents: { ja: '明細行（規格別）', en: 'BOM lines (by spec)', fr: 'Lignes (par spéc.)' },
-    totalParts: { ja: '部品合計', en: 'Total Parts', fr: 'Total pièces' },
+    totalParts: { ja: 'BOM数量の合計', en: 'Total BOM quantity', fr: 'Qté totale (Nomenclature)' },
+    totalPartsHint: {
+      ja: '上の表の「数量」をすべて足した値です。3Dはイメージ用で、ブレス1本でもX筋違は対角パイプ2本で描画されます。前後2列の支柱や布材・ネット類は画面上では数えにくいです。',
+      en: 'Sum of every quantity in the table above. The 3D view is illustrative: each X-brace uses two diagonal pipes, planks may use several meshes per line item, and items such as mesh sheets or nets are hard to count visually. Posts are double-row (front and back)—from one angle you may only see one row.',
+      fr: 'Somme de toutes les quantités du tableau. La vue 3D est indicative : chaque croix de façade utilise deux diagonales, et filets / nappes ne se comptent pas facilement à l’œil.',
+    },
     wallsActive: { ja: '有効壁面', en: 'Active Walls', fr: 'Murs actifs' },
     scanShare: { ja: '共有・スキャン', en: 'Scan / Share', fr: 'Scanner / Partager' },
     scanToOpen: { ja: 'スマホでスキャンして同じ結果を開く', en: 'Scan to open this result on another device', fr: 'Scannez pour ouvrir ce résultat sur un autre appareil' },
