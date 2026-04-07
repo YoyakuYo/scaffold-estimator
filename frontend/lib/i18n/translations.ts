@@ -1439,9 +1439,9 @@ export const translations = {
     },
     contactEyebrow: { ja: 'お問い合わせ', en: 'Contact', fr: 'Contact' },
     contactTitle: {
-      ja: 'ご質問・デモのご依頼',
-      en: 'Questions or demo requests',
-      fr: 'Questions ou demande de démo',
+      ja: 'ご質問',
+      en: 'Questions',
+      fr: 'Questions',
     },
     contactSubtitle: {
       ja: 'メッセージは運営のメールとスーパー管理者の通知に届きます。折り返しご連絡いたします。',
