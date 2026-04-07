@@ -5,8 +5,10 @@ import {
   SPAN_SIZES,
   classifyKusabiRectangleEdgeRoles,
   compressAdjacentCatalogSumMerges,
+  compressAdjacentNominalSameSpanMerges,
   cornerTerminalSpanMmKusabi,
   exactSumWithStandardSpans,
+  finalizeStandardSpanRowWithNominal,
   fitSpansToWallLengthWithCorner,
   inferReflexVerticesFromOutline,
   scaffoldFacadeBasisMmFromCorners,
@@ -211,6 +213,12 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     const a = [914, 610, 1219];
     const m = compressAdjacentCatalogSumMerges(a);
     expect(m.reduce((x, y) => x + y, 0)).toBe(a.reduce((x, y) => x + y, 0));
+  });
+
+  it('compressAdjacentNominalSameSpanMerges: 914+914→1829, 610+610→1219; chains 3×610→1829', () => {
+    expect(compressAdjacentNominalSameSpanMerges([914, 914])).toEqual([1829]);
+    expect(compressAdjacentNominalSameSpanMerges([610, 610])).toEqual([1219]);
+    expect(finalizeStandardSpanRowWithNominal([610, 610, 610])).toEqual([1829]);
   });
 });
 

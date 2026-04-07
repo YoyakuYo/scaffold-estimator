@@ -115,6 +115,13 @@ export const SPAN_SIZES: number[] = [610, 914, 1219, 1524, 1829];
  */
 export const KUSABI_MIDDLE_PACK_MAX_OVERRUN_MM = 10;
 
+/**
+ * When two **identical** adjacent catalog bays (e.g. 914+914, 610+610) sum within this delta of a
+ * larger catalog member, merge to that member (1828→1829, 1220→1219). Used for BOM / span-row display
+ * on open walls and convex corner middles only — not on reflex runs where length must stay exact.
+ */
+export const KUSABI_NOMINAL_PAIR_MERGE_MAX_DELTA_MM = 1;
+
 /** Set lookup for span catalog (exact-sum merges, validation). */
 export const SPAN_SIZE_SET: ReadonlySet<number> = new Set(SPAN_SIZES);
 
@@ -503,6 +510,75 @@ export function compressAdjacentCatalogSumMerges(
 }
 
 /**
+ * Merge adjacent **equal** spans when their sum differs from a catalog span by at most
+ * {@link KUSABI_NOMINAL_PAIR_MERGE_MAX_DELTA_MM} (e.g. 914+914→1829, 610+610→1219). Re-scan until stable.
+ */
+export function compressAdjacentNominalSameSpanMerges(
+  spans: readonly number[],
+  spanSet: ReadonlySet<number> = SPAN_SIZE_SET,
+  maxDeltaMm: number = KUSABI_NOMINAL_PAIR_MERGE_MAX_DELTA_MM,
+): number[] {
+  const catalog = [...spanSet].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  const out = [...spans];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < out.length - 1; i++) {
+      const a = out[i]!;
+      const b = out[i + 1]!;
+      if (a !== b) continue;
+      const sum = a + b;
+      let best: number | null = null;
+      let bestD = Infinity;
+      for (const c of catalog) {
+        const d = Math.abs(sum - c);
+        if (d <= maxDeltaMm && d < bestD) {
+          bestD = d;
+          best = c;
+        }
+      }
+      if (best != null) {
+        out.splice(i, 2, best);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** Repeat exact catalog-sum merges until fixed point (length-preserving). */
+export function finalizeMiddleExactCatalogMerges(
+  spans: readonly number[],
+  spanSet: ReadonlySet<number> = SPAN_SIZE_SET,
+): number[] {
+  let out = [...spans];
+  for (let g = 0; g < 40; g++) {
+    const next = compressAdjacentCatalogSumMerges(out, spanSet);
+    if (next.length === out.length && next.every((v, i) => v === out[i]!)) return next;
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * Exact-sum merges + nominal same-span pair merges until stable (open walls & convex corner middles).
+ */
+export function finalizeStandardSpanRowWithNominal(
+  spans: readonly number[],
+  spanSet: ReadonlySet<number> = SPAN_SIZE_SET,
+): number[] {
+  let out = [...spans];
+  for (let g = 0; g < 80; g++) {
+    const step1 = compressAdjacentCatalogSumMerges(out, spanSet);
+    const step2 = compressAdjacentNominalSameSpanMerges(step1, spanSet);
+    if (step2.length === out.length && step2.every((v, i) => v === out[i]!)) return step2;
+    out = step2;
+  }
+  return out;
+}
+
+/**
  * Given a wall length, find the optimal combination of standard spans
  * to fit.
  *
@@ -520,7 +596,8 @@ export function fitSpansToWallLength(
   options?: { northWall?: boolean },
 ): number[] {
   const maxOverrunMm = options?.northWall ? 610 : 300;
-  return fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
+  const raw = fitSpansToWallLengthWithOverrun(wallLengthMm, SPAN_SIZES, maxOverrunMm);
+  return finalizeStandardSpanRowWithNominal(raw);
 }
 
 /** Hint for 4-wall rectangles: shorter sides vs longer — used only to **prefer** span patterns, not fixed layouts. */
@@ -596,8 +673,9 @@ export function classifyKusabiRectangleEdgeRoles(
  *   The middle is filled from **SPAN_SIZES** (small overrun allowed via **KUSABI_MIDDLE_PACK_MAX_OVERRUN_MM** so
  *   fewer longer bays beat an exact sum of shorter modules). Adjacent middle bays whose lengths
  *   sum to another catalog span are merged (e.g. 610+914→1524) **without** changing total length.
- *   *Nominal* pairs (914+914→1829, 610+610→1219) differ by ±1mm from a single catalog member and are **not**
- *   auto-merged here, so the geometric total stays consistent with the overrun fitter.
+ *   **Nominal** identical pairs (914+914→1829, 610+610→1219, etc.) are then merged when within
+ *   {@link KUSABI_NOMINAL_PAIR_MERGE_MAX_DELTA_MM} of a catalog member — may change total length by ±1mm per
+ *   merge (allowed within {@link KUSABI_MIDDLE_PACK_MAX_OVERRUN_MM} for the middle segment).
  * - **Reflex (inner) corner:** subtract **300mm** from nominal wall length **per** reflex vertex on that edge
  *   (effective façade = `scaffoldFacadeBasisMmFromCorners`). **Rule 1:** when possible, end the wall with the
  *   width-module terminal span so the next wall can reuse the same posts for a continuous
@@ -644,14 +722,14 @@ export function fitSpansToWallLengthWithCorner(
       if (middleNeed >= 0) {
         const middleExact = exactSumWithStandardSpans(middleNeed, SPAN_SIZES);
         if (middleExact !== null) {
-          return [...prefix, ...middleExact, terminal];
+          return [...prefix, ...finalizeMiddleExactCatalogMerges(middleExact), terminal];
         }
       }
       // Rule 2: cannot end with width-module using exact standard spans → pack to inner line; pattanko at joint.
       const middleTarget = effectiveFacadeMm - prefixSum;
       if (middleTarget <= 0) return [...prefix];
       const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
-      return [...prefix, ...middleSpans];
+      return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans)];
     }
 
     // Reflex start only; convex end: overrun + terminal past outer corner
@@ -660,7 +738,7 @@ export function fitSpansToWallLengthWithCorner(
     const middleTarget = runTarget - prefixSum - terminal;
     if (middleTarget <= 0) return [...prefix, ...suffix];
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
-    return [...prefix, ...middleSpans, ...suffix];
+    return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans), ...suffix];
   }
 
   const runTargetMm = wallLengthMm + CORNER_OVERRUN_MM + terminal;
@@ -674,7 +752,7 @@ export function fitSpansToWallLengthWithCorner(
       SPAN_SIZES,
       KUSABI_MIDDLE_PACK_MAX_OVERRUN_MM,
     );
-    const mergedMiddle = compressAdjacentCatalogSumMerges(middleSpans);
+    const mergedMiddle = finalizeStandardSpanRowWithNominal(middleSpans);
     return [terminal, ...mergedMiddle, terminal];
   }
 
@@ -694,7 +772,7 @@ export function fitSpansToWallLengthWithCorner(
     KUSABI_MIDDLE_PACK_MAX_OVERRUN_MM,
     middlePref,
   );
-  const mergedMiddle = compressAdjacentCatalogSumMerges(middleSpans);
+  const mergedMiddle = finalizeStandardSpanRowWithNominal(middleSpans);
   return [start, ...mergedMiddle, terminal];
 }
 

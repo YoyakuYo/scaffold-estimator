@@ -16,6 +16,8 @@ import {
   cornerTerminalSpanMmKusabi,
   expandMiddleSpansToTargetCount,
   exactSumWithStandardSpans,
+  finalizeMiddleExactCatalogMerges,
+  finalizeStandardSpanRowWithNominal,
   normalizeScaffoldWidthMmToCatalog,
   SPAN_OPTIONS,
   SPAN_SIZES,
@@ -215,7 +217,8 @@ export function fitSpansToWallLengthWakugumi(
   options?: { northWall?: boolean },
 ): number[] {
   const maxOverrunMm = options?.northWall ? 610 : 300;
-  return fitSpansToWallLengthWithOverrun(wallLengthMm, WAKUGUMI_SPAN_SIZES, maxOverrunMm);
+  const raw = fitSpansToWallLengthWithOverrun(wallLengthMm, WAKUGUMI_SPAN_SIZES, maxOverrunMm);
+  return finalizeStandardSpanRowWithNominal(raw);
 }
 
 /**
@@ -260,13 +263,13 @@ export function fitSpansToWallLengthWithCornerWakugumi(
       if (middleNeed >= 0) {
         const middleExact = exactSumWithStandardSpans(middleNeed, WAKUGUMI_SPAN_SIZES);
         if (middleExact !== null) {
-          return [...prefix, ...middleExact, terminal];
+          return [...prefix, ...finalizeMiddleExactCatalogMerges(middleExact), terminal];
         }
       }
       const middleTarget = effectiveFacadeMm - prefixSum;
       if (middleTarget <= 0) return [...prefix];
       const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
-      return [...prefix, ...middleSpans];
+      return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans)];
     }
 
     const suffix = [terminal];
@@ -274,7 +277,7 @@ export function fitSpansToWallLengthWithCornerWakugumi(
     const middleTarget = runTarget - prefixSum - terminal;
     if (middleTarget <= 0) return [...prefix, ...suffix];
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
-    return [...prefix, ...middleSpans, ...suffix];
+    return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans), ...suffix];
   }
   const totalRunMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM;
   const middleMmNew = totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - terminal;
@@ -289,7 +292,7 @@ export function fitSpansToWallLengthWithCornerWakugumi(
       WAKUGUMI_SPAN_SIZES,
       0,
     );
-    return [terminal, ...middleSpans, terminal];
+    return [terminal, ...finalizeStandardSpanRowWithNominal(middleSpans), terminal];
   }
   if (middleMmNew === 0) {
     return [WAKUGUMI_CORNER_START_SPAN_MM, terminal];
@@ -305,7 +308,11 @@ export function fitSpansToWallLengthWithCornerWakugumi(
     WAKUGUMI_SPAN_SIZES,
     WAKUGUMI_CORNER_START_SPAN_MM,
   );
-  return [WAKUGUMI_CORNER_START_SPAN_MM, ...middleSpans, terminal];
+  return [
+    WAKUGUMI_CORNER_START_SPAN_MM,
+    ...finalizeStandardSpanRowWithNominal(middleSpans),
+    terminal,
+  ];
 }
 
 function fitSpansToWallLengthWithOverrun(
