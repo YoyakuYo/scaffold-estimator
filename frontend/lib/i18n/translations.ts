@@ -1444,9 +1444,9 @@ export const translations = {
       fr: 'Questions',
     },
     contactSubtitle: {
-      ja: 'メッセージは運営のメールとスーパー管理者の通知に届きます。折り返しご連絡いたします。',
-      en: 'Your message is delivered to our team by email and appears in the superadmin notification center. We will follow up with you.',
-      fr: 'Votre message est envoyé à l’équipe par e-mail et apparaît dans les notifications superadmin. Nous vous recontacterons.',
+      ja: 'ご質問やご相談がございましたら、下記フォームよりお送りください。担当より折り返しご連絡いたします。',
+      en: 'Have a question or want to learn more? Send us a message below and we will get back to you as soon as we can.',
+      fr: 'Une question ou un projet en tête ? Écrivez-nous ci-dessous et nous vous répondrons dès que possible.',
     },
     contactName: { ja: 'お名前', en: 'Name', fr: 'Nom' },
     contactEmail: { ja: 'メールアドレス', en: 'Email', fr: 'E-mail' },
