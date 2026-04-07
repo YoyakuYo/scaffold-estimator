@@ -135,24 +135,27 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(sum).toBeLessThanOrEqual(expectedBase + 1829);
   });
 
-  it('short wall (legacy): terminal bays = nominal width; middle from standard grid', () => {
-    // 1500 + 300 = 1800 target run; middleLegacy 600 may pack as 610 (catalog) → small overrun OK
+  it('short convex wall: wall+300 < 1829 still uses run = wall+300+terminal; terminal-mid-terminal', () => {
+    // 1500 + 300 + 610 = 2410; cannot start with 1829 → [610, middle≥1190, 610]
+    const terminal = cornerTerminalSpanMmKusabi(600);
+    const target = 1500 + CORNER_OVERRUN_MM + terminal;
     const spans = fitSpansToWallLengthWithCorner(1500, 600);
-    expect(spans[0]).toBe(CORNER_SPAN_MM);
-    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
-    expect(spans.length).toBe(3);
+    expect(spans[0]).toBe(terminal);
+    expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBeGreaterThanOrEqual(1500 + CORNER_OVERRUN_MM);
-    expect(sum).toBeLessThanOrEqual(1500 + CORNER_OVERRUN_MM + 200);
+    expect(sum).toBeGreaterThanOrEqual(target);
+    expect(sum).toBeLessThanOrEqual(target + CORNER_START_SPAN_MM);
   });
 
-  it('falls back to terminal–middle–terminal when wall+300 < corner-start+terminal', () => {
+  it('when wall+300 ≥ 1829 uses corner-start first (same total run wall+300+terminal)', () => {
+    const terminal = cornerTerminalSpanMmKusabi(600);
+    const target = 1834 + CORNER_OVERRUN_MM + terminal;
     const spans = fitSpansToWallLengthWithCorner(1834, 600);
-    expect(spans[0]).toBe(CORNER_SPAN_MM);
-    expect(spans[spans.length - 1]).toBe(CORNER_SPAN_MM);
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(2134);
-    expect(spans).toEqual([CORNER_SPAN_MM, 914, CORNER_SPAN_MM]);
+    expect(sum).toBeGreaterThanOrEqual(target);
+    expect(sum).toBeLessThanOrEqual(target + CORNER_START_SPAN_MM);
   });
 
   it('reflex end (Rule 1): last span = width-module; total run = wall − 300 (walk joint)', () => {

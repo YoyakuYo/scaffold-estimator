@@ -596,7 +596,8 @@ export function classifyKusabiRectangleEdgeRoles(
  *   width-module terminal span so the next wall can reuse the same posts for a continuous
  *   walk bay (−300 line). **Rule 2:** if an exact standard span packing cannot end with that module, pack
  *   without it and count **pattanko** at that reflex joint (see calculator).
- * - **Too short** for [1829, …, terminal]: legacy **[terminal, …middle…, terminal]** with total = wall+300.
+ * - **Convex 90° when wall+300 < 1829:** cannot place the leading **1829**; use **[terminal, …middle…, terminal]**
+ *   so run length is still **wall+300+terminal** (not **wall+300** alone).
  */
 export function fitSpansToWallLengthWithCorner(
   wallLengthMm: number,
@@ -655,24 +656,19 @@ export function fitSpansToWallLengthWithCorner(
     return [...prefix, ...middleSpans, ...suffix];
   }
 
-  if (wallLengthMm + CORNER_OVERRUN_MM < start + terminal) {
-    const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * terminal;
-    if (middleLegacy <= 0) return [terminal, terminal];
-    const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
-    return [terminal, ...middleSpans, terminal];
-  }
-
+  const runTargetMm = wallLengthMm + CORNER_OVERRUN_MM + terminal;
   const middleSum = kusabiCornerMiddleSumMm(wallLengthMm);
+
+  if (middleSum < 0) {
+    const middleNeed = runTargetMm - 2 * terminal;
+    if (middleNeed <= 0) return [terminal, terminal];
+    const middleSpans = fitSpansToWallLengthWithOverrun(middleNeed, SPAN_SIZES, 0);
+    const mergedMiddle = compressAdjacentCatalogSumMerges(middleSpans);
+    return [terminal, ...mergedMiddle, terminal];
+  }
 
   if (middleSum === 0) {
     return [start, terminal];
-  }
-
-  if (middleSum < 0) {
-    const middleLegacy = wallLengthMm + CORNER_OVERRUN_MM - 2 * terminal;
-    if (middleLegacy <= 0) return [terminal, terminal];
-    const middleSpans = fitSpansToWallLengthWithOverrun(middleLegacy, SPAN_SIZES, 0);
-    return [terminal, ...middleSpans, terminal];
   }
 
   const role = options?.rectangleEdgeRole;
