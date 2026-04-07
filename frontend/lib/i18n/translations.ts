@@ -1694,6 +1694,11 @@ export const translations = {
   // ─── Result Page Extras ─────────────────────────────────────
   resultExtra: {
     tabOverall: { ja: '全体数量', en: 'Overall Totals', fr: 'Totaux généraux' },
+    overallTotalsKusabiNote: {
+      ja: 'くさび式の数量は、最上ガード帯のため手摺・ブレス・巾木・相間ブラケット等が「フル段数 + 1」相当で計上されます。布材は手摺・根がらみ・踏板受け・端部手摺を行で分けています。',
+      en: 'Kusabi counts include one extra band for the top guard: inner handrails, braces, toe boards, and sokan brackets scale with full levels + 1. Nuno-family rows are split into handrail, base tie (negarami), plank bearer, and end stopper.',
+      fr: 'Kusabi : une bande supplémentaire pour le garde-corps supérieur — lisses intérieures, croisillons, plinthes et consoles suivent « niveaux pleins + 1 ». Les lisses type Nuno sont ventilées : lisse, négarami, support de platelage, lisse d’extrémité.',
+    },
     perLiftSectionTitle: {
       ja: '段別（足場段）内訳 — 各辺',
       en: 'Per-lift breakdown by edge',

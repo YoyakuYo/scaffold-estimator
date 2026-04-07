@@ -529,27 +529,68 @@ export class ScaffoldCalculatorService {
     }
     nunoBarsBySize[yokojiWidthSize].bearer += postPositions * L + extraWidthYokoji;
 
-    // Emit all Nuno Bars grouped by size - combine all types into single line per size
+    // Emit nuno-family members on separate lines (same catalog pipe, different roles).
+    // Previously summed into one "Nuno Bar" row, which looked like over-counting vs handrails-only takeoffs.
     const sortedSizes = Object.keys(nunoBarsBySize).map(Number).sort((a, b) => a - b);
     for (const size of sortedSizes) {
-      const nuno = nunoBarsBySize[size];
-      
-      // Sum all nuno bar types for this size
-      const totalQuantity = nuno.tesuri + nuno.stopper + nuno.negarami + nuno.bearer;
-      
-      if (totalQuantity > 0) {
+      const nuno = nunoBarsBySize[size]!;
+      if (nuno.negarami > 0) {
         sortOrder++;
         components.push({
-          type: 'nuno_bar',
+          type: 'nuno_negarami',
           category: CAT.nuno.jp,
           categoryEn: CAT.nuno.en,
-          name: 'Nuno Bar',
-          nameJp: `布材`,
+          name: 'Base tie (negarami)',
+          nameJp: '根がらみ',
           sizeSpec: `${size}`,
           unit: '本',
-          quantity: totalQuantity,
+          quantity: nuno.negarami,
           sortOrder,
-          // No materialCode - will be matched by category + sizeSpec in price lookup
+          materialCode: undefined,
+        });
+      }
+      if (nuno.bearer > 0) {
+        sortOrder++;
+        components.push({
+          type: 'nuno_bearer',
+          category: CAT.nuno.jp,
+          categoryEn: CAT.nuno.en,
+          name: 'Plank bearer',
+          nameJp: '踏板受け布材',
+          sizeSpec: `${size}`,
+          unit: '本',
+          quantity: nuno.bearer,
+          sortOrder,
+          materialCode: undefined,
+        });
+      }
+      if (nuno.tesuri > 0) {
+        sortOrder++;
+        components.push({
+          type: 'nuno_tesuri',
+          category: CAT.nuno.jp,
+          categoryEn: CAT.nuno.en,
+          name: 'Inner handrail (incl. top guard band)',
+          nameJp: '手摺（内面・最上ガード帯含む）',
+          sizeSpec: `${size}`,
+          unit: '本',
+          quantity: nuno.tesuri,
+          sortOrder,
+          materialCode: undefined,
+        });
+      }
+      if (nuno.stopper > 0) {
+        sortOrder++;
+        components.push({
+          type: 'nuno_stopper',
+          category: CAT.nuno.jp,
+          categoryEn: CAT.nuno.en,
+          name: 'End handrail (stopper)',
+          nameJp: '端部手摺',
+          sizeSpec: `${size}`,
+          unit: '本',
+          quantity: nuno.stopper,
+          sortOrder,
           materialCode: undefined,
         });
       }
@@ -809,19 +850,14 @@ export class ScaffoldCalculatorService {
 
   /**
    * Aggregate components from all walls into a summary.
-   * For Nuno Bars, groups by category + sizeSpec (combines all types by size).
+   * Key matches frontend `scaffoldWallQuantityKey`: materialCode when set, else type-sizeSpec.
    */
   private aggregateComponents(walls: WallCalculationResult[]): CalculatedComponent[] {
     const map = new Map<string, CalculatedComponent>();
 
     for (const wall of walls) {
       for (const comp of wall.components) {
-        let key: string;
-        if (comp.category === '布材') {
-          key = `${comp.category}-${comp.sizeSpec}`;
-        } else {
-          key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
-        }
+        const key = comp.materialCode || `${comp.type}-${comp.sizeSpec}`;
 
         const existing = map.get(key);
         if (existing) {
