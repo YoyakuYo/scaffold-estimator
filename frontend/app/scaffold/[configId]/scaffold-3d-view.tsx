@@ -941,9 +941,13 @@ export default function Scaffold3DView({
         // ── Base negarami (根がらみ) — base level only; same elevation band as first lift 下桟 offset ─────
         const negY = postBaseY + 0.05;
         const negOverhang = 0.06;
-        const innerPostAtNeg = (pi: number): boolean => {
+        /**
+         * Inner row at post line `pi` for span-direction 根がらみ. Does not use `startPostIdx`: at polygon corners
+         * the first bay (e.g. 1829 mm lead span) still gets inner negarami in local X even when post[0] steel is
+         * meshed on the adjacent wall.
+         */
+        const innerRowAtPostIndexForSpanNegarami = (pi: number): boolean => {
           if (isBracket) return false;
-          if (pi < startPostIdx) return false;
           if (pi === 0 && skipInnerAtStart) return false;
           if (pi === postX.length - 1 && skipInnerAtEnd) return false;
           return true;
@@ -970,7 +974,7 @@ export default function Scaffold3DView({
         if (!isBracket) {
           for (let i = startSpanIdx; i < spans.length; i++) {
             if (doorSpanIndices.has(i)) continue;
-            if (!innerPostAtNeg(i) || !innerPostAtNeg(i + 1)) continue;
+            if (!innerRowAtPostIndexForSpanNegarami(i) || !innerRowAtPostIndexForSpanNegarami(i + 1)) continue;
             const x1 = postX[i];
             const x2 = postX[i + 1];
             addPipe(group, x1, negY, widthM, x2, negY, widthM, yokojiMat, PIPE_R * 1.0);
