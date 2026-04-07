@@ -306,8 +306,16 @@ export class ScaffoldCalculatorService {
         ? (wallIndex > 0 ? 2 : 0) +
           (input.walls.length >= 3 && wallIndex === input.walls.length - 1 ? 2 : 0)
         : 0;
+    /**
+     * Jack bases use `cornerPostDeduction` (2 rows per shared post line). Width-direction 根がらみ and
+     * 踏板受け（幅方向布材） count one bar per post line along the wall — the same shared corner lines
+     * must not be ordered twice when summing per-wall BOM. Use half the jack deduction (always even).
+     */
+    const cornerWidthNunoDeduction =
+      useCornerLogic && input.walls.length >= 2 ? cornerPostDeduction / 2 : 0;
     const totalSpans = spans.length;
     const postPositions = totalSpans + 1; // sharing principle
+    const effectiveWidthPostLines = Math.max(0, postPositions - cornerWidthNunoDeduction);
     const L = levelCalc.fullLevels;
     /** Top guard band: habaki / end stopper / sokan extend one level like the upper safety row. Mesh: height ÷ 3.6m sheet length. */
     const Lsafety = L + 1;
@@ -510,8 +518,8 @@ export class ScaffoldCalculatorService {
       const sz = Number(spanSizeMm);
       negaramiBySize[sz] = (negaramiBySize[sz] || 0) + Number(count) * 2;
     }
-    // Accumulate width direction
-    negaramiBySize[yokojiWidthSize] = (negaramiBySize[yokojiWidthSize] || 0) + postPositions;
+    // Accumulate width direction (dedupe shared polygon corners vs adjacent wall)
+    negaramiBySize[yokojiWidthSize] = (negaramiBySize[yokojiWidthSize] || 0) + effectiveWidthPostLines;
 
     // Add negarami to nuno bars by size
     for (const [sizeMm, qty] of Object.entries(negaramiBySize)) {
@@ -527,7 +535,7 @@ export class ScaffoldCalculatorService {
     if (!nunoBarsBySize[yokojiWidthSize]) {
       nunoBarsBySize[yokojiWidthSize] = { tesuri: 0, stopper: 0, negarami: 0, bearer: 0 };
     }
-    nunoBarsBySize[yokojiWidthSize].bearer += postPositions * L + extraWidthYokoji;
+    nunoBarsBySize[yokojiWidthSize].bearer += effectiveWidthPostLines * L + extraWidthYokoji;
 
     // Emit all Nuno Bars grouped by size — one row per catalog length (tesuri + stopper + negarami + bearer).
     const sortedSizes = Object.keys(nunoBarsBySize).map(Number).sort((a, b) => a - b);
