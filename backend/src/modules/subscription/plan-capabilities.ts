@@ -8,7 +8,7 @@ export interface EffectivePlanCapabilities {
   quickShape: boolean;
   cadDraw: boolean;
   aiExtract: boolean;
-  /** Interactive 3D view + 3D exports (Medium / Premium tiers; legacy Professional matches Medium). */
+  /** Interactive 3D view + 3D exports (Medium / Premium / Enterprise; legacy Professional matches Medium). */
   view3d: boolean;
 }
 

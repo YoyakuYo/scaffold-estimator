@@ -529,7 +529,11 @@ export class SubscriptionService {
         await this.ensureSubscriptionForUser(userId);
         subs = await this.getSubscriptionsForCompany(companyId);
       }
-      return this.aggregateCompanyCapabilities(subs);
+      let caps = await this.aggregateCompanyCapabilities(subs);
+      if (await this.companyHasSubscriptionExemptMember(companyId)) {
+        caps = mergeCapabilitiesMax(caps, capabilitiesForPlan('enterprise'));
+      }
+      return caps;
     }
 
     let sub = await this.ensureSubscriptionForUser(userId);
@@ -558,6 +562,23 @@ export class SubscriptionService {
       .neq('role', 'superadmin');
     if (error) return 0;
     return count ?? 0;
+  }
+
+  /**
+   * Enterprise / manual full-access orgs often set `subscription_exempt` on the billing owner only.
+   * That user gets SUPERADMIN_CAPABILITIES directly; peers must still inherit the same feature tier
+   * even when the exempt user's subscription row has no Stripe-backed `effectivePaidPlanFromRow`.
+   */
+  private async companyHasSubscriptionExemptMember(companyId: string): Promise<boolean> {
+    const { count, error } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .eq('subscription_exempt', true);
+    if (error) return false;
+    return (count ?? 0) > 0;
   }
 
   /** Pending team invites reserve a seat until they expire or are revoked. */

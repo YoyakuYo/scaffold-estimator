@@ -756,9 +756,9 @@ export const translations = {
     tabTable: { ja: '見積表', en: 'Quotation', fr: 'Devis' },
     tab3d: { ja: '3D表示', en: '3D View', fr: 'Vue 3D' },
     view3dRequiresPlan: {
-      ja: '3D表示はミディアム／プレミアムプランでご利用いただけます。',
-      en: '3D view is available on Medium and Premium plans.',
-      fr: 'La vue 3D est disponible avec les offres Medium et Premium.',
+      ja: '3D表示はミディアム／プレミアム／エンタープライズでご利用いただけます。',
+      en: '3D view is available on Medium, Premium, and Enterprise plans.',
+      fr: 'La vue 3D est disponible avec les offres Medium, Premium et Enterprise.',
     },
     view3dUpgradeHint: {
       ja: '請求ページでプランをアップグレードすると、3Dビューと3DのPDF/OBJエクスポートが使えます。',
@@ -767,9 +767,9 @@ export const translations = {
     },
     view3dUpgradeCta: { ja: 'プランを見る', en: 'View plans', fr: 'Voir les offres' },
     view3dSeatHolderHint: {
-      ja: '3D表示は会社の契約プランに含まれます。必要な場合は、請求を管理している担当者にご相談ください。',
-      en: '3D view depends on your organization’s plan. Ask the teammate who manages billing if an upgrade is needed.',
-      fr: 'La vue 3D dépend du forfait de votre organisation. Demandez au collègue qui gère la facturation si un changement d’offre est nécessaire.',
+      ja: '3D表示は会社の契約プラン（ミディアム以上／エンタープライズ含む）に含まれます。表示されない場合は、請求を管理している担当者にご相談ください。',
+      en: '3D view follows your organization’s plan (Medium+ or Enterprise). If it is missing, ask the teammate who manages billing or support.',
+      fr: 'La vue 3D suit le forfait de votre organisation (Medium+ ou Enterprise). Si elle manque, contactez la personne qui gère la facturation ou le support.',
     },
     noResult: { ja: '計算結果が見つかりません', en: 'No calculation results found', fr: 'Aucun résultat de calcul' },
     spanConfig: { ja: 'スパン構成', en: 'Span Configuration', fr: 'Configuration des travées' },
