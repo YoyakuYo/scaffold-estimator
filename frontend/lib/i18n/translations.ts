@@ -359,6 +359,16 @@ export const translations = {
     title: { ja: '足場積算', en: 'Scaffold Calculator', fr: 'Calculateur d\'échafaudage' },
     subtitle: { ja: '壁の長さと建物の高さを入力して、材料数量を自動計算します', en: 'Enter wall lengths and building height to auto-calculate material quantities', fr: 'Saisissez longueurs des murs et hauteur du bâtiment pour calculer les quantités' },
     loadingConfig: { ja: '設定を読み込み中…', en: 'Loading configuration…', fr: 'Chargement de la configuration…' },
+    editRecalculateModeHint: {
+      ja: '同じ案件の再計算中です。最初からやり直す場合は「新規案件を開始」を押すか、下のタブで別の入力方法へ切り替えてください。',
+      en: 'You are editing this job for recalculation. To start from scratch, use “Start new job” or switch input tabs below.',
+      fr: 'Vous modifiez ce dossier pour un nouveau calcul. Pour tout recommencer, utilisez « Nouveau dossier » ou les onglets ci-dessous.',
+    },
+    startNewJob: {
+      ja: '新規案件を開始',
+      en: 'Start new job',
+      fr: 'Nouveau dossier',
+    },
     editFromQuickHint: {
       ja: 'この案件はクイックシェイプビルダーで作成されました。下の壁・設定を変更して再計算できます。',
       en: 'This job was created with Quick Shape Builder. Edit walls and settings below, then recalculate.',

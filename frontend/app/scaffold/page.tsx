@@ -73,6 +73,7 @@ import {
   SCAFFOLD_WIZARD_DRAFT_KEY,
   WIZARD_DRAFT_MAX_AGE_MS,
   WIZARD_DRAFT_SAVE_VERSION,
+  clearScaffoldWizardDraft,
 } from '@/lib/scaffold-wizard-draft-storage';
 import { footprintVerticesForWallPreview } from '@/lib/footprint-preview';
 import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
@@ -1021,9 +1022,18 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
 export default function ScaffoldPage() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
-      <ScaffoldPageContent />
+      <ScaffoldPageRouteShell />
     </Suspense>
   );
+}
+
+/** Remount wizard when `?edit=` or `?start=` changes so state matches URL (e.g. exit edit → fresh job). */
+function ScaffoldPageRouteShell() {
+  const searchParams = useSearchParams();
+  const edit = searchParams.get('edit');
+  const start = searchParams.get('start');
+  const contentKey = edit || start || 'default';
+  return <ScaffoldPageContent key={contentKey} />;
 }
 
 function ScaffoldPageContent() {
@@ -1031,7 +1041,18 @@ function ScaffoldPageContent() {
   const searchParams = useSearchParams();
   const { t, locale } = useI18n();
   const editConfigId = searchParams.get('edit') ?? null;
-  const initialWizard = useMemo(() => bootstrapWizardFromSession(editConfigId), [editConfigId]);
+  const startFreshParam = searchParams.get('start');
+  const initialWizard = useMemo(() => {
+    const base = bootstrapWizardFromSession(editConfigId);
+    if (editConfigId) return base;
+    if (startFreshParam === 'quick') {
+      return { ...base, inputMode: 'quick' as const, manualSubTab: 'quick' as const };
+    }
+    if (startFreshParam === 'drawing') {
+      return { ...base, inputMode: 'drawing' as const, manualSubTab: 'drawing' as const };
+    }
+    return base;
+  }, [editConfigId, startFreshParam]);
 
   // ─── Input Mode ────────────────────────────────────────
   const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>(() => initialWizard.inputMode);
@@ -1808,6 +1829,25 @@ function ScaffoldPageContent() {
     calculateMutation.mutate({ dto, configId: null });
   };
 
+  /** Leave `?edit=` recalculate flow: clear draft, remount wizard via `?start=` (see ScaffoldPageRouteShell key). */
+  const goToFreshManualSubtab = useCallback(
+    (tab: 'drawing' | 'quick') => {
+      if (editConfigId) {
+        clearScaffoldWizardDraft();
+        router.replace(`/scaffold?start=${tab}`);
+        return;
+      }
+      setManualSubTab(tab);
+      setInputMode(tab === 'quick' ? 'quick' : 'drawing');
+    },
+    [editConfigId, router],
+  );
+
+  const startNewScaffoldJob = useCallback(() => {
+    clearScaffoldWizardDraft();
+    router.replace('/scaffold');
+  }, [router]);
+
   const aiUploadAccept = '.dxf,.ifc,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/dxf,image/vnd.dxf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/bmp,model/ifc,application/octet-stream';
 
   // ═══════════════════════════════════════════════════════════
@@ -1840,7 +1880,7 @@ function ScaffoldPageContent() {
           </h1>
           <p className="mt-1 text-sm text-gray-600">{t('scaffold', 'subtitle')}</p>
 
-          {/* ─── Mode Selector (4 sections) ─── */}
+          {/* ─── Mode Selector (4 sections); full strip hidden during edit, use “Start new job” below ─── */}
           {!editConfigId && (
             <div className="flex flex-wrap gap-2 mt-4">
               {canAi && (
@@ -1893,6 +1933,20 @@ function ScaffoldPageContent() {
                   {t('scaffoldExtra', 'cadDrawTab')}
                 </button>
               )}
+            </div>
+          )}
+
+          {editConfigId && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <p className="text-sm text-gray-600">{t('scaffold', 'editRecalculateModeHint')}</p>
+              <button
+                type="button"
+                onClick={startNewScaffoldJob}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-blue-200 bg-white text-blue-800 text-sm font-semibold hover:bg-blue-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {t('scaffold', 'startNewJob')}
+              </button>
             </div>
           )}
 
@@ -2993,13 +3047,8 @@ function ScaffoldPageContent() {
           {canFile && (
           <button
             type="button"
-            disabled={!!editConfigId}
-            onClick={() => {
-              if (editConfigId) return;
-              setManualSubTab('drawing');
-              setInputMode('drawing');
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
+            onClick={() => goToFreshManualSubtab('drawing')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
               manualSubTab === 'drawing'
                 ? 'bg-white text-blue-700 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
@@ -3012,13 +3061,8 @@ function ScaffoldPageContent() {
           {canQuick && (
           <button
             type="button"
-            disabled={!!editConfigId}
-            onClick={() => {
-              if (editConfigId) return;
-              setManualSubTab('quick');
-              setInputMode('quick');
-            }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
+            onClick={() => goToFreshManualSubtab('quick')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
               manualSubTab === 'quick'
                 ? 'bg-white text-green-700 shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
