@@ -4,6 +4,7 @@ import {
   CORNER_START_SPAN_MM,
   SPAN_SIZES,
   classifyKusabiRectangleEdgeRoles,
+  compressAdjacentCatalogSumMerges,
   cornerTerminalSpanMmKusabi,
   exactSumWithStandardSpans,
   fitSpansToWallLengthWithCorner,
@@ -185,6 +186,15 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
   it('exactSumWithStandardSpans: decomposes when possible', () => {
     expect(exactSumWithStandardSpans(3658, SPAN_SIZES)?.reduce((a, b) => a + b, 0)).toBe(3658);
     expect(exactSumWithStandardSpans(2855, SPAN_SIZES)).toBeNull();
+  });
+
+  it('compressAdjacentCatalogSumMerges: 610+914→1524, 610+1219→1829; total length unchanged', () => {
+    expect(compressAdjacentCatalogSumMerges([610, 914, 1219])).toEqual([1524, 1219]);
+    expect(compressAdjacentCatalogSumMerges([610, 1219])).toEqual([1829]);
+    expect(compressAdjacentCatalogSumMerges([1219, 610, 914])).toEqual([1829, 914]);
+    const a = [914, 610, 1219];
+    const m = compressAdjacentCatalogSumMerges(a);
+    expect(m.reduce((x, y) => x + y, 0)).toBe(a.reduce((x, y) => x + y, 0));
   });
 });
 
