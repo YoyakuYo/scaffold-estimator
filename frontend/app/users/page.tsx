@@ -232,6 +232,9 @@ function UsersPage() {
     mutationFn: usersApi.rejectUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-count'] });
     },
   });
 
@@ -279,6 +282,13 @@ function UsersPage() {
 
   const handleReject = (user: UserProfile) => {
     const msg = t('usersAdmin', 'confirmReject').replace('{email}', user.email);
+    if (window.confirm(msg)) {
+      rejectMutation.mutate(user.id);
+    }
+  };
+
+  const handlePurgeRejectedRecord = (user: UserProfile) => {
+    const msg = t('usersAdmin', 'confirmPurgeRejected').replace('{email}', user.email);
     if (window.confirm(msg)) {
       rejectMutation.mutate(user.id);
     }
@@ -1006,6 +1016,19 @@ function UsersPage() {
                                   </button>
                                   <div className="border-t border-gray-100 my-1" />
                                 </>
+                              )}
+                              {isSuperAdmin && user.approvalStatus === 'rejected' && (
+                                <button
+                                  onClick={() => {
+                                    handlePurgeRejectedRecord(user);
+                                    setOpenMenuId(null);
+                                  }}
+                                  disabled={rejectMutation.isPending}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                  {t('usersAdmin', 'purgeRejectedRecord')}
+                                </button>
                               )}
                               <button
                                 onClick={() => openEdit(user)}

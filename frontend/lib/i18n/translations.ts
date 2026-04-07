@@ -2404,6 +2404,12 @@ export const translations = {
     confirmDeactivate: { ja: '{email} を無効化しますか？', en: 'Deactivate {email}?', fr: 'Désactiver {email} ?' },
     confirmApprove: { ja: '{email} を承認しますか？', en: 'Approve {email}?', fr: 'Approuver {email} ?' },
     confirmReject: { ja: '{email} を拒否しますか？', en: 'Reject {email}?', fr: 'Refuser {email} ?' },
+    confirmPurgeRejected: {
+      ja: '{email} の登録レコードをデータベースから完全に削除しますか？（空の会社はあれば削除されます）',
+      en: 'Permanently delete the signup record for {email} from the database? (Empty signup company is removed if applicable.)',
+      fr: 'Supprimer définitivement la fiche d’inscription de {email} ? (L’entreprise vide est supprimée si besoin.)',
+    },
+    purgeRejectedRecord: { ja: 'レコードを完全削除', en: 'Delete record', fr: 'Supprimer la fiche' },
     companiesTitle: { ja: '会社一覧（人数・支店）', en: 'Companies (user count & branches)', fr: "Entreprises (nombre d'utilisateurs et succursales)" },
     company: { ja: '会社名', en: 'Company', fr: 'Entreprise' },
     users: { ja: 'ユーザー数', en: 'Users', fr: 'Utilisateurs' },

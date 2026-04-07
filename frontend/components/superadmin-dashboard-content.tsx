@@ -93,6 +93,7 @@ export function SuperAdminDashboardContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-stats'] });
       queryClient.invalidateQueries({ queryKey: ['pending-count'] });
       setApprovingId(null);
     },
