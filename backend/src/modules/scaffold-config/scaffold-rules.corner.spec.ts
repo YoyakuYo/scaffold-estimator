@@ -135,6 +135,19 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
     expect(sum).toBeLessThanOrEqual(expectedBase + 1829);
   });
 
+  it('prefers fewer longer middle bays over three 914 exact when both within pack tolerance', () => {
+    // middleSum = wall + 300 − 1829 = 2742 = 914×3 exact, or 1829+914 with 1mm overrun → prefer 2 bays
+    const wallMm = 4271;
+    const terminal = cornerTerminalSpanMmKusabi(600);
+    const spans = fitSpansToWallLengthWithCorner(wallMm, 600);
+    expect(spans[0]).toBe(CORNER_START_SPAN_MM);
+    expect(spans[spans.length - 1]).toBe(terminal);
+    const mid = spans.slice(1, -1);
+    expect(mid).toEqual([1829, 914]);
+    // Middle is 2743 vs ideal 2742 (914×3 exact); total run is +1 mm vs wall+300+terminal for fewer bays.
+    expect(spans.reduce((a, b) => a + b, 0)).toBe(wallMm + CORNER_OVERRUN_MM + terminal + 1);
+  });
+
   it('short convex wall: wall+300 < 1829 still uses run = wall+300+terminal; terminal-mid-terminal', () => {
     // Catalog façade 1524mm (not nominal 1500); 1524+300+610 = 2434; cannot start with 1829 → [610, middle≥1214, 610]
     const terminal = cornerTerminalSpanMmKusabi(600);
