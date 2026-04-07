@@ -193,7 +193,6 @@ function AdminDashboard() {
             value={stats?.totalUsers ?? '—'}
             color="blue"
             loading={statsLoading}
-            hint={t('adminDashboard', 'totalUsersStatsHint')}
           />
           <KpiCard
             icon={<Building2 className="h-5 w-5" />}
@@ -201,13 +200,6 @@ function AdminDashboard() {
             value={stats?.totalCompanies ?? '—'}
             color="purple"
             loading={statsLoading}
-            hint={
-              stats
-                ? t('adminDashboard', 'companiesStatsBreakdown')
-                    .replace('{userCount}', String(stats.totalUsers))
-                    .replace('{companyCount}', String(stats.totalCompanies))
-                : undefined
-            }
           />
           <KpiCard
             icon={<Activity className="h-5 w-5" />}
