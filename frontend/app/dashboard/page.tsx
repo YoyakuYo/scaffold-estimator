@@ -144,11 +144,24 @@ function AdminDashboard() {
   };
   const rejectMutation = useMutation({
     mutationFn: usersApi.rejectUser,
-    onSuccess: () => {
+    onSuccess: (_data, rejectedUserId) => {
+      queryClient.setQueryData<UserProfile[]>(['users'], (prev) =>
+        prev ? prev.filter((u) => u.id !== rejectedUserId) : prev,
+      );
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['platform-stats'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       queryClient.invalidateQueries({ queryKey: ['pending-count'] });
+      queryClient.invalidateQueries({ queryKey: ['online-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-companies'] });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message
+          : null;
+      const text = Array.isArray(msg) ? msg.join('\n') : msg;
+      window.alert(text || 'Could not remove this user. The row may still exist in the database.');
     },
   });
 
@@ -256,7 +269,11 @@ function AdminDashboard() {
                           {t('adminDashboard', 'approve')}
                         </button>
                         <button
-                          onClick={() => rejectMutation.mutate(u.id)}
+                          onClick={() => {
+                            const msg = t('adminDashboard', 'confirmRejectPermanent').replace('{email}', u.email);
+                            if (!window.confirm(msg)) return;
+                            rejectMutation.mutate(u.id);
+                          }}
                           disabled={rejectMutation.isPending}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
                         >

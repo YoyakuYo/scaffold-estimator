@@ -2334,6 +2334,11 @@ export const translations = {
       fr: 'Approuver {email} pour le forfait par virement ({plan}) ? Un code unique sera envoyé par e-mail.',
     },
     reject: { ja: '拒否', en: 'Reject', fr: 'Refuser' },
+    confirmRejectPermanent: {
+      ja: '{email} を拒否し、データベースから登録を完全に削除しますか？',
+      en: 'Reject {email} and permanently remove their signup from the database?',
+      fr: 'Refuser {email} et supprimer définitivement son inscription de la base ?',
+    },
     openInbox: { ja: '受信箱を開く', en: 'Open Inbox', fr: 'Ouvrir la boîte de réception' },
     noConversations: { ja: 'まだ会話はありません', en: 'No conversations yet', fr: 'Aucune conversation pour le moment' },
     live: { ja: 'リアルタイム', en: 'Live', fr: 'Temps réel' },
@@ -2403,7 +2408,11 @@ export const translations = {
     companySeatBadge: { ja: '招待席', en: 'Seat', fr: 'Siège' },
     confirmDeactivate: { ja: '{email} を無効化しますか？', en: 'Deactivate {email}?', fr: 'Désactiver {email} ?' },
     confirmApprove: { ja: '{email} を承認しますか？', en: 'Approve {email}?', fr: 'Approuver {email} ?' },
-    confirmReject: { ja: '{email} を拒否しますか？', en: 'Reject {email}?', fr: 'Refuser {email} ?' },
+    confirmReject: {
+      ja: '{email} を拒否し、データベースから登録を完全に削除しますか？',
+      en: 'Reject {email} and permanently remove their signup from the database?',
+      fr: 'Refuser {email} et supprimer définitivement son inscription de la base ?',
+    },
     confirmPurgeRejected: {
       ja: '{email} の登録レコードをデータベースから完全に削除しますか？（空の会社はあれば削除されます）',
       en: 'Permanently delete the signup record for {email} from the database? (Empty signup company is removed if applicable.)',

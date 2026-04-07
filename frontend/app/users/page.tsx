@@ -230,11 +230,24 @@ function UsersPage() {
 
   const rejectMutation = useMutation({
     mutationFn: usersApi.rejectUser,
-    onSuccess: () => {
+    onSuccess: (_data, rejectedUserId) => {
+      queryClient.setQueryData<UserProfile[]>(['users'], (prev) =>
+        prev ? prev.filter((u) => u.id !== rejectedUserId) : prev,
+      );
       queryClient.invalidateQueries({ queryKey: ['users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       queryClient.invalidateQueries({ queryKey: ['platform-stats'] });
       queryClient.invalidateQueries({ queryKey: ['pending-count'] });
+      queryClient.invalidateQueries({ queryKey: ['online-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-companies'] });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message
+          : null;
+      const text = Array.isArray(msg) ? msg.join('\n') : msg;
+      window.alert(text || 'Could not remove this user. The row may still exist in the database.');
     },
   });
 
