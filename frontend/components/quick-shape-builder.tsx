@@ -29,6 +29,13 @@ import {
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
 import { formatMmAsMetersLabel, formatMmLabel, mToMm, mmToM } from '@/lib/dimension-meters';
+import {
+  composeEdgePlanAxisMm,
+  edgePlanRunDirectionLabel,
+  edgePlanRunMagnitudeMm,
+  edgePlanRunSign,
+  parsePositiveMetersToMm,
+} from '@/lib/edge-plan-run-ui';
 
 const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
   reflex: 'wallCfReflex',
@@ -458,11 +465,11 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     setEdgePlanByLabel((prev) => ({ ...prev, [label]: { axis, mm } }));
   };
 
-  const updateEdgePlanMmForRow = (label: string, mm: number) => {
+  const updateEdgePlanMmForRow = (label: string, mm: number, axis: 'X' | 'Y') => {
     setEdgePlanByLabel((prev) => {
       const cur = prev[label];
-      if (!cur) return prev;
-      return { ...prev, [label]: { ...cur, mm: Math.round(mm) } };
+      const ax = cur?.axis ?? axis;
+      return { ...prev, [label]: { axis: ax, mm: Math.round(mm) } };
     });
   };
 
@@ -617,7 +624,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                 <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-medium text-gray-600">
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeSideColumn')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeLengthMm')}</th>
-                  <th className="py-2 px-2 whitespace-nowrap">{t('scaffoldExtra', 'edgeXYRun') || 'XY'}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planAxisColumn')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planRunMm')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">CF</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'scaffoldWidth')}</th>
@@ -665,17 +672,45 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                         </select>
                       </td>
                       <td className="py-2 px-2">
-                        <div className="flex items-center gap-1">
+                        <div className="flex flex-wrap items-center gap-1">
                           <input
                             type="number"
-                            value={Math.round(mmToM(plan.mm) * 10000) / 10000}
+                            min={0}
+                            value={
+                              edgePlanRunMagnitudeMm(plan.mm) > 0
+                                ? Math.round(mmToM(edgePlanRunMagnitudeMm(plan.mm)) * 10000) / 10000
+                                : ''
+                            }
                             onChange={(e) => {
-                              const m = parseFloat(e.target.value);
-                              updateEdgePlanMmForRow(side.label, Number.isFinite(m) ? mToMm(m) : 0);
+                              const magMm = parsePositiveMetersToMm(e.target.value);
+                              if (magMm == null) return;
+                              updateEdgePlanMmForRow(
+                                side.label,
+                                composeEdgePlanAxisMm(magMm, edgePlanRunSign(plan.mm)),
+                                plan.axis,
+                              );
                             }}
-                            className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
+                            className="w-20 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
                             step={0.01}
+                            title={(t('scaffoldExtra', 'edgePlanRunPositiveHint') as string) || ''}
                           />
+                          <select
+                            value={edgePlanRunSign(plan.mm) === 1 ? 'plus' : 'minus'}
+                            onChange={(e) => {
+                              const sign = e.target.value === 'plus' ? 1 : -1;
+                              const mag = edgePlanRunMagnitudeMm(plan.mm);
+                              updateEdgePlanMmForRow(
+                                side.label,
+                                composeEdgePlanAxisMm(mag || 0, sign),
+                                plan.axis,
+                              );
+                            }}
+                            title={(t('scaffoldExtra', 'edgePlanRunDirection') as string) || ''}
+                            className="w-[3.25rem] rounded border border-gray-300 px-1 py-1 text-[11px] font-mono font-semibold bg-white"
+                          >
+                            <option value="plus">{edgePlanRunDirectionLabel(plan.axis, 1)}</option>
+                            <option value="minus">{edgePlanRunDirectionLabel(plan.axis, -1)}</option>
+                          </select>
                           <span className="text-xs text-gray-500">{mUnit}</span>
                         </div>
                       </td>

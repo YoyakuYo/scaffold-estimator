@@ -29,6 +29,13 @@ import {
 import { inferEdgePlanAxisFromVertices } from '@/lib/infer-edge-plan-axis';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
 import { mToMm, mmToM } from '@/lib/dimension-meters';
+import {
+  composeEdgePlanAxisMm,
+  edgePlanRunDirectionLabel,
+  edgePlanRunMagnitudeMm,
+  edgePlanRunSign,
+  parsePositiveMetersToMm,
+} from '@/lib/edge-plan-run-ui';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -1105,6 +1112,52 @@ export function CadDrawingCanvas({
                                 </option>
                               ))}
                             </select>
+                            <input
+                              type="number"
+                              step="any"
+                              min={0}
+                              value={
+                                edgePlanRunMagnitudeMm(planAxisMm) > 0
+                                  ? Math.round(
+                                      (edgePlanRunMagnitudeMm(planAxisMm) / 1000) * 10000,
+                                    ) / 10000
+                                  : ''
+                              }
+                              onChange={(e) => {
+                                const magMm = parsePositiveMetersToMm(e.target.value);
+                                if (magMm == null) return;
+                                const sign = edgePlanRunSign(planAxisMm);
+                                setEdgePlanAxisMmLocal((prev) => {
+                                  const n = [...prev];
+                                  n[i] = composeEdgePlanAxisMm(magMm, sign);
+                                  return n;
+                                });
+                              }}
+                              className="min-w-0 w-14 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
+                              title={(t('scaffoldExtra', 'edgePlanRunPositiveHint') as string) || ''}
+                            />
+                            <select
+                              value={edgePlanRunSign(planAxisMm) === 1 ? 'plus' : 'minus'}
+                              onChange={(e) => {
+                                const sign = e.target.value === 'plus' ? 1 : -1;
+                                const mag = edgePlanRunMagnitudeMm(planAxisMm);
+                                setEdgePlanAxisMmLocal((prev) => {
+                                  const n = [...prev];
+                                  n[i] = composeEdgePlanAxisMm(mag || 0, sign);
+                                  return n;
+                                });
+                              }}
+                              title={(t('scaffoldExtra', 'edgePlanRunDirection') as string) || ''}
+                              className="w-[2.85rem] shrink-0 rounded border border-gray-200 px-0.5 py-0.5 text-[10px] font-mono font-semibold bg-white"
+                            >
+                              <option value="plus">
+                                {edgePlanRunDirectionLabel(effectiveAxis, 1)}
+                              </option>
+                              <option value="minus">
+                                {edgePlanRunDirectionLabel(effectiveAxis, -1)}
+                              </option>
+                            </select>
+                            <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
                           </div>
                           {stationEnd != null ? (
                             <p className="text-[10px] font-mono text-blue-900 mt-0.5 font-semibold">
@@ -1112,7 +1165,10 @@ export function CadDrawingCanvas({
                             </p>
                           ) : null}
                           {dxM != null && dyM != null ? (
-                            <p className="text-[9px] text-gray-400 mt-0.5 font-mono truncate" title="Δ">
+                            <p
+                              className="text-[9px] text-gray-400 mt-0.5 font-mono truncate"
+                              title={(t('scaffoldExtra', 'edgePlanCoordDeltaHint') as string) || ''}
+                            >
                               ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}
                             </p>
                           ) : null}

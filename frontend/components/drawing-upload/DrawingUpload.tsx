@@ -32,6 +32,13 @@ import {
 } from '@/lib/drawing-upload-persist';
 import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
 import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
+import {
+  composeEdgePlanAxisMm,
+  edgePlanRunDirectionLabel,
+  edgePlanRunMagnitudeMm,
+  edgePlanRunSign,
+  parsePositiveMetersToMm,
+} from '@/lib/edge-plan-run-ui';
 
 const SCAFFOLD_WALL_CF_LABEL_KEYS = {
   reflex: 'wallCfReflex',
@@ -127,14 +134,6 @@ function fmtMeters(mm: number): string {
 function parseMetersInputToMm(s: string): number | null {
   const v = parseFloat(String(s).trim().replace(',', '.'));
   if (!Number.isFinite(v) || v <= 0) return null;
-  return Math.round(v * 1000);
-}
-
-function parseSignedMetersToMm(s: string): number | null {
-  const t = String(s).trim().replace(',', '.');
-  if (t === '' || t === '-' || t === '+') return null;
-  const v = parseFloat(t);
-  if (!Number.isFinite(v)) return null;
   return Math.round(v * 1000);
 }
 
@@ -1282,22 +1281,55 @@ export function DrawingUpload({
                                   </option>
                                 ))}
                               </select>
-                            ) : (
-                              <>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  value={planAxisMm / 1000}
-                                  onChange={(e) => {
-                                    const mm = parseSignedMetersToMm(e.target.value);
-                                    if (mm != null) onEdgePlanAxisMmChange?.(i, mm);
-                                  }}
-                                  disabled={!onEdgePlanAxisMmChange}
-                                  className="min-w-0 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono disabled:opacity-60"
-                                />
-                                <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
-                              </>
-                            )}
+                            ) : null}
+                            <>
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={
+                                  edgePlanRunMagnitudeMm(planAxisMm) > 0
+                                    ? Math.round(
+                                        (edgePlanRunMagnitudeMm(planAxisMm) / 1000) * 10000,
+                                      ) / 10000
+                                    : ''
+                                }
+                                onChange={(e) => {
+                                  const magMm = parsePositiveMetersToMm(e.target.value);
+                                  if (magMm == null) return;
+                                  const sign = edgePlanRunSign(planAxisMm);
+                                  onEdgePlanAxisMmChange?.(
+                                    i,
+                                    composeEdgePlanAxisMm(magMm, sign),
+                                  );
+                                }}
+                                disabled={!onEdgePlanAxisMmChange}
+                                className="min-w-0 w-14 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono disabled:opacity-60"
+                                title={(t('scaffoldExtra', 'edgePlanRunPositiveHint') as string) || ''}
+                              />
+                              <select
+                                value={edgePlanRunSign(planAxisMm) === 1 ? 'plus' : 'minus'}
+                                onChange={(e) => {
+                                  const sign = e.target.value === 'plus' ? 1 : -1;
+                                  const mag = edgePlanRunMagnitudeMm(planAxisMm);
+                                  onEdgePlanAxisMmChange?.(
+                                    i,
+                                    composeEdgePlanAxisMm(mag || 0, sign),
+                                  );
+                                }}
+                                disabled={!onEdgePlanAxisMmChange}
+                                title={(t('scaffoldExtra', 'edgePlanRunDirection') as string) || ''}
+                                className="w-[2.85rem] shrink-0 rounded border border-gray-200 px-0.5 py-0.5 text-[10px] font-mono font-semibold bg-white disabled:opacity-60"
+                              >
+                                <option value="plus">
+                                  {edgePlanRunDirectionLabel(effectiveAxis, 1)}
+                                </option>
+                                <option value="minus">
+                                  {edgePlanRunDirectionLabel(effectiveAxis, -1)}
+                                </option>
+                              </select>
+                              <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
+                            </>
                           </div>
                           {hasHashiraPlanning && stationEnd != null ? (
                             <p
@@ -1310,7 +1342,10 @@ export function DrawingUpload({
                             </p>
                           ) : null}
                           {dxM != null && dyM != null ? (
-                            <p className="text-[9px] text-gray-400 mt-0.5 font-mono truncate" title="Geometry">
+                            <p
+                              className="text-[9px] text-gray-400 mt-0.5 font-mono truncate"
+                              title={(t('scaffoldExtra', 'edgePlanCoordDeltaHint') as string) || ''}
+                            >
                               ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}
                             </p>
                           ) : null}
