@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException, InternalSer
 import { Quotation } from './quotation.entity';
 import { QuotationItem } from './quotation-item.entity';
 import { QuotationCostItem } from './quotation-cost-item.entity';
-import { ScaffoldConfigService } from '../scaffold-config/scaffold-config.service';
+import { ScaffoldAccessActor, ScaffoldConfigService } from '../scaffold-config/scaffold-config.service';
 import { QuotationCostService } from './quotation-cost.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -24,17 +24,17 @@ export class QuotationService {
     private costService: QuotationCostService,
   ) {}
 
-  async create(dto: CreateQuotationDto, userId: string): Promise<Quotation> {
+  async create(dto: CreateQuotationDto, actor: ScaffoldAccessActor): Promise<Quotation> {
     try {
-      const config = await this.configService.getConfig(dto.configId);
+      const config = await this.configService.getConfig(dto.configId, actor);
       if (!config) throw new NotFoundException(`Configuration with ID ${dto.configId} not found.`);
-      const quantities = await this.configService.getQuantities(dto.configId);
+      const quantities = await this.configService.getQuantities(dto.configId, actor);
       if (quantities.length === 0) throw new BadRequestException('No calculated quantities found. Please run the calculation first.');
 
       if (config.status !== 'reviewed') {
         if (config.status === 'calculated') {
-          await this.configService.markReviewed(dto.configId);
-          const updatedConfig = await this.configService.getConfig(dto.configId);
+          await this.configService.markReviewed(dto.configId, actor);
+          const updatedConfig = await this.configService.getConfig(dto.configId, actor);
           if (updatedConfig.status !== 'reviewed') throw new BadRequestException('Failed to mark configuration as reviewed.');
         } else {
           throw new BadRequestException(`Configuration must be calculated and reviewed. Current status: '${config.status}'.`);
@@ -67,7 +67,7 @@ export class QuotationService {
         taxAmount: 0,
         totalAmount: 0,
         status: 'draft',
-        createdBy: userId,
+        createdBy: actor.id,
       });
       const { data: savedQuotationRow, error: qErr } = await client.from('quotations').insert(quotationIns).select().single();
       if (qErr || !savedQuotationRow) throw new Error(qErr?.message || 'Failed to create quotation');
@@ -89,7 +89,7 @@ export class QuotationService {
         materialSubtotal,
         totalComponents,
         totalArea,
-        userId,
+        actor.id,
         dto.rentalCostAmounts ?? null,
       );
       const costSubtotal = costItems.reduce((sum, item) => sum + effectiveCostLineAmount(item), 0);
@@ -165,11 +165,11 @@ export class QuotationService {
   }
 
   /** Re-sync line unit prices from calculated_quantities and re-run rental cost formulas (no global price master). */
-  async repopulatePrices(quotationId: string, userId: string): Promise<Quotation> {
+  async repopulatePrices(quotationId: string, actor: ScaffoldAccessActor): Promise<Quotation> {
     const quotation = await this.get(quotationId);
     if (quotation.status === 'finalized') throw new BadRequestException('Cannot update prices on a finalized quotation.');
-    const config = await this.configService.getConfig(quotation.configId);
-    const quantities = await this.configService.getQuantities(quotation.configId);
+    const config = await this.configService.getConfig(quotation.configId, actor);
+    const quantities = await this.configService.getQuantities(quotation.configId, actor);
     const keyOf = (componentType: string, sizeSpec: string) => `${componentType}|${sizeSpec}`;
     const unitPriceByKey = new Map<string, number>();
     for (const q of quantities) {
@@ -195,7 +195,7 @@ export class QuotationService {
       return sum + wallLengthM * scaffoldHeightM;
     }, 0);
 
-    const costItems = await this.costService.calculateCosts(quotation, materialSubtotal, totalComponents, totalArea, userId, null);
+    const costItems = await this.costService.calculateCosts(quotation, materialSubtotal, totalComponents, totalArea, actor.id, null);
     const costSubtotal = costItems.reduce((sum, item) => sum + effectiveCostLineAmount(item), 0);
     const subtotal = materialSubtotal + costSubtotal;
     const taxAmount = Math.floor(subtotal * 0.1);

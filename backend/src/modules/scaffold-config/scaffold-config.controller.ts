@@ -74,7 +74,7 @@ export class ScaffoldConfigController {
     @Body() dto: PatchResultLabelsDto,
     @CurrentUser() user: any,
   ) {
-    return await this.configService.patchEdgeHashiraLabeling(id, dto, user.id);
+    return await this.configService.patchEdgeHashiraLabeling(id, dto, user);
   }
 
   /**
@@ -82,8 +82,12 @@ export class ScaffoldConfigController {
    * Update job site header fields only (Excel / print). No recalculation.
    */
   @Patch(':id/site-contact')
-  async patchSiteContact(@Param('id') id: string, @Body() dto: PatchSiteContactDto) {
-    return await this.configService.patchSiteContact(id, dto);
+  async patchSiteContact(
+    @Param('id') id: string,
+    @Body() dto: PatchSiteContactDto,
+    @CurrentUser() user: any,
+  ) {
+    return await this.configService.patchSiteContact(id, dto, user);
   }
 
   /**
@@ -97,15 +101,15 @@ export class ScaffoldConfigController {
     @CurrentUser() user: any,
   ) {
     this.logger.log(`Updating scaffold config ${id}`);
-    return await this.configService.updateAndRecalculate(id, dto, user.id);
+    return await this.configService.updateAndRecalculate(id, dto, user);
   }
 
   /**
    * GET /scaffold-configs?projectId=xxx
    */
   @Get()
-  async listConfigs(@Query('projectId') projectId?: string) {
-    return await this.configService.listConfigs(projectId);
+  async listConfigs(@Query('projectId') projectId: string | undefined, @CurrentUser() user: any) {
+    return await this.configService.listConfigs(projectId, user);
   }
 
   // ─── Materials catalog (optional seed) — must be BEFORE :id routes ───────
@@ -128,24 +132,24 @@ export class ScaffoldConfigController {
    * GET /scaffold-configs/by-drawing/:drawingId
    */
   @Get('by-drawing/:drawingId')
-  async getConfigByDrawing(@Param('drawingId') drawingId: string) {
-    return await this.configService.getConfigByDrawing(drawingId);
+  async getConfigByDrawing(@Param('drawingId') drawingId: string, @CurrentUser() user: any) {
+    return await this.configService.getConfigByDrawing(drawingId, user);
   }
 
   /**
    * GET /scaffold-configs/:id
    */
   @Get(':id')
-  async getConfig(@Param('id') id: string) {
-    return await this.configService.getConfig(id);
+  async getConfig(@Param('id') id: string, @CurrentUser() user: any) {
+    return await this.configService.getConfig(id, user);
   }
 
   /**
    * GET /scaffold-configs/:id/quantities
    */
   @Get(':id/quantities')
-  async getQuantities(@Param('id') configId: string) {
-    return await this.configService.getQuantities(configId);
+  async getQuantities(@Param('id') configId: string, @CurrentUser() user: any) {
+    return await this.configService.getQuantities(configId, user);
   }
 
   /**
@@ -157,11 +161,12 @@ export class ScaffoldConfigController {
   async patchQuantityUnitPrice(
     @Param('quantityId') quantityId: string,
     @Body('unitPrice') unitPrice: number,
+    @CurrentUser() user: any,
   ) {
     if (typeof unitPrice !== 'number' || Number.isNaN(unitPrice)) {
       throw new BadRequestException('unitPrice is required');
     }
-    return await this.configService.updateQuantityUnitPrice(quantityId, unitPrice);
+    return await this.configService.updateQuantityUnitPrice(quantityId, unitPrice, user);
   }
 
   /**
@@ -173,11 +178,13 @@ export class ScaffoldConfigController {
   async updateQuantity(
     @Param('quantityId') quantityId: string,
     @Body() dto: UpdateQuantityDto,
+    @CurrentUser() user: any,
   ) {
     return await this.configService.updateQuantity(
       quantityId,
       dto.adjustedQuantity,
       dto.adjustmentReason,
+      user,
     );
   }
 
@@ -191,11 +198,12 @@ export class ScaffoldConfigController {
   async bulkQuantityUnitPrices(
     @Param('id') configId: string,
     @Body() body: { updates: Array<{ quantityId: string; unitPrice: number }> },
+    @CurrentUser() user: any,
   ) {
     if (!body?.updates?.length) {
       throw new BadRequestException('updates[] is required');
     }
-    return await this.configService.bulkUpdateQuantityUnitPrices(configId, body.updates);
+    return await this.configService.bulkUpdateQuantityUnitPrices(configId, body.updates, user);
   }
 
   /**
@@ -204,8 +212,8 @@ export class ScaffoldConfigController {
   @Post(':id/review')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'estimator', 'viewer')
-  async markReviewed(@Param('id') configId: string) {
-    return await this.configService.markReviewed(configId);
+  async markReviewed(@Param('id') configId: string, @CurrentUser() user: any) {
+    return await this.configService.markReviewed(configId, user);
   }
 
   /**
@@ -215,9 +223,9 @@ export class ScaffoldConfigController {
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'estimator', 'viewer')
-  async deleteConfig(@Param('id') configId: string) {
+  async deleteConfig(@Param('id') configId: string, @CurrentUser() user: any) {
     this.logger.log(`Deleting scaffold config ${configId}`);
-    await this.configService.deleteConfig(configId);
+    await this.configService.deleteConfig(configId, user);
     return { message: 'Configuration deleted successfully' };
   }
 
@@ -230,8 +238,9 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Query('lang') lang: string | undefined,
     @Res() res: Response,
+    @CurrentUser() user: any,
   ) {
-    const config = await this.configService.getConfig(configId);
+    const config = await this.configService.getConfig(configId, user);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
       return;
@@ -259,8 +268,9 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Body() body: { svgContent: string },
     @Res() res: Response,
+    @CurrentUser() user: any,
   ) {
-    const config = await this.configService.getConfig(configId);
+    const config = await this.configService.getConfig(configId, user);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
       return;
@@ -285,13 +295,13 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Body() body: { imageBase64: string },
     @Res() res: Response,
-    @CurrentUser() user: { id: string; role?: string },
+    @CurrentUser() user: { id: string; role?: string; companyId?: string },
   ) {
     const caps = await this.subscriptionService.resolveEffectiveCapabilities(user.id, user.role);
     if (!caps.view3d) {
       throw new ForbiddenException('3D export requires a Medium or Premium subscription.');
     }
-    const config = await this.configService.getConfig(configId);
+    const config = await this.configService.getConfig(configId, user);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
       return;
@@ -316,8 +326,9 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Query('wall') wallSide: string,
     @Res() res: Response,
+    @CurrentUser() user: any,
   ) {
-    const config = await this.configService.getConfig(configId);
+    const config = await this.configService.getConfig(configId, user);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
       return;
@@ -342,13 +353,13 @@ export class ScaffoldConfigController {
     @Param('id') configId: string,
     @Query('wall') wallSide: string,
     @Res() res: Response,
-    @CurrentUser() user: { id: string; role?: string },
+    @CurrentUser() user: { id: string; role?: string; companyId?: string },
   ) {
     const caps = await this.subscriptionService.resolveEffectiveCapabilities(user.id, user.role);
     if (!caps.view3d) {
       throw new ForbiddenException('3D export requires a Medium or Premium subscription.');
     }
-    const config = await this.configService.getConfig(configId);
+    const config = await this.configService.getConfig(configId, user);
     if (!config.calculationResult) {
       res.status(400).json({ message: 'Calculation not yet performed' });
       return;

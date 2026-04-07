@@ -103,8 +103,9 @@ function AdminDashboard() {
   });
 
   const { data: configs } = useQuery<ScaffoldConfiguration[]>({
-    queryKey: ['scaffold-configs'],
+    queryKey: ['scaffold-configs', profile?.id],
     queryFn: () => scaffoldConfigsApi.list(),
+    enabled: !!profile?.id,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -488,9 +489,16 @@ function UserDashboard() {
     west: t('sides', 'west'),
   };
 
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: usersApi.getProfile,
+    staleTime: 1000 * 60 * 5,
+  });
+
   const { data: configs, isLoading, isError } = useQuery<ScaffoldConfiguration[]>({
-    queryKey: ['scaffold-configs'],
+    queryKey: ['scaffold-configs', profile?.id],
     queryFn: () => scaffoldConfigsApi.list(),
+    enabled: !!profile?.id,
     retry: false,
     staleTime: 1000 * 60 * 5,
   });

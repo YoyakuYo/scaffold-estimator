@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ScaffoldConfiguration } from './scaffold-config.entity';
 import { CalculatedQuantity } from './calculated-quantity.entity';
 import { ScaffoldMaterial } from './scaffold-material.entity';
@@ -68,6 +68,9 @@ function stripScaffoldConfigPayloadForMissingColumn(
   }
   return null;
 }
+
+/** JWT user shape for tenant scoping of scaffold configs (list + single-config access). */
+export type ScaffoldAccessActor = { id: string; role?: string; companyId?: string };
 
 @Injectable()
 export class ScaffoldConfigService {
@@ -410,9 +413,9 @@ export class ScaffoldConfigService {
   async updateAndRecalculate(
     configId: string,
     dto: CreateScaffoldConfigDto,
-    userId: string,
+    actor: ScaffoldAccessActor,
   ): Promise<{ config: ScaffoldConfiguration; result: ScaffoldCalculationResult; quantities: CalculatedQuantity[] }> {
-    const config = await this.getConfig(configId);
+    const config = await this.getConfig(configId, actor);
     const scaffoldType = dto.scaffoldType || config.scaffoldType || 'kusabi';
     const dtoForCalc = scaffoldType === 'wakugumi' ? this.applyWakugumiFrameSeries(dto) : dto;
     this.logger.log(`Updating and recalculating ${scaffoldType} config ${configId}`);
@@ -692,7 +695,7 @@ export class ScaffoldConfigService {
     return { config, result, quantities: savedQuantities };
   }
 
-  async getConfig(id: string): Promise<ScaffoldConfiguration> {
+  private async loadConfigUnchecked(id: string): Promise<ScaffoldConfiguration> {
     const { data: row, error } = await this.supabase.getClient().from('scaffold_configurations').select('*').eq('id', id).maybeSingle();
     if (error || !row) throw new NotFoundException('Scaffold configuration not found');
     const config = mapRowToCamel<ScaffoldConfiguration>(row as Record<string, unknown>);
@@ -703,15 +706,38 @@ export class ScaffoldConfigService {
     return config;
   }
 
+  private async assertConfigAccess(config: ScaffoldConfiguration, actor: ScaffoldAccessActor): Promise<void> {
+    if (actor.role === 'superadmin') return;
+    if (config.createdBy === actor.id) return;
+    if (!actor.companyId) {
+      throw new ForbiddenException('Access denied');
+    }
+    const { data: row } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('company_id')
+      .eq('id', config.createdBy)
+      .maybeSingle();
+    const creatorCompany = (row as { company_id?: string } | null)?.company_id;
+    if (creatorCompany && creatorCompany === actor.companyId) return;
+    throw new ForbiddenException('Access denied');
+  }
+
+  async getConfig(id: string, actor?: ScaffoldAccessActor): Promise<ScaffoldConfiguration> {
+    const config = await this.loadConfigUnchecked(id);
+    if (actor) await this.assertConfigAccess(config, actor);
+    return config;
+  }
+
   /**
    * Shallow-merge edge X/Y 支柱番号 into calculation_result (no recalculation).
    */
   async patchEdgeHashiraLabeling(
     configId: string,
     dto: PatchResultLabelsDto,
-    _userId: string,
+    actor: ScaffoldAccessActor,
   ): Promise<ScaffoldConfiguration> {
-    const config = await this.getConfig(configId);
+    const config = await this.getConfig(configId, actor);
     const prev = (config.calculationResult ?? {}) as Record<string, unknown>;
     const nextCr = {
       ...prev,
@@ -727,8 +753,8 @@ export class ScaffoldConfigService {
     return config;
   }
 
-  async patchSiteContact(configId: string, dto: PatchSiteContactDto): Promise<ScaffoldConfiguration> {
-    const config = await this.getConfig(configId);
+  async patchSiteContact(configId: string, dto: PatchSiteContactDto, actor: ScaffoldAccessActor): Promise<ScaffoldConfiguration> {
+    const config = await this.getConfig(configId, actor);
     const siteName = (dto.siteName ?? '').trim() || null;
     const siteAddress = (dto.siteAddress ?? '').trim() || null;
     const siteEmail = (dto.siteEmail ?? '').trim() || null;
@@ -756,10 +782,10 @@ export class ScaffoldConfigService {
       this.logger.error('patchSiteContact failed', error);
       throw new BadRequestException('Failed to save site contact.');
     }
-    return this.getConfig(configId);
+    return this.getConfig(configId, actor);
   }
 
-  async getConfigByDrawing(drawingId: string): Promise<ScaffoldConfiguration | null> {
+  async getConfigByDrawing(drawingId: string, actor: ScaffoldAccessActor): Promise<ScaffoldConfiguration | null> {
     const { data: rows } = await this.supabase
       .getClient()
       .from('scaffold_configurations')
@@ -772,10 +798,12 @@ export class ScaffoldConfigService {
     if (!cfg) return null;
     this.applyLegacyMassingCorrection(cfg);
     this.normalizeLoadedConfigScaffoldWidths(cfg);
+    await this.assertConfigAccess(cfg, actor);
     return cfg;
   }
 
-  async getQuantities(configId: string): Promise<CalculatedQuantity[]> {
+  async getQuantities(configId: string, actor: ScaffoldAccessActor): Promise<CalculatedQuantity[]> {
+    await this.getConfig(configId, actor);
     const { data: rows } = await this.supabase
       .getClient()
       .from('calculated_quantities')
@@ -785,21 +813,32 @@ export class ScaffoldConfigService {
     return mapRowsToCamel<CalculatedQuantity>(rows || []);
   }
 
-  async updateQuantity(quantityId: string, adjustedQuantity: number, reason?: string): Promise<CalculatedQuantity> {
+  async updateQuantity(
+    quantityId: string,
+    adjustedQuantity: number,
+    reason: string | undefined,
+    actor: ScaffoldAccessActor,
+  ): Promise<CalculatedQuantity> {
     const { data: row } = await this.supabase.getClient().from('calculated_quantities').select('*').eq('id', quantityId).maybeSingle();
     if (!row) throw new NotFoundException('Quantity record not found');
+    const existing = mapRowToCamel<CalculatedQuantity>(row as Record<string, unknown>);
+    if (!existing) throw new NotFoundException('Quantity record not found');
+    await this.getConfig(existing.configId, actor);
     const updates = mapPayloadToSnake({ adjustedQuantity, adjustmentReason: reason || null });
     const { data: saved, error } = await this.supabase.getClient().from('calculated_quantities').update(updates).eq('id', quantityId).select().single();
     if (error || !saved) throw new BadRequestException('Update failed.');
     return mapRowToCamel<CalculatedQuantity>(saved as Record<string, unknown>)!;
   }
 
-  async updateQuantityUnitPrice(quantityId: string, unitPrice: number): Promise<CalculatedQuantity> {
+  async updateQuantityUnitPrice(quantityId: string, unitPrice: number, actor: ScaffoldAccessActor): Promise<CalculatedQuantity> {
     if (typeof unitPrice !== 'number' || Number.isNaN(unitPrice) || unitPrice < 0) {
       throw new BadRequestException('unitPrice must be a non-negative number');
     }
     const { data: row } = await this.supabase.getClient().from('calculated_quantities').select('*').eq('id', quantityId).maybeSingle();
     if (!row) throw new NotFoundException('Quantity record not found');
+    const existing = mapRowToCamel<CalculatedQuantity>(row as Record<string, unknown>);
+    if (!existing) throw new NotFoundException('Quantity record not found');
+    await this.getConfig(existing.configId, actor);
     const rounded = Math.round(unitPrice);
     const { data: saved, error } = await this.supabase
       .getClient()
@@ -815,8 +854,9 @@ export class ScaffoldConfigService {
   async bulkUpdateQuantityUnitPrices(
     configId: string,
     updates: Array<{ quantityId: string; unitPrice: number }>,
+    actor: ScaffoldAccessActor,
   ): Promise<CalculatedQuantity[]> {
-    await this.getConfig(configId);
+    await this.getConfig(configId, actor);
     const results: CalculatedQuantity[] = [];
     for (const u of updates) {
       const { data: row } = await this.supabase.getClient().from('calculated_quantities').select('*').eq('id', u.quantityId).maybeSingle();
@@ -825,16 +865,16 @@ export class ScaffoldConfigService {
       if (q.configId !== configId) {
         throw new BadRequestException(`Quantity ${u.quantityId} does not belong to this configuration`);
       }
-      const saved = await this.updateQuantityUnitPrice(u.quantityId, Number(u.unitPrice));
+      const saved = await this.updateQuantityUnitPrice(u.quantityId, Number(u.unitPrice), actor);
       results.push(saved);
     }
     return results;
   }
 
-  async markReviewed(configId: string): Promise<ScaffoldConfiguration> {
-    const config = await this.getConfig(configId);
+  async markReviewed(configId: string, actor: ScaffoldAccessActor): Promise<ScaffoldConfiguration> {
+    const config = await this.getConfig(configId, actor);
     if (config.status !== 'calculated') {
-      const quantities = await this.getQuantities(configId);
+      const quantities = await this.getQuantities(configId, actor);
       if (quantities.length > 0) {
         await this.supabase.getClient().from('scaffold_configurations').update(mapPayloadToSnake({ status: 'calculated' })).eq('id', configId);
         config.status = 'calculated';
@@ -847,9 +887,19 @@ export class ScaffoldConfigService {
     return config;
   }
 
-  async listConfigs(projectId?: string): Promise<ScaffoldConfiguration[]> {
+  async listConfigs(projectId?: string, actor?: ScaffoldAccessActor): Promise<ScaffoldConfiguration[]> {
     let q = this.supabase.getClient().from('scaffold_configurations').select('*').order('created_at', { ascending: false });
     if (projectId) q = q.eq('project_id', projectId);
+    if (actor && actor.role !== 'superadmin') {
+      if (actor.companyId) {
+        const { data: userRows } = await this.supabase.getClient().from('users').select('id').eq('company_id', actor.companyId);
+        const ids = (userRows || []).map((r: { id: string }) => r.id);
+        if (ids.length === 0) return [];
+        q = q.in('created_by', ids);
+      } else {
+        q = q.eq('created_by', actor.id);
+      }
+    }
     const { data: rows } = await q;
     const list = mapRowsToCamel<ScaffoldConfiguration>(rows || []);
     for (const cfg of list) {
@@ -906,9 +956,8 @@ export class ScaffoldConfigService {
     }
   }
 
-  async deleteConfig(configId: string): Promise<void> {
-    const { data: row } = await this.supabase.getClient().from('scaffold_configurations').select('id').eq('id', configId).maybeSingle();
-    if (!row) throw new Error('Configuration not found');
+  async deleteConfig(configId: string, actor: ScaffoldAccessActor): Promise<void> {
+    await this.getConfig(configId, actor);
     await this.supabase.getClient().from('calculated_quantities').delete().eq('config_id', configId);
     await this.supabase.getClient().from('scaffold_configurations').delete().eq('id', configId);
     this.logger.log(`Deleted scaffold config ${configId}`);
