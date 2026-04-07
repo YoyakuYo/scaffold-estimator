@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useRef } from 'react';
 import {
   Calculator,
@@ -19,10 +19,14 @@ import {
   UserPlus,
   Ruler,
   Download,
+  ChevronDown,
+  Mail,
+  Loader2,
 } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
+import { submitPublicContact } from '@/lib/api/public-contact';
 import { usePwaInstall } from '@/lib/pwa-install-context';
 
 const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
@@ -187,7 +191,30 @@ export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const [plansOpen, setPlansOpen] = useState(false);
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [contactHp, setContactHp] = useState('');
+  const [contactSent, setContactSent] = useState(false);
   const localeMenuRef = useRef<HTMLDivElement>(null);
+
+  const contactMutation = useMutation({
+    mutationFn: () =>
+      submitPublicContact({
+        name: contactName.trim(),
+        email: contactEmail.trim(),
+        message: contactMessage.trim(),
+        company: contactHp.trim() || undefined,
+      }),
+    onSuccess: () => {
+      setContactSent(true);
+      setContactName('');
+      setContactEmail('');
+      setContactMessage('');
+      setContactHp('');
+    },
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -238,6 +265,18 @@ export default function LandingPage() {
               {t('landing', 'appName')}
             </Link>
             <div className="flex items-center gap-2">
+              <a
+                href="#landing-plans"
+                className="hidden md:inline-flex px-2 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              >
+                {t('landing', 'plansEyebrow')}
+              </a>
+              <a
+                href="#landing-contact"
+                className="hidden md:inline-flex px-2 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              >
+                {t('landing', 'contactEyebrow')}
+              </a>
               <div className="relative" ref={localeMenuRef}>
                 <button
                   type="button"
@@ -696,49 +735,215 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ─── Commercial plans (features only; fees on Billing) ─ */}
+        {/* ─── Plans (collapsed until opened) + Contact ─ */}
         <section
-          className="border-b border-gray-200 bg-slate-100 py-16 md:py-20"
+          id="landing-plans"
+          className="border-b border-gray-200 bg-slate-100 py-12 md:py-16"
           aria-labelledby="landing-plans-heading"
         >
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-700">
-              {t('landing', 'plansEyebrow')}
-            </p>
-            <h2 id="landing-plans-heading" className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
-              {t('landing', 'plansTitle')}
-            </h2>
-            <p className="mt-3 max-w-3xl text-gray-600 leading-relaxed">{t('landing', 'plansIntro')}</p>
-            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {(
-                [
-                  { title: t('billing', 'planTierBasic'), body: t('landing', 'plansBasicBody') },
-                  { title: t('billing', 'planTierMedium'), body: t('landing', 'plansMediumBody') },
-                  { title: t('billing', 'planTierMonthly'), body: t('landing', 'plansPerProjectBody') },
-                  { title: t('billing', 'planTierPremium'), body: t('landing', 'plansPremiumBody') },
-                ] as const
-              ).map((plan, cardIdx) => (
-                <div
-                  key={cardIdx}
-                  className="flex flex-col rounded-2xl border border-gray-200/90 bg-white p-6 shadow-sm ring-1 ring-gray-900/5"
-                >
-                  <h3 className="text-lg font-bold text-gray-900">{plan.title}</h3>
-                  <ul className="mt-4 flex flex-1 list-none flex-col gap-2.5 p-0 text-sm leading-relaxed text-gray-600">
-                    {plan.body
-                      .split('\n')
-                      .map((line) => line.trim())
-                      .filter(Boolean)
-                      .map((line, idx) => (
-                        <li key={`${cardIdx}-${idx}`} className="flex gap-2.5">
-                          <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
-                          <span>{line}</span>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              ))}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-700">
+                  {t('landing', 'plansEyebrow')}
+                </p>
+                <h2 id="landing-plans-heading" className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
+                  {t('landing', 'plansTitle')}
+                </h2>
+                <p className="mt-3 max-w-3xl text-gray-600 leading-relaxed">{t('landing', 'plansIntro')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPlansOpen((o) => !o)}
+                aria-expanded={plansOpen}
+                aria-controls="landing-plans-panel"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-900/5 transition hover:bg-gray-50"
+              >
+                {plansOpen ? t('landing', 'plansToggleHide') : t('landing', 'plansToggleShow')}
+                <ChevronDown
+                  className={`h-4 w-4 text-gray-500 transition-transform ${plansOpen ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+              </button>
             </div>
-            <p className="mt-8 text-sm text-gray-500 max-w-3xl leading-relaxed">{t('landing', 'plansFootnote')}</p>
+
+            {plansOpen && (
+              <div id="landing-plans-panel" className="mt-10 space-y-8" role="region" aria-labelledby="landing-plans-heading">
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                  {(
+                    [
+                      {
+                        title: t('billing', 'planTierBasic'),
+                        prices: [
+                          t('billing', 'planCardBasicLicense'),
+                          t('billing', 'planCardBasicYearly'),
+                          t('billing', 'planCardBasicSeats'),
+                        ],
+                        bullets: [t('billing', 'planCardBasicF1'), t('billing', 'planCardBasicF2')],
+                      },
+                      {
+                        title: t('billing', 'planTierMedium'),
+                        prices: [
+                          t('billing', 'planCardMediumLicense'),
+                          t('billing', 'planCardMediumYearly'),
+                          t('billing', 'planCardMediumSeats'),
+                        ],
+                        bullets: [
+                          t('billing', 'planCardMediumF1'),
+                          t('billing', 'planCardMediumF2'),
+                          t('billing', 'planCardMediumF3'),
+                        ],
+                      },
+                      {
+                        title: t('billing', 'planTierMonthly'),
+                        prices: [
+                          t('billing', 'planCardMonthlyPrice'),
+                          t('billing', 'planCardMonthlySeats'),
+                          t('billing', 'planCardMonthlyRenewal'),
+                        ],
+                        bullets: [t('billing', 'planCardMonthlyLandingF1')],
+                      },
+                      {
+                        title: t('billing', 'planTierPremium'),
+                        prices: [
+                          t('billing', 'planCardPremiumLicense'),
+                          t('billing', 'planCardPremiumYearly'),
+                          t('billing', 'planCardPremiumSeats'),
+                        ],
+                        bullets: [
+                          t('billing', 'planCardPremiumF1'),
+                          t('billing', 'planCardPremiumF2'),
+                          t('billing', 'planCardPremiumF3'),
+                        ],
+                      },
+                    ] as const
+                  ).map((plan, cardIdx) => (
+                    <div
+                      key={cardIdx}
+                      className="flex flex-col rounded-2xl border border-gray-200/90 bg-white p-6 shadow-sm ring-1 ring-gray-900/5"
+                    >
+                      <h3 className="text-lg font-bold text-gray-900">{plan.title}</h3>
+                      <ul className="mt-3 list-none space-y-1.5 border-b border-gray-100 pb-4 p-0 text-sm font-medium text-gray-800">
+                        {plan.prices.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                      <ul className="mt-4 flex flex-1 list-none flex-col gap-2.5 p-0 text-sm leading-relaxed text-gray-600">
+                        {plan.bullets.map((line) => (
+                          <li key={line} className="flex gap-2.5">
+                            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                            <span>{line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-500 max-w-3xl leading-relaxed">{t('landing', 'plansFootnote')}</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section id="landing-contact" className="border-b border-gray-200 bg-white py-14 md:py-16">
+          <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-700">{t('landing', 'contactEyebrow')}</p>
+            <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-2">
+              <Mail className="h-7 w-7 text-blue-600 shrink-0" aria-hidden />
+              {t('landing', 'contactTitle')}
+            </h2>
+            <p className="mt-3 text-gray-600 leading-relaxed">{t('landing', 'contactSubtitle')}</p>
+
+            {contactSent && (
+              <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+                {t('landing', 'contactSuccess')}
+              </p>
+            )}
+
+            <form
+              className="relative mt-8 space-y-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setContactSent(false);
+                contactMutation.mutate();
+              }}
+            >
+              <div>
+                <label htmlFor="landing-contact-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('landing', 'contactName')}
+                </label>
+                <input
+                  id="landing-contact-name"
+                  name="name"
+                  required
+                  maxLength={120}
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  autoComplete="name"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+              <div>
+                <label htmlFor="landing-contact-email" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('landing', 'contactEmail')}
+                </label>
+                <input
+                  id="landing-contact-email"
+                  name="email"
+                  type="email"
+                  required
+                  maxLength={320}
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  autoComplete="email"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+              <div>
+                <label htmlFor="landing-contact-message" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('landing', 'contactMessage')}
+                </label>
+                <textarea
+                  id="landing-contact-message"
+                  name="message"
+                  required
+                  minLength={5}
+                  maxLength={8000}
+                  rows={5}
+                  value={contactMessage}
+                  onChange={(e) => setContactMessage(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                />
+              </div>
+              <div className="absolute -left-[9999px] h-px w-px overflow-hidden" aria-hidden>
+                <label htmlFor="landing-contact-hp">{t('landing', 'contactHpLabel')}</label>
+                <input
+                  id="landing-contact-hp"
+                  name="company"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={contactHp}
+                  onChange={(e) => setContactHp(e.target.value)}
+                />
+              </div>
+              {contactMutation.isError && (
+                <p className="text-sm text-red-600">{t('landing', 'contactError')}</p>
+              )}
+              <button
+                type="submit"
+                disabled={contactMutation.isPending}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
+              >
+                {contactMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    {t('landing', 'contactSending')}
+                  </>
+                ) : (
+                  t('landing', 'contactSubmit')
+                )}
+              </button>
+            </form>
           </div>
         </section>
 

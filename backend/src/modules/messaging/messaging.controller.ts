@@ -6,6 +6,8 @@ import {
   Param,
   UseGuards,
   Logger,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -14,12 +16,20 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MessagingService } from './messaging.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { AdminStartConversationDto } from './dto/admin-start-conversation.dto';
+import { PublicContactDto } from './dto/public-contact.dto';
 
 @Controller('messages')
 export class MessagingController {
   private readonly logger = new Logger(MessagingController.name);
 
   constructor(private messagingService: MessagingService) {}
+
+  /** Public landing-page contact (no auth). Emails superadmins + in-app notification. */
+  @Post('public-contact')
+  @HttpCode(HttpStatus.OK)
+  async publicContact(@Body() dto: PublicContactDto) {
+    return this.messagingService.submitPublicContact(dto.name, dto.email, dto.message, dto.company);
+  }
 
   /** Get my conversation (user). */
   @UseGuards(JwtAuthGuard)

@@ -192,4 +192,46 @@ export class MessagingService {
     const { count } = await this.supabase.getClient().from('messages').select('*', { count: 'exact', head: true }).eq('conversation_id', cid).neq('sender_id', userId).is('read_at', null);
     return count ?? 0;
   }
+
+  /**
+   * Public marketing-site contact: emails superadmin addresses and creates in-app notifications
+   * (visible in the superadmin notification bell; full text also in email).
+   */
+  async submitPublicContact(name: string, email: string, message: string, honeypot?: string): Promise<{ ok: boolean }> {
+    if (honeypot?.trim()) {
+      return { ok: true };
+    }
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedMessage = message.trim();
+    const client = this.supabase.getClient();
+    const { data: admins, error } = await client.from('users').select('id, email').eq('role', 'superadmin');
+    if (error) {
+      this.logger.error(`submitPublicContact list superadmins: ${error.message}`);
+      throw new InternalServerErrorException('Could not deliver message');
+    }
+    if (!admins?.length) {
+      this.logger.warn('submitPublicContact: no superadmin users; landing contact dropped');
+      return { ok: true };
+    }
+    const preview = trimmedMessage.slice(0, 200) + (trimmedMessage.length > 200 ? '…' : '');
+    const emailed = new Set<string>();
+    for (const row of admins) {
+      const aid = (row as { id: string }).id;
+      const adminEmail = ((row as { email?: string }).email || '').trim();
+      await this.notificationsService
+        .create(aid, 'system', 'Landing page contact', {
+          body: `${trimmedName} · ${trimmedEmail}: ${preview}`,
+          link: '/superadmin/dashboard',
+        })
+        .catch((e) => this.logger.warn(`submitPublicContact notification: ${(e as Error)?.message}`));
+      if (adminEmail && !emailed.has(adminEmail.toLowerCase())) {
+        emailed.add(adminEmail.toLowerCase());
+        await this.mailerService.sendLandingContactEmail(adminEmail, trimmedName, trimmedEmail, trimmedMessage).catch((e) => {
+          this.logger.warn(`submitPublicContact email to ${adminEmail}: ${(e as Error)?.message}`);
+        });
+      }
+    }
+    return { ok: true };
+  }
 }

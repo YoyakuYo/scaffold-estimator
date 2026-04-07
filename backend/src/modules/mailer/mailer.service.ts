@@ -301,6 +301,26 @@ ${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
     await this.send(to, subject, text);
   }
 
+  /** Landing page contact form — sent to each superadmin inbox. */
+  async sendLandingContactEmail(to: string, name: string, fromEmail: string, message: string): Promise<void> {
+    const subject = `Landing page inquiry from ${name}`;
+    const text = [
+      'Someone submitted the public contact form on the marketing site.',
+      '',
+      `Name: ${name}`,
+      `Email: ${fromEmail}`,
+      '',
+      'Message:',
+      message.trim(),
+      '',
+      'Reply directly to the visitor by email.',
+    ].join('\n');
+    const html = `<p><strong>Landing page contact</strong></p>
+<p>Name: ${escapeHtml(name)}<br/>Email: <a href="mailto:${escapeHtml(fromEmail)}">${escapeHtml(fromEmail)}</a></p>
+<p style="white-space:pre-wrap;">${escapeHtml(message.trim())}</p>`;
+    await this.send(to, subject, text, html);
+  }
+
   /** Password reset email. Uses Brevo or SendGrid API when configured; else SMTP. */
   async sendPasswordResetEmail(to: string, resetUrl: string): Promise<boolean> {
     if (!this.mailConfigured()) {

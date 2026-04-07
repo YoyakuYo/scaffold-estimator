@@ -1398,9 +1398,19 @@ export const translations = {
       fr: 'Des offres pour estimateurs seuls et équipes',
     },
     plansIntro: {
-      ja: '各プランで利用できる機能の違いです。金額・お支払い手続きは登録後の請求ページでご確認ください。',
-      en: 'What each tier includes—no pricing on this page. After you create an account, open Billing for fees and bank transfer.',
-      fr: 'Ce que chaque formule inclut—sans montants ici. Après inscription, ouvrez Facturation pour les tarifs et le virement.',
+      ja: '下記はライセンス・更新の目安価格と、各プランで利用できる機能です。契約文言・税・振込手順はログイン後の請求ページで確定します。',
+      en: 'License and renewal fees are shown below with what each tier includes. Contract wording, tax, and payment steps are confirmed in Billing after you sign in.',
+      fr: 'Licence et renouvellement ci-dessous avec le périmètre fonctionnel. Conditions, fiscalité et paiement sont confirmés dans Facturation après connexion.',
+    },
+    plansToggleShow: {
+      ja: 'プランと料金を表示',
+      en: 'Show plans & pricing',
+      fr: 'Afficher les offres et tarifs',
+    },
+    plansToggleHide: {
+      ja: 'プランと料金を閉じる',
+      en: 'Hide plans & pricing',
+      fr: 'Masquer les offres et tarifs',
     },
     plansBasicBody: {
       ja: '1ユーザー向け。\n図面ファイルのアップロードとクイックシェイプ。\n手描きCAD・3D表示は含まれません。\n更新・保守・サポートは年単位で契約します。',
@@ -1426,6 +1436,37 @@ export const translations = {
       ja: '契約条件・お支払い方法・税の扱いは、ログイン後の請求ページでご確認ください。',
       en: 'Contract terms, payment options, and tax treatment are described on Billing after you sign in.',
       fr: 'Conditions, modalités de paiement et fiscalité : voir Facturation une fois connecté.',
+    },
+    contactEyebrow: { ja: 'お問い合わせ', en: 'Contact', fr: 'Contact' },
+    contactTitle: {
+      ja: 'ご質問・デモのご依頼',
+      en: 'Questions or demo requests',
+      fr: 'Questions ou demande de démo',
+    },
+    contactSubtitle: {
+      ja: 'メッセージは運営のメールとスーパー管理者の通知に届きます。折り返しご連絡いたします。',
+      en: 'Your message is delivered to our team by email and appears in the superadmin notification center. We will follow up with you.',
+      fr: 'Votre message est envoyé à l’équipe par e-mail et apparaît dans les notifications superadmin. Nous vous recontacterons.',
+    },
+    contactName: { ja: 'お名前', en: 'Name', fr: 'Nom' },
+    contactEmail: { ja: 'メールアドレス', en: 'Email', fr: 'E-mail' },
+    contactMessage: { ja: 'メッセージ', en: 'Message', fr: 'Message' },
+    contactSubmit: { ja: '送信する', en: 'Send message', fr: 'Envoyer' },
+    contactSending: { ja: '送信中…', en: 'Sending…', fr: 'Envoi…' },
+    contactSuccess: {
+      ja: '送信しました。ありがとうございます。',
+      en: 'Thanks — your message was sent.',
+      fr: 'Merci — votre message a été envoyé.',
+    },
+    contactError: {
+      ja: '送信に失敗しました。時間をおいて再度お試しください。',
+      en: 'Could not send right now. Please try again in a moment.',
+      fr: 'Envoi impossible pour le moment. Réessayez un peu plus tard.',
+    },
+    contactHpLabel: {
+      ja: '会社名（空のままにしてください）',
+      en: 'Company (leave blank)',
+      fr: 'Société (laisser vide)',
     },
     showcase1Alt: {
       ja: '高層建設現場とタワークレーン',
@@ -2122,6 +2163,11 @@ export const translations = {
     planCardMediumSeats: { ja: '利用ユーザー: 最大5名', en: 'Users included: up to 5', fr: 'Utilisateurs inclus : jusqu’à 5' },
     planCardMediumF1: { ja: 'ベーシックのすべての機能', en: 'Everything in Basic', fr: 'Tout le contenu Basique' },
     planCardMediumF2: { ja: '手描きCAD（平面図の作成）', en: 'Manual CAD drawing (plan input)', fr: 'CAO manuelle (saisie du plan)' },
+    planCardMediumF3: {
+      ja: 'インタラクティブな3D足場ビューとエクスポート',
+      en: 'Interactive 3D scaffold views and exports',
+      fr: 'Vues 3D interactives de l’échafaudage et exports',
+    },
     planCardPremiumTitle: { ja: 'プレミアム / エンタープライズ', en: 'Premium / Enterprise', fr: 'Premium / Entreprise' },
     planCardPremiumLicense: {
       ja: 'ライセンス（買い切り）: ¥5,000,000（＋税）',
@@ -2136,6 +2182,11 @@ export const translations = {
     planCardPremiumSeats: { ja: '利用ユーザー: 最大20名', en: 'Users included: up to 20', fr: 'Utilisateurs inclus : jusqu’à 20' },
     planCardPremiumF1: { ja: 'ベーシック・ミディアムのすべての機能', en: 'Everything in Basic and Medium', fr: 'Tout le contenu Basique et Moyen' },
     planCardPremiumF2: { ja: 'AI 抽出（画像・PDF・DXF 等、IFC/BIM 対応はロードマップに準拠）', en: 'AI extraction (images, PDF, DXF; IFC/BIM per product roadmap)', fr: 'Extraction IA (images, PDF, DXF ; IFC/BIM selon la feuille de route)' },
+    planCardPremiumF3: {
+      ja: 'Premium 向け壁スケジュール取り込み（JSON・CSV・スパン設定テキスト、有効な場合）',
+      en: 'Premium wall schedule import (JSON, CSV, or span configuration text) where enabled',
+      fr: 'Import planning premium (JSON, CSV ou texte de configuration des travées) lorsqu’activé',
+    },
     planCardMonthlyTitle: { ja: 'プロジェクト単価（銀行振込）', en: 'Per-project bank plan', fr: 'Forfait par projet (virement)' },
     planCardMonthlyPrice: {
       ja: 'お支払い: ¥200,000 / プロジェクト（＋税）',
@@ -2156,6 +2207,11 @@ export const translations = {
       ja: 'Premium と同範囲の機能（手描きCAD・3D・図面アップロード等）。AI 抽出と Premium 向けスケジュール取り込みは含みません。',
       en: 'Same product scope as Premium (CAD, 3D, uploads, etc.), excluding AI extraction and premium schedule import.',
       fr: 'Même périmètre produit que Premium (CAO, 3D, imports, etc.), sans extraction IA ni import planning premium.',
+    },
+    planCardMonthlyLandingF1: {
+      ja: 'ライセンス期間中は CAD ワークスペース、インタラクティブな3D、図面アップロード、見積・図面エクスポートまで一連の積算フローを利用できます。',
+      en: 'During your licensed project window you get the full workflow: CAD workspace, interactive 3D, drawing uploads, quotations, and exports.',
+      fr: 'Pendant la période licenciée : CAO, 3D interactif, imports de plans, devis et exports dans un flux complet.',
     },
     bankTransferTitle: { ja: '銀行振込でお支払い', en: 'Pay by bank transfer', fr: 'Payer par virement bancaire' },
     bankTransferIntro: { ja: '登録メールを振込依頼人名義などにご記載ください。入金確認後、管理者が利用権限を有効にします。', en: 'Include your registered email in the transfer details so we can match your payment. An admin will enable access after confirming the deposit.', fr: 'Indiquez votre e-mail d’inscription pour que nous puissions associer le virement. Un administrateur activera l’accès après réception.' },

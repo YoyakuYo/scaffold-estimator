@@ -85,7 +85,7 @@ function BankPlanGrid({
           t('billing', 'planCardMediumYearly'),
           t('billing', 'planCardMediumSeats'),
         ],
-        bullets: [t('billing', 'planCardMediumF1'), t('billing', 'planCardMediumF2')],
+        bullets: [t('billing', 'planCardMediumF1'), t('billing', 'planCardMediumF2'), t('billing', 'planCardMediumF3')],
       };
     }
     if (tier === 'monthly') {
@@ -106,7 +106,7 @@ function BankPlanGrid({
         t('billing', 'planCardPremiumYearly'),
         t('billing', 'planCardPremiumSeats'),
       ],
-      bullets: [t('billing', 'planCardPremiumF1'), t('billing', 'planCardPremiumF2')],
+      bullets: [t('billing', 'planCardPremiumF1'), t('billing', 'planCardPremiumF2'), t('billing', 'planCardPremiumF3')],
     };
   };
 
