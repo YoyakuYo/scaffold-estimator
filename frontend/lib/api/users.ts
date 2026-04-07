@@ -118,9 +118,9 @@ export const usersApi = {
     return res.data;
   },
 
-  /** Reject a pending user (admin only) */
-  rejectUser: async (id: string): Promise<UserProfile> => {
-    const res = await apiClient.post<UserProfile>(`/auth/users/${id}/reject`, {});
+  /** Reject a pending user (superadmin): removes user row and empty signup company */
+  rejectUser: async (id: string): Promise<{ success: true }> => {
+    const res = await apiClient.post<{ success: true }>(`/auth/users/${id}/reject`, {});
     return res.data;
   },
 

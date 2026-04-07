@@ -286,8 +286,12 @@ ${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
   }
 
   async sendRejectionEmail(to: string): Promise<void> {
-    const subject = 'Account request update';
-    const text = 'Your account request was not approved. Please contact support if you have questions.';
+    const subject = 'Account request not approved';
+    const text = [
+      'Your signup request was not approved, and the account we created for your registration has been removed from our system.',
+      '',
+      'You will not be able to log in with this registration. If you believe this was a mistake, contact support.',
+    ].join('\n');
     await this.send(to, subject, text);
   }
 

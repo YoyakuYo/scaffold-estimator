@@ -753,18 +753,48 @@ export class AuthService {
     return { ok: true, plan: planTier };
   }
 
-  async rejectUser(userId: string): Promise<any> {
-    const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
+  async rejectUser(userId: string): Promise<{ success: true }> {
+    const client = this.supabase.getClient();
+    const { data: row } = await client.from('users').select('*').eq('id', userId).maybeSingle();
     if (!row) throw new NotFoundException('ユーザーが見つかりません。');
     const user = mapRowToCamel<User>(row as Record<string, unknown>);
     if (!user) throw new NotFoundException('ユーザーが見つかりません。');
-    if (user.approvalStatus === 'rejected') throw new BadRequestException('このユーザーは既に拒否されています。');
+    if (user.role === 'superadmin') {
+      throw new ForbiddenException('Platform superadmin cannot be rejected.');
+    }
+    const isPending = user.approvalStatus === 'pending';
+    const isRejected = user.approvalStatus === 'rejected';
+    if (!isPending && !isRejected) {
+      throw new BadRequestException(
+        'Only pending signups (or legacy rejected rows) can be removed with reject. Deactivate approved users instead if needed.',
+      );
+    }
 
-    await this.supabase.getClient().from('users').update(mapPayloadToSnake({ approvalStatus: 'rejected', isActive: false })).eq('id', userId);
-    await this.notificationsService.create(userId, 'rejection', 'Account not approved', { body: 'Your account request was not approved. Please contact support if you have questions.', link: '/login' }).catch(() => {});
-    await this.mailerService.sendRejectionEmail(user.email).catch(() => {});
-    const { passwordHash, ...result } = user;
-    return result;
+    const { email, companyId } = user;
+    if (isPending) {
+      await this.mailerService.sendRejectionEmail(email).catch(() => {});
+    }
+
+    const { error: delErr } = await client.from('users').delete().eq('id', userId);
+    if (delErr) {
+      this.logger.error('rejectUser: user delete failed', delErr);
+      throw new BadRequestException(
+        'Could not remove this user. They may already have app data tied to this account. Contact support.',
+      );
+    }
+
+    const { count, error: cntErr } = await client
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId);
+    if (!cntErr && (count ?? 0) === 0) {
+      const { error: compErr } = await client.from('companies').delete().eq('id', companyId);
+      if (compErr) {
+        this.logger.warn(`rejectUser: orphan company delete failed companyId=${companyId}`, compErr);
+      }
+    }
+
+    return { success: true };
   }
 
   async getPendingUsersCount(): Promise<number> {
