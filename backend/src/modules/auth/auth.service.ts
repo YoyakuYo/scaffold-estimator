@@ -23,6 +23,7 @@ import { TransferCompanyAdminDto } from './dto/transfer-company-admin.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
@@ -753,6 +754,24 @@ export class AuthService {
     return { ok: true, plan: planTier };
   }
 
+  /**
+   * Deletes rows that reference users(id) without ON DELETE CASCADE (e.g. quotations.created_by),
+   * so pending/rejected signup removal does not fail on FK violations.
+   */
+  private async removeRowsBlockingUserDelete(client: SupabaseClient, userId: string): Promise<void> {
+    const tables = ['quotations', 'estimates'] as const;
+    for (const table of tables) {
+      const { error } = await client.from(table).delete().eq('created_by', userId);
+      if (!error) continue;
+      const code = (error as { code?: string }).code;
+      const msg = error.message || String(error);
+      if (code === 'PGRST205' || msg.includes('schema cache') || msg.includes('Could not find the table')) {
+        continue;
+      }
+      this.logger.warn(`removeRowsBlockingUserDelete: ${table} delete for user ${userId}: ${msg}`);
+    }
+  }
+
   async rejectUser(userId: string): Promise<{ success: true }> {
     const client = this.supabase.getClient();
     const { data: row } = await client.from('users').select('*').eq('id', userId).maybeSingle();
@@ -775,11 +794,16 @@ export class AuthService {
       await this.mailerService.sendRejectionEmail(email).catch(() => {});
     }
 
+    await this.removeRowsBlockingUserDelete(client, userId);
+
     const { error: delErr } = await client.from('users').delete().eq('id', userId);
     if (delErr) {
       this.logger.error('rejectUser: user delete failed', delErr);
+      const hint =
+        (delErr as { message?: string }).message ||
+        'Foreign key or database constraint may still reference this user.';
       throw new BadRequestException(
-        'Could not remove this user. They may already have app data tied to this account. Contact support.',
+        `Could not remove this user: ${hint} If you use Supabase SQL, delete dependent rows first or contact support.`,
       );
     }
 
