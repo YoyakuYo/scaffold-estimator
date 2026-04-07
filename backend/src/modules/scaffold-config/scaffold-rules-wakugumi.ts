@@ -16,7 +16,6 @@ import {
   cornerTerminalSpanMmKusabi,
   expandMiddleSpansToTargetCount,
   exactSumWithStandardSpans,
-  finalizeMiddleExactCatalogMerges,
   finalizeStandardSpanRowWithNominal,
   normalizeScaffoldWidthMmToCatalog,
   SPAN_OPTIONS,
@@ -263,13 +262,13 @@ export function fitSpansToWallLengthWithCornerWakugumi(
       if (middleNeed >= 0) {
         const middleExact = exactSumWithStandardSpans(middleNeed, WAKUGUMI_SPAN_SIZES);
         if (middleExact !== null) {
-          return [...prefix, ...finalizeMiddleExactCatalogMerges(middleExact), terminal];
+          return [...prefix, ...middleExact, terminal];
         }
       }
       const middleTarget = effectiveFacadeMm - prefixSum;
       if (middleTarget <= 0) return [...prefix];
       const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
-      return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans)];
+      return [...prefix, ...middleSpans];
     }
 
     const suffix = [terminal];
@@ -277,7 +276,7 @@ export function fitSpansToWallLengthWithCornerWakugumi(
     const middleTarget = runTarget - prefixSum - terminal;
     if (middleTarget <= 0) return [...prefix, ...suffix];
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
-    return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans), ...suffix];
+    return [...prefix, ...middleSpans, ...suffix];
   }
   const totalRunMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM;
   const middleMmNew = totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - terminal;

@@ -547,20 +547,6 @@ export function compressAdjacentNominalSameSpanMerges(
   return out;
 }
 
-/** Repeat exact catalog-sum merges until fixed point (length-preserving). */
-export function finalizeMiddleExactCatalogMerges(
-  spans: readonly number[],
-  spanSet: ReadonlySet<number> = SPAN_SIZE_SET,
-): number[] {
-  let out = [...spans];
-  for (let g = 0; g < 40; g++) {
-    const next = compressAdjacentCatalogSumMerges(out, spanSet);
-    if (next.length === out.length && next.every((v, i) => v === out[i]!)) return next;
-    out = next;
-  }
-  return out;
-}
-
 /**
  * Exact-sum merges + nominal same-span pair merges until stable (open walls & convex corner middles).
  */
@@ -722,14 +708,14 @@ export function fitSpansToWallLengthWithCorner(
       if (middleNeed >= 0) {
         const middleExact = exactSumWithStandardSpans(middleNeed, SPAN_SIZES);
         if (middleExact !== null) {
-          return [...prefix, ...finalizeMiddleExactCatalogMerges(middleExact), terminal];
+          return [...prefix, ...middleExact, terminal];
         }
       }
       // Rule 2: cannot end with width-module using exact standard spans → pack to inner line; pattanko at joint.
       const middleTarget = effectiveFacadeMm - prefixSum;
       if (middleTarget <= 0) return [...prefix];
       const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
-      return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans)];
+      return [...prefix, ...middleSpans];
     }
 
     // Reflex start only; convex end: overrun + terminal past outer corner
@@ -738,7 +724,7 @@ export function fitSpansToWallLengthWithCorner(
     const middleTarget = runTarget - prefixSum - terminal;
     if (middleTarget <= 0) return [...prefix, ...suffix];
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, SPAN_SIZES);
-    return [...prefix, ...finalizeMiddleExactCatalogMerges(middleSpans), ...suffix];
+    return [...prefix, ...middleSpans, ...suffix];
   }
 
   const runTargetMm = wallLengthMm + CORNER_OVERRUN_MM + terminal;

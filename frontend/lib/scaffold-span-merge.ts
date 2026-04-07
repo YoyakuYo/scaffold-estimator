@@ -1,19 +1,14 @@
 /**
- * Mirror of backend `scaffold-rules.ts` span compression so 3D (and other UI) matches
- * merged catalog bays without requiring an immediate recalculate. Keep in sync with:
- * `backend/src/modules/scaffold-config/scaffold-rules.ts` (compress/finalize helpers).
+ * Mirror of backend `scaffold-rules.ts` span compression for 3D display only.
+ * When `onlyInterior` is true (multi-wall layouts), first and last bays are left unchanged;
+ * only the spans **between** them are merged (914+914→1829, etc.) — corner/start/terminal bays untouched.
+ * Keep logic aligned with `backend/src/modules/scaffold-config/scaffold-rules.ts`.
  */
-
-import { normalizeScaffoldWidthMmToCatalog } from '@/lib/scaffold-width-catalog';
 
 export const SPAN_SIZES_MM = [610, 914, 1219, 1524, 1829] as const;
 const SPAN_SIZE_SET: ReadonlySet<number> = new Set(SPAN_SIZES_MM);
 
-/** @see KUSABI_NOMINAL_PAIR_MERGE_MAX_DELTA_MM */
 const NOMINAL_PAIR_MERGE_MAX_DELTA_MM = 1;
-
-/** @see CORNER_START_SPAN_MM */
-const CORNER_START_SPAN_MM = 1829;
 
 export function compressAdjacentCatalogSumMerges(spans: readonly number[]): number[] {
   const out = [...spans];
@@ -77,26 +72,18 @@ export function finalizeStandardSpanRowWithNominal(spans: readonly number[]): nu
 }
 
 /**
- * Apply catalog + nominal merges for 3D display. When the row looks like standard closed-loop
- * packing (1829 … terminal or terminal … terminal), only the **middle** is merged so we never
- * fuse the width-module terminal with the previous bay (914+610→1524).
+ * @param onlyInterior — if true and length ≥ 3, merge only `spans[1..n-2]`; never merge end bays with neighbors.
  */
-export function finalizeWallSpansForThreeD(spans: readonly number[], scaffoldWidthMm: number): number[] {
+export function finalizeWallSpansForThreeD(
+  spans: readonly number[],
+  options: { onlyInterior: boolean },
+): number[] {
   const s = [...spans];
   if (s.length === 0) return s;
-  if (s.length < 2) return finalizeStandardSpanRowWithNominal(s);
-
-  const terminal = normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
-  const first = s[0]!;
-  const last = s[s.length - 1]!;
-  const middleOnly =
-    s.length >= 3 &&
-    ((first === CORNER_START_SPAN_MM && last === terminal) ||
-      (first === terminal && last === terminal));
-
-  if (middleOnly) {
+  if (options.onlyInterior && s.length >= 3) {
+    const first = s[0]!;
+    const last = s[s.length - 1]!;
     const mid = s.slice(1, -1);
-    if (mid.length === 0) return s;
     return [first, ...finalizeStandardSpanRowWithNominal(mid), last];
   }
   return finalizeStandardSpanRowWithNominal(s);

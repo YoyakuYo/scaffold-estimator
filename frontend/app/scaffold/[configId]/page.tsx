@@ -1123,11 +1123,6 @@ function QuotationTable({
             <h2 id={headingDomId} className="text-lg font-bold text-gray-900 tracking-tight">
               {heading}
             </h2>
-            {(result.scaffoldType === 'kusabi' || result.scaffoldType == null) && !levelSlice ? (
-              <p className="mt-2 text-xs text-slate-600 leading-relaxed max-w-4xl">
-                {t('resultExtra', 'overallTotalsKusabiNote')}
-              </p>
-            ) : null}
           </div>
         ) : null}
         <div className="overflow-x-auto">

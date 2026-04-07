@@ -24,10 +24,6 @@ export function bomTypePhase(type: string): number {
     case 'brace':
       return 4;
     case 'nuno_bar':
-    case 'nuno_negarami':
-    case 'nuno_bearer':
-    case 'nuno_tesuri':
-    case 'nuno_stopper':
     case 'shitasan':
     case 'end_stopper_nuno':
     case 'end_stopper_frame':
@@ -66,20 +62,12 @@ export function bomTypeSubOrder(type: string): number {
       return 2;
     case 'nuno_bar':
       return 0;
-    case 'nuno_negarami':
-      return 1;
-    case 'nuno_bearer':
-      return 2;
-    case 'nuno_tesuri':
-      return 3;
-    case 'nuno_stopper':
-      return 4;
     case 'shitasan':
-      return 5;
+      return 1;
     case 'end_stopper_nuno':
-      return 6;
+      return 2;
     case 'end_stopper_frame':
-      return 7;
+      return 3;
     case 'habaki':
       return 0;
     case 'sokan_bracket':

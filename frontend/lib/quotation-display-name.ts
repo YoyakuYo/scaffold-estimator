@@ -8,10 +8,6 @@ export function quotationComponentBaseName(comp: CalculatedComponent, locale: st
   if (locale === 'ja') {
     return (comp.nameJp || '').trim();
   }
-  if (comp.type === 'nuno_tesuri') return 'Inner handrail';
-  if (comp.type === 'nuno_negarami') return 'Base tie';
-  if (comp.type === 'nuno_bearer') return 'Plank bearer';
-  if (comp.type === 'nuno_stopper') return 'End handrail';
   const raw = (comp.name || comp.nameJp || '').trim();
   if (!raw) return '';
 
