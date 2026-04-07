@@ -28,7 +28,7 @@ import {
   SCAFFOLD_WIDTH_CATALOG_MM,
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
-import { formatMmAsMetersLabel, mToMm, mmToM } from '@/lib/dimension-meters';
+import { formatMmAsMetersLabel, formatMmLabel, mToMm, mmToM } from '@/lib/dimension-meters';
 
 const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
   reflex: 'wallCfReflex',
@@ -717,10 +717,10 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                           }}
                           className="w-[4.75rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
                         >
-                          <option value="">{formatMmAsMetersLabel(scaffoldWidthMm)}</option>
+                          <option value="">{formatMmLabel(scaffoldWidthMm)}</option>
                           {[...SCAFFOLD_WIDTH_CATALOG_MM].filter((w) => w !== scaffoldWidthMm).map((w) => (
                             <option key={w} value={w}>
-                              {formatMmAsMetersLabel(w)}
+                              {formatMmLabel(w)}
                             </option>
                           ))}
                         </select>
@@ -894,9 +894,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   onChange={(e) => setScaffoldWidthMm(Number(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value={610}>{formatMmAsMetersLabel(610)}</option>
-                  <option value={914}>{formatMmAsMetersLabel(914)}</option>
-                  <option value={1219}>{formatMmAsMetersLabel(1219)}</option>
+                  <option value={610}>{formatMmLabel(610)}</option>
+                  <option value={914}>{formatMmLabel(914)}</option>
+                  <option value={1219}>{formatMmLabel(1219)}</option>
                 </select>
               </div>
 
@@ -951,9 +951,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                       }}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="FT617">FT-617 — {formatMmAsMetersLabel(610)}</option>
-                      <option value="FT917">FT-917 — {formatMmAsMetersLabel(914)}</option>
-                      <option value="FT1217">FT-1217 — {formatMmAsMetersLabel(1219)}</option>
+                      <option value="FT617">FT-617 — {formatMmLabel(610)}</option>
+                      <option value="FT917">FT-917 — {formatMmLabel(914)}</option>
+                      <option value="FT1217">FT-1217 — {formatMmLabel(1219)}</option>
                     </select>
                   </div>
                   <div>

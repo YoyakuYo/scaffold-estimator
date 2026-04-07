@@ -17,7 +17,7 @@ export function formatMmAsMetersLabel(mm: number): string {
   return `${s || '0'} m`;
 }
 
-/** Scaffold catalog / material sizes stored as mm (e.g. width, frame height, post length). */
+/** Scaffold catalog width (610/914/1219) and other sizes stored as mm — use for width display; building height / long members may still use {@link formatMmAsMetersLabel}. */
 export function formatMmLabel(mm: number): string {
   if (!Number.isFinite(mm)) return '—';
   return `${Math.round(mm)} mm`;

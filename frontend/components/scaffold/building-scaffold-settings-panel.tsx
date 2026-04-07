@@ -4,7 +4,7 @@ import { Building2, MapPin } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import type { CreateScaffoldConfigDto, ScaffoldRules } from '@/lib/api/scaffold-configs';
 import type { ScaffoldWidthCatalogMm } from '@/lib/scaffold-width-catalog';
-import { formatMmAsMetersLabel } from '@/lib/dimension-meters';
+import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
 
 const WAKUGUMI_FIXED_FRAME_HEIGHT_MM = 1700;
 
@@ -289,7 +289,7 @@ export function BuildingScaffoldSettingsPanel({
                   { value: 1219, label: '1219mm' },
                 ]).map((opt) => (
                   <option key={opt.value} value={opt.value}>
-                    {formatMmAsMetersLabel(opt.value)}
+                    {formatMmLabel(opt.value)}
                   </option>
                 ))}
               </select>
@@ -319,13 +319,13 @@ export function BuildingScaffoldSettingsPanel({
                     opt.value === 'FT617' ? 610 : opt.value === 'FT917' ? 914 : 1219;
                   return (
                   <option key={opt.value} value={opt.value}>
-                    {opt.value} — {formatMmAsMetersLabel(w)}
+                    {opt.value} — {formatMmLabel(w)}
                   </option>
                   );
                 })}
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                {t('scaffold', 'scaffoldWidth')}: {formatMmAsMetersLabel(scaffoldWidthMm)}
+                {t('scaffold', 'scaffoldWidth')}: {formatMmLabel(scaffoldWidthMm)}
               </p>
             </div>
           )}

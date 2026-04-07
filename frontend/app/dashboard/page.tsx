@@ -6,7 +6,7 @@ import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-co
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { messagesApi, ConversationWithUser } from '@/lib/api/messages';
 import { useI18n } from '@/lib/i18n';
-import { formatMmAsMetersLabel } from '@/lib/dimension-meters';
+import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
 import Link from 'next/link';
 import {
   Calculator,
@@ -810,7 +810,7 @@ function UserDashboard() {
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-slate-800 truncate">
                                   {t('dashboard', 'buildingHeight')}: {formatMmAsMetersLabel(cfg.buildingHeightMm)} |{' '}
-                                  {t('dashboard', 'scaffoldWidth')}: {formatMmAsMetersLabel(cfg.scaffoldWidthMm)}
+                                  {t('dashboard', 'scaffoldWidth')}: {formatMmLabel(cfg.scaffoldWidthMm)}
                                 </div>
                                 <div className="text-sm text-slate-500 truncate">
                                   {wallNames || '—'} |{' '}
