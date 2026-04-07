@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { teamInvitesApi } from '@/lib/api/team-invites';
 import Cookies from 'js-cookie';
+import { clearAccessTokenCookie } from '@/lib/api/access-token-cookie';
 import { useI18n } from '@/lib/i18n';
 import { Loader2, Building2, Mail } from 'lucide-react';
 
@@ -110,11 +111,7 @@ function JoinTeamContent() {
           <button
             type="button"
             onClick={() => {
-              const opts: { path: string; domain?: string } = { path: '/' };
-              if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
-                opts.domain = window.location.hostname;
-              }
-              Cookies.remove('access_token', opts);
+              clearAccessTokenCookie();
               const next = encodeURIComponent(`/join-team?token=${token}`);
               router.push(`/login?next=${next}`);
             }}

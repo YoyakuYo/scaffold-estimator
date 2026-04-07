@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { clearAccessTokenCookie } from './access-token-cookie';
 
 // Set NEXT_PUBLIC_BACKEND_URL to your API base including /api/v1 (e.g. https://your-api.onrender.com/api/v1).
 // If unset in production, the browser uses same-origin /api/v1 — set BACKEND_PROXY_TARGET on the Next host (see next.config.js)
@@ -86,11 +87,7 @@ apiClient.interceptors.response.use(
 
         if (isAuthError && !isLoginFailure) {
           isLoggingOut = true;
-          const removeOpts: { path: string; domain?: string } = { path: '/' };
-          if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
-            removeOpts.domain = window.location.hostname;
-          }
-          Cookies.remove('access_token', removeOpts);
+          clearAccessTokenCookie();
           if (typeof window !== 'undefined') {
             setTimeout(() => {
               window.location.href = '/';

@@ -1,5 +1,6 @@
 import apiClient from './client';
 import Cookies from 'js-cookie';
+import { accessTokenCookieWriteAttributes } from './access-token-cookie';
 
 export interface TeamInvitePreview {
   companyName: string;
@@ -44,13 +45,7 @@ export interface AuthResponse {
 }
 
 function setAuthCookie(token: string) {
-  Cookies.set('access_token', token, {
-    expires: 7,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    ...(process.env.NODE_ENV === 'production' ? { domain: window.location.hostname } : {}),
-  });
+  Cookies.set('access_token', token, accessTokenCookieWriteAttributes());
 }
 
 export const teamInvitesApi = {

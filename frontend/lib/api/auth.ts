@@ -1,5 +1,6 @@
 import apiClient from './client';
 import Cookies from 'js-cookie';
+import { accessTokenCookieWriteAttributes, clearAccessTokenCookie } from './access-token-cookie';
 import { clearScaffoldWizardDraft } from '@/lib/scaffold-wizard-draft-storage';
 import { clearDrawingUploadSession } from '@/lib/drawing-upload-persist';
 
@@ -58,15 +59,7 @@ export const authApi = {
 
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
-    // Store token in cookie with longer expiration
-    Cookies.set('access_token', response.data.access_token, {
-      expires: 7, // 7 days (longer than JWT expiration, but token will be refreshed)
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', // Changed from 'strict' to allow cross-origin requests
-      path: '/',
-      // Add domain for better persistence (optional, works for localhost)
-      ...(process.env.NODE_ENV === 'production' ? { domain: window.location.hostname } : {}),
-    });
+    Cookies.set('access_token', response.data.access_token, accessTokenCookieWriteAttributes());
     return response.data;
   },
 
@@ -75,12 +68,7 @@ export const authApi = {
       clearScaffoldWizardDraft();
       void clearDrawingUploadSession();
     }
-    // Use same path (and domain in production) as when the cookie was set, so it is actually removed
-    const options: { path: string; domain?: string } = { path: '/' };
-    if (process.env.NODE_ENV === 'production' && typeof window !== 'undefined') {
-      options.domain = window.location.hostname;
-    }
-    Cookies.remove('access_token', options);
+    clearAccessTokenCookie();
     window.location.href = '/';
   },
 
