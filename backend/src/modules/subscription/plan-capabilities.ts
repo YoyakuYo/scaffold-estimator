@@ -10,6 +10,11 @@ export interface EffectivePlanCapabilities {
   aiExtract: boolean;
   /** Interactive 3D view + 3D exports (Medium / Premium / Enterprise; legacy Professional matches Medium). */
   view3d: boolean;
+  /**
+   * Bank wire tier `monthly`: priced per scaffold project (not a large seat bundle).
+   * Used only for feature/display inference; merge with OR across company subs.
+   */
+  perProjectWire?: boolean;
 }
 
 export const SUPERADMIN_CAPABILITIES: EffectivePlanCapabilities = {
@@ -53,15 +58,16 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
         aiExtract: false,
         view3d: true,
       };
-    /** Monthly subscription: same seat/UI tier as Premium except AI extraction. */
+    /** Bank per-project wire: full CAD/3D/upload tier except AI; small team, not a 20-seat bundle. */
     case 'monthly':
       return {
-        maxSeats: 20,
+        maxSeats: 2,
         fileUpload: true,
         quickShape: true,
         cadDraw: true,
         aiExtract: false,
         view3d: true,
+        perProjectWire: true,
       };
     case 'premium':
       return {
@@ -96,7 +102,7 @@ export function inferDisplayPlanFromCapabilities(caps: EffectivePlanCapabilities
   if (caps.maxSeats <= 0) return 'free_trial';
   if (caps.maxSeats >= 9000) return 'enterprise';
   if (caps.aiExtract) return 'premium';
-  if (caps.cadDraw && caps.view3d && !caps.aiExtract && caps.maxSeats > 5) return 'monthly';
+  if (caps.perProjectWire && caps.cadDraw && caps.view3d && !caps.aiExtract) return 'monthly';
   if (caps.cadDraw || caps.view3d || caps.maxSeats > 2) return 'medium';
   return 'basic';
 }
@@ -112,5 +118,6 @@ export function mergeCapabilitiesMax(
     cadDraw: a.cadDraw || b.cadDraw,
     aiExtract: a.aiExtract || b.aiExtract,
     view3d: a.view3d || b.view3d,
+    perProjectWire: !!(a.perProjectWire || b.perProjectWire),
   };
 }

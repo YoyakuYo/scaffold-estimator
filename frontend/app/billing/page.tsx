@@ -30,7 +30,7 @@ function billingDisplayPlan(sub: SubscriptionInfo): SubscriptionPlan {
   const c = sub.capabilities;
   if (!c) return sub.plan;
   if (c.aiExtract) return 'premium';
-  if (c.cadDraw && c.view3d && !c.aiExtract && c.maxSeats > 5) return 'monthly';
+  if (c.perProjectWire) return 'monthly';
   if (c.cadDraw || c.view3d || c.maxSeats > 2) return 'medium';
   return sub.plan;
 }

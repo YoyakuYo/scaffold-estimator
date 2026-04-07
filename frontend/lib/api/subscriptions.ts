@@ -91,6 +91,8 @@ export interface PlanCapabilities {
   aiExtract: boolean;
   /** Medium / Premium / Enterprise (and legacy Professional); false on Basic, Starter, trial. */
   view3d?: boolean;
+  /** True for bank wire plan `monthly` (per-project SKU). */
+  perProjectWire?: boolean;
 }
 
 export interface SubscriberRow {

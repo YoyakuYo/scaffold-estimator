@@ -969,9 +969,11 @@ export class SubscriptionService {
     const user = await this.getUserOrFail(userId);
     const raw =
       planTier === 'monthly'
-        ? this.configService.get<string>('BANK_MONTHLY_SUBSCRIPTION_PERIOD_DAYS')?.trim() || '30'
+        ? this.configService.get<string>('BANK_PER_PROJECT_SUBSCRIPTION_PERIOD_DAYS')?.trim() ||
+          this.configService.get<string>('BANK_MONTHLY_SUBSCRIPTION_PERIOD_DAYS')?.trim() ||
+          '365'
         : this.configService.get<string>('BANK_SUBSCRIPTION_PERIOD_DAYS')?.trim() || '365';
-    const defaultDays = planTier === 'monthly' ? 30 : 365;
+    const defaultDays = 365;
     const periodDays = Math.max(1, parseInt(raw, 10) || defaultDays);
     const start = new Date();
     const end = new Date(start.getTime() + periodDays * 86_400_000);

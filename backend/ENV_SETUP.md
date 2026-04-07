@@ -160,8 +160,10 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # Optional:
 # BANK_ACTIVATION_CODE_TTL_HOURS=168
 # BANK_SUBSCRIPTION_PERIOD_DAYS=365
-# Monthly plan (subscriptions.plan = monthly): access period after wire confirmation (default 30 days).
-# BANK_MONTHLY_SUBSCRIPTION_PERIOD_DAYS=30
+# Per-project bank plan (subscriptions.plan = monthly): access period after wire confirmation (default 365 days).
+# BANK_PER_PROJECT_SUBSCRIPTION_PERIOD_DAYS=365
+# Legacy alias (still read if BANK_PER_PROJECT_SUBSCRIPTION_PERIOD_DAYS is unset):
+# BANK_MONTHLY_SUBSCRIPTION_PERIOD_DAYS=365
 
 # Card billing (Stripe) is not used in this product; keep billing env to BANK_* only.
 
