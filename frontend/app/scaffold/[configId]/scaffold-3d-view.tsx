@@ -28,6 +28,7 @@ import {
   SCAFFOLD_WIDTH_MEDIUM_MM,
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
+import { finalizeWallSpansForThreeD } from '@/lib/scaffold-span-merge';
 
 /**
  * 3D Scaffold View — Closed Polygon
@@ -826,11 +827,12 @@ export default function Scaffold3DView({
         const widthMm = normalizeScaffoldWidthMmToCatalog(rawWidthMm);
         const widthM = widthMm / 1000;
         const isBracket = wall.layoutMode === 'bracket';
-        const baseSpans = Array.isArray(wall.spans) && wall.spans.length > 0
+        const baseSpansRaw = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
+        // Match backend merged bays (914+914→1829, …) for labels/geometry even if JSON predates recalc.
+        const allSpans: number[] = finalizeWallSpansForThreeD(baseSpansRaw, widthMm);
         // Closed polygon: [1829, …middle…, terminal = catalog 610/914/1219]; sum = wallLength+300+terminal.
-        const allSpans: number[] = baseSpans;
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? capSpansFor3dPreview(allSpans, maxSpans)
           : allSpans;
