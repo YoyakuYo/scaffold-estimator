@@ -6,7 +6,7 @@ export type UserRole = 'superadmin' | 'estimator' | 'viewer';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
-export type BankPendingPlanTier = 'basic' | 'medium' | 'premium';
+export type BankPendingPlanTier = 'basic' | 'medium' | 'monthly' | 'premium';
 
 export interface UserProfile {
   id: string;

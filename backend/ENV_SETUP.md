@@ -160,6 +160,8 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # Optional:
 # BANK_ACTIVATION_CODE_TTL_HOURS=168
 # BANK_SUBSCRIPTION_PERIOD_DAYS=365
+# Monthly plan (subscriptions.plan = monthly): access period after wire confirmation (default 30 days).
+# BANK_MONTHLY_SUBSCRIPTION_PERIOD_DAYS=30
 
 # Card billing (Stripe) is not used in this product; keep billing env to BANK_* only.
 

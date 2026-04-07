@@ -70,7 +70,7 @@ export class User {
 
   /** After bank-transfer approval: tier to apply once user verifies code. */
   @Column({ name: 'pending_bank_plan', type: 'text', nullable: true })
-  pendingBankPlan: 'basic' | 'medium' | 'premium' | null;
+  pendingBankPlan: 'basic' | 'medium' | 'monthly' | 'premium' | null;
 
   @Column({ name: 'bank_activation_code_hash', type: 'text', nullable: true })
   bankActivationCodeHash: string | null;
@@ -84,7 +84,7 @@ export class User {
 
   /** Plan tier selected for the pending wire (see bank_wire_reference). */
   @Column({ name: 'bank_wire_intent_plan', type: 'text', nullable: true })
-  bankWireIntentPlan: 'basic' | 'medium' | 'premium' | null;
+  bankWireIntentPlan: 'basic' | 'medium' | 'monthly' | 'premium' | null;
 
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
   lastActiveAt: Date | null;

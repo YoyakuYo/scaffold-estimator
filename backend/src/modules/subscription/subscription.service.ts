@@ -147,7 +147,7 @@ export class SubscriptionService {
 
   private getBankWireCheckoutTiers(): BankWirePlanTier[] {
     if (!this.isBankTransferConfigured()) return [];
-    return ['basic', 'medium', 'premium'];
+    return ['basic', 'medium', 'monthly', 'premium'];
   }
 
   private buildTrialEnd(fromDate: Date): Date {
@@ -223,8 +223,10 @@ export class SubscriptionService {
   private planTierScore(plan: string): number {
     switch (plan) {
       case 'enterprise':
-        return 5;
+        return 6;
       case 'premium':
+        return 5;
+      case 'monthly':
         return 4;
       case 'medium':
       case 'professional':
@@ -960,10 +962,17 @@ export class SubscriptionService {
   }
 
   /** Apply paid tier after user verifies bank-transfer code (no Stripe). */
-  async activateBankVerifiedPlan(userId: string, planTier: 'basic' | 'medium' | 'premium'): Promise<void> {
+  async activateBankVerifiedPlan(
+    userId: string,
+    planTier: 'basic' | 'medium' | 'premium' | 'monthly',
+  ): Promise<void> {
     const user = await this.getUserOrFail(userId);
-    const raw = this.configService.get<string>('BANK_SUBSCRIPTION_PERIOD_DAYS')?.trim() || '365';
-    const periodDays = Math.max(1, parseInt(raw, 10) || 365);
+    const raw =
+      planTier === 'monthly'
+        ? this.configService.get<string>('BANK_MONTHLY_SUBSCRIPTION_PERIOD_DAYS')?.trim() || '30'
+        : this.configService.get<string>('BANK_SUBSCRIPTION_PERIOD_DAYS')?.trim() || '365';
+    const defaultDays = planTier === 'monthly' ? 30 : 365;
+    const periodDays = Math.max(1, parseInt(raw, 10) || defaultDays);
     const start = new Date();
     const end = new Date(start.getTime() + periodDays * 86_400_000);
     const client = this.supabase.getClient();

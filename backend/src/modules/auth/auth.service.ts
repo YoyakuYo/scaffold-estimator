@@ -670,7 +670,7 @@ export class AuthService {
     if (mode === 'bank_transfer') {
       if (!dto?.planTier) {
         throw new BadRequestException(
-          'planTier is required when paymentActivation is bank_transfer (basic, medium, or premium).',
+          'planTier is required when paymentActivation is bank_transfer (basic, medium, monthly, or premium).',
         );
       }
       await this.subscriptionService.ensureInactiveSubscriptionForPendingBank(userId);

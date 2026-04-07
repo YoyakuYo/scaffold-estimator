@@ -9,6 +9,6 @@ export class ApproveUserDto {
 
   /** Required when paymentActivation is bank_transfer (validated in AuthService). */
   @IsOptional()
-  @IsEnum(['basic', 'medium', 'premium'])
-  planTier?: 'basic' | 'medium' | 'premium';
+  @IsEnum(['basic', 'medium', 'monthly', 'premium'])
+  planTier?: 'basic' | 'medium' | 'monthly' | 'premium';
 }

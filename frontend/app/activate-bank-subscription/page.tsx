@@ -15,9 +15,11 @@ export default function ActivateBankSubscriptionPage() {
       ? t('billing', 'planTierBasic')
       : tier === 'medium'
         ? t('billing', 'planTierMedium')
-        : tier === 'premium'
-          ? t('billing', 'planTierPremium')
-          : tier;
+        : tier === 'monthly'
+          ? t('billing', 'planTierMonthly')
+          : tier === 'premium'
+            ? t('billing', 'planTierPremium')
+            : tier;
   const queryClient = useQueryClient();
   const [code, setCode] = useState('');
   const [done, setDone] = useState<{ plan: string } | null>(null);

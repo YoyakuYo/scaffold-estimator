@@ -2056,6 +2056,7 @@ export const translations = {
     planTierBasic: { ja: 'ベーシック', en: 'Basic', fr: 'Basique' },
     planTierMedium: { ja: 'ミディアム', en: 'Medium', fr: 'Moyen' },
     planTierPremium: { ja: 'プレミアム', en: 'Premium', fr: 'Premium' },
+    planTierMonthly: { ja: '月額（フル機能・AI除く）', en: 'Monthly (full features, no AI)', fr: 'Mensuel (tout sauf IA)' },
     planTierStandard: { ja: 'スタンダード', en: 'Standard', fr: 'Standard' },
     seatUsage: { ja: 'ユーザー枠: {used} / {limit}', en: 'Seats in use: {used} / {limit}', fr: 'Places utilisées : {used} / {limit}' },
     companySeatBillingNote: {
@@ -2091,6 +2092,12 @@ export const translations = {
     planCardPremiumSeats: { ja: '利用ユーザー: 最大20名', en: 'Users included: up to 20', fr: 'Utilisateurs inclus : jusqu’à 20' },
     planCardPremiumF1: { ja: 'ベーシック・ミディアムのすべての機能', en: 'Everything in Basic and Medium', fr: 'Tout le contenu Basique et Moyen' },
     planCardPremiumF2: { ja: 'AI 抽出（画像・PDF・DXF 等、IFC/BIM 対応はロードマップに準拠）', en: 'AI extraction (images, PDF, DXF; IFC/BIM per product roadmap)', fr: 'Extraction IA (images, PDF, DXF ; IFC/BIM selon la feuille de route)' },
+    planCardMonthlyTitle: { ja: '月額サブスクリプション', en: 'Monthly subscription', fr: 'Abonnement mensuel' },
+    planCardMonthlyPrice: { ja: '月額: ¥25,000（税別の場合は表記に従ってください）', en: '¥25,000 per month (plus tax if applicable)', fr: '25 000 ¥ / mois (taxes selon votre cas)' },
+    planCardMonthlyRenewal: { ja: '毎月お振込み後、請求期間を延長（銀行振込）', en: 'Pay each month by bank transfer to renew your access period', fr: 'Renouvelez par virement chaque mois' },
+    planCardMonthlySeats: { ja: '利用ユーザー: 最大20名（Premium枠、AI抽出なし）', en: 'Up to 20 users (Premium tier, no AI extraction)', fr: "Jusqu'à 20 utilisateurs (niveau Premium, sans extraction IA)" },
+    planCardMonthlyF1: { ja: '手描きCAD・3D表示・図面アップロードなど Premium と同範囲（AI 抽出のみ除外）', en: 'Same scope as Premium except AI plan extraction', fr: 'Même périmètre que Premium sauf extraction IA des plans' },
+    planCardMonthlyF2: { ja: 'AI 抽出タブ・Premiumスケジュール取り込みは利用不可', en: 'AI extraction and premium schedule import stay disabled', fr: 'Extraction IA et import planning premium non inclus' },
     bankTransferTitle: { ja: '銀行振込でお支払い', en: 'Pay by bank transfer', fr: 'Payer par virement bancaire' },
     bankTransferIntro: { ja: '登録メールを振込依頼人名義などにご記載ください。入金確認後、管理者が利用権限を有効にします。', en: 'Include your registered email in the transfer details so we can match your payment. An admin will enable access after confirming the deposit.', fr: 'Indiquez votre e-mail d’inscription pour que nous puissions associer le virement. Un administrateur activera l’accès après réception.' },
     bankName: { ja: '銀行名', en: 'Bank', fr: 'Banque' },
@@ -2257,6 +2264,11 @@ export const translations = {
     approvalModeBankBasic: { ja: '銀行振込 — Basic', en: 'Bank transfer — Basic', fr: 'Virement — Basic' },
     approvalModeBankMedium: { ja: '銀行振込 — Medium', en: 'Bank transfer — Medium', fr: 'Virement — Medium' },
     approvalModeBankPremium: { ja: '銀行振込 — Premium', en: 'Bank transfer — Premium', fr: 'Virement — Premium' },
+    approvalModeBankMonthly: {
+      ja: '銀行振込 — 月額（フル・AI除く）',
+      en: 'Bank transfer — Monthly (full, no AI)',
+      fr: 'Virement — Mensuel (complet, sans IA)',
+    },
     confirmApproveBank: {
       ja: '{email} を銀行振込プラン（{plan}）で承認しますか？ユーザーに確認コードが送信されます。',
       en: 'Approve {email} for bank-transfer plan ({plan})? A one-time code will be emailed.',
@@ -2360,6 +2372,11 @@ export const translations = {
     approveBankBasic: { ja: '承認（銀行 / Basic）', en: 'Approve (bank / Basic)', fr: 'Approuver (virement / Basic)' },
     approveBankMedium: { ja: '承認（銀行 / Medium）', en: 'Approve (bank / Medium)', fr: 'Approuver (virement / Medium)' },
     approveBankPremium: { ja: '承認（銀行 / Premium）', en: 'Approve (bank / Premium)', fr: 'Approuver (virement / Premium)' },
+    approveBankMonthly: {
+      ja: '承認（銀行 / 月額）',
+      en: 'Approve (bank / Monthly)',
+      fr: 'Approuver (virement / Mensuel)',
+    },
     confirmApproveBank: {
       ja: '{email} を銀行振込（{plan}）で承認しますか？確認コードが送信されます。',
       en: 'Approve {email} for bank transfer ({plan})? A code will be sent.',

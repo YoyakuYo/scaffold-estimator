@@ -129,13 +129,15 @@ function AdminDashboard() {
       approveMutation.mutate({ id: u.id, payload: {} });
       return;
     }
-    const tier = mode.replace('bank_', '') as 'basic' | 'medium' | 'premium';
+    const tier = mode.replace('bank_', '') as 'basic' | 'medium' | 'monthly' | 'premium';
     const planWord =
       tier === 'basic'
         ? t('billing', 'planTierBasic')
         : tier === 'medium'
           ? t('billing', 'planTierMedium')
-          : t('billing', 'planTierPremium');
+          : tier === 'monthly'
+            ? t('billing', 'planTierMonthly')
+            : t('billing', 'planTierPremium');
     const msg = t('adminDashboard', 'confirmApproveBank').replace('{email}', u.email).replace('{plan}', planWord);
     if (!window.confirm(msg)) return;
     approveMutation.mutate({ id: u.id, payload: { paymentActivation: 'bank_transfer', planTier: tier } });
@@ -237,6 +239,7 @@ function AdminDashboard() {
                             <option value="trial">{t('adminDashboard', 'approvalModeTrial')}</option>
                             <option value="bank_basic">{t('adminDashboard', 'approvalModeBankBasic')}</option>
                             <option value="bank_medium">{t('adminDashboard', 'approvalModeBankMedium')}</option>
+                            <option value="bank_monthly">{t('adminDashboard', 'approvalModeBankMonthly')}</option>
                             <option value="bank_premium">{t('adminDashboard', 'approvalModeBankPremium')}</option>
                           </select>
                         </label>

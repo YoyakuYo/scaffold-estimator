@@ -53,6 +53,16 @@ export function capabilitiesForPlan(plan: string): EffectivePlanCapabilities {
         aiExtract: false,
         view3d: true,
       };
+    /** Monthly subscription: same seat/UI tier as Premium except AI extraction. */
+    case 'monthly':
+      return {
+        maxSeats: 20,
+        fileUpload: true,
+        quickShape: true,
+        cadDraw: true,
+        aiExtract: false,
+        view3d: true,
+      };
     case 'premium':
       return {
         maxSeats: 20,
@@ -86,6 +96,7 @@ export function inferDisplayPlanFromCapabilities(caps: EffectivePlanCapabilities
   if (caps.maxSeats <= 0) return 'free_trial';
   if (caps.maxSeats >= 9000) return 'enterprise';
   if (caps.aiExtract) return 'premium';
+  if (caps.cadDraw && caps.view3d && !caps.aiExtract && caps.maxSeats > 5) return 'monthly';
   if (caps.cadDraw || caps.view3d || caps.maxSeats > 2) return 'medium';
   return 'basic';
 }

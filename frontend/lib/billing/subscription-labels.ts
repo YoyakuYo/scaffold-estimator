@@ -12,6 +12,8 @@ export function subscriptionPlanLabel(plan: SubscriptionPlan, t: BillingT): stri
       return t('billing', 'planTierBasic');
     case 'medium':
       return t('billing', 'planTierMedium');
+    case 'monthly':
+      return t('billing', 'planTierMonthly');
     case 'premium':
       return t('billing', 'planTierPremium');
     case 'starter':

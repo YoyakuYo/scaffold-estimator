@@ -7,10 +7,11 @@ export type SubscriptionPlan =
   | 'enterprise'
   | 'basic'
   | 'medium'
+  | 'monthly'
   | 'premium';
 
 /** Bank wire checkout tier (matches backend BankWirePlanTier). */
-export type BankWirePlanTier = 'basic' | 'medium' | 'premium';
+export type BankWirePlanTier = 'basic' | 'medium' | 'monthly' | 'premium';
 
 /** @deprecated Use BankWirePlanTier; kept for older type references. */
 export type CheckoutPlanTier = BankWirePlanTier;
@@ -78,7 +79,7 @@ export interface SubscriptionInfo {
   capabilities?: PlanCapabilities;
   seatUsage?: { used: number; limit: number };
   /** Set while waiting for bank-transfer activation code entry. */
-  pendingBankPlan?: 'basic' | 'medium' | 'premium' | null;
+  pendingBankPlan?: 'basic' | 'medium' | 'monthly' | 'premium' | null;
   bankActivationCodeExpiresAt?: string | null;
 }
 

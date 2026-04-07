@@ -22,7 +22,7 @@ import { effectiveSeatCap, isUnlimitedSeatCap } from '@/lib/billing/effective-se
 import { usersApi } from '@/lib/api/users';
 import { Loader2, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark, Check } from 'lucide-react';
 
-const BANK_TIER_ORDER: BankWirePlanTier[] = ['basic', 'medium', 'premium'];
+const BANK_TIER_ORDER: BankWirePlanTier[] = ['basic', 'medium', 'monthly', 'premium'];
 
 /** Align billing header with company capabilities when `plan`/`status` rows lag seat sync. */
 function billingDisplayPlan(sub: SubscriptionInfo): SubscriptionPlan {
@@ -30,6 +30,7 @@ function billingDisplayPlan(sub: SubscriptionInfo): SubscriptionPlan {
   const c = sub.capabilities;
   if (!c) return sub.plan;
   if (c.aiExtract) return 'premium';
+  if (c.cadDraw && c.view3d && !c.aiExtract && c.maxSeats > 5) return 'monthly';
   if (c.cadDraw || c.view3d || c.maxSeats > 2) return 'medium';
   return sub.plan;
 }
@@ -85,6 +86,17 @@ function BankPlanGrid({
           t('billing', 'planCardMediumSeats'),
         ],
         bullets: [t('billing', 'planCardMediumF1'), t('billing', 'planCardMediumF2')],
+      };
+    }
+    if (tier === 'monthly') {
+      return {
+        title: t('billing', 'planCardMonthlyTitle'),
+        lines: [
+          t('billing', 'planCardMonthlyPrice'),
+          t('billing', 'planCardMonthlyRenewal'),
+          t('billing', 'planCardMonthlySeats'),
+        ],
+        bullets: [t('billing', 'planCardMonthlyF1'), t('billing', 'planCardMonthlyF2')],
       };
     }
     return {

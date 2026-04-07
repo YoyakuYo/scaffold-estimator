@@ -262,13 +262,15 @@ function UsersPage() {
     }
   };
 
-  const handleApproveBank = (user: UserProfile, tier: 'basic' | 'medium' | 'premium') => {
+  const handleApproveBank = (user: UserProfile, tier: 'basic' | 'medium' | 'monthly' | 'premium') => {
     const planWord =
       tier === 'basic'
         ? t('billing', 'planTierBasic')
         : tier === 'medium'
           ? t('billing', 'planTierMedium')
-          : t('billing', 'planTierPremium');
+          : tier === 'monthly'
+            ? t('billing', 'planTierMonthly')
+            : t('billing', 'planTierPremium');
     const msg = t('usersAdmin', 'confirmApproveBank').replace('{email}', user.email).replace('{plan}', planWord);
     if (window.confirm(msg)) {
       approveMutation.mutate({ id: user.id, payload: { paymentActivation: 'bank_transfer', planTier: tier } });
@@ -977,6 +979,14 @@ function UsersPage() {
                                   >
                                     <CheckCircle className="h-4 w-4" />
                                     {t('usersAdmin', 'approveBankMedium')}
+                                  </button>
+                                  <button
+                                    onClick={() => { handleApproveBank(user, 'monthly'); setOpenMenuId(null); }}
+                                    disabled={approveMutation.isPending}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-800 hover:bg-green-50 disabled:opacity-50"
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                    {t('usersAdmin', 'approveBankMonthly')}
                                   </button>
                                   <button
                                     onClick={() => { handleApproveBank(user, 'premium'); setOpenMenuId(null); }}

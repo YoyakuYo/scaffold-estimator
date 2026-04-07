@@ -15,6 +15,7 @@ export type PlanTier =
   | 'enterprise'
   | 'basic'
   | 'medium'
+  | 'monthly'
   | 'premium';
 
 @Entity('subscriptions')
