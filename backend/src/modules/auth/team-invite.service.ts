@@ -405,6 +405,8 @@ export class TeamInviteService {
           pendingBankPlan: null,
           bankActivationCodeHash: null,
           bankActivationCodeExpiresAt: null,
+          bankWireReference: null,
+          bankWireIntentPlan: null,
           isCompanySeat: true,
         }),
       )

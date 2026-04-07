@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -10,30 +10,21 @@ import type { Locale, TranslationKeys, TranslationSection } from '@/lib/i18n/tra
 type BillingT = <S extends TranslationSection>(section: S, key: keyof TranslationKeys[S]) => string;
 import {
   subscriptionsApi,
+  type BankWirePlanTier,
   type SubscriptionInfo,
   type SubscriptionPlan,
   type SubscriptionStatus,
-  type CheckoutPlanTier,
 } from '@/lib/api/subscriptions';
 import { bankTransferFromPublicEnv } from '@/lib/billing/bank-transfer-from-env';
 import { subscriptionPlanForBillingCard, subscriptionStatusLabel } from '@/lib/billing/subscription-labels';
 import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { effectiveSeatCap, isUnlimitedSeatCap } from '@/lib/billing/effective-seat-cap';
 import { usersApi } from '@/lib/api/users';
-import {
-  Loader2,
-  CreditCard,
-  AlertTriangle,
-  CheckCircle,
-  CalendarDays,
-  Shield,
-  Landmark,
-  Check,
-} from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark, Check } from 'lucide-react';
 
-const CHECKOUT_TIER_ORDER: CheckoutPlanTier[] = ['basic', 'medium', 'premium', 'standard'];
+const BANK_TIER_ORDER: BankWirePlanTier[] = ['basic', 'medium', 'premium'];
 
-/** Align billing header with company capabilities when `plan`/`status` rows lag Stripe or seat sync. */
+/** Align billing header with company capabilities when `plan`/`status` rows lag seat sync. */
 function billingDisplayPlan(sub: SubscriptionInfo): SubscriptionPlan {
   if (sub.plan !== 'free_trial' || sub.status !== 'trialing') return sub.plan;
   const c = sub.capabilities;
@@ -51,27 +42,20 @@ function billingDisplayStatus(sub: SubscriptionInfo): SubscriptionStatus {
   return sub.status;
 }
 
-function PlanTierPricingGrid({
+function BankPlanGrid({
   subscription,
-  checkoutMutation,
-  portalMutation,
-  isActive,
+  wireIntentMutation,
   managesBilling,
   t,
 }: {
   subscription: SubscriptionInfo;
-  checkoutMutation: {
-    mutate: (plan?: CheckoutPlanTier) => void;
-    isPending: boolean;
-  };
-  portalMutation: { mutate: () => void; isPending: boolean };
-  isActive: boolean;
+  wireIntentMutation: { mutate: (tier: BankWirePlanTier) => void; isPending: boolean };
   managesBilling: boolean;
   t: BillingT;
 }) {
   const plans = (subscription.checkoutPlans ?? [])
     .slice()
-    .sort((a, b) => CHECKOUT_TIER_ORDER.indexOf(a) - CHECKOUT_TIER_ORDER.indexOf(b));
+    .sort((a, b) => BANK_TIER_ORDER.indexOf(a) - BANK_TIER_ORDER.indexOf(b));
 
   const bullet = (text: string) => (
     <li key={text} className="flex gap-2 text-sm text-gray-700">
@@ -80,14 +64,7 @@ function PlanTierPricingGrid({
     </li>
   );
 
-  const cardForTier = (tier: CheckoutPlanTier) => {
-    if (tier === 'standard') {
-      return {
-        title: t('billing', 'planTierStandard'),
-        lines: [] as string[],
-        bullets: [t('billing', 'planCardStandardBlurb')],
-      };
-    }
+  const cardForTier = (tier: BankWirePlanTier) => {
     if (tier === 'basic') {
       return {
         title: t('billing', 'planCardBasicTitle'),
@@ -121,38 +98,19 @@ function PlanTierPricingGrid({
     };
   };
 
-  const canSelfServeStripe = managesBilling;
-
   return (
     <>
-      {!canSelfServeStripe && subscription.hasAccess && (
+      {!managesBilling && subscription.hasAccess && (
         <p className="text-sm text-blue-900 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-4">
           {t('billing', 'companySeatBillingNote')}
         </p>
       )}
-      {plans.length > 1 && canSelfServeStripe && (
-        <p className="text-sm text-gray-600 mb-4">{t('billing', 'choosePlanStripe')}</p>
+      {plans.length > 1 && managesBilling && (
+        <p className="text-sm text-gray-600 mb-4">{t('billing', 'choosePlanBank')}</p>
       )}
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {plans.length === 0 ? (
-          <div className="rounded-2xl border-2 border-blue-100 bg-gradient-to-b from-blue-50 to-white p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{t('billing', 'stripeSectionTitle')}</h3>
-            <button
-              type="button"
-              onClick={() => checkoutMutation.mutate()}
-              disabled={
-                checkoutMutation.isPending || !subscription.isStripeConfigured || !canSelfServeStripe
-              }
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
-            >
-              {checkoutMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="h-4 w-4" />
-              )}
-              {t('billing', 'startPaidPlan')}
-            </button>
-          </div>
+          <p className="text-sm text-gray-600 col-span-full">{t('billing', 'bankPlansUnavailable')}</p>
         ) : (
           plans.map((tier) => {
             const c = cardForTier(tier);
@@ -172,41 +130,22 @@ function PlanTierPricingGrid({
                 <ul className="space-y-2 mb-6 flex-1">{c.bullets.map((b) => bullet(b))}</ul>
                 <button
                   type="button"
-                  onClick={() => checkoutMutation.mutate(tier)}
-                  disabled={
-                    checkoutMutation.isPending || !subscription.isStripeConfigured || !canSelfServeStripe
-                  }
+                  onClick={() => wireIntentMutation.mutate(tier)}
+                  disabled={wireIntentMutation.isPending || !managesBilling}
                   className="mt-auto w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {checkoutMutation.isPending ? (
+                  {wireIntentMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <CreditCard className="h-4 w-4" />
+                    <Landmark className="h-4 w-4" />
                   )}
-                  {plans.length === 1 ? t('billing', 'startPaidPlan') : t('billing', 'planCardSubscribe')}
+                  {t('billing', 'showBankTransferDetails')}
                 </button>
               </div>
             );
           })
         )}
       </div>
-      {isActive && canSelfServeStripe && (
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => portalMutation.mutate()}
-            disabled={portalMutation.isPending || !subscription.isStripeConfigured}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-          >
-            {portalMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CreditCard className="h-4 w-4" />
-            )}
-            {t('billing', 'openBillingPortal')}
-          </button>
-        </div>
-      )}
     </>
   );
 }
@@ -271,17 +210,10 @@ export default function BillingPage() {
     }
   }, [profile, subscription, isLoading, router]);
 
-  const checkoutMutation = useMutation({
-    mutationFn: subscriptionsApi.createCheckoutSession,
-    onSuccess: ({ url }) => {
-      window.location.href = url;
-    },
-  });
-
-  const portalMutation = useMutation({
-    mutationFn: subscriptionsApi.createPortalSession,
-    onSuccess: ({ url }) => {
-      window.location.href = url;
+  const wireIntentMutation = useMutation({
+    mutationFn: (plan: BankWirePlanTier) => subscriptionsApi.createBankWireIntent(plan),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-subscription'] });
     },
   });
 
@@ -291,17 +223,6 @@ export default function BillingPage() {
       queryClient.invalidateQueries({ queryKey: ['my-subscription'] });
     },
   });
-
-  const [payTab, setPayTab] = useState<'stripe' | 'bank'>('stripe');
-  const payTabDefaultedRef = useRef(false);
-  useEffect(() => {
-    if (!profile || profile.role === 'superadmin') return;
-    if (!subscription || payTabDefaultedRef.current) return;
-    const bt =
-      subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
-    if (!subscription.isStripeConfigured && bt) setPayTab('bank');
-    payTabDefaultedRef.current = true;
-  }, [profile, subscription]);
 
   if (!profile) {
     return (
@@ -317,12 +238,8 @@ export default function BillingPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
             <Shield className="h-14 w-14 text-amber-600 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-amber-900 mb-2">
-              {t('billing', 'platformOwner')}
-            </h1>
-            <p className="text-amber-800">
-              {t('billing', 'platformOwnerDesc')}
-            </p>
+            <h1 className="text-2xl font-bold text-amber-900 mb-2">{t('billing', 'platformOwner')}</h1>
+            <p className="text-amber-800">{t('billing', 'platformOwnerDesc')}</p>
           </div>
         </div>
       </div>
@@ -368,27 +285,19 @@ export default function BillingPage() {
   const displayPlan = billingDisplayPlan(subscription);
   const displayStatus = billingDisplayStatus(subscription);
   const isTrial = displayStatus === 'trialing' && displayPlan === 'free_trial';
-  const isActive = displayStatus === 'active' || displayPlan === 'enterprise';
 
-  const bankTransfer =
+  const bankTransferMerged =
     subscription.bankTransfer ?? bankTransferFromPublicEnv(profile.email ?? '');
-  const hasAnyPaymentPath = subscription.isStripeConfigured || !!bankTransfer;
-
-  const tabBtnClass = (active: boolean) =>
-    `flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium border border-b-0 transition-colors ${
-      active
-        ? 'bg-white text-blue-700 border-gray-200 relative z-10 mb-[-1px] pb-[11px]'
-        : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900 hover:bg-gray-100/80'
-    }`;
+  const apiBankReady = subscription.isBankTransferConfigured === true;
+  const showBankDetails = !!subscription.bankWireReference && !!bankTransferMerged;
+  const hasPaymentSection = apiBankReady || !!bankTransferMerged;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">{t('billing', 'title')}</h1>
-          <p className="text-gray-500 mt-1">
-            {t('billing', 'subtitle')}
-          </p>
+          <p className="text-gray-500 mt-1">{t('billing', 'subtitle')}</p>
         </div>
 
         {subscription.pendingBankPlan && (
@@ -474,9 +383,7 @@ export default function BillingPage() {
             <div className="mt-5 p-4 rounded-lg border border-amber-200 bg-amber-50 flex items-start gap-3">
               <CalendarDays className="h-5 w-5 text-amber-700 mt-0.5" />
               <div>
-                <p className="font-semibold text-amber-900">
-                  {t('billing', 'freeTrialInProgress')}
-                </p>
+                <p className="font-semibold text-amber-900">{t('billing', 'freeTrialInProgress')}</p>
                 <p className="text-amber-800 text-sm">
                   {subscription.trialDaysRemaining < 1
                     ? t('billing', 'trialFinalDay').replace('{total}', String(subscription.trialLengthDays))
@@ -505,159 +412,116 @@ export default function BillingPage() {
           )}
 
           {subscription.seatUsage && effectiveSeatCap(subscription) > 0 && (
-              <p className="text-sm text-gray-600 mt-3">
-                {t('billing', 'seatUsage')
-                  .replace('{used}', String(subscription.seatUsage.used))
-                  .replace(
-                    '{limit}',
-                    isUnlimitedSeatCap(effectiveSeatCap(subscription))
-                      ? t('profile', 'seatUnlimited')
-                      : String(effectiveSeatCap(subscription)),
-                  )}
-              </p>
-            )}
+            <p className="text-sm text-gray-600 mt-3">
+              {t('billing', 'seatUsage')
+                .replace('{used}', String(subscription.seatUsage.used))
+                .replace(
+                  '{limit}',
+                  isUnlimitedSeatCap(effectiveSeatCap(subscription))
+                    ? t('profile', 'seatUnlimited')
+                    : String(effectiveSeatCap(subscription)),
+                )}
+            </p>
+          )}
         </div>
 
-        {bankTransfer ? (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="border-b border-gray-200 bg-gray-50 px-4 pt-4 pb-0">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-                {t('billing', 'payWithTitle')}
-              </h2>
-              <div
-                className="flex flex-wrap gap-1"
-                role="tablist"
-                aria-label={t('billing', 'payWithTitle')}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  id="billing-tab-stripe"
-                  aria-controls="billing-panel-stripe"
-                  aria-selected={payTab === 'stripe'}
-                  className={tabBtnClass(payTab === 'stripe')}
-                  onClick={() => setPayTab('stripe')}
-                >
-                  <CreditCard className="h-4 w-4 shrink-0" aria-hidden />
-                  {t('billing', 'tabStripe')}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  id="billing-tab-bank"
-                  aria-controls="billing-panel-bank"
-                  aria-selected={payTab === 'bank'}
-                  className={tabBtnClass(payTab === 'bank')}
-                  onClick={() => setPayTab('bank')}
-                >
-                  <Landmark className="h-4 w-4 shrink-0" aria-hidden />
-                  {t('billing', 'tabBankTransfer')}
-                </button>
+        {hasPaymentSection ? (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              {t('billing', 'payWithTitle')}
+            </h2>
+            <div className="flex items-start gap-3 mb-5">
+              <Landmark className="h-6 w-6 text-blue-700 shrink-0 mt-0.5" aria-hidden />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{t('billing', 'bankTransferTitle')}</h3>
+                <p className="text-sm text-gray-600 mt-1">{t('billing', 'bankTransferIntroWire')}</p>
               </div>
             </div>
 
-            {payTab === 'stripe' ? (
-              <div
-                id="billing-panel-stripe"
-                role="tabpanel"
-                aria-labelledby="billing-tab-stripe"
-                className="p-6"
-              >
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                  {t('billing', 'stripeSectionTitle')}
-                </h3>
-                <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
-                <PlanTierPricingGrid
-                  subscription={subscription}
-                  checkoutMutation={checkoutMutation}
-                  portalMutation={portalMutation}
-                  isActive={isActive}
-                  managesBilling={managesBilling}
-                  t={t}
-                />
-                {!subscription.isStripeConfigured && (
-                  <p className="text-sm text-amber-700 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100">
-                    {t('billing', 'stripeNotConfigured')}
+            <BankPlanGrid
+              subscription={subscription}
+              wireIntentMutation={wireIntentMutation}
+              managesBilling={managesBilling && apiBankReady}
+              t={t}
+            />
+
+            {wireIntentMutation.isError && (
+              <p className="text-sm text-red-700 mt-4 p-3 rounded-lg bg-red-50 border border-red-100">
+                {t('billing', 'bankWireIntentError')}
+              </p>
+            )}
+
+            {showBankDetails && bankTransferMerged && (
+              <div className="mt-8 border-t border-gray-100 pt-6">
+                <p className="text-sm font-semibold text-gray-900 mb-2">{t('billing', 'bankDetailsHeading')}</p>
+                {subscription.bankWireIntentPlan && (
+                  <p className="text-sm text-gray-600 mb-4">
+                    {t('billing', 'bankIntentPlanLabel').replace(
+                      '{plan}',
+                      subscription.bankWireIntentPlan,
+                    )}
                   </p>
                 )}
-                {!hasAnyPaymentPath && (
-                  <p className="text-sm text-gray-600 mt-4 border-t border-gray-100 pt-4">
-                    {t('billing', 'noPaymentConfigured')}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div
-                id="billing-panel-bank"
-                role="tabpanel"
-                aria-labelledby="billing-tab-bank"
-                className="p-6"
-              >
-                <div className="flex items-start gap-3 mb-5">
-                  <Landmark className="h-6 w-6 text-blue-700 shrink-0 mt-0.5" aria-hidden />
+                <dl className="grid gap-4 sm:grid-cols-2 text-sm">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {t('billing', 'bankTransferTitle')}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">{t('billing', 'bankTransferIntro')}</p>
+                    <dt className="text-gray-500">{t('billing', 'bankWireCodeLabel')}</dt>
+                    <dd className="font-mono font-semibold text-gray-900 break-all">
+                      {subscription.bankWireReference}
+                    </dd>
                   </div>
-                </div>
-                <dl className="grid gap-4 sm:grid-cols-2 text-sm border-t border-gray-100 pt-5">
                   <div>
                     <dt className="text-gray-500">{t('billing', 'bankName')}</dt>
                     <BankDd
-                      ja={bankTransfer.bankName}
-                      en={bankTransfer.bankNameEn}
-                      fr={bankTransfer.bankNameFr}
+                      ja={bankTransferMerged.bankName}
+                      en={bankTransferMerged.bankNameEn}
+                      fr={bankTransferMerged.bankNameFr}
                       locale={locale}
                     />
                   </div>
                   <div>
                     <dt className="text-gray-500">{t('billing', 'bankBranch')}</dt>
                     <BankDd
-                      ja={bankTransfer.branch}
-                      en={bankTransfer.branchEn}
-                      fr={bankTransfer.branchFr}
+                      ja={bankTransferMerged.branch}
+                      en={bankTransferMerged.branchEn}
+                      fr={bankTransferMerged.branchFr}
                       locale={locale}
                     />
                   </div>
                   <div>
                     <dt className="text-gray-500">{t('billing', 'bankAccountType')}</dt>
                     <BankDd
-                      ja={bankTransfer.accountType}
-                      en={bankTransfer.accountTypeEn}
-                      fr={bankTransfer.accountTypeFr}
+                      ja={bankTransferMerged.accountType}
+                      en={bankTransferMerged.accountTypeEn}
+                      fr={bankTransferMerged.accountTypeFr}
                       locale={locale}
                     />
                   </div>
                   <div>
                     <dt className="text-gray-500">{t('billing', 'bankAccountNumber')}</dt>
-                    <dd className="font-medium text-gray-900 tabular-nums">
-                      {bankTransfer.accountNumber}
-                    </dd>
+                    <dd className="font-medium text-gray-900 tabular-nums">{bankTransferMerged.accountNumber}</dd>
                   </div>
                   <div className="sm:col-span-2">
                     <dt className="text-gray-500">{t('billing', 'bankAccountHolder')}</dt>
                     <BankDd
-                      ja={bankTransfer.accountHolder}
-                      en={bankTransfer.accountHolderEn}
-                      fr={bankTransfer.accountHolderFr}
+                      ja={bankTransferMerged.accountHolder}
+                      en={bankTransferMerged.accountHolderEn}
+                      fr={bankTransferMerged.accountHolderFr}
                       locale={locale}
                     />
                   </div>
                   <div className="sm:col-span-2">
                     <dt className="text-gray-500">{t('billing', 'bankRemittanceReference')}</dt>
-                    <dd className="font-medium text-gray-900 break-all">{bankTransfer.remittanceReference}</dd>
+                    <dd className="font-medium text-gray-900 break-all">{bankTransferMerged.remittanceReference}</dd>
                   </div>
-                  {(bankTransfer.amountNote ||
-                    bankTransfer.amountNoteEn ||
-                    bankTransfer.amountNoteFr) && (
+                  {(bankTransferMerged.amountNote ||
+                    bankTransferMerged.amountNoteEn ||
+                    bankTransferMerged.amountNoteFr) && (
                     <div className="sm:col-span-2">
                       <dt className="text-gray-500">{t('billing', 'bankAmountNote')}</dt>
                       <BankDd
-                        ja={bankTransfer.amountNote || ''}
-                        en={bankTransfer.amountNoteEn}
-                        fr={bankTransfer.amountNoteFr}
+                        ja={bankTransferMerged.amountNote || ''}
+                        en={bankTransferMerged.amountNoteEn}
+                        fr={bankTransferMerged.amountNoteFr}
                         locale={locale}
                       />
                     </div>
@@ -665,31 +529,22 @@ export default function BillingPage() {
                 </dl>
               </div>
             )}
+
+            {!apiBankReady && !showBankDetails && (
+              <p className="text-sm text-amber-700 mt-6 p-3 rounded-lg bg-amber-50 border border-amber-100">
+                {t('billing', 'bankBackendRequiredForWire')}
+              </p>
+            )}
+
+            {!subscription.checkoutPlans?.length && apiBankReady && (
+              <p className="text-sm text-gray-600 mt-4">{t('billing', 'bankPlansUnavailable')}</p>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">
-              {t('billing', 'stripeSectionTitle')}
-            </h2>
-            <p className="text-sm text-gray-500 mb-4">{t('billing', 'manageSubscription')}</p>
-            <PlanTierPricingGrid
-              subscription={subscription}
-              checkoutMutation={checkoutMutation}
-              portalMutation={portalMutation}
-              isActive={isActive}
-              managesBilling={managesBilling}
-              t={t}
-            />
-            {!subscription.isStripeConfigured && (
-              <p className="text-sm text-amber-700 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100">
-                {t('billing', 'stripeNotConfigured')}
-              </p>
-            )}
-            {!hasAnyPaymentPath && (
-              <p className="text-sm text-gray-600 mt-4 border-t border-gray-100 pt-4">
-                {t('billing', 'noPaymentConfigured')}
-              </p>
-            )}
+            <p className="text-sm text-amber-700 p-3 rounded-lg bg-amber-50 border border-amber-100">
+              {t('billing', 'noPaymentConfigured')}
+            </p>
           </div>
         )}
       </div>

@@ -6,12 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Stripe from 'stripe';
+import { randomBytes } from 'crypto';
 import { PlanTier, Subscription, SubscriptionStatus } from './subscription.entity';
 import { User } from '../auth/user.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
-import { CheckoutPlanTier, CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import type { BankWirePlanTier } from './dto/bank-wire-intent.dto';
 import {
   NO_ACCESS_CAPABILITIES,
   SUPERADMIN_CAPABILITIES,
@@ -30,29 +30,19 @@ export const TRIAL_MAX_DRAWING_UPLOADS = 2;
 @Injectable()
 export class SubscriptionService {
   private readonly logger = new Logger(SubscriptionService.name);
-  private readonly stripe: Stripe | null;
 
   constructor(
     private readonly supabase: SupabaseService,
     private readonly configService: ConfigService,
-  ) {
-    const secret = this.configService.get<string>('STRIPE_SECRET_KEY')?.trim();
-    const restricted = this.configService.get<string>('STRIPE_RESTRICTED_KEY')?.trim();
-    const key = secret || restricted;
-    if (restricted && !secret) {
-      this.logger.warn(
-        'Using STRIPE_RESTRICTED_KEY (no STRIPE_SECRET_KEY). Ensure Stripe key permissions include Customers, Checkout Sessions, Subscriptions, and Webhooks.',
-      );
-    }
-    this.stripe = key ? new Stripe(key) : null;
-  }
+  ) {}
 
-  private getFrontendUrl(): string {
-    return this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+  /** True when BANK_TRANSFER_* env is complete; used for checkout plan cards on /billing. */
+  isBankTransferConfigured(): boolean {
+    return this.getBankTransferInstructions('') !== null;
   }
 
   /** Public bank-transfer details for /billing (manual 銀行振込, e.g. Japan). */
-  private getBankTransferInstructions(userEmail: string): {
+  private getBankTransferInstructions(userEmail: string, wireReference?: string | null): {
     bankName: string;
     branch: string;
     accountType: string;
@@ -95,13 +85,15 @@ export class SubscriptionService {
     const accountTypeFr = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_TYPE_FR')?.trim();
     const accountHolderFr = this.configService.get<string>('BANK_TRANSFER_ACCOUNT_HOLDER_FR')?.trim();
     const amountNoteFr = this.configService.get<string>('BANK_TRANSFER_AMOUNT_NOTE_FR')?.trim();
+    const ref = wireReference?.trim();
+    const remittanceReference = ref ? `${ref} (${userEmail})` : userEmail;
     return {
       bankName,
       branch,
       accountType,
       accountNumber,
       accountHolder,
-      remittanceReference: userEmail,
+      remittanceReference,
       ...(amountNote ? { amountNote } : {}),
       ...(bankNameEn ? { bankNameEn } : {}),
       ...(branchEn ? { branchEn } : {}),
@@ -116,106 +108,24 @@ export class SubscriptionService {
     };
   }
 
-  private requireStripe(): Stripe {
-    if (!this.stripe) {
-      throw new BadRequestException('Stripe is not configured. Set STRIPE_SECRET_KEY or STRIPE_RESTRICTED_KEY.');
-    }
-    return this.stripe;
-  }
-
-  private getLegacyStripePriceId(): string | undefined {
-    return this.configService.get<string>('STRIPE_PRICE_ID')?.trim() || undefined;
-  }
-
-  private getStripePriceIdForTier(tier: CheckoutPlanTier): string | undefined {
-    if (tier === 'standard') return this.getLegacyStripePriceId();
-    const key =
-      tier === 'basic'
-        ? 'STRIPE_PRICE_ID_BASIC'
-        : tier === 'medium'
-          ? 'STRIPE_PRICE_ID_MEDIUM'
-          : 'STRIPE_PRICE_ID_PREMIUM';
-    return this.configService.get<string>(key)?.trim() || undefined;
-  }
-
-  /** Optional one-time (e.g. license) charged on the first Checkout invoice alongside recurring updates. */
-  private getStripeOnetimePriceIdForTier(tier: CheckoutPlanTier): string | undefined {
-    if (tier === 'standard') {
-      return this.configService.get<string>('STRIPE_PRICE_ID_ONETIME')?.trim() || undefined;
-    }
-    const key =
-      tier === 'basic'
-        ? 'STRIPE_PRICE_ID_BASIC_ONETIME'
-        : tier === 'medium'
-          ? 'STRIPE_PRICE_ID_MEDIUM_ONETIME'
-          : 'STRIPE_PRICE_ID_PREMIUM_ONETIME';
-    return this.configService.get<string>(key)?.trim() || undefined;
-  }
-
-  /** Tiers that have a price id configured (plus legacy `standard` if STRIPE_PRICE_ID only). */
-  getAvailableCheckoutTiers(): CheckoutPlanTier[] {
-    const tiers: CheckoutPlanTier[] = [];
-    if (this.getStripePriceIdForTier('basic')) tiers.push('basic');
-    if (this.getStripePriceIdForTier('medium')) tiers.push('medium');
-    if (this.getStripePriceIdForTier('premium')) tiers.push('premium');
-    if (tiers.length === 0 && this.getLegacyStripePriceId()) tiers.push('standard');
-    return tiers;
-  }
-
-  private resolveCheckoutTier(dto: CreateCheckoutSessionDto): CheckoutPlanTier {
-    const available = this.getAvailableCheckoutTiers();
-    if (available.length === 0) {
-      throw new BadRequestException(
-        'No Stripe prices configured. Set STRIPE_PRICE_ID_BASIC, STRIPE_PRICE_ID_MEDIUM, STRIPE_PRICE_ID_PREMIUM, or STRIPE_PRICE_ID.',
-      );
-    }
-    if (dto.plan) {
-      if (!available.includes(dto.plan)) {
-        throw new BadRequestException(
-          `Plan "${dto.plan}" is not available. Configured: ${available.join(', ')}.`,
-        );
-      }
-      return dto.plan;
-    }
-    if (available.length === 1) return available[0];
-    throw new BadRequestException(`Select a plan: ${available.join(', ')}.`);
-  }
-
-  private planFromStripePriceId(priceId: string | null): import('./subscription.entity').PlanTier {
-    if (!priceId) return 'free_trial';
-    if (priceId === this.getStripePriceIdForTier('basic')) return 'basic';
-    if (priceId === this.getStripePriceIdForTier('medium')) return 'medium';
-    if (priceId === this.getStripePriceIdForTier('premium')) return 'premium';
-    if (priceId === this.getLegacyStripePriceId()) return 'professional';
-    return 'professional';
-  }
-
   /**
-   * `subscriptions.plan` can stay `free_trial` while Stripe rows are updated (webhook drift).
-   * Use `stripe_price_id` so company caps, seat sync, and invitees see the real tier.
-   * If `stripe_subscription_id` is set and status is live, treat as paid even when `plan` lags.
+   * Paid plan from DB row. Legacy rows may still carry `stripe_*` ids without an updated `plan`;
+   * treat active/trialing stripe-linked rows as professional so seats stay valid without Stripe API.
    */
   private effectivePaidPlanFromRow(sub: Subscription): string | null {
-    let p = sub.plan;
-    if (p === 'free_trial' && sub.stripePriceId) {
-      const fromPrice = this.planFromStripePriceId(sub.stripePriceId);
-      if (fromPrice && fromPrice !== 'free_trial') p = fromPrice;
-    }
-    if ((!p || p === 'free_trial') && sub.stripeSubscriptionId) {
+    const p = sub.plan;
+    const now = new Date();
+    if ((!p || p === 'free_trial') && (sub.stripeSubscriptionId || sub.stripeCustomerId)) {
       const st = sub.status;
-      if (st === 'active' || st === 'trialing') {
-        if (sub.stripePriceId) {
-          const fromPrice = this.planFromStripePriceId(sub.stripePriceId);
-          if (fromPrice && fromPrice !== 'free_trial') return fromPrice;
-        }
-        return 'professional';
-      }
+      if (st === 'active' || st === 'trialing') return 'professional';
     }
     if (!p || p === 'free_trial') return null;
-    return p;
+    if (sub.status === 'active') return p;
+    if (sub.status === 'trialing' && sub.trialEnd && new Date(sub.trialEnd) > now) return p;
+    return null;
   }
 
-  /** True if this row is (or appears to be) the organization's Stripe customer / paid subscriber. */
+  /** Row represents an org billing anchor (paid access or legacy Stripe linkage). */
   private subscriptionRowLooksLikeCompanyPayer(s: Subscription): boolean {
     if (s.stripeCustomerId || s.stripeSubscriptionId) return true;
     return this.effectivePaidPlanFromRow(s) != null;
@@ -225,12 +135,19 @@ export class SubscriptionService {
     return companySubs.some((x) => x.userId !== userId && this.subscriptionRowLooksLikeCompanyPayer(x));
   }
 
-  private mapStripeStatus(status: Stripe.Subscription.Status): SubscriptionStatus {
-    if (status === 'active') return 'active';
-    if (status === 'trialing') return 'trialing';
-    if (status === 'past_due' || status === 'unpaid' || status === 'incomplete') return 'past_due';
-    if (status === 'canceled' || status === 'incomplete_expired') return 'canceled';
-    return 'expired';
+  /**
+   * Who may run bank checkout / manage org billing: solo users, company admin (non-seat), or legacy Stripe customer rows.
+   */
+  private ownsBillingContactRow(user: User, sub: Subscription): boolean {
+    if (user.role === 'superadmin') return false;
+    if (sub.stripeCustomerId || sub.stripeSubscriptionId) return true;
+    if (!user.companyId) return true;
+    return user.isCompanyAdmin === true && user.isCompanySeat !== true;
+  }
+
+  private getBankWireCheckoutTiers(): BankWirePlanTier[] {
+    if (!this.isBankTransferConfigured()) return [];
+    return ['basic', 'medium', 'premium'];
   }
 
   private buildTrialEnd(fromDate: Date): Date {
@@ -498,10 +415,7 @@ export class SubscriptionService {
       }
       if (s.status === 'trialing' && s.trialEnd && new Date(s.trialEnd) > now && !paidPlan) {
         const orphanInviteTrial =
-          companyHasBillingAnchor &&
-          !s.stripeCustomerId &&
-          !s.stripeSubscriptionId &&
-          s.plan === 'free_trial';
+          companyHasBillingAnchor && !this.subscriptionRowLooksLikeCompanyPayer(s) && s.plan === 'free_trial';
         if (orphanInviteTrial) continue;
         hasValidTrial = true;
       }
@@ -605,14 +519,14 @@ export class SubscriptionService {
   }
 
   /**
-   * Personal row may still be `free_trial` / trialing after join while a teammate is the Stripe customer;
+   * Personal row may still be `free_trial` / trialing after join while a teammate anchors billing;
    * that must not consume "personal trial" upload quota.
    */
   private async isInvitedCompanySeatTrialShadow(userId: string, sub: Subscription): Promise<boolean> {
     const user = await this.getUserOrFail(userId);
     if (user.isCompanySeat === true) return true;
     if (!user.companyId || user.role === 'superadmin' || user.subscriptionExempt) return false;
-    if (sub.stripeCustomerId || sub.stripeSubscriptionId) return false;
+    if (this.effectivePaidPlanFromRow(sub)) return false;
     if (!(sub.plan === 'free_trial' && sub.status === 'trialing')) return false;
     const peers = await this.getSubscriptionsForCompany(user.companyId);
     return this.companyHasPeerBillingAnchor(peers, userId);
@@ -660,10 +574,8 @@ export class SubscriptionService {
     let user = await this.getUserOrFail(userId);
     let sub = await this.ensureSubscriptionForUser(userId);
     if (user.companyId && user.role !== 'superadmin' && !user.subscriptionExempt) {
-      const ownsStripe = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
-      // Seat holders often have no Stripe customer; full sync aligns their row with the company plan.
-      // Billing owners keep reconcile-only so we never strip their Stripe ids.
-      if (!ownsStripe) {
+      const ownsBilling = this.ownsBillingContactRow(user, sub);
+      if (!ownsBilling) {
         await this.syncSubscriptionRowForCompanyMember(userId);
       } else {
         await this.reconcileSeatMemberTrialShadow(userId);
@@ -673,14 +585,14 @@ export class SubscriptionService {
     }
     user = await this.getUserOrFail(userId);
     sub = await this.expireTrialIfNeeded(sub);
-    const ownsStripeAfterReload = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
+    const ownsBillingAfterReload = this.ownsBillingContactRow(user, sub);
     const fullCompanyPaidSnap =
       user.companyId && user.role !== 'superadmin' && !user.subscriptionExempt
         ? await this.bestCompanyPaidSeatSnapshot(await this.getSubscriptionsForCompany(user.companyId))
         : null;
     if (
       fullCompanyPaidSnap &&
-      !ownsStripeAfterReload &&
+      !ownsBillingAfterReload &&
       sub.plan === 'free_trial' &&
       sub.status === 'trialing'
     ) {
@@ -696,13 +608,13 @@ export class SubscriptionService {
     }
     const exempt = user.subscriptionExempt;
     const hasAccess = await this.hasActiveAccess(userId, user.role);
-    const checkoutTiers = this.getAvailableCheckoutTiers();
+    const checkoutTiers = this.getBankWireCheckoutTiers();
     const capabilities = await this.resolveEffectiveCapabilities(userId, user.role);
     const seatUsed =
       user.companyId && user.role !== 'superadmin'
         ? await this.countCompanySeats(user.companyId)
         : 0;
-    const ownsStripeAfter = !!(sub.stripeCustomerId || sub.stripeSubscriptionId);
+    const ownsBillingAfter = this.ownsBillingContactRow(user, sub);
     let peerPaidSnap: { plan: PlanTier } | null = null;
     let companySubsForPeers: Subscription[] = [];
     if (user.companyId) {
@@ -713,8 +625,7 @@ export class SubscriptionService {
     }
     /**
      * Another teammate must look like the payer: `bestCompanyPaidSeatSnapshot` OR any peer row with
-     * Stripe ids / effective paid plan. Without this, invitees see `managesBilling: true` when the
-     * payer row still has `plan: free_trial` and empty `stripe_price_id` but a live subscription id.
+     * a billing anchor (paid plan on row or legacy Stripe ids).
      */
     const peerAnchorsBilling =
       peerPaidSnap != null ||
@@ -722,26 +633,26 @@ export class SubscriptionService {
         user.companyId !== '' &&
         this.companyHasPeerBillingAnchor(companySubsForPeers, userId));
     /**
-     * Org seat: invited / mirrored member with no personal Stripe — includes `users.is_company_seat`
+     * Org seat: invited / mirrored member with no personal billing contact row — includes `users.is_company_seat`
      * so existing invitees keep billing hidden even when peer detection regresses.
      */
     const orgSeat =
       !!user.companyId &&
       hasAccess &&
-      !ownsStripeAfter &&
+      !ownsBillingAfter &&
       !exempt &&
       user.role !== 'superadmin' &&
       (peerAnchorsBilling || user.isCompanySeat === true);
-    /** False when this user inherits a paid company seat and should not use Stripe checkout/portal themselves. */
+    /** False when this user inherits a paid company seat and should not use billing checkout themselves. */
     let managesBilling =
       exempt ||
       user.role === 'superadmin' ||
       !user.companyId ||
-      ownsStripeAfter ||
+      ownsBillingAfter ||
       !hasAccess ||
       !orgSeat;
 
-    /** Only the designated company admin may pay or open the customer portal for the organization. */
+    /** Only the designated company admin may pay for the organization. */
     const companyMayUseBillingUi =
       !user.companyId || user.role === 'superadmin' || exempt || user.isCompanyAdmin === true;
     managesBilling = managesBilling && companyMayUseBillingUi;
@@ -793,9 +704,12 @@ export class SubscriptionService {
               used: subPayload.trialDocumentsUsed ?? 0,
               max: TRIAL_MAX_DRAWING_UPLOADS,
             },
-      isStripeConfigured: managesBilling && !!this.stripe && checkoutTiers.length > 0,
-      checkoutPlans: managesBilling ? checkoutTiers : [],
-      bankTransfer: managesBilling ? this.getBankTransferInstructions(user.email) : null,
+      isStripeConfigured: false,
+      isBankTransferConfigured: this.isBankTransferConfigured(),
+      checkoutPlans: managesBilling && checkoutTiers.length > 0 ? checkoutTiers : [],
+      bankTransfer: managesBilling ? this.getBankTransferInstructions(user.email, user.bankWireReference) : null,
+      bankWireReference: managesBilling ? (user.bankWireReference ?? null) : null,
+      bankWireIntentPlan: managesBilling ? (user.bankWireIntentPlan ?? null) : null,
       capabilities,
       pendingBankPlan: user.pendingBankPlan ?? null,
       bankActivationCodeExpiresAt: user.bankActivationCodeExpiresAt ?? null,
@@ -806,13 +720,13 @@ export class SubscriptionService {
     };
   }
 
-  async createCheckoutSession(userId: string, dto: CreateCheckoutSessionDto): Promise<{ url: string }> {
-    const stripe = this.requireStripe();
+  async createBankWireIntent(
+    userId: string,
+    planTier: BankWirePlanTier,
+  ): Promise<{ bankTransfer: Record<string, unknown>; wireReference: string; planTier: BankWirePlanTier }> {
     const user = await this.getUserOrFail(userId);
-    let sub = await this.ensureSubscriptionForUser(userId);
-
     if (user.role === 'superadmin') {
-      throw new ForbiddenException('Superadmin account does not require paid subscription checkout.');
+      throw new ForbiddenException('Superadmin account does not require a paid subscription checkout.');
     }
     if (user.subscriptionExempt) {
       throw new ForbiddenException('This account has full access without a paid subscription.');
@@ -823,167 +737,65 @@ export class SubscriptionService {
         'Your seat is included in your organization’s subscription. Billing changes must be made by the teammate who manages payment.',
       );
     }
-
-    let customerId = sub.stripeCustomerId;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: [user.firstName, user.lastName].filter(Boolean).join(' ') || undefined,
-        metadata: { userId: user.id, companyId: user.companyId || '' },
-      });
-      customerId = customer.id;
-      await this.supabase.getClient().from('subscriptions').update(mapPayloadToSnake({ stripeCustomerId: customer.id })).eq('id', sub.id);
-      sub = { ...sub, stripeCustomerId: customer.id };
-      await this.supabase
-        .getClient()
-        .from('users')
-        .update(mapPayloadToSnake({ isCompanySeat: false }))
-        .eq('id', user.id);
-    }
-
-    const tier = this.resolveCheckoutTier(dto);
-    const priceId = this.getStripePriceIdForTier(tier);
-    if (!priceId) throw new BadRequestException(`No Stripe price ID configured for plan "${tier}".`);
-
-    if (!priceId.startsWith('price_')) {
+    if (!this.getBankWireCheckoutTiers().includes(planTier)) {
       throw new BadRequestException(
-        `Invalid Stripe price ID for plan "${tier}": use a Price id (price_...), not a Product id (prod_...).`,
+        'Bank transfer checkout is not available. Set BANK_TRANSFER_ENABLED and BANK_TRANSFER_* on the API.',
       );
     }
-
-    let price: Stripe.Price;
-    try {
-      price = await stripe.prices.retrieve(priceId);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadRequestException(
-        `Could not load Stripe price "${priceId}" for plan "${tier}". Check the id and that the key matches the same Stripe mode (test vs live). ${msg}`,
-      );
+    let wireRef = user.bankWireReference ?? null;
+    if (!wireRef || user.bankWireIntentPlan !== planTier) {
+      wireRef = await this.allocateUniqueWireReference();
     }
-    if (price.type !== 'recurring' || !price.recurring) {
-      throw new BadRequestException(
-        `Stripe price "${priceId}" is not a recurring subscription price. In Stripe Dashboard → Products, edit the price and set billing to recurring (e.g. monthly), or create a new recurring price and update your STRIPE_PRICE_ID_* env var.`,
-      );
-    }
-
-    const onetimePriceId = this.getStripeOnetimePriceIdForTier(tier);
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
-    if (onetimePriceId) {
-      if (!onetimePriceId.startsWith('price_')) {
-        throw new BadRequestException(
-          `Invalid Stripe one-time price ID for plan "${tier}": use a Price id (price_...), not prod_....`,
-        );
-      }
-      let oneTime: Stripe.Price;
-      try {
-        oneTime = await stripe.prices.retrieve(onetimePriceId);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        throw new BadRequestException(
-          `Could not load Stripe one-time price "${onetimePriceId}" for plan "${tier}". ${msg}`,
-        );
-      }
-      if (oneTime.type !== 'one_time') {
-        throw new BadRequestException(
-          `Stripe price "${onetimePriceId}" must be a one-time price (license/fee). Set STRIPE_PRICE_ID_*_ONETIME to a Dashboard price with type "one time".`,
-        );
-      }
-      lineItems.push({ price: onetimePriceId, quantity: 1 });
-    }
-    lineItems.push({ price: priceId, quantity: 1 });
-
-    const frontendUrl = this.getFrontendUrl();
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      line_items: lineItems,
-      success_url: `${frontendUrl}/billing?checkout=success`,
-      cancel_url: `${frontendUrl}/billing?checkout=cancel`,
-      allow_promotion_codes: true,
-      metadata: { userId: user.id, checkoutTier: tier },
-    });
-
-    if (!session.url) throw new BadRequestException('Could not create Stripe checkout session URL.');
-    return { url: session.url };
-  }
-
-  async createPortalSession(userId: string): Promise<{ url: string }> {
-    const stripe = this.requireStripe();
-    const billingState = await this.getMySubscription(userId);
-    if (!billingState.managesBilling) {
-      throw new ForbiddenException(
-        'Your seat is included in your organization’s subscription. The Stripe customer portal is only available to the teammate who manages payment.',
-      );
-    }
-    const sub = await this.ensureSubscriptionForUser(userId);
-    if (!sub.stripeCustomerId) throw new BadRequestException('No Stripe customer found for this account.');
-    const session = await stripe.billingPortal.sessions.create({
-      customer: sub.stripeCustomerId,
-      return_url: `${this.getFrontendUrl()}/billing`,
-    });
-    return { url: session.url };
-  }
-
-  private async upsertFromStripeSubscription(stripeSub: Stripe.Subscription): Promise<void> {
     const client = this.supabase.getClient();
-    let sub: Subscription | null = null;
-    if (stripeSub.id) {
-      const { data } = await client.from('subscriptions').select('*').eq('stripe_subscription_id', stripeSub.id).maybeSingle();
-      if (data) sub = mapRowToCamel<Subscription>(data as Record<string, unknown>);
-    }
-    if (!sub && typeof stripeSub.customer === 'string') {
-      const { data } = await client.from('subscriptions').select('*').eq('stripe_customer_id', stripeSub.customer).maybeSingle();
-      if (data) sub = mapRowToCamel<Subscription>(data as Record<string, unknown>);
-    }
-    if (!sub) {
-      this.logger.warn(`Ignoring Stripe subscription ${stripeSub.id}: no local subscription found.`);
-      return;
-    }
-
-    const priceId = stripeSub.items.data[0]?.price?.id || null;
-    const periodStart = (stripeSub as any).current_period_start as number | undefined;
-    const periodEnd = (stripeSub as any).current_period_end as number | undefined;
-    const mappedPlan = this.planFromStripePriceId(priceId);
-    const updates = mapPayloadToSnake({
-      stripeSubscriptionId: stripeSub.id,
-      stripePriceId: priceId,
-      status: this.mapStripeStatus(stripeSub.status),
-      plan: mappedPlan,
-      currentPeriodStart: periodStart ? new Date(periodStart * 1000) : null,
-      currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
-      cancelAt: stripeSub.cancel_at ? new Date(stripeSub.cancel_at * 1000) : null,
-      canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null,
-    });
-    await client.from('subscriptions').update(updates).eq('id', sub.id);
-    await client.from('users').update(mapPayloadToSnake({ isCompanySeat: false })).eq('id', sub.userId);
+    const { error } = await client
+      .from('users')
+      .update(
+        mapPayloadToSnake({
+          bankWireReference: wireRef,
+          bankWireIntentPlan: planTier,
+        }),
+      )
+      .eq('id', userId);
+    if (error) throw new BadRequestException('Could not save payment reference.');
+    const bankTransfer = this.getBankTransferInstructions(user.email, wireRef)!;
+    return { bankTransfer, wireReference: wireRef, planTier };
   }
 
-  async handleWebhook(signature: string | undefined, rawBody: Buffer): Promise<{ received: true }> {
-    const stripe = this.requireStripe();
-    const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
-    if (!webhookSecret) throw new BadRequestException('STRIPE_WEBHOOK_SECRET is not configured.');
-    if (!signature) throw new BadRequestException('Missing Stripe signature header.');
-    let event: Stripe.Event;
+  private async allocateUniqueWireReference(): Promise<string> {
+    const client = this.supabase.getClient();
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const code = `ZM-${randomBytes(5).toString('hex').toUpperCase()}`;
+      const { data } = await client.from('users').select('id').eq('bank_wire_reference', code).maybeSingle();
+      if (!data) return code;
+    }
+    throw new BadRequestException('Could not allocate a unique payment reference.');
+  }
+
+  async adminConfirmBankWirePayment(userId: string): Promise<{ ok: true; plan: string }> {
+    const user = await this.getUserOrFail(userId);
+    if (user.role === 'superadmin') throw new BadRequestException('Invalid target.');
+    const tier = user.bankWireIntentPlan;
+    if (!tier || !user.bankWireReference) {
+      throw new BadRequestException('No pending bank transfer for this user.');
+    }
+    await this.activateBankVerifiedPlan(userId, tier);
+    const { error } = await this.supabase
+      .getClient()
+      .from('users')
+      .update(
+        mapPayloadToSnake({
+          bankWireReference: null,
+          bankWireIntentPlan: null,
+        }),
+      )
+      .eq('id', userId);
+    if (error) this.logger.warn(`adminConfirmBankWirePayment user cleanup: ${error.message}`);
     try {
-      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-    } catch (error) {
-      throw new BadRequestException(`Invalid Stripe webhook signature: ${(error as Error).message}`);
+      await this.syncSubscriptionRowForCompanyMember(userId);
+    } catch (e) {
+      this.logger.warn(`sync after bank confirm: ${(e as Error).message}`);
     }
-    if (
-      event.type === 'customer.subscription.created' ||
-      event.type === 'customer.subscription.updated' ||
-      event.type === 'customer.subscription.deleted'
-    ) {
-      await this.upsertFromStripeSubscription(event.data.object as Stripe.Subscription);
-    }
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.subscription && typeof session.subscription === 'string') {
-        const stripeSub = await stripe.subscriptions.retrieve(session.subscription);
-        await this.upsertFromStripeSubscription(stripeSub);
-      }
-    }
-    return { received: true };
+    return { ok: true, plan: tier };
   }
 
   async listSubscribers(): Promise<any[]> {
@@ -1007,7 +819,16 @@ export class SubscriptionService {
           ...sub,
           trialDaysRemaining,
           user: user
-            ? { id: user.id, email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName, companyId: user.companyId }
+            ? {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                companyId: user.companyId,
+                bankWireReference: user.bankWireReference ?? null,
+                bankWireIntentPlan: user.bankWireIntentPlan ?? null,
+              }
             : null,
         };
       })

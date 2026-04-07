@@ -9,8 +9,12 @@ export type SubscriptionPlan =
   | 'medium'
   | 'premium';
 
-/** Stripe checkout tier; `standard` = legacy STRIPE_PRICE_ID only. */
-export type CheckoutPlanTier = 'basic' | 'medium' | 'premium' | 'standard';
+/** Bank wire checkout tier (matches backend BankWirePlanTier). */
+export type BankWirePlanTier = 'basic' | 'medium' | 'premium';
+
+/** @deprecated Use BankWirePlanTier; kept for older type references. */
+export type CheckoutPlanTier = BankWirePlanTier;
+
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
 
 /** Shown on /billing when backend BANK_TRANSFER_* env is set (manual wire / 銀行振込). */
@@ -51,7 +55,7 @@ export interface SubscriptionInfo {
   cancelAt: string | null;
   canceledAt: string | null;
   hasAccess: boolean;
-  /** False for invited seats on a paid company plan (no personal Stripe customer). */
+  /** False for invited seats on a paid company plan (no personal billing row). */
   managesBilling?: boolean;
   /** True when this session is an org seat (hide billing / pricing). */
   companySeat?: boolean;
@@ -59,11 +63,17 @@ export interface SubscriptionInfo {
   trialLengthDays: number;
   /** While trialing: drawing file uploads used vs max (Quick Shape does not count). */
   trialFileUploads?: { used: number; max: number };
+   
   isStripeConfigured: boolean;
-  /** Tiers with a configured Stripe price (from STRIPE_PRICE_ID_* or legacy STRIPE_PRICE_ID). */
-  checkoutPlans?: CheckoutPlanTier[];
+  /** True when BANK_TRANSFER_* is set on the API. */
+  isBankTransferConfigured?: boolean;
+  /** Paid tiers available for bank transfer checkout. */
+  checkoutPlans?: BankWirePlanTier[];
   /** Present when backend BANK_TRANSFER_* is set; may be absent on older APIs. */
   bankTransfer?: BankTransferInstructions | null;
+  /** Unique wire memo code after POST .../me/bank-wire-intent (also in remittanceReference). */
+  bankWireReference?: string | null;
+  bankWireIntentPlan?: BankWirePlanTier | null;
   /** Company-wide feature gates from paid/trial plan (from API). */
   capabilities?: PlanCapabilities;
   seatUsage?: { used: number; limit: number };
@@ -97,6 +107,8 @@ export interface SubscriberRow {
     firstName: string | null;
     lastName: string | null;
     companyId: string;
+    bankWireReference?: string | null;
+    bankWireIntentPlan?: BankWirePlanTier | null;
   } | null;
 }
 
@@ -106,13 +118,14 @@ export const subscriptionsApi = {
     return res.data;
   },
 
-  createCheckoutSession: async (plan?: CheckoutPlanTier): Promise<{ url: string }> => {
-    const res = await apiClient.post<{ url: string }>('/subscriptions/checkout-session', plan ? { plan } : {});
-    return res.data;
-  },
-
-  createPortalSession: async (): Promise<{ url: string }> => {
-    const res = await apiClient.post<{ url: string }>('/subscriptions/portal-session', {});
+  createBankWireIntent: async (
+    plan: BankWirePlanTier,
+  ): Promise<{ bankTransfer: BankTransferInstructions; wireReference: string; planTier: BankWirePlanTier }> => {
+    const res = await apiClient.post<{
+      bankTransfer: BankTransferInstructions;
+      wireReference: string;
+      planTier: BankWirePlanTier;
+    }>('/subscriptions/me/bank-wire-intent', { plan });
     return res.data;
   },
 
@@ -131,6 +144,14 @@ export const subscriptionsApi = {
     access: 'active' | 'canceled' | 'expired',
   ): Promise<any> => {
     const res = await apiClient.post(`/subscriptions/admin/${userId}/set-access`, { access });
+    return res.data;
+  },
+
+  confirmBankWire: async (userId: string): Promise<{ ok: true; plan: string }> => {
+    const res = await apiClient.post<{ ok: true; plan: string }>(
+      `/subscriptions/admin/${userId}/confirm-bank-wire`,
+      {},
+    );
     return res.data;
   },
 

@@ -6,11 +6,9 @@ import {
   Param,
   ParseIntPipe,
   Post,
-  Req,
   UseGuards,
 } from '@nestjs/common';
-import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
-import { Request } from 'express';
+import { BankWireIntentDto } from './dto/bank-wire-intent.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -37,23 +35,16 @@ export class SubscriptionController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Post('checkout-session')
-  async createCheckoutSession(@CurrentUser() user: any, @Body() body: CreateCheckoutSessionDto) {
-    return this.subscriptionService.createCheckoutSession(user.id, body);
+  @Post('me/bank-wire-intent')
+  async createBankWireIntent(@CurrentUser() user: any, @Body() body: BankWireIntentDto) {
+    return this.subscriptionService.createBankWireIntent(user.id, body.plan);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Post('portal-session')
-  async createPortalSession(@CurrentUser() user: any) {
-    return this.subscriptionService.createPortalSession(user.id);
-  }
-
-  @Post('webhook')
-  async handleWebhook(
-    @Req() req: Request & { body: Buffer },
-    @Headers('stripe-signature') signature?: string,
-  ) {
-    return this.subscriptionService.handleWebhook(signature, req.body);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('admin/:userId/confirm-bank-wire')
+  async confirmBankWire(@Param('userId') userId: string) {
+    return this.subscriptionService.adminConfirmBankWirePayment(userId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

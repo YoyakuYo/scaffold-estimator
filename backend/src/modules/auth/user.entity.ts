@@ -29,8 +29,8 @@ export class User {
   branchId: string | null;
 
   /**
-   * True when this account is an org seat (e.g. accepted team invite) and must not manage Stripe checkout.
-   * Cleared when the user becomes the Stripe customer on their subscription row.
+   * True when this account is an org seat (e.g. accepted team invite) and must not manage billing checkout.
+   * Cleared when the user becomes the organization billing contact on their subscription row.
    */
   @Column({ name: 'is_company_seat', default: false })
   isCompanySeat: boolean;
@@ -64,7 +64,7 @@ export class User {
   @Column({ type: 'text', default: 'pending', name: 'approval_status' })
   approvalStatus: ApprovalStatus;
 
-  /** Full app access without Stripe; set in DB (e.g. Supabase) for lifetime/comp accounts. */
+  /** Full app access without a paid subscription; set in DB (e.g. Supabase) for lifetime/comp accounts. */
   @Column({ name: 'subscription_exempt', default: false })
   subscriptionExempt: boolean;
 
@@ -77,6 +77,14 @@ export class User {
 
   @Column({ name: 'bank_activation_code_expires_at', type: 'timestamptz', nullable: true })
   bankActivationCodeExpiresAt: Date | null;
+
+  /** Unique wire memo code for /billing bank checkout; cleared after admin confirms funds. */
+  @Column({ name: 'bank_wire_reference', type: 'text', nullable: true })
+  bankWireReference: string | null;
+
+  /** Plan tier selected for the pending wire (see bank_wire_reference). */
+  @Column({ name: 'bank_wire_intent_plan', type: 'text', nullable: true })
+  bankWireIntentPlan: 'basic' | 'medium' | 'premium' | null;
 
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
   lastActiveAt: Date | null;

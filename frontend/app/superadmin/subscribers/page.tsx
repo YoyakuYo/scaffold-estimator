@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { subscriptionsApi, SubscriberRow } from '@/lib/api/subscriptions';
 import { usersApi } from '@/lib/api/users';
-import { Loader2, CreditCard, CalendarClock, CheckCircle2, Ban } from 'lucide-react';
+import { Loader2, CreditCard, CalendarClock, CheckCircle2, Ban, Landmark } from 'lucide-react';
 
 export default function SuperadminSubscribersPage() {
   const { t } = useI18n();
@@ -47,6 +47,14 @@ export default function SuperadminSubscribersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['subscribers'] }),
   });
 
+  const confirmBankWireMutation = useMutation({
+    mutationFn: (userId: string) => subscriptionsApi.confirmBankWire(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscribers'] });
+      queryClient.invalidateQueries({ queryKey: ['my-subscription'] });
+    },
+  });
+
   if (!isSuperAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -85,6 +93,7 @@ export default function SuperadminSubscribersPage() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'plan')}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'status')}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'trial')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'wireRef')}</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{t('subscribersAdmin', 'actions')}</th>
                 </tr>
               </thead>
@@ -123,6 +132,19 @@ export default function SuperadminSubscribersPage() {
                         '—'
                       )}
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px]">
+                      {sub.user?.bankWireReference ? (
+                        <span className="block">
+                          <span className="text-xs font-medium text-indigo-700">{t('subscribersAdmin', 'pendingWire')}</span>
+                          <span className="block font-mono text-xs break-all mt-0.5">{sub.user.bankWireReference}</span>
+                          {sub.user.bankWireIntentPlan && (
+                            <span className="block text-xs text-gray-500 mt-0.5">→ {sub.user.bankWireIntentPlan}</span>
+                          )}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -138,6 +160,27 @@ export default function SuperadminSubscribersPage() {
                         >
                           {t('subscribersAdmin', 'restartFreshTrial')}
                         </button>
+                        {sub.user?.bankWireReference && sub.user?.bankWireIntentPlan && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                !confirm(
+                                  t('subscribersAdmin', 'confirmBankPaymentPrompt')
+                                    .replace('{email}', sub.user?.email || sub.userId)
+                                    .replace('{plan}', sub.user?.bankWireIntentPlan || ''),
+                                )
+                              )
+                                return;
+                              confirmBankWireMutation.mutate(sub.userId);
+                            }}
+                            disabled={confirmBankWireMutation.isPending}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs bg-indigo-50 border border-indigo-300 text-indigo-800 rounded hover:bg-indigo-100 disabled:opacity-50"
+                          >
+                            <Landmark className="h-3.5 w-3.5" />
+                            {t('subscribersAdmin', 'confirmBankPayment')}
+                          </button>
+                        )}
                         <button
                           onClick={() => setAccessMutation.mutate({ userId: sub.userId, access: 'active' })}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs bg-green-50 border border-green-300 text-green-700 rounded hover:bg-green-100"

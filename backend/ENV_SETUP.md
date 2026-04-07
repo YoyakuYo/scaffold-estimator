@@ -127,9 +127,9 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # ============================================
 # BILLING: MANUAL BANK TRANSFER (optional)
 # ============================================
-# When set, /billing shows 銀行振込 details after login. Users should put their
-# registered email in the transfer memo; you confirm at the bank and set access
-# in Superadmin → Subscribers if not using Stripe alone.
+# When set, /billing shows 銀行振込 checkout: users choose Basic/Medium/Premium,
+# reveal a unique wire reference code (ZM-...), then transfer with that code in the memo.
+# After you confirm the deposit, use Superadmin → Subscribers → "Confirm deposit & activate".
 # BANK_TRANSFER_ENABLED=true
 # BANK_TRANSFER_BANK_NAME=みずほ銀行
 # BANK_TRANSFER_BRANCH=〇〇支店
@@ -161,39 +161,7 @@ ALLOWED_FILE_TYPES=pdf,dxf,dwg
 # BANK_ACTIVATION_CODE_TTL_HOURS=168
 # BANK_SUBSCRIPTION_PERIOD_DAYS=365
 
-# ============================================
-# STRIPE (optional — card checkout + webhooks)
-# ============================================
-# Use either STRIPE_SECRET_KEY (full secret) or STRIPE_RESTRICTED_KEY if your host
-# only allows restricted keys. Checkout needs permission to create sessions; the
-# webhook handler may need a key with broader permissions if the restricted key
-# cannot read subscription events — test in Stripe test mode first.
-#
-# STRIPE_SECRET_KEY=sk_live_...
-# STRIPE_RESTRICTED_KEY=rk_live_...
-# STRIPE_WEBHOOK_SECRET=whsec_...
-#
-# Register the webhook URL in Stripe Dashboard → Developers → Webhooks (or Event destinations):
-#   POST https://<your-api-host>/api/v1/subscriptions/webhook
-# Copy the endpoint’s signing secret into STRIPE_WEBHOOK_SECRET. The Dashboard “destination” id
-# (we_...) is optional documentation only; the app does not require it. You may set:
-# STRIPE_WEBHOOK_ENDPOINT_ID=we_...
-#
-# Multi-plan: recurring price_... per tier (e.g. yearly updates). Required for each tier you sell.
-# STRIPE_PRICE_ID_BASIC=price_...
-# STRIPE_PRICE_ID_MEDIUM=price_...
-# STRIPE_PRICE_ID_PREMIUM=price_...
-#
-# Optional one-time price per tier (e.g. license) — charged once on the first Checkout
-# invoice together with the recurring line. Omit if you only charge yearly.
-# STRIPE_PRICE_ID_BASIC_ONETIME=price_...
-# STRIPE_PRICE_ID_MEDIUM_ONETIME=price_...
-# STRIPE_PRICE_ID_PREMIUM_ONETIME=price_...
-#
-# Legacy single price (still supported): if none of the three above are set,
-# STRIPE_PRICE_ID=price_... is used as tier "standard". Optional one-time for that path:
-# STRIPE_PRICE_ID_ONETIME=price_...
-# STRIPE_PRICE_ID=price_...
+# Card billing (Stripe) is not used in this product; keep billing env to BANK_* only.
 
 # ============================================
 # FREE TRIAL RESTART (self-service, gated)
