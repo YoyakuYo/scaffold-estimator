@@ -26,8 +26,20 @@ describe('ScaffoldCalculatorService — Nuno (610) corner dedup', () => {
     });
     const n610 = result.summary.find((c) => c.type === 'nuno_bar' && c.sizeSpec === '610');
     expect(n610).toBeDefined();
-    // Regression lock: closed rectangle should not double-count width-direction negarami / bearers at corners.
-    // For 5+4+5+4 post lines and L=1, width negarami + bearer alone drop by 8 vs naive (shared corners).
-    expect(n610!.quantity).toBe(52);
+    // Shared-corner width negarami/bearer dedup + no inner 手摺 on terminal (足場幅) bay per wall.
+    expect(n610!.quantity).toBe(36);
+  });
+
+  it('single wall: terminal-bay tesuri rule does not apply (no multi-wall corner layout)', () => {
+    const result = service.calculate({
+      walls: [{ side: 'AB', wallLengthMm: 5182, wallHeightMm: 1800, stairAccessCount: 0 }],
+      scaffoldWidthMm: 610,
+      preferredMainTatejiMm: 1800,
+    });
+    const w = result.walls[0]!;
+    expect(w.spans.length).toBeGreaterThan(0);
+    const n610 = result.summary.find((c) => c.type === 'nuno_bar' && c.sizeSpec === '610');
+    expect(n610).toBeDefined();
+    expect(n610!.quantity).toBeGreaterThan(0);
   });
 });

@@ -249,6 +249,8 @@ export const CALC_RULES = {
    * Per span per level (くさび式):
    * - Outer row: 1 ブレス/スパン/段
    * - Inner row: 手摺（布材）2 本高さ/スパン/段（外列はブレス）
+   *   — except the last span when it equals the corner terminal bay (足場幅モジュール):
+   *   that bay is left open for access to the inside / next wall; braces stay on the outer row.
    * - Habaki: 2 per span (front + back)
    * - Anchi: 1 per span (sits on width yokoji)
    */
@@ -360,6 +362,20 @@ export function scaffoldFacadeBasisMmFromCorners(
 /** Corner terminal bay = same catalog module as the scaffold width tier (610 / 914 / 1219). */
 export function cornerTerminalSpanMmKusabi(scaffoldWidthMm: number): number {
   return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
+}
+
+/**
+ * Multi-wall corner layout: inner 手摺 are omitted on the last span when it is the standard
+ * width-module terminal bay into the turn (通路・内部出入り用).
+ */
+export function omitKusabiTesuriOnLastSpan(
+  spans: readonly number[],
+  scaffoldWidthMm: number,
+  useMultiWallCornerLayout: boolean,
+): boolean {
+  if (!useMultiWallCornerLayout || spans.length === 0) return false;
+  const terminal = cornerTerminalSpanMmKusabi(scaffoldWidthMm);
+  return spans[spans.length - 1] === terminal;
 }
 
 /** Footprint vertex (fractional or mm — only turn direction matters for reflex detection). */

@@ -15,6 +15,7 @@ import {
   freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
   cornerTerminalSpanMmKusabi,
+  omitKusabiTesuriOnLastSpan,
   meshSheetVerticalRowsForHeightMm,
   MESH_SHEET_VERTICAL_LENGTH_MM,
 } from './scaffold-rules';
@@ -493,7 +494,15 @@ export class ScaffoldCalculatorService {
     }> = {};
 
     // 5. 手摺 (Tesuri/Handrail) — 内面のみ（外面はブレス）。最上ガード帯も同じ手摺本数（Lsafety=L+1）。
-    for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
+    // コーナー先端の足場幅ターミナルスパンは手摺なし（外ブレスのみ）— 内部・他面への出入り用。
+    const skipTesuriOnTerminalBay = omitKusabiTesuriOnLastSpan(spans, widthMm, useCornerLogic);
+    const tesuriEligibleCountBySize: Record<number, number> = {};
+    for (let si = 0; si < spans.length; si++) {
+      if (skipTesuriOnTerminalBay && si === spans.length - 1) continue;
+      const sm = spans[si]!;
+      tesuriEligibleCountBySize[sm] = (tesuriEligibleCountBySize[sm] || 0) + 1;
+    }
+    for (const [spanSizeMm, count] of Object.entries(tesuriEligibleCountBySize)) {
       const size = Number(spanSizeMm);
       if (!nunoBarsBySize[size]) {
         nunoBarsBySize[size] = { tesuri: 0, stopper: 0, negarami: 0, bearer: 0 };

@@ -880,6 +880,14 @@ export default function Scaffold3DView({
           ANCHI_LAYOUT_BY_WIDTH[widthMm] ?? ANCHI_LAYOUT_BY_WIDTH[SCAFFOLD_WIDTH_NARROW_MM];
         const habakiCountPerSpan = result?.habakiCountPerSpan ?? 2;
 
+        // くさび: コーナー先端の足場幅ターミナルスパンは内手摺なし（外ブレスのみ）— BOM と一致。
+        const skipTesuriOnLastTerminalBay =
+          !isWakugumi &&
+          !isBracket &&
+          walls.length >= 2 &&
+          spans.length > 0 &&
+          spans[spans.length - 1] === widthMm;
+
         // Door opening span indices (for skipping planks/braces/habaki at ground level)
         const doorSpanIndices = new Set<number>();
         const doorOpeningsRaw = wall.doorOpenings ?? (wall as any).door_openings;
@@ -1087,10 +1095,12 @@ export default function Scaffold3DView({
                 addPipe(group, x1, shitasanY, 0, x2, shitasanY, 0, shitasanMat, PIPE_R * 0.6);
               }
             } else if (!isBracket) {
-              const railTop = y + 0.9;
-              const railMid = y + 0.45;
-              addPipe(group, x1, railTop, tzInner, x2, railTop, tzInner, tesuriMat, PIPE_R * 0.65);
-              addPipe(group, x1, railMid, tzInner, x2, railMid, tzInner, tesuriMat, PIPE_R * 0.6);
+              if (!(skipTesuriOnLastTerminalBay && i === spans.length - 1)) {
+                const railTop = y + 0.9;
+                const railMid = y + 0.45;
+                addPipe(group, x1, railTop, tzInner, x2, railTop, tzInner, tesuriMat, PIPE_R * 0.65);
+                addPipe(group, x1, railMid, tzInner, x2, railMid, tzInner, tesuriMat, PIPE_R * 0.6);
+              }
             } else {
               const railTop = y + 0.9;
               const railMid = y + 0.45;
@@ -1174,9 +1184,11 @@ export default function Scaffold3DView({
               addPipe(group, x1, footHi, outerZ, x2, footLow, outerZ, braceMat, PIPE_R * 0.72);
               addPipe(group, x1, headLow, outerZ, x2, headHi, outerZ, braceMat, PIPE_R * 0.72);
               addPipe(group, x1, headHi, outerZ, x2, headLow, outerZ, braceMat, PIPE_R * 0.72);
-              addPipe(group, x1, tesuriLow, innerZ, x2, tesuriLow, innerZ, tesuriMat, PIPE_R * 0.6);
-              addPipe(group, x1, tesuriMid, innerZ, x2, tesuriMid, innerZ, tesuriMat, PIPE_R * 0.62);
-              addPipe(group, x1, tesuriTop, innerZ, x2, tesuriTop, innerZ, tesuriMat, PIPE_R * 0.58);
+              if (!(skipTesuriOnLastTerminalBay && i === spans.length - 1)) {
+                addPipe(group, x1, tesuriLow, innerZ, x2, tesuriLow, innerZ, tesuriMat, PIPE_R * 0.6);
+                addPipe(group, x1, tesuriMid, innerZ, x2, tesuriMid, innerZ, tesuriMat, PIPE_R * 0.62);
+                addPipe(group, x1, tesuriTop, innerZ, x2, tesuriTop, innerZ, tesuriMat, PIPE_R * 0.58);
+              }
             }
           }
         }
