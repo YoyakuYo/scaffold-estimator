@@ -1066,11 +1066,26 @@ export default function Scaffold3DView({
 
             // Braces (ブレス) — skip at ground level for door opening spans
             // Kusabi: 外列のみ (local z = widthM / street side). Bracket: single row at z=0.
-            // Wakugumi: BOTH faces
+            // Wakugumi: BOTH faces. 最上段（ガード建枠）は帯内にブレス×2（足下・頭上）で明示。
             if (!isDoorSpan) {
-              const braceBottomY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.18;
+              const yDeckLift = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H;
+              const braceBottomY = yDeckLift + 0.18;
               const braceTopY = y - 0.18;
-              if (isWakugumi && !isBracket) {
+              const isWakugumiTopGuardLift = isWakugumi && !isBracket && lv === levelLoopMax;
+              if (isWakugumiTopGuardLift) {
+                const yDeck = yDeckLift;
+                const yCap = y;
+                const footLow = yDeck + 0.14;
+                const footHi = yDeck + 0.52;
+                const headLow = yCap - 0.52;
+                const headHi = yCap - 0.12;
+                for (const bz of [0, widthM]) {
+                  addPipe(group, x1, footLow, bz, x2, footHi, bz, topGuardMat, PIPE_R * 0.72);
+                  addPipe(group, x1, footHi, bz, x2, footLow, bz, topGuardMat, PIPE_R * 0.72);
+                  addPipe(group, x1, headLow, bz, x2, headHi, bz, topGuardMat, PIPE_R * 0.72);
+                  addPipe(group, x1, headHi, bz, x2, headLow, bz, topGuardMat, PIPE_R * 0.72);
+                }
+              } else if (isWakugumi && !isBracket) {
                 for (const bz of [0, widthM]) {
                   addPipe(group, x1, braceBottomY, bz, x2, braceTopY, bz, braceMat, PIPE_R * 0.75);
                   addPipe(group, x1, braceTopY, bz, x2, braceBottomY, bz, braceMat, PIPE_R * 0.75);
@@ -1188,6 +1203,18 @@ export default function Scaffold3DView({
                 addPipe(group, x1, tesuriLow, innerZ, x2, tesuriLow, innerZ, tesuriMat, PIPE_R * 0.6);
                 addPipe(group, x1, tesuriMid, innerZ, x2, tesuriMid, innerZ, tesuriMat, PIPE_R * 0.62);
                 addPipe(group, x1, tesuriTop, innerZ, x2, tesuriTop, innerZ, tesuriMat, PIPE_R * 0.58);
+              }
+            }
+          }
+
+          // 枠組最上段（ガード建枠）: スパン方向天端ラインを上部ガードとして明示
+          if (isWakugumi && !isBracket && lv === levelLoopMax) {
+            const yCapRail = y - 0.02;
+            for (const pz of [tzOuter, tzInner]) {
+              for (let i = startSpanIdx; i < spans.length; i++) {
+                const xa = postX[i];
+                const xb = postX[i + 1];
+                addPipe(group, xa, yCapRail, pz, xb, yCapRail, pz, topGuardMat, PIPE_R * 0.65);
               }
             }
           }
