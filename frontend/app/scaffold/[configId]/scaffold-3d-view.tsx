@@ -2322,13 +2322,17 @@ export default function Scaffold3DView({
           addDimLine(dimGroup, p1, p2, `${spans[si]}`, 0.08);
         }
 
-        // Total length line (below span lines)
+        // Total length line (below span lines) — label must match the drawn segment length.
+        // `runLenForDims` follows Σ spans (kusabi corner run = wall+300+terminal in mm), not façade `wallLengthMm`.
         const totalDimY = dimY - 0.5;
+        const runMmFromSpans =
+          spans.length > 0 ? spans.reduce((acc, mm) => acc + mm, 0) : wall.wallLengthMm ?? 0;
+        const runMmLabeled = Math.round(Math.max(0, runMmFromSpans));
         addDimLine(
           dimGroup,
           new THREE.Vector3(startX, totalDimY, startZ),
           new THREE.Vector3(endX, totalDimY, endZ),
-          `${(wall.wallLengthMm ?? 0).toLocaleString()}mm`,
+          `${runMmLabeled.toLocaleString()}mm`,
           0.1,
         );
 
