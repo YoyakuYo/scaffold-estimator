@@ -136,10 +136,10 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
   });
 
   it('short convex wall: wall+300 < 1829 still uses run = wall+300+terminal; terminal-mid-terminal', () => {
-    // 1500 + 300 + 610 = 2410; cannot start with 1829 → [610, middle≥1190, 610]
+    // Catalog façade 1524mm (not nominal 1500); 1524+300+610 = 2434; cannot start with 1829 → [610, middle≥1214, 610]
     const terminal = cornerTerminalSpanMmKusabi(600);
-    const target = 1500 + CORNER_OVERRUN_MM + terminal;
-    const spans = fitSpansToWallLengthWithCorner(1500, 600);
+    const target = 1524 + CORNER_OVERRUN_MM + terminal;
+    const spans = fitSpansToWallLengthWithCorner(1524, 600);
     expect(spans[0]).toBe(terminal);
     expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
