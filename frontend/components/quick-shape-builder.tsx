@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { inferEdgePlanAxisFromVertices, signedAxisRunMmFromVertices } from '@/lib/infer-edge-plan-axis';
+import { type EdgeHashiraFormRow } from '@/lib/edge-hashira-labels';
 import {
   normalizeScaffoldWallCfKey,
   SCAFFOLD_WALL_CF_KEYS,
@@ -29,13 +30,8 @@ import {
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
 import { formatMmAsMetersLabel, formatMmLabel, mToMm, mmToM } from '@/lib/dimension-meters';
-import {
-  composeEdgePlanAxisMm,
-  edgePlanRunDirectionLabel,
-  edgePlanRunMagnitudeMm,
-  edgePlanRunSign,
-  parsePositiveMetersToMm,
-} from '@/lib/edge-plan-run-ui';
+/** End station 1..10 → X1–Xn / Y1–Yn on drawings */
+const QUICK_SHAPE_STATION_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
 
 const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
   reflex: 'wallCfReflex',
@@ -113,6 +109,8 @@ export interface QuickShapeConfig {
   habakiCountPerSpan: number;
   endStopperType: 'nuno' | 'frame';
   kaidanPerSide: Record<string, KaidanConfig>;
+  /** Saved with calculate — grid line X1–Xn / Y1–Yn (stations 1–10). */
+  edgeHashiraByLabel?: Record<string, EdgeHashiraFormRow>;
 }
 
 /** Persisted wizard state for sessionStorage (quick builder tab). */
@@ -136,6 +134,8 @@ export interface QuickShapeBuilderDraft {
   scaffoldWidthPerSide: Record<string, number | undefined>;
   /** Plan axis + signed run (mm) per edge label — same role as drawing upload XY column. */
   edgePlanByLabel?: Record<string, { axis: 'X' | 'Y'; mm: number }>;
+  /** X1–Xn / Y1–Yn end station (1–10) per edge label. */
+  hashiraByLabel?: Record<string, EdgeHashiraFormRow>;
   /** Per-edge CF (R/C) — same as drawing upload CF column. */
   cfNoteByLabel?: Record<string, ScaffoldWallCfKey>;
 }
@@ -165,6 +165,24 @@ function parseCfNoteByLabel(raw: unknown): Record<string, ScaffoldWallCfKey> {
   const out: Record<string, ScaffoldWallCfKey> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     out[k] = normalizeScaffoldWallCfKey(String(v));
+  }
+  return out;
+}
+
+function parseHashiraByLabel(raw: unknown): Record<string, EdgeHashiraFormRow> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, EdgeHashiraFormRow> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue;
+    const ax = (v as { axis?: string }).axis;
+    const axis: '' | 'X' | 'Y' =
+      ax === 'X' || ax === 'Y' ? ax : '';
+    const cs = String((v as { countStr?: unknown }).countStr ?? '').trim();
+    if (cs !== '') {
+      const n = parseInt(cs, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 10) continue;
+    }
+    out[k] = { axis, countStr: cs === '' ? '' : String(Math.min(10, Math.max(1, parseInt(cs, 10)))) };
   }
   return out;
 }
@@ -222,6 +240,7 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
           )
         : {},
     edgePlanByLabel: parseEdgePlanByLabel(d.edgePlanByLabel),
+    hashiraByLabel: parseHashiraByLabel(d.hashiraByLabel),
     cfNoteByLabel: parseCfNoteByLabel(d.cfNoteByLabel),
   };
 }
@@ -307,6 +326,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
   const [edgePlanByLabel, setEdgePlanByLabel] = useState<
     Record<string, { axis: 'X' | 'Y'; mm: number }>
   >(() => mergedInitial?.edgePlanByLabel ?? {});
+  const [hashiraByLabel, setHashiraByLabel] = useState<Record<string, EdgeHashiraFormRow>>(
+    () => mergedInitial?.hashiraByLabel ?? {},
+  );
   const [cfNoteByLabel, setCfNoteByLabel] = useState<Record<string, ScaffoldWallCfKey>>(
     () => mergedInitial?.cfNoteByLabel ?? {},
   );
@@ -336,6 +358,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         kaidanPerSide,
         scaffoldWidthPerSide,
         edgePlanByLabel,
+        hashiraByLabel,
         cfNoteByLabel,
       });
     }, 400);
@@ -359,6 +382,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     kaidanPerSide,
     scaffoldWidthPerSide,
     edgePlanByLabel,
+    hashiraByLabel,
     cfNoteByLabel,
   ]);
 
@@ -430,6 +454,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
       habakiCountPerSpan,
       endStopperType,
       kaidanPerSide,
+      edgeHashiraByLabel:
+        Object.keys(hashiraByLabel).length > 0 ? hashiraByLabel : undefined,
     });
   };
 
@@ -463,13 +489,15 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     const closed = verts.length >= 3;
     const mm = signedAxisRunMmFromVertices(verts, edgeIndex, axis, closed);
     setEdgePlanByLabel((prev) => ({ ...prev, [label]: { axis, mm } }));
-  };
-
-  const updateEdgePlanMmForRow = (label: string, mm: number, axis: 'X' | 'Y') => {
-    setEdgePlanByLabel((prev) => {
+    setHashiraByLabel((prev) => {
       const cur = prev[label];
-      const ax = cur?.axis ?? axis;
-      return { ...prev, [label]: { axis: ax, mm: Math.round(mm) } };
+      return {
+        ...prev,
+        [label]: {
+          axis,
+          countStr: cur?.countStr ?? '',
+        },
+      };
     });
   };
 
@@ -517,6 +545,18 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
           changed = true;
         }
       }
+      for (const k of Object.keys(next)) {
+        if (!sidesList.some((s) => s.label === k)) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setHashiraByLabel((prev) => {
+      const next = { ...prev };
+      let changed = false;
       for (const k of Object.keys(next)) {
         if (!sidesList.some((s) => s.label === k)) {
           delete next[k];
@@ -625,7 +665,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeSideColumn')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeLengthMm')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planAxisColumn')}</th>
-                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planRunMm')}</th>
+                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planGridStations')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">CF</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'scaffoldWidth')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'stairAccess')}</th>
@@ -639,6 +679,15 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   const plan =
                     edgePlanByLabel[side.label] ??
                     inferred ?? { axis: 'X' as const, mm: 0 };
+                  const hr = hashiraByLabel[side.label];
+                  const stationParsed =
+                    hr?.countStr?.trim() === '' || hr?.countStr == null
+                      ? Number.NaN
+                      : parseInt(hr.countStr, 10);
+                  const stationEnd =
+                    Number.isFinite(stationParsed) && stationParsed >= 1 && stationParsed <= 10
+                      ? stationParsed
+                      : null;
                   const cfVal = normalizeScaffoldWallCfKey(cfNoteByLabel[side.label]);
                   return (
                     <tr key={`${side.label}-${i}`} className="border-b border-gray-100 last:border-0 align-middle">
@@ -671,47 +720,38 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                           <option value="Y">Y</option>
                         </select>
                       </td>
-                      <td className="py-2 px-2">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            value={
-                              edgePlanRunMagnitudeMm(plan.mm) > 0
-                                ? Math.round(mmToM(edgePlanRunMagnitudeMm(plan.mm)) * 10000) / 10000
-                                : ''
-                            }
-                            onChange={(e) => {
-                              const magMm = parsePositiveMetersToMm(e.target.value);
-                              if (magMm == null) return;
-                              updateEdgePlanMmForRow(
-                                side.label,
-                                composeEdgePlanAxisMm(magMm, edgePlanRunSign(plan.mm)),
-                                plan.axis,
-                              );
-                            }}
-                            className="w-20 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
-                            step={0.01}
-                            title={(t('scaffoldExtra', 'edgePlanRunPositiveHint') as string) || ''}
-                          />
+                      <td className="py-2 px-2 align-top">
+                        <div className="flex flex-col gap-0.5 min-w-[5.5rem]">
                           <select
-                            value={edgePlanRunSign(plan.mm) === 1 ? 'plus' : 'minus'}
+                            value={stationEnd != null ? String(stationEnd) : ''}
                             onChange={(e) => {
-                              const sign = e.target.value === 'plus' ? 1 : -1;
-                              const mag = edgePlanRunMagnitudeMm(plan.mm);
-                              updateEdgePlanMmForRow(
-                                side.label,
-                                composeEdgePlanAxisMm(mag || 0, sign),
-                                plan.axis,
-                              );
+                              const v = e.target.value;
+                              setHashiraByLabel((prev) => ({
+                                ...prev,
+                                [side.label]: {
+                                  axis: plan.axis,
+                                  countStr: v === '' ? '' : v,
+                                },
+                              }));
                             }}
-                            title={(t('scaffoldExtra', 'edgePlanRunDirection') as string) || ''}
-                            className="w-[3.25rem] rounded border border-gray-300 px-1 py-1 text-[11px] font-mono font-semibold bg-white"
+                            title={(t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''}
+                            className="w-full rounded border border-gray-300 px-1.5 py-1 text-xs bg-white font-mono"
                           >
-                            <option value="plus">{edgePlanRunDirectionLabel(plan.axis, 1)}</option>
-                            <option value="minus">{edgePlanRunDirectionLabel(plan.axis, -1)}</option>
+                            <option value="">
+                              {t('quickBuilder', 'planGridStationsPlaceholder')}
+                            </option>
+                            {QUICK_SHAPE_STATION_OPTIONS.map((n) => (
+                              <option key={n} value={n}>
+                                {plan.axis}1–{plan.axis}
+                                {n}
+                              </option>
+                            ))}
                           </select>
-                          <span className="text-xs text-gray-500">{mUnit}</span>
+                          {stationEnd != null ? (
+                            <span className="text-[10px] font-mono text-blue-800 font-semibold">
+                              {`${plan.axis}1\u2013${plan.axis}${stationEnd}`}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td className="py-2 px-2">

@@ -60,6 +60,40 @@ export function normalizeEdgeHashiraForWallCount(
 
 export type EdgeHashiraFormRow = { axis: '' | 'X' | 'Y'; countStr: string };
 
+/**
+ * Build API labeling from chord labels (e.g. quick shape) in wall order.
+ * `rowsByLabel` keys are edge names like `AB`; values are axis + end station index string.
+ */
+export function edgeHashiraLabelingFromSideLabels(
+  sideLabelsInOrder: string[],
+  rowsByLabel: Record<string, EdgeHashiraFormRow> | undefined,
+  options?: { maxStation?: number },
+): EdgeHashiraLabeling | undefined {
+  if (!rowsByLabel || sideLabelsInOrder.length === 0) return undefined;
+  const cap = options?.maxStation ?? 500;
+  const assignments: EdgeHashiraAxisAssignment[] = sideLabelsInOrder.map((label, wallIndex) => {
+    const row = rowsByLabel[label] ?? { axis: '' as const, countStr: '' };
+    const raw = row.countStr.trim();
+    const n = raw === '' ? undefined : parseInt(raw, 10);
+    const axis = row.axis === 'X' || row.axis === 'Y' ? row.axis : ('' as const);
+    const labelCount =
+      n != null && Number.isFinite(n) && n > 0 ? Math.min(cap, Math.floor(n)) : undefined;
+    return {
+      wallIndex,
+      axis,
+      ...(labelCount != null ? { labelCount } : {}),
+    };
+  });
+  const hasAny = assignments.some(
+    (a) =>
+      a.axis === 'X' ||
+      a.axis === 'Y' ||
+      (a.labelCount != null && a.labelCount > 0),
+  );
+  if (!hasAny) return undefined;
+  return { assignments };
+}
+
 function rowsToLabelingAll(rows: EdgeHashiraFormRow[]): EdgeHashiraLabeling {
   return {
     assignments: rows.map((row, wi) => {

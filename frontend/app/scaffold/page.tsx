@@ -68,7 +68,10 @@ import {
   SCAFFOLD_WALL_CF_KEYS,
   type ScaffoldWallCfKey,
 } from '@/lib/scaffold-wall-cf-options';
-import { EDGE_HASHIRA_STATION_SELECT_MAX } from '@/lib/edge-hashira-labels';
+import {
+  EDGE_HASHIRA_STATION_SELECT_MAX,
+  edgeHashiraLabelingFromSideLabels,
+} from '@/lib/edge-hashira-labels';
 import {
   SCAFFOLD_WIZARD_DRAFT_KEY,
   WIZARD_DRAFT_MAX_AGE_MS,
@@ -1801,6 +1804,12 @@ function ScaffoldPageContent() {
     if (wallInputs.length === 0 || wallInputs.length !== vertices.length) return; // ensure closed loop
 
     const buildingOutline = vertices;
+    const sideLabels = qConfig.sides.map((s) => s.label);
+    const edgeHashiraLabeling = edgeHashiraLabelingFromSideLabels(
+      sideLabels,
+      qConfig.edgeHashiraByLabel,
+      { maxStation: 10 },
+    );
 
     const dto: CreateScaffoldConfigDto = {
       projectId: 'default-project',
@@ -1821,6 +1830,7 @@ function ScaffoldPageContent() {
         endStopperType: qConfig.endStopperType,
       }),
       inputUiPath: 'quick',
+      ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
     };
     calculateMutation.mutate({ dto, configId: null });
   };

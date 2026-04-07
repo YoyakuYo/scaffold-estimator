@@ -1516,9 +1516,9 @@ export const translations = {
     stepShape: { ja: '形状選択', en: 'Shape Selection', fr: 'Shape Selection' },
     stepFootprint: { ja: '外形', en: 'Footprint', fr: 'Empreinte' },
     stepEdges: {
-      ja: '辺ごとの寸法・軸・走行・CF',
-      en: 'Edges: length, axis, plan run & CF',
-      fr: 'Arêtes : longueur, axe, course au plan et CF',
+      ja: '辺ごとの寸法・軸・グリッド（X1–X10 等）・CF',
+      en: 'Edges: length, axis, grid (X1–X10, etc.) & CF',
+      fr: 'Arêtes : longueur, axe, grille (X1–X10, etc.) et CF',
     },
     stepHeight: { ja: '建物高さ', en: 'Building Height', fr: 'Building Height' },
     stepConfig: { ja: '足場設定', en: 'Scaffold Config', fr: 'Scaffold Config' },
@@ -1566,10 +1566,15 @@ export const translations = {
     edgeSideColumn: { ja: '辺', en: 'Edge', fr: 'Arête' },
     edgeLengthMm: { ja: '長さ (m)', en: 'Length (m)', fr: 'Longueur (m)' },
     planAxisColumn: { ja: '軸', en: 'Axis', fr: 'Axe' },
-    planRunMm: {
-      ja: '走行の長さ・向き (m)',
-      en: 'Run length & direction (m)',
-      fr: 'Longueur et sens de course (m)',
+    planGridStations: {
+      ja: 'グリッド（X1–X10 / Y1–Y10）',
+      en: 'Grid (X1–X10 / Y1–Y10)',
+      fr: 'Grille (X1–X10 / Y1–Y10)',
+    },
+    planGridStationsPlaceholder: {
+      ja: '選択…',
+      en: 'Choose…',
+      fr: 'Choisir…',
     },
     stairUnits: { ja: '台数', en: 'Units', fr: 'Units' },
     summaryTitle: { ja: '設定概要', en: 'Configuration Summary', fr: 'Configuration Summary' },
