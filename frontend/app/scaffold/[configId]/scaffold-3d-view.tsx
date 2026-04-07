@@ -919,8 +919,6 @@ export default function Scaffold3DView({
           }
         }
 
-        // Base yokoji (根がらみ) removed — no yokoji on ground base in 3D view.
-
         // ── Stair positions ────────────────────────────
         let uniqueStairPos: number[] = [];
         if (kaidanSpanIndices.length > 0) {
@@ -936,6 +934,59 @@ export default function Scaffold3DView({
             if (!uniqueStairPos.includes(clamped)) uniqueStairPos.push(clamped);
           }
           uniqueStairPos.sort((a, b) => a - b);
+        }
+
+        // ── Base negarami (根がらみ) — base level only; same elevation band as first lift 下桟 offset ─────
+        const negY = postBaseY + 0.05;
+        const negOverhang = 0.06;
+        const innerPostAtNeg = (pi: number): boolean => {
+          if (isBracket) return false;
+          if (pi < startPostIdx) return false;
+          if (pi === 0 && skipInnerAtStart) return false;
+          if (pi === postX.length - 1 && skipInnerAtEnd) return false;
+          return true;
+        };
+        for (let pi = 0; pi < postX.length; pi++) {
+          if (pi < startPostIdx) continue;
+          const px = postX[pi];
+          const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+          if (skipInner) continue;
+          if (isBracket) {
+            addPipe(group, px, negY, widthM, px, negY, 0, bracketMat, PIPE_R * 0.8);
+          } else {
+            addPipe(group, px, negY, -negOverhang, px, negY, widthM + negOverhang, yokojiMat, PIPE_R * 1.1);
+            addCoupler(THREE, group, px, negY, 0, couplerMat);
+            addCoupler(THREE, group, px, negY, widthM, couplerMat);
+          }
+        }
+        for (let i = startSpanIdx; i < spans.length; i++) {
+          if (doorSpanIndices.has(i)) continue;
+          const x1 = postX[i];
+          const x2 = postX[i + 1];
+          addPipe(group, x1, negY, 0, x2, negY, 0, yokojiMat, isBracket ? PIPE_R * 0.85 : PIPE_R * 1.0);
+        }
+        if (!isBracket) {
+          for (let i = startSpanIdx; i < spans.length; i++) {
+            if (doorSpanIndices.has(i)) continue;
+            if (!innerPostAtNeg(i) || !innerPostAtNeg(i + 1)) continue;
+            const x1 = postX[i];
+            const x2 = postX[i + 1];
+            addPipe(group, x1, negY, widthM, x2, negY, widthM, yokojiMat, PIPE_R * 1.0);
+          }
+        }
+        if (needsExtendedBay && uniqueStairPos.length > 0) {
+          const extZNeg = -0.9;
+          for (const stairSpanIdx of uniqueStairPos) {
+            if (stairSpanIdx < startSpanIdx || stairSpanIdx >= spans.length) continue;
+            const sx1 = postX[stairSpanIdx];
+            const sx2 = postX[stairSpanIdx + 1];
+            const sMidX = (sx1 + sx2) / 2;
+            addPipe(group, sx1, negY, extZNeg, sMidX, negY, extZNeg, yokojiMat, PIPE_R * 1.0);
+            addPipe(group, sMidX, negY, extZNeg, sx2, negY, extZNeg, yokojiMat, PIPE_R * 1.0);
+            for (const epx of [sx1, sMidX, sx2]) {
+              addPipe(group, epx, negY, extZNeg, epx, negY, 0, yokojiMat, PIPE_R * 1.05);
+            }
+          }
         }
 
         // ── Per-level components: working levels above ground (y = ground + jack + level height), not building floor level ───────────────────────
