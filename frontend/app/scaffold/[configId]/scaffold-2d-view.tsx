@@ -26,8 +26,6 @@ const TESURI_STROKE = 2.5;
 const PLANK_H_PX = 8;
 const HABAKI_H_PX = 6;
 const DIMENSION_OFFSET = 28;
-const FRAME_WIDTH_PX = 14;
-
 // ─── Colors (clean technical drawing for estimation/quotation) ────
 const COL = {
   post: '#0f172a',      // 支柱 — dark, primary structure
@@ -365,37 +363,19 @@ export default function Scaffold2DView({ result }: Props) {
         </text>
       );
 
-      // Posts / Frames
+      // Posts — 枠組: simple post line only (same symbol as くさび支柱); くさび unchanged.
       postXPositions.forEach((px, pi) => {
-        if (isWakugumi) {
-          // Wakugumi: 門型建枠 — top bar + two vertical legs; all three segments meet at 90° (no splay).
-          const halfW = FRAME_WIDTH_PX / 2;
-          const topLX = x(px) - halfW;
-          const topRX = x(px) + halfW;
-          elements.push(
-            <g key={`frame-${lvl}-${pi}`}>
-              <line x1={topLX} y1={y(topY)} x2={topLX} y2={y(baseY)}
-                stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
-              <line x1={topRX} y1={y(topY)} x2={topRX} y2={y(baseY)}
-                stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
-              <line x1={topLX} y1={y(topY)} x2={topRX} y2={y(topY)}
-                stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
-            </g>
-          );
-        } else {
-          // Kusabi: single vertical post line
-          elements.push(
-            <line
-              key={`post-${lvl}-${pi}`}
-              x1={x(px)}
-              y1={y(baseY)}
-              x2={x(px)}
-              y2={y(topY)}
-              stroke={COL.post}
-              strokeWidth={POST_STROKE}
-            />
-          );
-        }
+        elements.push(
+          <line
+            key={`post-${lvl}-${pi}`}
+            x1={x(px)}
+            y1={y(baseY)}
+            x2={x(px)}
+            y2={y(topY)}
+            stroke={isWakugumi ? COL.frame : COL.post}
+            strokeWidth={POST_STROKE}
+          />
+        );
       });
 
       // Per span

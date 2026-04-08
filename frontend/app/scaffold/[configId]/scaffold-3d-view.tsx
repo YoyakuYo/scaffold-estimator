@@ -41,8 +41,8 @@ import { fitSpansToWallLengthWithCornerWakugumi } from '@/lib/wakugumi-corner-sp
  * wall’s terminal bay. 枠組: each wall meshes its own corner frame (startPostIdx=0 when a corner layout applies).
  * Corner placement uses postX[last] along local +X from the vertex, not (postX[last]−postX[0]), so the
  * terminal bay and 端部 align with the steel (the −300mm overrun lives in negative postX[0]).
- * Visualization-only: for 枠組, the wall group origin is shifted slightly along the wall into the first bay
- * at polygon corners so the next wall’s frames read in front of the previous wall’s inner row (small visible gap).
+ * Visualization-only (枠組のみ): wall group origin shifts along +edge at corner starts so corner posts read as a
+ * distinct polygon (gap vs kusabi, which is unchanged).
  */
 
 const PIPE_R = 0.024;
@@ -60,10 +60,10 @@ const CORNER_OVERRUN_M = 0.3;
  */
 const WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M = 0.002 / Math.SQRT2;
 /**
- * Closed polygon: shift whole wall scaffold along +edge (into the first span) at a corner start so the
- * first frames of wall B sit clearly ahead of wall A’s terminal bay (visual gap only; BOM unchanged).
+ * Closed polygon (wakugumi only): shift whole wall scaffold along +edge at a corner start so adjacent wall
+ * posts separate visibly and read as a polygon vertex (larger than eco-only offset; BOM unchanged).
  */
-const WAKUGUMI_CORNER_WALL_ORIGIN_GAP_M = 0.05;
+const WAKUGUMI_CORNER_WALL_ORIGIN_GAP_M = 0.2;
 /** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
