@@ -1881,6 +1881,16 @@ export const translations = {
       en: 'Footprint cleared. Trace again on this drawing or choose another file above.',
       fr: 'Contour effacé. Retracez sur ce plan ou choisissez un autre fichier.',
     },
+    drawingUploadFullImageRejected: {
+      ja: '検出された外形が画像全体の枠に一致しました。平面図の建物外周をクリックしてトレースしてください。',
+      en: 'Detected outline matched the image border, not the building. Click along the plan exterior to trace the footprint.',
+      fr: 'Le contour détecté correspond au bord de l’image, pas au bâtiment. Cliquez le long du pourtour du plan.',
+    },
+    drawingUploadZoomUnlockHint: {
+      ja: '拡大/縮小ボタンでビュー操作（ホイール・右ドラッグ）を有効にします。',
+      en: 'Click zoom + or − to enable wheel zoom and right-drag pan on the preview.',
+      fr: 'Cliquez sur + ou − pour activer la molette et le panoramique (clic droit) sur l’aperçu.',
+    },
     scaffoldType: { ja: '足場タイプ', en: 'Scaffold Type', fr: 'Scaffold Type' },
     frameSize: { ja: '建枠サイズ', en: 'Frame Size', fr: 'Frame Size' },
     frameSizeHint: { ja: 'レベル高さ = 建枠サイズ', en: 'Level height = frame size', fr: 'Level height = frame size' },

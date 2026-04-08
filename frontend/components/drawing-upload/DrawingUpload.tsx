@@ -171,6 +171,62 @@ function bbox(pts: Vertex[], extra?: Seg[]): { x: number; y: number; w: number; 
   return { x: x0 - pad, y: y0 - pad, w: w + 2 * pad, h: h + 2 * pad };
 }
 
+/** Shoelace area (absolute) — detects footprint size vs image even for skewed quads */
+function polygonAreaAbs(verts: readonly Vertex[]): number {
+  const n = verts.length;
+  if (n < 3) return 0;
+  let a = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    a += verts[i]!.x * verts[j]!.y - verts[j]!.x * verts[i]!.y;
+  }
+  return Math.abs(a / 2);
+}
+
+/**
+ * Vision/OCR often returns a rectangle around the whole raster (0–1 or pixel bounds).
+ * That is not the building exterior — switch user to manual trace.
+ */
+function isLikelyFullImageBoundsFootprint(verts: Vertex[], imgW: number, imgH: number): boolean {
+  if (verts.length !== 4 || imgW <= 0 || imgH <= 0) return false;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const v of verts) {
+    minX = Math.min(minX, v.x);
+    minY = Math.min(minY, v.y);
+    maxX = Math.max(maxX, v.x);
+    maxY = Math.max(maxY, v.y);
+  }
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) return false;
+
+  const fracSpace = maxX <= 1.5 && maxY <= 1.5 && minX >= -0.1 && minY >= -0.1;
+  if (fracSpace) {
+    const touchesUnitFrame =
+      minX <= 0.06 && minY <= 0.06 && maxX >= 0.94 && maxY >= 0.94;
+    const a = polygonAreaAbs(verts);
+    return touchesUnitFrame && a > 0.72;
+  }
+
+  const iw = imgW;
+  const ih = imgH;
+  const pixelLike = maxX <= iw * 1.05 && maxY <= ih * 1.05 && minX >= -iw * 0.02 && minY >= -ih * 0.02;
+  if (!pixelLike) return false;
+
+  const touchesImageEdges =
+    minX <= iw * 0.035 &&
+    minY <= ih * 0.035 &&
+    maxX >= iw * 0.965 &&
+    maxY >= ih * 0.965;
+  const imgArea = iw * ih;
+  const a = polygonAreaAbs(verts);
+  const areaRatio = imgArea > 0 ? a / imgArea : 0;
+  return touchesImageEdges && areaRatio > 0.68;
+}
+
 function svgPt(e: React.MouseEvent, svg: SVGSVGElement): Vertex | null {
   const pt = svg.createSVGPoint();
   pt.x = e.clientX;
@@ -243,6 +299,8 @@ export function DrawingUpload({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
+  /** Wheel zoom + right-drag pan only after user clicks zoom +/− (preview stays fixed otherwise). */
+  const [previewViewUnlocked, setPreviewViewUnlocked] = useState(false);
   const previewPanRef = useRef(previewPan);
   previewPanRef.current = previewPan;
   const [svgRightPan, setSvgRightPan] = useState<{
@@ -617,6 +675,7 @@ export function DrawingUpload({
     setShape({ verts: [], wallMm: [], coordsAreMm: false });
     setBgSegs([]);
     setTracing(false);
+    setPreviewViewUnlocked(false);
 
     if (fk === 'image') setPreviewUrl(URL.createObjectURL(f));
     else setPreviewUrl(null);
@@ -659,6 +718,7 @@ export function DrawingUpload({
     setDragIdx(null);
     setPendingDimIdx(null);
     setPendingDimVal('');
+    setPreviewViewUnlocked(false);
     perimeterModel.clear();
     onWallsDetected([]);
     if (persistSession) void clearDrawingUploadSession();
@@ -680,7 +740,42 @@ export function DrawingUpload({
   useEffect(() => {
     setPreviewZoom(1);
     setPreviewPan({ x: 0, y: 0 });
+    setPreviewViewUnlocked(false);
   }, [vb.x, vb.y, vb.w, vb.h]);
+
+  // Reject AI/OCR "footprint" that is just the image frame (whole file rectangle).
+  const vertsFingerprint =
+    shape.verts.length === 4
+      ? shape.verts.map((v) => `${v.x},${v.y}`).join('|')
+      : '';
+
+  useEffect(() => {
+    if (phase !== 'editor' || !previewUrl || !imgSize || kind !== 'image') return;
+    if (tracing) return;
+    if (shape.verts.length !== 4 || !vertsFingerprint) return;
+    const maxC = shape.verts.reduce((m, v) => Math.max(m, Math.abs(v.x), Math.abs(v.y)), 0);
+    if (shape.coordsAreMm && maxC > Math.max(imgSize.w, imgSize.h) * 3) return;
+    if (!isLikelyFullImageBoundsFootprint(shape.verts, imgSize.w, imgSize.h)) return;
+    setShape({ verts: [], wallMm: [], coordsAreMm: false });
+    setTracing(true);
+    setStatus(
+      t('scaffoldExtra', 'drawingUploadFullImageRejected')
+      || 'Detected outline matched the image border, not the building. Trace the plan exterior.',
+    );
+    perimeterModel.clear();
+    onWallsDetected([]);
+  }, [
+    phase,
+    previewUrl,
+    imgSize,
+    kind,
+    tracing,
+    vertsFingerprint,
+    shape.coordsAreMm,
+    t,
+    perimeterModel,
+    onWallsDetected,
+  ]);
 
   const displayVb = useMemo(
     () => zoomPanViewBox(vb, previewZoom, previewPan),
@@ -702,20 +797,28 @@ export function DrawingUpload({
     setDragIdx(i);
   }, []);
 
-  const onSvgWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    setPreviewZoom((z) => Math.min(8, Math.max(0.25, z * factor)));
-  }, []);
+  const onSvgWheel = useCallback(
+    (e: React.WheelEvent<SVGSVGElement>) => {
+      e.preventDefault();
+      if (!previewViewUnlocked) return;
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      setPreviewZoom((z) => Math.min(8, Math.max(0.25, z * factor)));
+    },
+    [previewViewUnlocked],
+  );
 
-  const onSvgDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (e.button !== 2) return;
-    e.preventDefault();
-    if (!svgRef.current) return;
-    const c = svgPt(e, svgRef.current);
-    if (!c) return;
-    setSvgRightPan({ startWorld: c, pan0: { ...previewPanRef.current } });
-  }, [tracing]);
+  const onSvgDown = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.button !== 2) return;
+      e.preventDefault();
+      if (!previewViewUnlocked) return;
+      if (!svgRef.current) return;
+      const c = svgPt(e, svgRef.current);
+      if (!c) return;
+      setSvgRightPan({ startWorld: c, pan0: { ...previewPanRef.current } });
+    },
+    [tracing, previewViewUnlocked],
+  );
 
   const onSvgMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (dragIdx !== null && svgRef.current) {
@@ -866,15 +969,28 @@ export function DrawingUpload({
           )}
 
           {(hasSvg || (previewUrl && imgSize)) && (
-            <div className="absolute top-2 right-2 z-10">
+            <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1 max-w-[min(100%,220px)]">
               <PreviewZoomToolbar
-                onZoomIn={() => setPreviewZoom((z) => Math.min(8, z * 1.15))}
-                onZoomOut={() => setPreviewZoom((z) => Math.max(0.25, z / 1.15))}
+                onZoomIn={() => {
+                  setPreviewViewUnlocked(true);
+                  setPreviewZoom((z) => Math.min(8, z * 1.15));
+                }}
+                onZoomOut={() => {
+                  setPreviewViewUnlocked(true);
+                  setPreviewZoom((z) => Math.max(0.25, z / 1.15));
+                }}
                 onReset={() => {
                   setPreviewZoom(1);
                   setPreviewPan({ x: 0, y: 0 });
+                  setPreviewViewUnlocked(false);
                 }}
               />
+              {!previewViewUnlocked && (
+                <p className="text-[10px] text-gray-600 bg-white/90 border border-gray-200 rounded px-2 py-1 shadow-sm leading-snug text-right">
+                  {t('scaffoldExtra', 'drawingUploadZoomUnlockHint')
+                  || 'Click zoom + or − to enable wheel zoom and right-drag pan.'}
+                </p>
+              )}
             </div>
           )}
 
