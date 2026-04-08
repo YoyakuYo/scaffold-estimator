@@ -823,8 +823,6 @@ export default function Scaffold3DView({
         flushDeckAtCornerEnd?: boolean,
         /** Non-L corners: place steel at local postX[0] instead of skipping (reuse with previous wall). */
         doublePostAtCornerStart?: boolean,
-        /** Multi-wall: compress only bays between first/last span; leave corner bays unchanged. */
-        mergeInteriorSpansOnly?: boolean,
       ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
         const rawWidthMm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM;
         const widthMm = normalizeScaffoldWidthMmToCatalog(rawWidthMm);
@@ -833,10 +831,7 @@ export default function Scaffold3DView({
         const baseSpansRaw = Array.isArray(wall.spans) && wall.spans.length > 0
           ? wall.spans
           : [Math.max(600, Number(wall.wallLengthMm) || 600)];
-        // Interior-only merge keeps first/last bays aligned with corner rules; open/single-wall uses full row.
-        const allSpans: number[] = finalizeWallSpansForThreeD(baseSpansRaw, {
-          onlyInterior: Boolean(mergeInteriorSpansOnly && baseSpansRaw.length >= 3),
-        });
+        const allSpans: number[] = finalizeWallSpansForThreeD(baseSpansRaw);
         // Closed polygon: [1829, …middle…, terminal = catalog 610/914/1219]; sum = wallLength+300+terminal.
         const spans = maxSpans != null && maxSpans < allSpans.length
           ? capSpansFor3dPreview(allSpans, maxSpans)
@@ -2283,7 +2278,6 @@ export default function Scaffold3DView({
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        const mergeInteriorSpansOnly = walls.length >= 2 && (wall.spans?.length ?? 0) >= 3;
         const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
@@ -2293,7 +2287,6 @@ export default function Scaffold3DView({
           cornerStart,
           flushDeckAtCornerEnd,
           doublePostAtCornerStart,
-          mergeInteriorSpansOnly,
         );
 
         const isCornerConnected =

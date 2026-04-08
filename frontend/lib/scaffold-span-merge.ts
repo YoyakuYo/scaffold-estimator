@@ -1,8 +1,9 @@
 /**
  * Mirror of backend `scaffold-rules.ts` span compression for 3D display only.
- * When `onlyInterior` is true (multi-wall layouts), first and last bays are left unchanged;
- * only the spans **between** them are merged (914+914→1829, etc.) — corner/start/terminal bays untouched.
- * Keep logic aligned with `backend/src/modules/scaffold-config/scaffold-rules.ts`.
+ * **First and last bays are never merged** with neighbors so post lines match the real layout
+ * (e.g. 610+1219→1829 must not absorb the width-module terminal bay into the previous span).
+ * Only interior runs are compressed (914+914→1829, catalog sums, etc.).
+ * Keep interior merge rules aligned with `backend/src/modules/scaffold-config/scaffold-rules.ts`.
  */
 
 export const SPAN_SIZES_MM = [610, 914, 1219, 1524, 1829] as const;
@@ -71,20 +72,14 @@ export function finalizeStandardSpanRowWithNominal(spans: readonly number[]): nu
   return out;
 }
 
-/**
- * @param onlyInterior — if true and length ≥ 3, merge only `spans[1..n-2]`; never merge end bays with neighbors.
- */
-export function finalizeWallSpansForThreeD(
-  spans: readonly number[],
-  options: { onlyInterior: boolean },
-): number[] {
+/** Merge interior catalog spans only; preserve leading and terminal bays for correct 3D posts. */
+export function finalizeWallSpansForThreeD(spans: readonly number[]): number[] {
   const s = [...spans];
   if (s.length === 0) return s;
-  if (options.onlyInterior && s.length >= 3) {
-    const first = s[0]!;
-    const last = s[s.length - 1]!;
-    const mid = s.slice(1, -1);
-    return [first, ...finalizeStandardSpanRowWithNominal(mid), last];
-  }
-  return finalizeStandardSpanRowWithNominal(s);
+  if (s.length === 1) return finalizeStandardSpanRowWithNominal(s);
+  const first = s[0]!;
+  const last = s[s.length - 1]!;
+  if (s.length === 2) return [first, last];
+  const mid = s.slice(1, -1);
+  return [first, ...finalizeStandardSpanRowWithNominal(mid), last];
 }
