@@ -343,14 +343,16 @@ export default function Scaffold2DView({ result }: Props) {
       });
     }
 
-    // Base Yokoji
-    spans.forEach((span, si) => {
-      const xStart = postXPositions[si];
-      elements.push(
-        <line key={`by-${si}`} x1={x(xStart)} y1={y(JACK_BASE_H)} x2={x(xStart + span)} y2={y(JACK_BASE_H)}
-          stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" />
-      );
-    });
+    // Base Yokoji (kusabi negarami — not used for wakugumi)
+    if (!isWakugumi) {
+      spans.forEach((span, si) => {
+        const xStart = postXPositions[si];
+        elements.push(
+          <line key={`by-${si}`} x1={x(xStart)} y1={y(JACK_BASE_H)} x2={x(xStart + span)} y2={y(JACK_BASE_H)}
+            stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" />
+        );
+      });
+    }
 
     // Per-Level Content (枠組+上部: もう一段の建枠を levelsDraw で表現)
     Array.from({ length: levelsDraw }).forEach((_, lvl) => {
@@ -578,14 +580,16 @@ export default function Scaffold2DView({ result }: Props) {
         }
       });
 
-      // Width yokoji
-      postXPositions.forEach((px, pi) => {
-        elements.push(
-          <line key={`wyk-${lvl}-${pi}`}
-            x1={x(px) - 4} y1={y(topY)} x2={x(px) + 4} y2={y(topY)}
-            stroke={COL.yokoji} strokeWidth={2.5} />
-        );
-      });
+      // Width yokoji (kusabi — not for wakugumi)
+      if (!isWakugumi) {
+        postXPositions.forEach((px, pi) => {
+          elements.push(
+            <line key={`wyk-${lvl}-${pi}`}
+              x1={x(px) - 4} y1={y(topY)} x2={x(px) + 4} y2={y(topY)}
+              stroke={COL.yokoji} strokeWidth={2.5} />
+          );
+        });
+      }
     });
 
     // Top Guard Posts / band（くさびのみ。枠組は上で +1 段の建枠として描画済み）
@@ -1016,7 +1020,6 @@ export default function Scaffold2DView({ result }: Props) {
                   { color: COL.plank, label: t('result', 'legendPlank') },
                   { color: COL.habaki, label: t('result', 'legendHabaki') },
                   { color: COL.endStopper, label: t('result', 'legendStopper') },
-                  { color: COL.yokoji, label: t('result', 'legendYokoji') },
                   { color: COL.topGuard, label: t('result', 'legendTopGuard') },
                   { color: COL.jackBase, label: t('result', 'legendJackBase') },
                   { color: COL.stair, label: t('result', 'legendStair') },
@@ -1070,7 +1073,6 @@ export default function Scaffold2DView({ result }: Props) {
                   { color: COL.plank, label: t('result', 'legendPlank') },
                   { color: COL.habaki, label: t('result', 'legendHabaki') },
                   { color: COL.endStopper, label: t('result', 'legendStopper') },
-                  { color: COL.yokoji, label: t('result', 'legendYokoji') },
                   { color: COL.topGuard, label: t('result', 'legendTopGuard') },
                   { color: COL.jackBase, label: t('result', 'legendJackBase') },
                   { color: COL.stair, label: t('result', 'legendStair') },

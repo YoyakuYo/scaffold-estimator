@@ -977,59 +977,61 @@ export default function Scaffold3DView({
           uniqueStairPos.sort((a, b) => a - b);
         }
 
-        // ── Base negarami (根がらみ) — base level only; same elevation band as first lift 下桟 offset ─────
-        const negY = postBaseY + 0.05;
-        const negOverhang = 0.06;
-        /**
-         * Inner row at post line `pi` for span-direction 根がらみ. Does not use `startPostIdx`: at polygon corners
-         * the first bay (e.g. 1829 mm lead span) still gets inner negarami in local X even when post[0] steel is
-         * meshed on the adjacent wall.
-         */
-        const innerRowAtPostIndexForSpanNegarami = (pi: number): boolean => {
-          if (isBracket) return false;
-          if (pi === 0 && skipInnerAtStart) return false;
-          if (pi === postX.length - 1 && skipInnerAtEnd) return false;
-          return true;
-        };
-        for (let pi = 0; pi < postX.length; pi++) {
-          if (pi < startPostIdx) continue;
-          const px = postX[pi];
-          const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
-          if (skipInner) continue;
-          if (isBracket) {
-            addPipe(group, px, negY, widthM, px, negY, 0, bracketMat, PIPE_R * 0.8);
-          } else {
-            addPipe(group, px, negY, -negOverhang, px, negY, widthM + negOverhang, yokojiMat, PIPE_R * 1.1);
-            addCoupler(THREE, group, px, negY, 0, couplerMat);
-            addCoupler(THREE, group, px, negY, widthM, couplerMat);
+        // ── Base negarami (根がらみ) — kusabi only; wakugumi has no negarami ─────
+        if (!isWakugumi) {
+          const negY = postBaseY + 0.05;
+          const negOverhang = 0.06;
+          /**
+           * Inner row at post line `pi` for span-direction 根がらみ. Does not use `startPostIdx`: at polygon corners
+           * the first bay (e.g. 1829 mm lead span) still gets inner negarami in local X even when post[0] steel is
+           * meshed on the adjacent wall.
+           */
+          const innerRowAtPostIndexForSpanNegarami = (pi: number): boolean => {
+            if (isBracket) return false;
+            if (pi === 0 && skipInnerAtStart) return false;
+            if (pi === postX.length - 1 && skipInnerAtEnd) return false;
+            return true;
+          };
+          for (let pi = 0; pi < postX.length; pi++) {
+            if (pi < startPostIdx) continue;
+            const px = postX[pi];
+            const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+            if (skipInner) continue;
+            if (isBracket) {
+              addPipe(group, px, negY, widthM, px, negY, 0, bracketMat, PIPE_R * 0.8);
+            } else {
+              addPipe(group, px, negY, -negOverhang, px, negY, widthM + negOverhang, yokojiMat, PIPE_R * 1.1);
+              addCoupler(THREE, group, px, negY, 0, couplerMat);
+              addCoupler(THREE, group, px, negY, widthM, couplerMat);
+            }
           }
-        }
-        for (let i = startSpanIdx; i < spans.length; i++) {
-          if (doorSpanIndices.has(i)) continue;
-          const x1 = postX[i];
-          const x2 = postX[i + 1];
-          addPipe(group, x1, negY, 0, x2, negY, 0, yokojiMat, isBracket ? PIPE_R * 0.85 : PIPE_R * 1.0);
-        }
-        if (!isBracket) {
           for (let i = startSpanIdx; i < spans.length; i++) {
             if (doorSpanIndices.has(i)) continue;
-            if (!innerRowAtPostIndexForSpanNegarami(i) || !innerRowAtPostIndexForSpanNegarami(i + 1)) continue;
             const x1 = postX[i];
             const x2 = postX[i + 1];
-            addPipe(group, x1, negY, widthM, x2, negY, widthM, yokojiMat, PIPE_R * 1.0);
+            addPipe(group, x1, negY, 0, x2, negY, 0, yokojiMat, isBracket ? PIPE_R * 0.85 : PIPE_R * 1.0);
           }
-        }
-        if (needsExtendedBay && uniqueStairPos.length > 0) {
-          const extZNeg = -0.9;
-          for (const stairSpanIdx of uniqueStairPos) {
-            if (stairSpanIdx < startSpanIdx || stairSpanIdx >= spans.length) continue;
-            const sx1 = postX[stairSpanIdx];
-            const sx2 = postX[stairSpanIdx + 1];
-            const sMidX = (sx1 + sx2) / 2;
-            addPipe(group, sx1, negY, extZNeg, sMidX, negY, extZNeg, yokojiMat, PIPE_R * 1.0);
-            addPipe(group, sMidX, negY, extZNeg, sx2, negY, extZNeg, yokojiMat, PIPE_R * 1.0);
-            for (const epx of [sx1, sMidX, sx2]) {
-              addPipe(group, epx, negY, extZNeg, epx, negY, 0, yokojiMat, PIPE_R * 1.05);
+          if (!isBracket) {
+            for (let i = startSpanIdx; i < spans.length; i++) {
+              if (doorSpanIndices.has(i)) continue;
+              if (!innerRowAtPostIndexForSpanNegarami(i) || !innerRowAtPostIndexForSpanNegarami(i + 1)) continue;
+              const x1 = postX[i];
+              const x2 = postX[i + 1];
+              addPipe(group, x1, negY, widthM, x2, negY, widthM, yokojiMat, PIPE_R * 1.0);
+            }
+          }
+          if (needsExtendedBay && uniqueStairPos.length > 0) {
+            const extZNeg = -0.9;
+            for (const stairSpanIdx of uniqueStairPos) {
+              if (stairSpanIdx < startSpanIdx || stairSpanIdx >= spans.length) continue;
+              const sx1 = postX[stairSpanIdx];
+              const sx2 = postX[stairSpanIdx + 1];
+              const sMidX = (sx1 + sx2) / 2;
+              addPipe(group, sx1, negY, extZNeg, sMidX, negY, extZNeg, yokojiMat, PIPE_R * 1.0);
+              addPipe(group, sMidX, negY, extZNeg, sx2, negY, extZNeg, yokojiMat, PIPE_R * 1.0);
+              for (const epx of [sx1, sMidX, sx2]) {
+                addPipe(group, epx, negY, extZNeg, epx, negY, 0, yokojiMat, PIPE_R * 1.05);
+              }
             }
           }
         }
@@ -1043,22 +1045,24 @@ export default function Scaffold3DView({
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
           const guardLiftNoDeck = isWakugumi && !isBracket && lv === levelLoopMax;
 
-          // Width yokoji (horizontal bars along scaffold depth) + coupler hints
-          const yokojiOverhang = 0.06;
-          for (let pi = 0; pi < postX.length; pi++) {
-            if (pi < startPostIdx) continue;
-            const px = postX[pi];
-            const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
-            if (skipInner) continue;
-            if (isBracket) {
-              addPipe(group, px, y, widthM, px, y, 0, bracketMat, PIPE_R * 0.8);
-            } else {
-              addPipe(group, px, y - 0.02, -yokojiOverhang, px, y - 0.02, widthM + yokojiOverhang, yokojiMat, PIPE_R * 1.1);
-              addCoupler(THREE, group, px, y, 0, couplerMat);
-              addCoupler(THREE, group, px, y, widthM, couplerMat);
+          // Width yokoji (horizontal bars along scaffold depth) + coupler hints — kusabi only (no negarami / width yokoji for wakugumi)
+          if (!isWakugumi || isBracket) {
+            const yokojiOverhang = 0.06;
+            for (let pi = 0; pi < postX.length; pi++) {
+              if (pi < startPostIdx) continue;
+              const px = postX[pi];
+              const skipInner = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+              if (skipInner) continue;
+              if (isBracket) {
+                addPipe(group, px, y, widthM, px, y, 0, bracketMat, PIPE_R * 0.8);
+              } else {
+                addPipe(group, px, y - 0.02, -yokojiOverhang, px, y - 0.02, widthM + yokojiOverhang, yokojiMat, PIPE_R * 1.1);
+                addCoupler(THREE, group, px, y, 0, couplerMat);
+                addCoupler(THREE, group, px, y, widthM, couplerMat);
+              }
             }
           }
-          if (cornerInnerPostX != null && !isBracket) {
+          if (!isWakugumi && cornerInnerPostX != null && !isBracket) {
             addRealisticNunoBar(THREE, group, cornerInnerPostX, y, 0, runSpanSumM, 0, yokojiMat);
           }
 
@@ -1278,10 +1282,11 @@ export default function Scaffold3DView({
               addPipe(group, epx, GROUND_Y, extZ, epx, GROUND_Y + JACK_H, extZ, jackMatEff, PIPE_R * 0.95);
             }
 
-            // Horizontal bars connecting extended posts to main scaffold at z=0
-            const yokojiY = GROUND_Y + JACK_H + lv * LEVEL_H;
+            // Horizontal bars connecting extended posts to main scaffold at z=0 (brace material for wakugumi — no yokoji/negarami)
+            const tieY = GROUND_Y + JACK_H + lv * LEVEL_H;
+            const extBayTieMat = isWakugumi ? braceMat : yokojiMat;
             for (const epx of [sx1, sx2]) {
-              addPipe(group, epx, yokojiY - 0.02, extZ, epx, yokojiY - 0.02, 0, yokojiMat, PIPE_R * 1.1);
+              addPipe(group, epx, tieY - 0.02, extZ, epx, tieY - 0.02, 0, extBayTieMat, PIPE_R * 1.1);
             }
 
             // Braces on the extended bay outer face
@@ -2504,7 +2509,7 @@ export default function Scaffold3DView({
       // Iterate per tier group so upper-tier corners are connected correctly
       // and walls from different tiers never cross-connect.
       // CORNER CLOSURE RULE: Every adjacent wall pair MUST be connected at the
-      // polygon vertex. L-shaped (~90°) corners get yokoji pipes + deck + habaki.
+      // polygon vertex. L-shaped (~90°) corners: kusabi gets yokoji pipes + deck + habaki; wakugumi has deck + habaki only (no negarami/yokoji ties).
       // Non-90° corners get pattanko filler planks. NO gaps allowed.
 
       const cornerGroup = new THREE.Group();
@@ -2695,10 +2700,12 @@ export default function Scaffold3DView({
 
             for (let lv = 1; lv <= maxLvThisCorner; lv++) {
               const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
-              addPipe(cornerGroup, r2.x, y, r2.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
-              addPipe(cornerGroup, aInnerEnd.x, y, aInnerEnd.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.9);
-              addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
-              addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
+              if (!isWakugumi) {
+                addPipe(cornerGroup, r2.x, y, r2.z, t1.x, y, t1.z, yokojiMat, PIPE_R * 0.9);
+                addPipe(cornerGroup, aInnerEnd.x, y, aInnerEnd.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.9);
+                addPipe(cornerGroup, aOuterEnd.x, y, aOuterEnd.z, aInnerEnd.x, y, aInnerEnd.z, yokojiMat, PIPE_R * 0.8);
+                addPipe(cornerGroup, bOuterStart.x, y, bOuterStart.z, bInnerStart.x, y, bInnerStart.z, yokojiMat, PIPE_R * 0.8);
+              }
 
               const cornerFootprint = [
                 { x: aOuterEnd.x, z: aOuterEnd.z },
