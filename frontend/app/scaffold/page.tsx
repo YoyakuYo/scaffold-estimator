@@ -2685,7 +2685,11 @@ function ScaffoldPageContent() {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-violet-700">{t('scaffold', 'aiBimConditionsTitle')}</span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div
+                          className={`grid grid-cols-1 gap-3 ${
+                            aiBimPreview.scaffoldType === 'wakugumi' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+                          }`}
+                        >
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">{t('scaffold', 'scaffoldTypeLabel')}</label>
                             <select
@@ -2729,24 +2733,18 @@ function ScaffoldPageContent() {
                               <option value="wakugumi">{t('scaffold', 'wakugumiType')}</option>
                             </select>
                           </div>
+                          {aiBimPreview.scaffoldType === 'kusabi' && (
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">{t('scaffold', 'aiBimScaffoldWidthHeader')}</label>
                             <select
                               value={aiBimPreview.dto.scaffoldWidthMm}
                               onChange={(e) => {
                                 const width = Number(e.target.value) || SCAFFOLD_WIDTH_NARROW_MM;
-                                const series = wakugumiSeriesFromScaffoldWidthMm(width);
                                 setAiBimPreview({
                                   ...aiBimPreview,
-                                  wakugumiFrameSeries:
-                                    aiBimPreview.scaffoldType === 'wakugumi' ? series : aiBimPreview.wakugumiFrameSeries,
                                   dto: {
                                     ...aiBimPreview.dto,
                                     scaffoldWidthMm: width,
-                                    ...(aiBimPreview.scaffoldType === 'wakugumi' && {
-                                      wakugumiFrameSeries: series,
-                                      frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
-                                    }),
                                   },
                                 });
                               }}
@@ -2759,6 +2757,7 @@ function ScaffoldPageContent() {
                               ))}
                             </select>
                           </div>
+                          )}
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
                               {aiBimPreview.scaffoldType === 'wakugumi'

@@ -328,9 +328,6 @@ export function BuildingScaffoldSettingsPanel({
                   );
                 })}
               </select>
-              <p className="text-xs text-gray-500 mt-1">
-                {t('scaffold', 'scaffoldWidth')}: {formatMmLabel(scaffoldWidthMm)}
-              </p>
             </div>
           )}
 

@@ -33,6 +33,20 @@ import { formatMmAsMetersLabel, formatMmLabel, mToMm, mmToM } from '@/lib/dimens
 /** End station 1..10 → X1–Xn / Y1–Yn on drawings */
 const QUICK_SHAPE_STATION_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
 
+type WakugumiFrameSeriesId = 'FT617' | 'FT917' | 'FT1217';
+
+function scaffoldWidthMmFromWakugumiSeries(s: WakugumiFrameSeriesId): number {
+  if (s === 'FT617') return 610;
+  if (s === 'FT917') return 914;
+  return 1219;
+}
+
+function wakugumiSeriesFromScaffoldWidthMm(w: number): WakugumiFrameSeriesId {
+  if (w <= 610) return 'FT617';
+  if (w <= 914) return 'FT917';
+  return 'FT1217';
+}
+
 const CF_LABEL_I18N_KEYS: Record<ScaffoldWallCfKey, 'wallCfReflex' | 'wallCfC'> = {
   reflex: 'wallCfReflex',
   c: 'wallCfC',
@@ -934,7 +948,12 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
               </button>
               <button
                 type="button"
-                onClick={() => setScaffoldType('wakugumi')}
+                onClick={() => {
+                  setScaffoldType('wakugumi');
+                  const s = wakugumiSeriesFromScaffoldWidthMm(scaffoldWidthMm);
+                  setWakugumiFrameSeries(s);
+                  setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
+                }}
                 className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-semibold transition-all ${
                   scaffoldType === 'wakugumi'
                     ? 'border-orange-500 bg-orange-50 text-orange-700'
@@ -960,7 +979,8 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-              {/* Scaffold Width */}
+              {/* Scaffold width: kusabi only (wakugumi width is chosen via FT series below). */}
+              {scaffoldType === 'kusabi' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'scaffoldWidth')}</label>
                 <select
@@ -973,6 +993,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                   <option value={1219}>{formatMmLabel(1219)}</option>
                 </select>
               </div>
+              )}
 
               {/* Kusabi-specific */}
               {scaffoldType === 'kusabi' && (
@@ -1004,10 +1025,9 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                     <select
                       value={wakugumiFrameSeries}
                       onChange={(e) => {
-                        const s = e.target.value as 'FT617' | 'FT917' | 'FT1217';
+                        const s = e.target.value as WakugumiFrameSeriesId;
                         setWakugumiFrameSeries(s);
-                        const w = s === 'FT617' ? 610 : s === 'FT917' ? 914 : 1219;
-                        setScaffoldWidthMm(w);
+                        setScaffoldWidthMm(scaffoldWidthMmFromWakugumiSeries(s));
                       }}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
