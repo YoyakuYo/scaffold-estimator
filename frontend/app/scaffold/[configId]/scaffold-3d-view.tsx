@@ -52,6 +52,11 @@ const JACK_H = 0.3;
 // Corner detail base rule (足場コーナー詳細図): 300mm overrun past building corner + corner span.
 // Corner bay into the turn: catalog 610 / 914 / 1219 per nominal 足場幅 (+ 300 mm overrun in layout rules).
 const CORNER_OVERRUN_M = 0.3;
+/**
+ * Wakugumi ~90° L-corners: shift each wall’s eco pad inward along local ±X so both pads stay visible.
+ * Per-axis offset = 1/√2 mm so center-to-center distance ≈ 1 mm at 90° (gap for pattanko).
+ */
+const WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M = 0.001 / Math.SQRT2;
 /** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
@@ -643,9 +648,6 @@ export default function Scaffold3DView({
       const groundMat = new THREE.MeshStandardMaterial({
         color: BIM_COLORS.ground, metalness: 0, roughness: 0.88,
       });
-      const ecoPalletMat = new THREE.MeshStandardMaterial({
-        color: BIM_COLORS.ecoPallet, metalness: 0.15, roughness: 0.75,
-      });
 
       const postMat = pipeMat;
       const jackMatEff = jackMat;
@@ -697,6 +699,12 @@ export default function Scaffold3DView({
       const scaffoldType: 'kusabi' | 'wakugumi' =
         (result.scaffoldType ?? (result as any).scaffold_type ?? 'kusabi') as 'kusabi' | 'wakugumi';
       const isWakugumi = scaffoldType === 'wakugumi';
+      /** Wakugumi eco pads: black for contrast vs frames; kusabi keeps BIM red. */
+      const ecoPalletMat = new THREE.MeshStandardMaterial({
+        color: isWakugumi ? 0x111111 : BIM_COLORS.ecoPallet,
+        metalness: 0.15,
+        roughness: 0.75,
+      });
       const LEVEL_H = isWakugumi ? ((result.frameSizeMm || 1700) / 1000) : LEVEL_H_KUSABI;
       const topGuardNum = Number(
         result.topGuardHeightMm ?? (isWakugumi ? (result.frameSizeMm ?? 1700) : 1800),
@@ -820,11 +828,10 @@ export default function Scaffold3DView({
         doublePostAtCornerStart?: boolean,
         /** Closed polygon: recompute wakugumi spans from wall+300+terminal rule (avoids stale DB spans). */
         closedPolygonWakugumiCornerSpans?: boolean,
-        /**
-         * Wakugumi + ~90° corners: each wall draws its own corner frame; skip eco at the first meshed post
-         * when the previous wall already placed eco there (avoids doubled pads merged with frame legs).
-         */
-        skipEcoAtStartDuplicate?: boolean,
+        /** L-corner start (~90°): shift eco +X inward from vertex (pairs with previous wall’s end shift). */
+        ecoPxOffsetLCornerStartM?: number,
+        /** L-corner end (~90°): shift eco −X inward from vertex. */
+        ecoPxOffsetLCornerEndM?: number,
       ): {
         runLenM: number;
         /** Σ spans (m) along the wall — wallLength + overrun + terminal for closed polygon corners. */
@@ -936,10 +943,13 @@ export default function Scaffold3DView({
         const palletD = useWkEcoSep ? 0.18 : 0.25;
         const ecoInset = useWkEcoSep ? 0.035 : 0;
         const ecoYDrop = useWkEcoSep ? 0.012 : 0;
+        const ecoPxOffStart = ecoPxOffsetLCornerStartM ?? 0;
+        const ecoPxOffEnd = ecoPxOffsetLCornerEndM ?? 0;
         for (let pi = 0; pi < postX.length; pi++) {
           if (pi < startPostIdx) continue;
-          if (skipEcoAtStartDuplicate && pi === startPostIdx) continue;
-          const px = postX[pi];
+          let px = postX[pi];
+          if (pi === startPostIdx && ecoPxOffStart !== 0) px += ecoPxOffStart;
+          if (pi === postX.length - 1 && ecoPxOffEnd !== 0) px += ecoPxOffEnd;
           const skipInnerPal = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
           for (const pz of isBracket ? [0] : (skipInnerPal ? [widthM] : [0, widthM])) {
             let ecoPz = pz;
@@ -2304,7 +2314,9 @@ export default function Scaffold3DView({
         const flushDeckAtCornerEnd = baseEndFlush || reflexEndWalkJoint;
 
         const tILS = tpd?.isLShapedAtStart ?? [];
+        const tILE = tpd?.isLShapedAtEnd ?? [];
         const lShapedAtThisWallStart = tILS[localIdx] ?? false;
+        const lShapedAtThisWallEnd = tILE[localIdx] ?? false;
         // 枠組: own corner frame on each wall (always mesh leading posts when a corner applies).
         // くさび: omit wall B’s leading pair when not L-shaped and the layout reuses the previous terminal bay.
         const doublePostAtCornerStart =
@@ -2314,11 +2326,18 @@ export default function Scaffold3DView({
             : !lShapedAtThisWallStart &&
               (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share'));
 
-        const skipEcoAtStartDuplicate =
+        /** Wakugumi L-corners: ±1/√2 mm along local X so eco pads at a 90° corner sit ≈1 mm apart (pattanko gap). */
+        const ecoPxOffsetLCornerStartM =
           isWakugumi &&
-          doublePostAtCornerStart &&
+          wall.layoutMode !== 'bracket' &&
           lShapedAtThisWallStart &&
-          (localIdx > 0 || (closedLoopCorners && localIdx === 0));
+          cornerStart !== 'none'
+            ? WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M
+            : undefined;
+        const ecoPxOffsetLCornerEndM =
+          isWakugumi && wall.layoutMode !== 'bracket' && lShapedAtThisWallEnd
+            ? -WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M
+            : undefined;
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
@@ -2333,7 +2352,8 @@ export default function Scaffold3DView({
           flushDeckAtCornerEnd,
           doublePostAtCornerStart,
           closedLoopCorners,
-          skipEcoAtStartDuplicate,
+          ecoPxOffsetLCornerStartM,
+          ecoPxOffsetLCornerEndM,
         );
 
         // Σ spans along the bay line (incl. 300mm overrun + terminal) often exceeds the offset-path
