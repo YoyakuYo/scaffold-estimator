@@ -35,10 +35,10 @@ import { finalizeWallSpansForThreeD } from '@/lib/scaffold-span-merge';
  * Footprint vertices come from `buildFootprintPolygonXZ` (shared with plan view):
  * walk stored outline directions with per-wall lengths; closing edge is the chord back
  * to the first corner (no overwriting vertex 0, which broke the last wall in BIM hexes).
- * Span generation uses N spans → N+1 post positions. Kusabi: at ~90° (L) corners the
- * incoming wall may reuse the previous wall’s terminal pair (startPostIdx=1). Non-L
- * corners use double posts. Wakugumi: no shared corner frame — each wall always meshes
- * its own leading posts (startPostIdx=0) when a corner layout applies.
+ * Span generation uses N spans → N+1 post positions. At convex / reflex polygon corners
+ * the incoming wall omits meshing postX[0] (startPostIdx=1) so the previous wall’s
+ * width-module terminal bay is one continuous real span — same rule for くさび and 枠組 3D.
+ * Non-L sharp corners use double posts at the wall start (see doublePostAtCornerStart).
  */
 
 const PIPE_R = 0.024;
@@ -1348,9 +1348,7 @@ export default function Scaffold3DView({
         // Fall prevention at open deck ends = **transverse horizontal** members (端部布材 / 端部手摺), not uprights.
         // Span **full opening** local z = 0 → widthM: transverse length = nominal 足場幅 (same as post spacing).
         // 枠タイプ keeps vertical frame legs (妻側枠).
-        //
-        // Convex corner + terminal bay (610/914/1219): last bay is the turn past the façade (−300mm overrun layout).
-        // 端部 closes the walking deck one span **in** (penultimate post), not on the corner tip — aligned with くさび 90° handling.
+        // Terminal bay (610/914/1219): 端部 sits at the **outer post** of that real span (+ slight façade outset).
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const exWallEnd = postX[postX.length - 1];
@@ -1361,12 +1359,7 @@ export default function Scaffold3DView({
             !isBracket &&
             spans.length >= 1 &&
             Math.abs(lastSpanMm - swMm) <= 55;
-          const useInwardStopperAtCornerEnd =
-            !!flushDeckAtCornerEnd && isEndTerminalBay && postX.length >= 3;
-          const exStopperPlane = useInwardStopperAtCornerEnd
-            ? postX[postX.length - 2]!
-            : exWallEnd;
-          const xPlane = isEndTerminalBay ? exStopperPlane + END_STOPPER_FACADE_OUTSET_M : exStopperPlane;
+          const xPlane = isEndTerminalBay ? exWallEnd + END_STOPPER_FACADE_OUTSET_M : exWallEnd;
 
           if (isWakugumi) {
             for (let lv = 1; lv <= levelLoopMax; lv++) {
@@ -2278,13 +2271,12 @@ export default function Scaffold3DView({
 
         const tILS = tpd?.isLShapedAtStart ?? [];
         const lShapedAtThisWallStart = tILS[localIdx] ?? false;
-        // Wakugumi BOM uses a separate frame line per wall at corners (no shared posts).
+        // 3D: same corner reuse as くさび — omit wall B’s leading post pair when the previous wall
+        // supplies the width-module terminal bay (avoids a duplicate “second 610” at the vertex).
         const doublePostAtCornerStart =
           wall.layoutMode !== 'bracket' &&
-          (isWakugumi
-            ? cornerStart !== 'none'
-            : !lShapedAtThisWallStart &&
-              (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share'));
+          !lShapedAtThisWallStart &&
+          (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share');
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
@@ -2517,7 +2509,7 @@ export default function Scaffold3DView({
         if (!info?.root || !Array.isArray(info.postX)) continue;
         const si = info.startPostIdx ?? 0;
         // Leading indices [0 .. si-1] are not meshed (kusabi: shared with previous wall’s terminal bay).
-        // Still register their world XZ so corner dedup sees the same steel. Wakugumi uses si=0 here.
+        // Still register their world XZ so corner dedup sees the same steel when startPostIdx > 0.
         for (let pi = 0; pi < si; pi++) {
           for (const pz of [0, info.widthM]) {
             const w = toWorldXZ(info.root, info.postX[pi], pz);
@@ -2578,7 +2570,7 @@ export default function Scaffold3DView({
           const aOuterPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], 0);
           const aInnerPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], infoA.widthM);
 
-          // Wall B: corner joint at postX[0] (kusabi may skip meshing via startPostIdx; wakugumi always draws from 0)
+          // Wall B: corner joint at postX[0] (both types may skip meshing via startPostIdx > 0)
           const bIdx = 0;
           const bNextIdx = Math.min(1, infoB.postX.length - 1);
           const bOuterStart = toWorldXZ(infoB.root, infoB.postX[bIdx], 0);
@@ -2726,7 +2718,7 @@ export default function Scaffold3DView({
           }
 
           // Corner vertical posts only where the wall meshes did not already place steel (no centroid post).
-          // Kusabi L-corner: wall B may omit postX[0] (reuse). Wakugumi always meshes B’s start — corner group skips duplicates via nearExistingWallPost.
+          // Wall B may omit postX[0] (reuse); corner group only adds B’s start posts when that pair was not meshed.
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
