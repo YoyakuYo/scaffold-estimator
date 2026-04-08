@@ -421,6 +421,43 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
+    // ─── 相間ブラゲット / 装間ネット（kusabi と同式: 内列支柱 × Ltot、壁走行÷6m ネット）──
+    const innerPostStationsW = Math.max(0, postPositions - Math.floor(cornerPostDeduction / 2));
+    const wallRunMmW = spans.reduce((sum, s) => sum + s, 0);
+    const sokanNettoSheetsW = wallRunMmW > 0 ? Math.ceil(wallRunMmW / 6000) : 0;
+    const sokanBracketQtyW = innerPostStationsW * Ltot;
+    if (sokanBracketQtyW > 0) {
+      sortOrder++;
+      components.push({
+        type: 'sokan_bracket',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Sokan bracket',
+        nameJp: '相間ブラゲット',
+        sizeSpec: 'Inner post mount',
+        unit: '本',
+        quantity: sokanBracketQtyW,
+        sortOrder,
+        materialCode: 'SOKAN-BRACKET',
+      });
+    }
+    const sokanNettoQtyW = sokanNettoSheetsW * Ltot;
+    if (sokanNettoQtyW > 0) {
+      sortOrder++;
+      components.push({
+        type: 'sokan_netto',
+        category: CAT.safety.jp,
+        categoryEn: CAT.safety.en,
+        name: 'Sokan net (6m)',
+        nameJp: '装間ネット',
+        sizeSpec: '6000mm',
+        unit: '枚',
+        quantity: sokanNettoQtyW,
+        sortOrder,
+        materialCode: 'SOKAN-NETTO',
+      });
+    }
+
     // ─── メッシュシート: 幅=スパン、縦=3.6m/枚。枚数/スパン=ceil(被せ高÷縦寸)（totalScaffoldHeightMm、最上ガード込み）──
     const meshVerticalRowsW = meshSheetVerticalRowsForHeightMm(levelCalc.totalScaffoldHeightMm);
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
