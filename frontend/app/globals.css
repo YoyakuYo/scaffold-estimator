@@ -143,4 +143,10 @@ body {
   .scaffold-result-print thead {
     display: table-header-group;
   }
+  /* Material gallery: keep photos visible and crisp in Save-as-PDF */
+  .scaffold-result-print .material-gallery-card img {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    max-height: 200px !important;
+  }
 }

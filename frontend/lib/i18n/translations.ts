@@ -1712,6 +1712,29 @@ export const translations = {
   // ─── Result Page Extras ─────────────────────────────────────
   resultExtra: {
     tabOverall: { ja: '全体数量', en: 'Overall Totals', fr: 'Totaux généraux' },
+    tabMaterials: { ja: '材料写真', en: 'Material Pictures', fr: 'Photos des matériaux' },
+    materialsGalleryHint: {
+      ja: '計算結果の部材を種類ごとに写真と合計数量で表示します（規格が複数ある場合は規格を併記）。',
+      en: 'Photos with total quantities per material group from this calculation (multiple specs are listed when needed).',
+      fr: 'Photos et quantités totales par groupe de matériaux pour ce calcul (plusieurs spécifications listées si besoin).',
+    },
+    materialsGalleryPrintPdf: {
+      ja: '印刷 / PDF 保存',
+      en: 'Print / Save as PDF',
+      fr: 'Imprimer / Enregistrer en PDF',
+    },
+    materialsGalleryEmpty: {
+      ja: '表示する部材がありません。',
+      en: 'No materials to display.',
+      fr: 'Aucun matériau à afficher.',
+    },
+    materialsGalleryQtyTitle: { ja: '合計数量', en: 'Total quantity', fr: 'Quantité totale' },
+    materialsGalleryUnit: { ja: '単位', en: 'Unit', fr: 'Unité' },
+    materialsGalleryPrintTitle: {
+      ja: '材料写真一覧',
+      en: 'Material picture summary',
+      fr: 'Résumé visuel des matériaux',
+    },
     perLiftSectionTitle: {
       ja: '段別（足場段）内訳 — 各辺',
       en: 'Per-lift breakdown by edge',

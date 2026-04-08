@@ -35,6 +35,7 @@ import {
   Plus,
   QrCode,
   MapPin,
+  LayoutGrid,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
@@ -46,6 +47,7 @@ import { buildWallMapsForScaffoldLevel, distributeByScaffoldLevel } from '@/lib/
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
+import { MaterialGalleryTab } from '@/components/scaffold/material-gallery-tab';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -57,7 +59,7 @@ const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
   ),
 });
 
-type TabView = 'table' | '2d' | 'plan' | '3d';
+type TabView = 'table' | 'materials' | '2d' | 'plan' | '3d';
 
 /** Cumulative per-level summary: approximate quantities up to visibleLevels (scale by visibleLevels/totalLevels). */
 function getLevelSummary(
@@ -204,7 +206,7 @@ function ScaffoldResultPage() {
   const normalizedTab = (rawTab === 'perside' || rawTab === 'breakdown' ? 'table' : rawTab) as TabView;
   const initialTab = (normalizedTab || 'table') as TabView;
   const [activeTab, setActiveTab] = useState<TabView>(
-    ['table', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table',
+    ['table', 'materials', '2d', 'plan', '3d'].includes(initialTab) ? initialTab : 'table',
   );
   const [visibleLevels, setVisibleLevels] = useState<number>(1);
 
@@ -690,6 +692,18 @@ function ScaffoldResultPage() {
             {t('resultExtra', 'tabOverall')}
           </button>
           <button
+            type="button"
+            onClick={() => setActiveTab('materials')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'materials'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            {t('resultExtra', 'tabMaterials')}
+          </button>
+          <button
             onClick={() => setActiveTab('2d')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === '2d'
@@ -734,6 +748,19 @@ function ScaffoldResultPage() {
             sectionHeadingId="overall-totals-heading"
           />
           <PerLiftBomSection result={resultForDisplay ?? result} />
+        </div>
+
+        <div className={activeTab === 'materials' ? 'block space-y-4' : 'hidden'}>
+          <h2 className="hidden print:block text-base font-bold text-gray-900 mb-3 pb-2 border-b-2 border-gray-300">
+            {t('resultExtra', 'materialsGalleryPrintTitle')}
+          </h2>
+          <MaterialGalleryTab
+            summary={(resultForDisplay ?? result).summary ?? []}
+            scaffoldType={
+              ((resultMergedForViz ?? result).scaffoldType ??
+                'kusabi') as 'kusabi' | 'wakugumi'
+            }
+          />
         </div>
 
         <div className={`${activeTab === '2d' ? 'block' : 'hidden'} print:overflow-visible`}>
