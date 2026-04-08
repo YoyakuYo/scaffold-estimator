@@ -859,18 +859,12 @@ export default function Scaffold3DView({
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = Math.min(levels, MAX_3D_RENDER_LEVELS);
         if (levels > MAX_3D_RENDER_LEVELS) threeDLevelsCapped = true;
-        /** Extra top lift: guard / ガード建枠 only — no working anchi (plank) deck. */
+        /** 枠組: extra top lift (ガード建枠) — no working plank on that lift (`guardLiftNoDeck`). */
         const wakugumiExtraTopLevel = isWakugumi;
-        const kusabiExtraGuardLift =
-          !isWakugumi && !isBracket && topGuardM > 0;
-        const levelLoopMax =
-          levelsToBuild + (wakugumiExtraTopLevel || kusabiExtraGuardLift ? 1 : 0);
+        const levelLoopMax = wakugumiExtraTopLevel ? levelsToBuild + 1 : levelsToBuild;
         // Post height = total scaffold height. No extension above top plank (was 0.2m cap).
         const postCapAbovePlank = 0;
-        const totalPostH =
-          kusabiExtraGuardLift
-            ? levelsToBuild * LEVEL_H + topGuardM + postCapAbovePlank
-            : levelLoopMax * LEVEL_H + postCapAbovePlank;
+        const totalPostH = levelLoopMax * LEVEL_H + postCapAbovePlank;
 
         // Corner joint disabled: each wall is independent (no extra inner post, no tesuri split)
         const cornerInnerPostX = null as number | null;
@@ -1018,54 +1012,6 @@ export default function Scaffold3DView({
         const tzOuter = widthM;
 
         for (let lv = 1; lv <= levelLoopMax; lv++) {
-          // くさび: 上部ガードはもう一段のリフトとして描画し、踏板（アンチ）なし。
-          if (kusabiExtraGuardLift && lv === levelLoopMax) {
-            const yDeck = GROUND_Y + JACK_H + levelsToBuild * LEVEL_H;
-            const yCap = yDeck + topGuardM;
-
-            for (const pz of [tzOuter, tzInner]) {
-              for (let pi = 0; pi < postX.length; pi++) {
-                if (pi < startPostIdx) continue;
-                const px = postX[pi];
-                const skipInnerRowTopGuardAtCorner =
-                  pz === tzInner &&
-                  ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
-                if (skipInnerRowTopGuardAtCorner) continue;
-                addPipe(group, px, yDeck, pz, px, yCap, pz, topGuardMat, PIPE_R * 0.7);
-              }
-              for (let i = startSpanIdx; i < spans.length; i++) {
-                const x1 = postX[i];
-                const x2 = postX[i + 1];
-                addPipe(group, x1, yCap, pz, x2, yCap, pz, topGuardMat, PIPE_R * 0.65);
-              }
-            }
-
-            const outerZ = tzOuter;
-            const innerZ = tzInner;
-            const footLow = yDeck + 0.14;
-            const footHi = yDeck + 0.52;
-            const headLow = yCap - 0.52;
-            const headHi = yCap - 0.12;
-            const tesuriLow = yDeck + 0.45;
-            const tesuriMid = yDeck + 0.9;
-            const tesuriTop = yCap - 0.06;
-
-            for (let i = startSpanIdx; i < spans.length; i++) {
-              const x1 = postX[i];
-              const x2 = postX[i + 1];
-              addPipe(group, x1, footLow, outerZ, x2, footHi, outerZ, braceMat, PIPE_R * 0.72);
-              addPipe(group, x1, footHi, outerZ, x2, footLow, outerZ, braceMat, PIPE_R * 0.72);
-              addPipe(group, x1, headLow, outerZ, x2, headHi, outerZ, braceMat, PIPE_R * 0.72);
-              addPipe(group, x1, headHi, outerZ, x2, headLow, outerZ, braceMat, PIPE_R * 0.72);
-              if (!(skipTesuriOnLastTerminalBay && i === spans.length - 1)) {
-                addPipe(group, x1, tesuriLow, innerZ, x2, tesuriLow, innerZ, tesuriMat, PIPE_R * 0.6);
-                addPipe(group, x1, tesuriMid, innerZ, x2, tesuriMid, innerZ, tesuriMat, PIPE_R * 0.62);
-                addPipe(group, x1, tesuriTop, innerZ, x2, tesuriTop, innerZ, tesuriMat, PIPE_R * 0.58);
-              }
-            }
-            continue;
-          }
-
           const y = GROUND_Y + JACK_H + lv * LEVEL_H;
           const guardLiftNoDeck = isWakugumi && !isBracket && lv === levelLoopMax;
 
@@ -1212,15 +1158,20 @@ export default function Scaffold3DView({
             }
           }
 
-          // くさび 梁枠: 上部ガードは従来どおり最上作業段の直上帯（リフト追加なし）
-          if (lv === levelsToBuild && topGuardM > 0 && !isWakugumi && isBracket) {
+          // くさび最上: 上段床に上部支柱→帯内は外にブレス×2（足下・頭上）、内に手摺×3（下2本＋天端1本）
+          if (lv === levelsToBuild && topGuardM > 0 && !isWakugumi) {
             const yDeck = y;
             const yCap = yDeck + topGuardM;
 
-            for (const pz of [0]) {
+            for (const pz of isBracket ? [0] : [tzOuter, tzInner]) {
               for (let pi = 0; pi < postX.length; pi++) {
                 if (pi < startPostIdx) continue;
                 const px = postX[pi];
+                const skipInnerRowTopGuardAtCorner =
+                  !isBracket &&
+                  pz === tzInner &&
+                  ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
+                if (skipInnerRowTopGuardAtCorner) continue;
                 addPipe(group, px, yDeck, pz, px, yCap, pz, topGuardMat, PIPE_R * 0.7);
               }
               for (let i = startSpanIdx; i < spans.length; i++) {
@@ -1230,8 +1181,8 @@ export default function Scaffold3DView({
               }
             }
 
-            const outerZ = 0;
-            const innerZ = 0;
+            const outerZ = isBracket ? 0 : tzOuter;
+            const innerZ = isBracket ? 0 : tzInner;
             const footLow = yDeck + 0.14;
             const footHi = yDeck + 0.52;
             const headLow = yCap - 0.52;
@@ -1461,8 +1412,6 @@ export default function Scaffold3DView({
             }
           } else if (!isBracket) {
             for (let lv = 1; lv <= levelLoopMax; lv++) {
-              // Guard-only top lift has no deck — 端部手摺は作業段のみ（最上ガード帯は上部支柱ブロックで表現）
-              if (kusabiExtraGuardLift && lv === levelLoopMax) continue;
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
               const railTop = y + 0.9;
               const railMid = y + 0.45;
