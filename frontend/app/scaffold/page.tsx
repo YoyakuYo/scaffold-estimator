@@ -847,7 +847,38 @@ type AiBimWizardPreview = {
   ifcPremiumMetadata?: IfcPremiumMetadata;
   /** Last applied Premium schedule import (optional). */
   premiumScheduleLast?: PremiumScheduleImportResult;
+  /**
+   * User-added door openings when AI did not detect them (merged with `obstacles` when creating the config).
+   * `wallIndex` is the edge index in the same order as `walls` / `dto.walls` before create.
+   */
+  manualDoorOpenings?: Array<{ wallIndex: number; positionMm: number; widthMm: number }>;
 };
+
+/** Merge AI obstacles with manually entered doors for `createAndCalculate` (backend injects doors into wall inputs). */
+function mergeAiExtractObstaclesForDto(
+  aiObstacles: AiBimWizardPreview['obstacles'] | undefined,
+  manualDoorOpenings: AiBimWizardPreview['manualDoorOpenings'] | undefined,
+  wallCount: number,
+): NonNullable<CreateScaffoldConfigDto['obstacles']> {
+  const out: NonNullable<CreateScaffoldConfigDto['obstacles']> = [];
+  for (const o of aiObstacles ?? []) {
+    out.push(o);
+  }
+  const n = Math.max(0, wallCount);
+  for (const d of manualDoorOpenings ?? []) {
+    const wi = Math.max(0, Math.min(n - 1, Math.floor(Number(d.wallIndex) || 0)));
+    const pos = Number(d.positionMm);
+    const wid = Number(d.widthMm);
+    if (!Number.isFinite(pos) || !Number.isFinite(wid) || wid <= 0) continue;
+    out.push({
+      type: 'door',
+      wallIndex: wi,
+      positionMm: pos,
+      widthMm: wid,
+    });
+  }
+  return out;
+}
 
 function applyPremiumScheduleToAiPreview(
   preview: AiBimWizardPreview,
@@ -2866,6 +2897,104 @@ function ScaffoldPageContent() {
                       <p className="text-xs text-slate-500 mt-1">{t('result', 'obstacleNote')}</p>
                     </div>
                   )}
+                  <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/90">
+                    <span className="text-xs font-medium text-amber-900 block mb-1">
+                      {t('scaffold', 'manualDoorSectionTitle')}
+                    </span>
+                    <p className="text-xs text-amber-900/85 mb-2">{t('scaffold', 'manualDoorSectionHint')}</p>
+                    <div className="space-y-2">
+                      {(aiBimPreview.manualDoorOpenings ?? []).map((row, idx) => (
+                        <div
+                          key={`manual-door-${idx}`}
+                          className="flex flex-wrap items-end gap-2 rounded border border-amber-100 bg-white/90 p-2"
+                        >
+                          <label className="flex flex-col gap-0.5 min-w-[7rem]">
+                            <span className="text-[10px] text-gray-600">{t('scaffold', 'manualDoorWall')}</span>
+                            <select
+                              value={Math.min(
+                                aiBimPreview.walls.length - 1,
+                                Math.max(0, Math.floor(row.wallIndex)),
+                              )}
+                              onChange={(e) => {
+                                const wi = Number(e.target.value);
+                                const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
+                                next[idx] = { ...next[idx], wallIndex: wi };
+                                setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
+                              }}
+                              className="rounded border border-gray-300 px-2 py-1 text-xs bg-white max-w-[12rem]"
+                            >
+                              {aiBimPreview.walls.map((w, i) => (
+                                <option key={`${w.side}-${i}`} value={i}>
+                                  {edgeChordName(i, aiBimPreview.walls.length, aiBimPreview.walls.length >= 3)} (
+                                  {w.wallLengthMm} mm)
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-0.5">
+                            <span className="text-[10px] text-gray-600">{t('scaffold', 'manualDoorPositionMm')}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={Number.isFinite(row.positionMm) ? row.positionMm : ''}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
+                                next[idx] = { ...next[idx], positionMm: Number.isFinite(v) ? v : 0 };
+                                setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
+                              }}
+                              className="w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-0.5">
+                            <span className="text-[10px] text-gray-600">{t('scaffold', 'manualDoorWidthMm')}</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={Number.isFinite(row.widthMm) ? row.widthMm : ''}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
+                                next[idx] = { ...next[idx], widthMm: Number.isFinite(v) ? v : 1800 };
+                                setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
+                              }}
+                              className="w-24 rounded border border-gray-300 px-2 py-1 text-xs"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
+                              next.splice(idx, 1);
+                              setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
+                            }}
+                            className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-800 hover:bg-red-100"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            {t('scaffold', 'manualDoorRemove')}
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const w0 = aiBimPreview.walls[0];
+                          const defaultPos = w0 ? Math.round(w0.wallLengthMm / 2) : 1500;
+                          setAiBimPreview({
+                            ...aiBimPreview,
+                            manualDoorOpenings: [
+                              ...(aiBimPreview.manualDoorOpenings ?? []),
+                              { wallIndex: 0, positionMm: defaultPos, widthMm: 1800 },
+                            ],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        {t('scaffold', 'manualDoorAdd')}
+                      </button>
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <span className="text-xs font-medium text-gray-500 block">
                       {t('scaffold', 'aiBimPreview3d')}
@@ -2954,8 +3083,16 @@ function ScaffoldPageContent() {
                           allWallIndices,
                           hashiraForDto,
                         );
+                        const { obstacles: _dtoObstaclesDrop, ...dtoBaseNoObstacles } = dtoBase as CreateScaffoldConfigDto & {
+                          obstacles?: CreateScaffoldConfigDto['obstacles'];
+                        };
+                        const mergedObstacles = mergeAiExtractObstaclesForDto(
+                          aiBimPreview.obstacles,
+                          aiBimPreview.manualDoorOpenings,
+                          sanitizedWalls.length,
+                        );
                         const dto = {
-                          ...dtoBase,
+                          ...dtoBaseNoObstacles,
                           walls: sanitizedWalls,
                           siteName: '',
                           siteAddress: '',
@@ -2967,6 +3104,7 @@ function ScaffoldPageContent() {
                             : {}),
                           includePattanko: dtoBase.includePattanko !== false,
                           ...(edgeHashiraFromAi ? { edgeHashiraLabeling: edgeHashiraFromAi } : {}),
+                          ...(mergedObstacles.length > 0 && { obstacles: mergedObstacles }),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
                         router.push(`/scaffold/${data.config.id}?aiBim=1`);

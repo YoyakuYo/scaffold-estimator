@@ -54,9 +54,9 @@ const JACK_H = 0.3;
 const CORNER_OVERRUN_M = 0.3;
 /**
  * Wakugumi ~90° L-corners: shift each wall’s eco pad inward along local ±X so both pads stay visible.
- * Per-axis offset = 1/√2 mm so center-to-center distance ≈ 1 mm at 90° (gap for pattanko).
+ * Per-axis offset = 2/√2 mm so center-to-center distance ≈ 2 mm at 90° (gap for pattanko).
  */
-const WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M = 0.001 / Math.SQRT2;
+const WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M = 0.002 / Math.SQRT2;
 /** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
@@ -2363,7 +2363,7 @@ export default function Scaffold3DView({
             : !lShapedAtThisWallStart &&
               (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share'));
 
-        /** Wakugumi L-corners: ±1/√2 mm along local X so eco pads at a 90° corner sit ≈1 mm apart (pattanko gap). */
+        /** Wakugumi L-corners: ±2/√2 mm along local X so eco pads at a 90° corner sit ≈2 mm apart (pattanko gap). */
         const ecoPxOffsetLCornerStartM =
           isWakugumi &&
           wall.layoutMode !== 'bracket' &&
