@@ -67,6 +67,30 @@ export function materialGalleryImageSrc(
   }
 }
 
+/**
+ * Short "L####" label from BOM sizeSpec for the gallery thumbnail (e.g. L610, L1829).
+ * Uses the larger dimension for `W×H` plank specs so the span side wins (500×610 → L610).
+ */
+export function materialGalleryThumbnailBadge(spec: string): string | null {
+  const s = (spec ?? '').trim();
+  if (!s) return null;
+  const xy = s.match(/(\d+)\s*[×xX]\s*(\d+)/);
+  if (xy) {
+    const a = parseInt(xy[1]!, 10);
+    const b = parseInt(xy[2]!, 10);
+    if (Number.isFinite(a) && Number.isFinite(b)) {
+      // Mesh / sheet: "610×3600mm" — second value is height; badge follows span width (610, 914, …).
+      if (b >= 2500) return `L${a}`;
+      return `L${Math.max(a, b)}`;
+    }
+  }
+  const mm = s.match(/(\d{3,5})\s*mm/i);
+  if (mm) return `L${mm[1]}`;
+  const word = s.match(/\b(\d{3,5})\b/);
+  if (word) return `L${word[1]}`;
+  return null;
+}
+
 export interface MaterialGalleryRow {
   /** Stable key for list items */
   rowId: string;

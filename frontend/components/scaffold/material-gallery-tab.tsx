@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import type { CalculatedComponent } from '@/lib/api/scaffold-configs';
 import {
   buildMaterialGalleryRows,
+  materialGalleryThumbnailBadge,
   type ScaffoldGalleryType,
 } from '@/lib/scaffold-material-gallery';
 import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
@@ -49,47 +50,60 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
         </button>
       </div>
 
-      <ul className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100 print:border-gray-400">
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 print:grid-cols-3">
         {rows.map((row) => {
           const specUi = displaySizeSpecForUi(row.sizeSpec);
+          const thumbBadge = materialGalleryThumbnailBadge(row.sizeSpec);
           return (
-          <li
-            key={row.rowId}
-            className="material-gallery-row flex items-start gap-3 sm:gap-5 px-3 py-3 sm:px-4 sm:py-3.5 print:break-inside-avoid"
-          >
-            <span
-              className="shrink-0 w-14 sm:w-16 text-right text-lg sm:text-xl font-bold tabular-nums text-blue-700 print:text-black leading-tight pt-0.5"
-              title={t('resultExtra', 'materialsGalleryQtyTitle')}
+            <li
+              key={row.rowId}
+              className="material-gallery-row flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-3 sm:px-4 sm:py-3.5 shadow-sm print:break-inside-avoid"
             >
-              {row.quantity.toLocaleString()}
-            </span>
-            <div className="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gradient-to-b from-slate-50 to-white border border-gray-100 flex items-center justify-center p-1.5 print:bg-white print:border-gray-200">
-              {row.imageSrc ? (
-                <img
-                  src={row.imageSrc}
-                  alt=""
-                  className="material-gallery-card max-h-full max-w-full object-contain drop-shadow-sm"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center text-gray-400 gap-0.5">
-                  <Package className="h-6 w-6 sm:h-7 sm:w-7 opacity-40" aria-hidden />
-                  <span className="text-[10px] text-center font-mono leading-none truncate max-w-full">
-                    {row.aggregationKey}
-                  </span>
+              <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3">
+                <div className="relative h-14 w-14 shrink-0 sm:h-16 sm:w-16">
+                  {thumbBadge ? (
+                    <span
+                      className="absolute -left-0.5 -top-0.5 z-10 rounded bg-slate-800/90 px-1 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm print:bg-black"
+                      aria-hidden
+                    >
+                      {thumbBadge}
+                    </span>
+                  ) : null}
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gradient-to-b from-slate-50 to-white p-1.5 print:bg-white print:border-gray-200">
+                    {row.imageSrc ? (
+                      <img
+                        src={row.imageSrc}
+                        alt=""
+                        className="material-gallery-card max-h-full max-w-full object-contain drop-shadow-sm"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-0.5 text-gray-400">
+                        <Package className="h-6 w-6 sm:h-7 sm:w-7 opacity-40" aria-hidden />
+                        <span className="max-w-full truncate text-center font-mono text-[10px] leading-none">
+                          {row.aggregationKey}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0 pt-0.5">
-              <h3 className="text-sm font-semibold text-gray-900 leading-snug">{row.label}</h3>
-              {specUi ? (
-                <p className="mt-1 text-xs text-gray-600 font-medium leading-snug">{specUi}</p>
-              ) : null}
-              <p className="mt-1 text-xs text-gray-400">
-                {t('resultExtra', 'materialsGalleryUnit')}: {row.unit || '—'}
-              </p>
-            </div>
-          </li>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <h3 className="text-sm font-semibold leading-snug text-gray-900">{row.label}</h3>
+                  {specUi ? (
+                    <p className="mt-1 text-xs font-medium leading-snug text-gray-600">{specUi}</p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-gray-400">
+                    {t('resultExtra', 'materialsGalleryUnit')}: {row.unit || '—'}
+                  </p>
+                </div>
+              </div>
+              <span
+                className="shrink-0 text-right text-xl font-bold tabular-nums text-blue-700 sm:text-2xl print:text-black"
+                title={t('resultExtra', 'materialsGalleryQtyTitle')}
+              >
+                {row.quantity.toLocaleString()}
+              </span>
+            </li>
           );
         })}
       </ul>
