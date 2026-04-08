@@ -2,16 +2,48 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { clearAccessTokenCookie } from './access-token-cookie';
 
-// Set NEXT_PUBLIC_BACKEND_URL to your API base including /api/v1 (e.g. https://your-api.onrender.com/api/v1).
-// If unset in production, the browser uses same-origin /api/v1 — set BACKEND_PROXY_TARGET on the Next host (see next.config.js)
-// or set NEXT_PUBLIC_BACKEND_URL at build time so requests reach Nest.
-//
-// Important: Next.js replaces process.env.NEXT_PUBLIC_* at **build** time in the browser bundle.
-// Changing the var on the host without a new frontend build leaves the old URL in the deployed JS.
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === 'production' ? '/api/v1' : 'http://localhost:3000/api/v1');
+function trimEnv(value: string | undefined): string | undefined {
+  const t = value?.trim();
+  return t || undefined;
+}
+
+/**
+ * Resolves the axios base URL (must include `/api/v1`).
+ *
+ * Priority: `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_API_URL` → then:
+ * - In the browser on localhost/127.0.0.1: direct `http://localhost:3000/api/v1` so `next start`
+ *   works without `BACKEND_PROXY_TARGET` or env files.
+ * - In the browser elsewhere: same-origin `/api/v1` (requires `BACKEND_PROXY_TARGET` on the host
+ *   or a BFF — see next.config.js).
+ * - During SSR / Node (no window): `BACKEND_PROXY_TARGET`/`INTERNAL_API_URL` + `/api/v1` if set,
+ *   else dev → localhost, prod → `/api/v1`.
+ *
+ * Next.js inlines `NEXT_PUBLIC_*` at **build** time; changing them on the host requires a rebuild.
+ */
+export function getApiBaseUrl(): string {
+  const fromEnv =
+    trimEnv(process.env.NEXT_PUBLIC_BACKEND_URL) ||
+    trimEnv(process.env.NEXT_PUBLIC_API_URL);
+  if (fromEnv) return fromEnv;
+
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return 'http://localhost:3000/api/v1';
+    }
+    return '/api/v1';
+  }
+
+  const proxy =
+    trimEnv(process.env.BACKEND_PROXY_TARGET) || trimEnv(process.env.INTERNAL_API_URL);
+  if (proxy) {
+    return `${proxy.replace(/\/$/, '')}/api/v1`;
+  }
+
+  return process.env.NODE_ENV === 'production'
+    ? '/api/v1'
+    : 'http://localhost:3000/api/v1';
+}
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const API_TIMEOUT_MS = (() => {
@@ -22,7 +54,7 @@ const API_TIMEOUT_MS = (() => {
 })();
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   timeout: API_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
@@ -31,6 +63,7 @@ export const apiClient = axios.create({
 
 // Add auth token to requests and handle FormData
 apiClient.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
   const token = Cookies.get('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
-import { API_BASE_URL } from '@/lib/api/client';
+import { getApiBaseUrl } from '@/lib/api/client';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { Globe, Loader2, AlertTriangle } from 'lucide-react';
 
@@ -95,9 +95,9 @@ export default function ForgotPasswordPage() {
                       </p>
                       <p className="text-xs text-red-600/90">{t('passwordReset', 'forgotNetworkErrorBuildHint')}</p>
                       <p className="text-xs font-mono break-all bg-red-100/60 rounded px-2 py-1.5 text-red-900">
-                        {API_BASE_URL}
+                        {getApiBaseUrl()}
                         <span className="block mt-1 font-sans text-red-700">
-                          → POST {API_BASE_URL.replace(/\/$/, '')}/auth/forgot-password
+                          → POST {getApiBaseUrl().replace(/\/$/, '')}/auth/forgot-password
                         </span>
                       </p>
                     </>

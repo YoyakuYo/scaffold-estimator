@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient, { getApiBaseUrl } from './client';
 
 export interface Drawing {
   id: string;
@@ -135,11 +135,7 @@ export const drawingsApi = {
 
   /** Get the URL for the uploaded drawing file (served by backend) */
   getFileUrl: (drawingId: string): string => {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_BACKEND_URL ||
-      process.env.NEXT_PUBLIC_API_URL ||
-      (process.env.NODE_ENV === 'production' ? '/api/v1' : 'http://localhost:3000/api/v1');
-    return `${baseUrl}/drawings/${drawingId}/file`;
+    return `${getApiBaseUrl().replace(/\/$/, '')}/drawings/${drawingId}/file`;
   },
 
   list: async (projectId?: string): Promise<Drawing[]> => {
