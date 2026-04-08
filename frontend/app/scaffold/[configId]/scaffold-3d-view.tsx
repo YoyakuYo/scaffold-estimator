@@ -2279,8 +2279,12 @@ export default function Scaffold3DView({
           doublePostAtCornerStart,
         );
 
+        // Σ spans along the bay line (incl. 300mm overrun + terminal) often exceeds the offset-path
+        // segment v1→v2. If we treated that as a "non-corner" wall, fitScale would compress local X
+        // (when |1 − len/run| ≤ 0.1) and the overrun + terminal bay vanished visually.
+        const needsFullScaffoldRunAlongEdge = runLenM > lenAlongMiter + 0.02;
         const isCornerConnected =
-          cornerStart !== 'none' || flushDeckAtCornerEnd;
+          cornerStart !== 'none' || flushDeckAtCornerEnd || needsFullScaffoldRunAlongEdge;
         const baseLen = Math.max(runLenM, 1e-6);
         const spanSumLenM = Math.max(runSpanSumM, 1e-6);
         const bux = edgeLen >= 1e-9 ? (v2.x - v1.x) / edgeLen : 1;
