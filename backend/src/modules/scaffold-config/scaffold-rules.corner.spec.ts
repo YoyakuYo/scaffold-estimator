@@ -225,26 +225,25 @@ describe('fitSpansToWallLengthWithCorner (kusabi)', () => {
 });
 
 describe('fitSpansToWallLengthWithCornerWakugumi', () => {
-  it('uses 1829 first, 610 last @ 600 width; total run >= wall+300', () => {
+  it('uses 1829 first, 610 last @ 600 width; Σ spans = wall+300+terminal (same rule as kusabi)', () => {
     const wallMm = 10_000;
+    const term = cornerTerminalSpanMmWakugumi(600);
     const spans = fitSpansToWallLengthWithCornerWakugumi(wallMm, 600);
     expect(spans[0]).toBe(WAKUGUMI_CORNER_START_SPAN_MM);
-    expect(spans[spans.length - 1]).toBe(cornerTerminalSpanMmWakugumi(600));
+    expect(spans[spans.length - 1]).toBe(term);
     const sum = spans.reduce((a, b) => a + b, 0);
-    expect(sum).toBeGreaterThanOrEqual(wallMm + WAKUGUMI_CORNER_OVERRUN_MM);
-    expect(sum).toBeLessThanOrEqual(wallMm + WAKUGUMI_CORNER_OVERRUN_MM + 2000);
+    const runT = wallMm + WAKUGUMI_CORNER_OVERRUN_MM + term;
+    expect(sum).toBeGreaterThanOrEqual(runT);
+    // Middle packing / expandMiddleSpansToTargetCount may add small slack over exact runTarget.
+    expect(sum).toBeLessThanOrEqual(runT + 200);
   });
 
-  it('exact two-span when wallLength fits 1829+610+300', () => {
-    const wallMm =
-      WAKUGUMI_CORNER_START_SPAN_MM +
-      WAKUGUMI_CORNER_SPAN_MM -
-      WAKUGUMI_CORNER_OVERRUN_MM;
+  it('exact two-span [1829, terminal] when middleMmNew === 0', () => {
+    const term = cornerTerminalSpanMmWakugumi(600);
+    /** runTarget = 1829+term → wall = 1829 - 300 = 1529 */
+    const wallMm = WAKUGUMI_CORNER_START_SPAN_MM - WAKUGUMI_CORNER_OVERRUN_MM;
     const spans = fitSpansToWallLengthWithCornerWakugumi(wallMm, 600);
-    expect(spans).toEqual([
-      WAKUGUMI_CORNER_START_SPAN_MM,
-      WAKUGUMI_CORNER_SPAN_MM,
-    ]);
+    expect(spans).toEqual([WAKUGUMI_CORNER_START_SPAN_MM, term]);
   });
 
   it('terminal span 914mm when scaffold width 900mm', () => {

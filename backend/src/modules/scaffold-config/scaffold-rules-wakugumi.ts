@@ -212,7 +212,8 @@ export function fitSpansToWallLengthWakugumi(
 
 /**
  * Span fitting for walls that meet at corners (closed polygon).
- * 1829 → middle → terminal (= catalog 610 / 914 / 1219 per 足場幅 tier); run = wall + 300mm.
+ * 1829 → middle → terminal (= catalog 610 / 914 / 1219 per 足場幅 tier).
+ * Convex run target matches くさび式: Σ spans = wallLength + 300mm overrun + terminal (same as scaffold-rules `fitSpansToWallLengthWithCorner`).
  * Short walls fall back to [t, …middle…, t].
  */
 /** Same catalog corner terminals as くさび式 (`cornerTerminalSpanMmKusabi`). */
@@ -268,16 +269,17 @@ export function fitSpansToWallLengthWithCornerWakugumi(
     const middleSpans = fitSpansToWallLengthNoOverrun(middleTarget, WAKUGUMI_SPAN_SIZES);
     return [...prefix, ...middleSpans, ...suffix];
   }
-  const totalRunMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM;
-  const middleMmNew = totalRunMm - WAKUGUMI_CORNER_START_SPAN_MM - terminal;
+  /** Same total as kusabi corner run: wall + overrun + width-module terminal (not wall + overrun only). */
+  const runTargetMm = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM + terminal;
+  const middleMmNew = runTargetMm - WAKUGUMI_CORNER_START_SPAN_MM - terminal;
 
   if (middleMmNew < 0) {
-    const middleLegacy = wallLengthMm + WAKUGUMI_CORNER_OVERRUN_MM - 2 * terminal;
-    if (middleLegacy <= 0) {
+    const middleNeed = runTargetMm - 2 * terminal;
+    if (middleNeed <= 0) {
       return [terminal, terminal];
     }
     const middleSpans = fitSpansToWallLengthWithOverrun(
-      middleLegacy,
+      middleNeed,
       WAKUGUMI_SPAN_SIZES,
       0,
     );
