@@ -820,6 +820,11 @@ export default function Scaffold3DView({
         doublePostAtCornerStart?: boolean,
         /** Closed polygon: recompute wakugumi spans from wall+300+terminal rule (avoids stale DB spans). */
         closedPolygonWakugumiCornerSpans?: boolean,
+        /**
+         * Wakugumi + ~90° corners: each wall draws its own corner frame; skip eco at the first meshed post
+         * when the previous wall already placed eco there (avoids doubled pads merged with frame legs).
+         */
+        skipEcoAtStartDuplicate?: boolean,
       ): {
         runLenM: number;
         /** Σ spans (m) along the wall — wallLength + overrun + terminal for closed polygon corners. */
@@ -926,14 +931,31 @@ export default function Scaffold3DView({
 
         // ── Eco pallets (エコプレット) at each post position ─────
         const palletH = 0.04;
-        const palletW = 0.25;
-        const palletD = 0.25;
+        const useWkEcoSep = isWakugumi && !isBracket;
+        const palletW = useWkEcoSep ? 0.18 : 0.25;
+        const palletD = useWkEcoSep ? 0.18 : 0.25;
+        const ecoInset = useWkEcoSep ? 0.035 : 0;
+        const ecoYDrop = useWkEcoSep ? 0.012 : 0;
         for (let pi = 0; pi < postX.length; pi++) {
           if (pi < startPostIdx) continue;
+          if (skipEcoAtStartDuplicate && pi === startPostIdx) continue;
           const px = postX[pi];
           const skipInnerPal = !isBracket && ((pi === 0 && skipInnerAtStart) || (pi === postX.length - 1 && skipInnerAtEnd));
           for (const pz of isBracket ? [0] : (skipInnerPal ? [widthM] : [0, widthM])) {
-            addBox(group, px, GROUND_Y + palletH / 2, pz, palletW, palletH, palletD, ecoPalletMat);
+            let ecoPz = pz;
+            if (useWkEcoSep && widthM > 1e-6) {
+              ecoPz = pz < widthM * 0.5 ? pz + ecoInset : pz - ecoInset;
+            }
+            addBox(
+              group,
+              px,
+              GROUND_Y + palletH / 2 - ecoYDrop,
+              ecoPz,
+              palletW,
+              palletH,
+              palletD,
+              ecoPalletMat,
+            );
           }
         }
 
@@ -2292,6 +2314,12 @@ export default function Scaffold3DView({
             : !lShapedAtThisWallStart &&
               (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share'));
 
+        const skipEcoAtStartDuplicate =
+          isWakugumi &&
+          doublePostAtCornerStart &&
+          lShapedAtThisWallStart &&
+          (localIdx > 0 || (closedLoopCorners && localIdx === 0));
+
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
@@ -2305,6 +2333,7 @@ export default function Scaffold3DView({
           flushDeckAtCornerEnd,
           doublePostAtCornerStart,
           closedLoopCorners,
+          skipEcoAtStartDuplicate,
         );
 
         // Σ spans along the bay line (incl. 300mm overrun + terminal) often exceeds the offset-path
