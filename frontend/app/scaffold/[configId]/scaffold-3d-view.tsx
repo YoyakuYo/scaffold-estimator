@@ -35,10 +35,11 @@ import { finalizeWallSpansForThreeD } from '@/lib/scaffold-span-merge';
  * Footprint vertices come from `buildFootprintPolygonXZ` (shared with plan view):
  * walk stored outline directions with per-wall lengths; closing edge is the chord back
  * to the first corner (no overwriting vertex 0, which broke the last wall in BIM hexes).
- * Span generation uses N spans → N+1 post positions. At convex / reflex polygon corners
- * the incoming wall omits meshing postX[0] (startPostIdx=1) so the previous wall’s
- * width-module terminal bay is one continuous real span — same rule for くさび and 枠組 3D.
- * Non-L sharp corners use double posts at the wall start (see doublePostAtCornerStart).
+ * Span generation uses N spans → N+1 post positions (closed polygon: Σ spans = wallLength + 300mm + terminal).
+ * くさび: at many corners the next wall omits meshing postX[0] (startPostIdx=1) and reuses the previous
+ * wall’s terminal bay. 枠組: each wall meshes its own corner frame (startPostIdx=0 when a corner layout applies).
+ * Corner placement uses postX[last] along local +X from the vertex, not (postX[last]−postX[0]), so the
+ * terminal bay and 端部 align with the steel (the −300mm overrun lives in negative postX[0]).
  */
 
 const PIPE_R = 0.024;
@@ -823,7 +824,15 @@ export default function Scaffold3DView({
         flushDeckAtCornerEnd?: boolean,
         /** Non-L corners: place steel at local postX[0] instead of skipping (reuse with previous wall). */
         doublePostAtCornerStart?: boolean,
-      ): { runLenM: number; postX: number[]; widthM: number; spansMm: number[]; startPostIdx: number } {
+      ): {
+        runLenM: number;
+        /** Σ spans (m) along the wall — wallLength + overrun + terminal for closed polygon corners. */
+        runSpanSumM: number;
+        postX: number[];
+        widthM: number;
+        spansMm: number[];
+        startPostIdx: number;
+      } {
         const rawWidthMm = result?.scaffoldWidthMm ?? wall.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM;
         const widthMm = normalizeScaffoldWidthMmToCatalog(rawWidthMm);
         const widthM = widthMm / 1000;
@@ -853,9 +862,13 @@ export default function Scaffold3DView({
           postX.length > 1;
         const startPostIdx = reuseStartFromPrevCorner ? 1 : 0;
         const startSpanIdx = 0;
-        const totalLen = postX.length > 1
-          ? (postX[postX.length - 1] - postX[0])
-          : Math.max(wall.wallLengthMm, 600) / 1000;
+        // postX[0] is often −0.3m (300mm overrun) so outermost post is at postX[last], not Σ spans from 0.
+        const runSpanSumM =
+          postX.length > 1
+            ? postX[postX.length - 1] - postX[0]
+            : Math.max(Number(wall.wallLengthMm) || 0, 600) / 1000;
+        const runExtentFromOriginM =
+          postX.length > 1 ? postX[postX.length - 1] : runSpanSumM;
         const levels = wall.levelCalc.fullLevels;
         const levelsToBuild = Math.min(levels, MAX_3D_RENDER_LEVELS);
         if (levels > MAX_3D_RENDER_LEVELS) threeDLevelsCapped = true;
@@ -1031,7 +1044,7 @@ export default function Scaffold3DView({
             }
           }
           if (cornerInnerPostX != null && !isBracket) {
-            addRealisticNunoBar(THREE, group, cornerInnerPostX, y, 0, totalLen, 0, yokojiMat);
+            addRealisticNunoBar(THREE, group, cornerInnerPostX, y, 0, runSpanSumM, 0, yokojiMat);
           }
 
           for (let i = startSpanIdx; i < spans.length; i++) {
@@ -1438,7 +1451,14 @@ export default function Scaffold3DView({
           }
         }
 
-        return { runLenM: totalLen, postX, widthM, spansMm: spans, startPostIdx };
+        return {
+          runLenM: runExtentFromOriginM,
+          runSpanSumM,
+          postX,
+          widthM,
+          spansMm: spans,
+          startPostIdx,
+        };
       }
 
       // ══════════════════════════════════════════════════════
@@ -2271,17 +2291,19 @@ export default function Scaffold3DView({
 
         const tILS = tpd?.isLShapedAtStart ?? [];
         const lShapedAtThisWallStart = tILS[localIdx] ?? false;
-        // 3D: same corner reuse as くさび — omit wall B’s leading post pair when the previous wall
-        // supplies the width-module terminal bay (avoids a duplicate “second 610” at the vertex).
+        // 枠組: own corner frame on each wall (always mesh leading posts when a corner applies).
+        // くさび: omit wall B’s leading pair when not L-shaped and the layout reuses the previous terminal bay.
         const doublePostAtCornerStart =
           wall.layoutMode !== 'bracket' &&
-          !lShapedAtThisWallStart &&
-          (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share');
+          (isWakugumi
+            ? cornerStart !== 'none'
+            : !lShapedAtThisWallStart &&
+              (cornerStart === 'convex-overrun' || cornerStart === 'reflex-share'));
 
         const wallRoot = new THREE.Group();
         const group = new THREE.Group();
         wallRoot.add(group);
-        const { runLenM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
+        const { runLenM, runSpanSumM, postX, widthM, spansMm, startPostIdx } = buildWallScaffold(
           wall,
           group,
           spanCaps[i],
@@ -2295,6 +2317,7 @@ export default function Scaffold3DView({
         const isCornerConnected =
           cornerStart !== 'none' || flushDeckAtCornerEnd;
         const baseLen = Math.max(runLenM, 1e-6);
+        const spanSumLenM = Math.max(runSpanSumM, 1e-6);
         const bux = edgeLen >= 1e-9 ? (v2.x - v1.x) / edgeLen : 1;
         const buz = edgeLen >= 1e-9 ? (v2.z - v1.z) / edgeLen : 0;
 
@@ -2324,7 +2347,7 @@ export default function Scaffold3DView({
         wallRoot.scale.set(fitScale, 1, 1);
 
         // The wall scaffold is built in local space:
-        //   local X = along wall length (0 to totalLen)
+        //   local X = along wall length (vertex at 0; steel to postX[last] ≈ runLenM)
         //   local Z = depth along outward normal (0 = building-near row, widthM = outer / street row)
         //   local Y = height (up)
         //
@@ -2402,7 +2425,7 @@ export default function Scaffold3DView({
         // ── Dimension lines (span sizes + height) ──
         const dimGroup = new THREE.Group();
         const dimOffset = standoffM + wallWidthM + 0.4;
-        const runLenForDims = baseLen * fitScale;
+        const runLenForDims = spanSumLenM * fitScale;
         const startX = nearStart.x - cx + nx * dimOffset;
         const startZ = nearStart.z - cz + nz * dimOffset;
         const endX = startX + edgeDirX * runLenForDims;
@@ -2509,7 +2532,7 @@ export default function Scaffold3DView({
         if (!info?.root || !Array.isArray(info.postX)) continue;
         const si = info.startPostIdx ?? 0;
         // Leading indices [0 .. si-1] are not meshed (kusabi: shared with previous wall’s terminal bay).
-        // Still register their world XZ so corner dedup sees the same steel when startPostIdx > 0.
+        // Still register their world XZ so corner dedup sees the same steel. Wakugumi uses si=0 here.
         for (let pi = 0; pi < si; pi++) {
           for (const pz of [0, info.widthM]) {
             const w = toWorldXZ(info.root, info.postX[pi], pz);
@@ -2570,7 +2593,7 @@ export default function Scaffold3DView({
           const aOuterPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], 0);
           const aInnerPrev = toWorldXZ(infoA.root, infoA.postX[Math.max(0, aLast - 1)], infoA.widthM);
 
-          // Wall B: corner joint at postX[0] (both types may skip meshing via startPostIdx > 0)
+          // Wall B: corner joint at postX[0] (kusabi may skip meshing via startPostIdx; wakugumi draws from 0)
           const bIdx = 0;
           const bNextIdx = Math.min(1, infoB.postX.length - 1);
           const bOuterStart = toWorldXZ(infoB.root, infoB.postX[bIdx], 0);
@@ -2718,7 +2741,7 @@ export default function Scaffold3DView({
           }
 
           // Corner vertical posts only where the wall meshes did not already place steel (no centroid post).
-          // Wall B may omit postX[0] (reuse); corner group only adds B’s start posts when that pair was not meshed.
+          // Kusabi: wall B may omit postX[0] (reuse). Wakugumi meshes B’s start — corner group skips duplicates via nearExistingWallPost.
           if (maxLvThisCorner > 0) {
             const postH = maxLvThisCorner * LEVEL_H;
             const postBaseY = baseYM_corner + GROUND_Y + JACK_H;
