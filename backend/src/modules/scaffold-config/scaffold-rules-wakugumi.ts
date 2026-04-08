@@ -151,6 +151,7 @@ export const WAKUGUMI_CALC_RULES = {
    * Per span per level — inner row and outer row each get one **set**:
    * one set = 1 下桟 + 1 ブレス on that face (内列・外列それぞれ 1 セット/スパン/段).
    * Totals: 2 ブレス + 2 下桟 per span per level.
+   * Multi-wall corner: last span = width-module terminal → inner face ブレス・下桟 omitted (通路・隣足場); outer only.
    * - Tesuri: 0 (NOT used in wakugumi)
    * - Habaki: 1 or 2 per span (user-selectable)
    * 相間ブラケット・装間ネットは枠組では使用しない（BOM に出さない）。

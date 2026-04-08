@@ -928,6 +928,16 @@ export default function Scaffold3DView({
           spans.length > 0 &&
           spans[spans.length - 1] === widthMm;
 
+        // 枠組: 同ターミナルスパンは内列ブレス・下桟なし（隣足場への出入り）— 外列のみ。BOM と一致。
+        const skipWakugumiInnerOnLastTerminalBay =
+          isWakugumi &&
+          !isBracket &&
+          walls.length >= 2 &&
+          spans.length > 0 &&
+          spans[spans.length - 1] === widthMm;
+        const wakugumiBraceZsForSpan = (spanIdx: number): number[] =>
+          skipWakugumiInnerOnLastTerminalBay && spanIdx === spans.length - 1 ? [widthM] : [0, widthM];
+
         // Door opening span indices (for skipping planks/braces/habaki at ground level)
         const doorSpanIndices = new Set<number>();
         const doorOpeningsRaw = wall.doorOpenings ?? (wall as any).door_openings;
@@ -1144,14 +1154,14 @@ export default function Scaffold3DView({
                 const footHi = yDeck + 0.52;
                 const headLow = yCap - 0.52;
                 const headHi = yCap - 0.12;
-                for (const bz of [0, widthM]) {
+                for (const bz of wakugumiBraceZsForSpan(i)) {
                   addPipe(group, x1, footLow, bz, x2, footHi, bz, topGuardMat, PIPE_R * 0.72);
                   addPipe(group, x1, footHi, bz, x2, footLow, bz, topGuardMat, PIPE_R * 0.72);
                   addPipe(group, x1, headLow, bz, x2, headHi, bz, topGuardMat, PIPE_R * 0.72);
                   addPipe(group, x1, headHi, bz, x2, headLow, bz, topGuardMat, PIPE_R * 0.72);
                 }
               } else if (isWakugumi && !isBracket) {
-                for (const bz of [0, widthM]) {
+                for (const bz of wakugumiBraceZsForSpan(i)) {
                   addPipe(group, x1, braceBottomY, bz, x2, braceTopY, bz, braceMat, PIPE_R * 0.75);
                   addPipe(group, x1, braceTopY, bz, x2, braceBottomY, bz, braceMat, PIPE_R * 0.75);
                 }
@@ -1172,7 +1182,7 @@ export default function Scaffold3DView({
                 const isWakugumiTopGuardLift = isWakugumi && !isBracket && lv === levelLoopMax;
                 const shitasanY = isWakugumiTopGuardLift ? yDeckLift + 0.14 : braceBottomY;
                 if (!isBracket) {
-                  for (const sz of [0, widthM]) {
+                  for (const sz of wakugumiBraceZsForSpan(i)) {
                     addPipe(group, x1, shitasanY, sz, x2, shitasanY, sz, shitasanWkMat, PIPE_R * 0.6);
                   }
                 } else {
@@ -1283,6 +1293,7 @@ export default function Scaffold3DView({
             const yCapRail = y - 0.02;
             for (const pz of [tzOuter, tzInner]) {
               for (let i = startSpanIdx; i < spans.length; i++) {
+                if (skipWakugumiInnerOnLastTerminalBay && i === spans.length - 1 && pz === tzInner) continue;
                 const xa = postX[i];
                 const xb = postX[i + 1];
                 addPipe(group, xa, yCapRail, pz, xb, yCapRail, pz, topGuardMat, PIPE_R * 0.65);

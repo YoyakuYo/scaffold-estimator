@@ -18,6 +18,7 @@ import {
   meshSheetVerticalRowsForHeightMm,
   MESH_SHEET_VERTICAL_LENGTH_MM,
   pattankoPiecesPerCornerPerLevel,
+  omitKusabiTesuriOnLastSpan,
 } from './scaffold-rules';
 import {
   WallCalculationInput,
@@ -228,6 +229,9 @@ export class ScaffoldCalculatorWakugumiService {
 
     const needsExtendedBay = widthMm <= 610 && kaidanSpanIndices.length > 0;
     const spanGroups = this.groupSpansBySize(spans);
+    /** Multi-wall corner: last span = width-module terminal — inner列ブレス・下桟なし（隣り足場への出入り用）。外列のみ。 */
+    const omitInnerFaceOnTerminalBay = omitKusabiTesuriOnLastSpan(spans, widthMm, useCornerLogic);
+    const lastSpanMm = spans.length > 0 ? spans[spans.length - 1]! : -1;
 
     const components: CalculatedComponent[] = [];
     let sortOrder = 0;
@@ -290,9 +294,11 @@ export class ScaffoldCalculatorWakugumiService {
     });
 
     // ─── 3. ブレス (Brace) — 内列・外列それぞれ 1 本/スパン/段（下桟とセット）──
-    // N × bracePerSpanPerLevel × Ltot
+    // Terminal corner span: inner face omitted (same rule as くさび内手摺) → −Ltot 本 for that span’s size bucket.
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
+      const innerDeduction =
+        omitInnerFaceOnTerminalBay && Number(spanSizeMm) === lastSpanMm ? Ltot : 0;
       components.push({
         type: 'brace',
         category: CAT.brace.jp,
@@ -301,7 +307,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: `ブレス`,
         sizeSpec: `${spanSizeMm}`,
         unit: '本',
-        quantity: Number(count) * WAKUGUMI_CALC_RULES.bracePerSpanPerLevel * Ltot,
+        quantity: Number(count) * WAKUGUMI_CALC_RULES.bracePerSpanPerLevel * Ltot - innerDeduction,
         sortOrder,
         materialCode: `WAKU-BRACE-${spanSizeMm}`,
       });
@@ -310,6 +316,8 @@ export class ScaffoldCalculatorWakugumiService {
     // ─── 5. 下桟 (Shitasan) — 内列・外列それぞれ 1 本/スパン/段（ブレスとセット）──
     for (const [spanSizeMm, count] of Object.entries(spanGroups)) {
       sortOrder++;
+      const innerDeduction =
+        omitInnerFaceOnTerminalBay && Number(spanSizeMm) === lastSpanMm ? Ltot : 0;
       components.push({
         type: 'shitasan',
         category: CAT.shitasan.jp,
@@ -318,7 +326,7 @@ export class ScaffoldCalculatorWakugumiService {
         nameJp: `下桟`,
         sizeSpec: `${spanSizeMm}`,
         unit: '本',
-        quantity: Number(count) * WAKUGUMI_CALC_RULES.shitasanPerSpanPerLevel * Ltot,
+        quantity: Number(count) * WAKUGUMI_CALC_RULES.shitasanPerSpanPerLevel * Ltot - innerDeduction,
         sortOrder,
         materialCode: `WAKU-SHITASAN-${spanSizeMm}`,
       });
