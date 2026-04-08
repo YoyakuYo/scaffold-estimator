@@ -16,11 +16,20 @@ export class PublicContactDto {
   message: string;
 
   /**
-   * Honeypot — must remain empty. Do not use `company`; browsers/password managers
-   * autofill that and submissions were silently dropped as "bots".
+   * Honeypot — must remain empty (current landing form).
    */
   @IsOptional()
   @IsString()
   @MaxLength(200)
   hp?: string;
+
+  /**
+   * Legacy key from older clients / some browsers still POST it. Autofill often fills
+   * "organization" as company (e.g. "BarberSow") — not used for spam checks; ignored
+   * so `forbidNonWhitelisted` does not return 400.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  company?: string;
 }
