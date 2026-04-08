@@ -64,6 +64,8 @@ const WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M = 0.002 / Math.SQRT2;
  * posts separate visibly and read as a polygon vertex (larger than eco-only offset; BOM unchanged).
  */
 const WAKUGUMI_CORNER_WALL_ORIGIN_GAP_M = 0.2;
+/** Wakugumi: shorten span-direction plank + habaki vs post line spacing so boards stay between posts (no overlap). */
+const WAKUGUMI_PLANK_INSET_FROM_POST_M = 0.04;
 /** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
@@ -1129,7 +1131,15 @@ export default function Scaffold3DView({
             const baseGap = 0.03;
             let spanDeckLen: number;
             let deckMidX: number;
-            if (cornerStartTouch && cornerEndTouch) {
+            if (isWakugumi) {
+              // Actual bay length in local X — inset both ends so planks/habaki do not extend past post centers.
+              const bayLenM = x2 - x1;
+              spanDeckLen = Math.max(
+                0.05,
+                bayLenM - 2 * WAKUGUMI_PLANK_INSET_FROM_POST_M,
+              );
+              deckMidX = (x1 + x2) / 2;
+            } else if (cornerStartTouch && cornerEndTouch) {
               spanDeckLen = Math.max(0.05, spanM - 2 * cornerDeckInsetM);
               deckMidX = (x1 + x2) / 2;
             } else if (cornerEndTouch) {
