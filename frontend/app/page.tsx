@@ -26,6 +26,7 @@ import {
 import { useI18n, type Locale } from '@/lib/i18n';
 import { usersApi } from '@/lib/api/users';
 import { authApi } from '@/lib/api/auth';
+import { isAxiosError } from 'axios';
 import { submitPublicContact } from '@/lib/api/public-contact';
 import { usePwaInstall } from '@/lib/pwa-install-context';
 
@@ -197,6 +198,10 @@ export default function LandingPage() {
   const [contactMessage, setContactMessage] = useState('');
   const [contactHp, setContactHp] = useState('');
   const [contactSent, setContactSent] = useState(false);
+  const [contactDelivery, setContactDelivery] = useState<{
+    inApp: boolean;
+    email: boolean;
+  } | null>(null);
   const localeMenuRef = useRef<HTMLDivElement>(null);
 
   const contactMutation = useMutation({
@@ -207,14 +212,23 @@ export default function LandingPage() {
         message: contactMessage.trim(),
         company: contactHp.trim() || undefined,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       setContactSent(true);
+      setContactDelivery({
+        inApp: data.inAppDelivered,
+        email: data.emailSent,
+      });
       setContactName('');
       setContactEmail('');
       setContactMessage('');
       setContactHp('');
     },
   });
+
+  const contactServerError =
+    contactMutation.isError && isAxiosError(contactMutation.error)
+      ? (contactMutation.error.response?.data as { message?: string } | undefined)?.message
+      : undefined;
 
   useEffect(() => {
     setMounted(true);
@@ -855,9 +869,16 @@ export default function LandingPage() {
             <p className="mt-3 text-gray-600 leading-relaxed">{t('landing', 'contactSubtitle')}</p>
 
             {contactSent && (
-              <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-                {t('landing', 'contactSuccess')}
-              </p>
+              <div className="mt-6 space-y-3">
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+                  {t('landing', 'contactSuccess')}
+                </p>
+                {contactDelivery?.inApp && !contactDelivery.email ? (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    {t('landing', 'contactSuccessEmailNotConfigured')}
+                  </p>
+                ) : null}
+              </div>
             )}
 
             <form
@@ -865,6 +886,7 @@ export default function LandingPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 setContactSent(false);
+                setContactDelivery(null);
                 contactMutation.mutate();
               }}
             >
@@ -927,7 +949,9 @@ export default function LandingPage() {
                 />
               </div>
               {contactMutation.isError && (
-                <p className="text-sm text-red-600">{t('landing', 'contactError')}</p>
+                <p className="text-sm text-red-600" role="alert">
+                  {contactServerError || t('landing', 'contactError')}
+                </p>
               )}
               <button
                 type="submit"

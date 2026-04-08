@@ -301,8 +301,17 @@ ${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
     await this.send(to, subject, text);
   }
 
-  /** Landing page contact form — sent to each superadmin inbox. */
-  async sendLandingContactEmail(to: string, name: string, fromEmail: string, message: string): Promise<void> {
+  /**
+   * Landing page contact form — sent to each superadmin inbox.
+   * @returns true if an email was sent; false if mail is not configured; throws on transport/API failure.
+   */
+  async sendLandingContactEmail(to: string, name: string, fromEmail: string, message: string): Promise<boolean> {
+    if (!this.mailConfigured()) {
+      this.logger.warn(
+        'Landing contact email skipped: set BREVO_API_KEY or SENDGRID_API_KEY with SMTP_FROM, or SMTP_HOST+SMTP_USER+SMTP_PASS (see ENV_SETUP.md).',
+      );
+      return false;
+    }
     const subject = `Landing page inquiry from ${name}`;
     const text = [
       'Someone submitted the public contact form on the marketing site.',
@@ -318,7 +327,14 @@ ${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
     const html = `<p><strong>Landing page contact</strong></p>
 <p>Name: ${escapeHtml(name)}<br/>Email: <a href="mailto:${escapeHtml(fromEmail)}">${escapeHtml(fromEmail)}</a></p>
 <p style="white-space:pre-wrap;">${escapeHtml(message.trim())}</p>`;
-    await this.send(to, subject, text, html);
+    try {
+      await this.send(to, subject, text, html);
+      return true;
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      this.logger.warn(`sendLandingContactEmail failed for ${to}: ${msg}`);
+      return false;
+    }
   }
 
   /** Password reset email. Uses Brevo or SendGrid API when configured; else SMTP. */

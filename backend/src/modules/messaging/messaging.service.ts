@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+  InternalServerErrorException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -196,10 +203,16 @@ export class MessagingService {
   /**
    * Public marketing-site contact: emails superadmin addresses and creates in-app notifications
    * (visible in the superadmin notification bell; full text also in email).
+   * Fails the request if nothing could be delivered (misconfiguration or DB error).
    */
-  async submitPublicContact(name: string, email: string, message: string, honeypot?: string): Promise<{ ok: boolean }> {
+  async submitPublicContact(
+    name: string,
+    email: string,
+    message: string,
+    honeypot?: string,
+  ): Promise<{ ok: boolean; inAppDelivered: boolean; emailSent: boolean }> {
     if (honeypot?.trim()) {
-      return { ok: true };
+      return { ok: true, inAppDelivered: false, emailSent: false };
     }
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
@@ -211,27 +224,51 @@ export class MessagingService {
       throw new InternalServerErrorException('Could not deliver message');
     }
     if (!admins?.length) {
-      this.logger.warn('submitPublicContact: no superadmin users; landing contact dropped');
-      return { ok: true };
+      this.logger.error(
+        'submitPublicContact: no users with role superadmin — landing contact cannot be delivered. Add one in the database.',
+      );
+      throw new ServiceUnavailableException(
+        'Contact is temporarily unavailable. Please try again later or reach us by email.',
+      );
     }
     const preview = trimmedMessage.slice(0, 200) + (trimmedMessage.length > 200 ? '…' : '');
     const emailed = new Set<string>();
+    let inAppDelivered = 0;
+    let emailSent = false;
+
     for (const row of admins) {
       const aid = (row as { id: string }).id;
       const adminEmail = ((row as { email?: string }).email || '').trim();
-      await this.notificationsService
-        .create(aid, 'system', 'Landing page contact', {
+      try {
+        await this.notificationsService.create(aid, 'system', 'Landing page contact', {
           body: `${trimmedName} · ${trimmedEmail}: ${preview}`,
           link: '/superadmin/dashboard',
-        })
-        .catch((e) => this.logger.warn(`submitPublicContact notification: ${(e as Error)?.message}`));
+        });
+        inAppDelivered += 1;
+      } catch (e) {
+        this.logger.error(`submitPublicContact notification for ${aid}: ${(e as Error)?.message}`);
+      }
       if (adminEmail && !emailed.has(adminEmail.toLowerCase())) {
         emailed.add(adminEmail.toLowerCase());
-        await this.mailerService.sendLandingContactEmail(adminEmail, trimmedName, trimmedEmail, trimmedMessage).catch((e) => {
-          this.logger.warn(`submitPublicContact email to ${adminEmail}: ${(e as Error)?.message}`);
-        });
+        const sent = await this.mailerService.sendLandingContactEmail(
+          adminEmail,
+          trimmedName,
+          trimmedEmail,
+          trimmedMessage,
+        );
+        if (sent) emailSent = true;
       }
     }
-    return { ok: true };
+
+    if (inAppDelivered === 0 && !emailSent) {
+      this.logger.error(
+        'submitPublicContact: no in-app notifications and no email — check notifications table and email env (BREVO_API_KEY + SMTP_FROM, etc.).',
+      );
+      throw new ServiceUnavailableException(
+        'Could not deliver your message. Please try again later or contact us directly by email.',
+      );
+    }
+
+    return { ok: true, inAppDelivered: inAppDelivered > 0, emailSent };
   }
 }

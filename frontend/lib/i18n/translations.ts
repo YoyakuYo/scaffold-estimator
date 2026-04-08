@@ -1467,6 +1467,11 @@ export const translations = {
       en: 'Thanks — your message was sent.',
       fr: 'Merci — votre message a été envoyé.',
     },
+    contactSuccessEmailNotConfigured: {
+      ja: '※ サーバー側のメール送信が未設定のため、メール副本は届きません。管理者画面の通知で確認できます。',
+      en: 'Note: email copy was not sent because outgoing mail is not configured on the server. The team is still notified in the admin dashboard.',
+      fr: "Note : aucun e-mail n'a été envoyé (envoi non configuré sur le serveur). L'équipe est tout de même notifiée dans l'interface d'administration.",
+    },
     contactError: {
       ja: '送信に失敗しました。時間をおいて再度お試しください。',
       en: 'Could not send right now. Please try again in a moment.',
