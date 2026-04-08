@@ -50,31 +50,31 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
         </button>
       </div>
 
-      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 print:grid-cols-3">
+      <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
         {rows.map((row) => {
           const specUi = displaySizeSpecForUi(row.sizeSpec);
           const thumbBadge = materialGalleryThumbnailBadge(row.sizeSpec);
           return (
             <li
               key={row.rowId}
-              className="material-gallery-row flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-3 sm:px-4 sm:py-3.5 shadow-sm print:break-inside-avoid"
+              className="material-gallery-row flex items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-3.5 print:break-inside-avoid"
             >
               <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3">
                 <div className="relative h-14 w-14 shrink-0 sm:h-16 sm:w-16">
                   {thumbBadge ? (
                     <span
-                      className="absolute -left-0.5 -top-0.5 z-10 rounded bg-slate-800/90 px-1 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm print:bg-black"
+                      className="absolute -left-0.5 -top-0.5 z-10 rounded bg-slate-800/90 px-1 py-0.5 text-[10px] font-bold leading-none text-white print:bg-black"
                       aria-hidden
                     >
                       {thumbBadge}
                     </span>
                   ) : null}
-                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gradient-to-b from-slate-50 to-white p-1.5 print:bg-white print:border-gray-200">
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden p-1">
                     {row.imageSrc ? (
                       <img
                         src={row.imageSrc}
                         alt=""
-                        className="material-gallery-card max-h-full max-w-full object-contain drop-shadow-sm"
+                        className="material-gallery-card max-h-full max-w-full object-contain"
                         loading="lazy"
                       />
                     ) : (
