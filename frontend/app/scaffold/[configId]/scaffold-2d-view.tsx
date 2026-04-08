@@ -27,8 +27,6 @@ const PLANK_H_PX = 8;
 const HABAKI_H_PX = 6;
 const DIMENSION_OFFSET = 28;
 const FRAME_WIDTH_PX = 14;
-const FRAME_SPLAY_PX = 5;
-const FRAME_BOTTOM_RATIO = 0.194;
 
 // ─── Colors (clean technical drawing for estimation/quotation) ────
 const COL = {
@@ -370,22 +368,16 @@ export default function Scaffold2DView({ result }: Props) {
       // Posts / Frames
       postXPositions.forEach((px, pi) => {
         if (isWakugumi) {
-          // Wakugumi: draw gate-shaped frame (門型) — two legs with a top crossbar
+          // Wakugumi: 門型建枠 — top bar + two vertical legs; all three segments meet at 90° (no splay).
           const halfW = FRAME_WIDTH_PX / 2;
-          const splay = FRAME_SPLAY_PX;
           const topLX = x(px) - halfW;
           const topRX = x(px) + halfW;
-          const btmLX = x(px) - halfW - splay;
-          const btmRX = x(px) + halfW + splay;
           elements.push(
             <g key={`frame-${lvl}-${pi}`}>
-              {/* Left leg */}
-              <line x1={topLX} y1={y(topY)} x2={btmLX} y2={y(baseY)}
+              <line x1={topLX} y1={y(topY)} x2={topLX} y2={y(baseY)}
                 stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
-              {/* Right leg */}
-              <line x1={topRX} y1={y(topY)} x2={btmRX} y2={y(baseY)}
+              <line x1={topRX} y1={y(topY)} x2={topRX} y2={y(baseY)}
                 stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
-              {/* Top crossbar */}
               <line x1={topLX} y1={y(topY)} x2={topRX} y2={y(topY)}
                 stroke={COL.frame} strokeWidth={POST_STROKE - 1} />
             </g>
