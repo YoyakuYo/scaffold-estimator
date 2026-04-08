@@ -5,10 +5,16 @@ const IMG_BASE = '/images/scaffold-materials';
 
 export type ScaffoldGalleryType = 'kusabi' | 'wakugumi';
 
-/** Group `anchi` + `anchi_half` into one visual card with summed quantity. */
+/** Group `anchi` + `anchi_half` into one image bucket (rows still split by size). */
 export function materialGalleryAggregationKey(comp: CalculatedComponent): string {
   if (comp.type === 'anchi' || comp.type === 'anchi_half') return 'anchi_group';
   return comp.type;
+}
+
+/** Merge key: same gallery image + same BOM line identity (size / material). */
+function galleryRowMergeKey(c: CalculatedComponent): string {
+  const agg = materialGalleryAggregationKey(c);
+  return `${agg}\x1e${c.type}\x1e${c.materialCode ?? ''}\x1e${c.sizeSpec ?? ''}`;
 }
 
 /**
@@ -61,23 +67,19 @@ export function materialGalleryImageSrc(
   }
 }
 
-/** BOM `type` used only for sort order (anchi_group → treat as anchi). */
-function bomTypeForSort(aggregationKey: string): string {
-  if (aggregationKey === 'anchi_group') return 'anchi';
-  return aggregationKey;
-}
-
 export interface MaterialGalleryRow {
+  /** Stable key for list items */
+  rowId: string;
   aggregationKey: string;
   quantity: number;
   imageSrc: string | null;
   /** Min sortOrder among merged lines */
   sortOrder: number;
-  /** First sizeSpec after BOM sort — tie-breaker */
   sizeSpec: string;
   unit: string;
   label: string;
-  specSummary: string;
+  /** First merged line’s `type` — BOM sort (anchi vs anchi_half, etc.) */
+  bomType: string;
 }
 
 export function buildMaterialGalleryRows(
@@ -87,7 +89,7 @@ export function buildMaterialGalleryRows(
 ): MaterialGalleryRow[] {
   const map = new Map<string, { qty: number; comps: CalculatedComponent[] }>();
   for (const c of summary) {
-    const key = materialGalleryAggregationKey(c);
+    const key = galleryRowMergeKey(c);
     const cur = map.get(key) ?? { qty: 0, comps: [] };
     cur.qty += c.quantity;
     cur.comps.push(c);
@@ -95,14 +97,10 @@ export function buildMaterialGalleryRows(
   }
 
   const rows: MaterialGalleryRow[] = [];
-  for (const [aggregationKey, { qty, comps }] of map) {
+  for (const [mergeKey, { qty, comps }] of map) {
     const sorted = [...comps].sort(compareCalculatedComponentsForBom);
     const first = sorted[0];
-    const specs = [...new Set(sorted.map((c) => c.sizeSpec).filter(Boolean))];
-    let specSummary = '';
-    if (specs.length === 0) specSummary = '';
-    else if (specs.length <= 3) specSummary = specs.join(' · ');
-    else specSummary = specs.slice(0, 2).join(' · ') + ` · +${specs.length - 2}`;
+    const aggregationKey = materialGalleryAggregationKey(first);
 
     const label =
       locale === 'ja'
@@ -110,6 +108,7 @@ export function buildMaterialGalleryRows(
         : (first.name || first.nameJp || first.type).trim();
 
     rows.push({
+      rowId: mergeKey,
       aggregationKey,
       quantity: qty,
       imageSrc: materialGalleryImageSrc(aggregationKey, scaffoldType),
@@ -117,12 +116,12 @@ export function buildMaterialGalleryRows(
       sizeSpec: first.sizeSpec || '',
       unit: first.unit || '',
       label,
-      specSummary,
+      bomType: first.type,
     });
   }
 
   const sortKey = (r: MaterialGalleryRow) => ({
-    type: bomTypeForSort(r.aggregationKey),
+    type: r.bomType,
     sortOrder: r.sortOrder,
     sizeSpec: r.sizeSpec,
   });

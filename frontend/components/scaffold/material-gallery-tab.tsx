@@ -51,7 +51,7 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
       <ul className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100 print:border-gray-400">
         {rows.map((row) => (
           <li
-            key={row.aggregationKey}
+            key={row.rowId}
             className="material-gallery-row flex items-start gap-3 sm:gap-5 px-3 py-3 sm:px-4 sm:py-3.5 print:break-inside-avoid"
           >
             <span
@@ -79,8 +79,8 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
             </div>
             <div className="flex-1 min-w-0 pt-0.5">
               <h3 className="text-sm font-semibold text-gray-900 leading-snug">{row.label}</h3>
-              {row.specSummary ? (
-                <p className="mt-1 text-xs text-gray-500 leading-snug">{row.specSummary}</p>
+              {row.sizeSpec ? (
+                <p className="mt-1 text-xs text-gray-600 font-medium leading-snug">{row.sizeSpec}</p>
               ) : null}
               <p className="mt-1 text-xs text-gray-400">
                 {t('resultExtra', 'materialsGalleryUnit')}: {row.unit || '—'}
