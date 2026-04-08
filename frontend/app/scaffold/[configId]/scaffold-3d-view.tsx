@@ -1348,9 +1348,12 @@ export default function Scaffold3DView({
         // Fall prevention at open deck ends = **transverse horizontal** members (端部布材 / 端部手摺), not uprights.
         // Span **full opening** local z = 0 → widthM: transverse length = nominal 足場幅 (same as post spacing).
         // 枠タイプ keeps vertical frame legs (妻側枠).
+        //
+        // Convex corner + terminal bay (610/914/1219): last bay is the turn past the façade (−300mm overrun layout).
+        // 端部 closes the walking deck one span **in** (penultimate post), not on the corner tip — aligned with くさび 90° handling.
         const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
-          const exEnd = postX[postX.length - 1];
+          const exWallEnd = postX[postX.length - 1];
           const zEndStopper = widthM;
           const swMm = widthMm;
           const lastSpanMm = spans[spans.length - 1] ?? 0;
@@ -1358,7 +1361,12 @@ export default function Scaffold3DView({
             !isBracket &&
             spans.length >= 1 &&
             Math.abs(lastSpanMm - swMm) <= 55;
-          const xPlane = isEndTerminalBay ? exEnd + END_STOPPER_FACADE_OUTSET_M : exEnd;
+          const useInwardStopperAtCornerEnd =
+            !!flushDeckAtCornerEnd && isEndTerminalBay && postX.length >= 3;
+          const exStopperPlane = useInwardStopperAtCornerEnd
+            ? postX[postX.length - 2]!
+            : exWallEnd;
+          const xPlane = isEndTerminalBay ? exStopperPlane + END_STOPPER_FACADE_OUTSET_M : exStopperPlane;
 
           if (isWakugumi) {
             for (let lv = 1; lv <= levelLoopMax; lv++) {
@@ -1381,13 +1389,13 @@ export default function Scaffold3DView({
                   addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.05);
                   addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.0);
                 } else {
-                  addPipe(group, exEnd, barY1, 0, exEnd, barY1, zEndStopper, endStopperMat, PIPE_R * 0.75);
-                  addPipe(group, exEnd, barY2, 0, exEnd, barY2, zEndStopper, endStopperMat, PIPE_R * 0.72);
+                  addPipe(group, exWallEnd, barY1, 0, exWallEnd, barY1, zEndStopper, endStopperMat, PIPE_R * 0.75);
+                  addPipe(group, exWallEnd, barY2, 0, exWallEnd, barY2, zEndStopper, endStopperMat, PIPE_R * 0.72);
                 }
               } else {
                 const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
                 const frameTop = y - 0.05;
-                const xs = isEndTerminalBay ? xPlane : exEnd;
+                const xs = isEndTerminalBay ? xPlane : exWallEnd;
                 if (isEndTerminalBay && zEndStopper >= 0.08) {
                   const kickT = 0.038;
                   const midY = (frameBottom + frameTop) * 0.5;
@@ -1430,8 +1438,8 @@ export default function Scaffold3DView({
                 addRealisticNunoBar(THREE, group, xPlane, railMid, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.05);
                 addRealisticNunoBar(THREE, group, xPlane, railTop, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.0);
               } else {
-                addPipe(group, exEnd, railTop, 0, exEnd, railTop, zEndStopper, endStopperMat, PIPE_R * 0.72);
-                addPipe(group, exEnd, railMid, 0, exEnd, railMid, zEndStopper, endStopperMat, PIPE_R * 0.68);
+                addPipe(group, exWallEnd, railTop, 0, exWallEnd, railTop, zEndStopper, endStopperMat, PIPE_R * 0.72);
+                addPipe(group, exWallEnd, railMid, 0, exWallEnd, railMid, zEndStopper, endStopperMat, PIPE_R * 0.68);
               }
             }
           }
