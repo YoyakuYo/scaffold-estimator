@@ -664,9 +664,6 @@ export default function Scaffold3DView({
       const topGuardMat = isTech
         ? new THREE.MeshStandardMaterial({ color: C_TECH.topGuard, metalness: metal, roughness: rough })
         : pipeMat;
-      const shitasanMat = isTech
-        ? new THREE.MeshStandardMaterial({ color: C_TECH.shitasan, metalness: metal, roughness: rough })
-        : pipeMat;
       const braceMat = pipeDarkMat;
       const habakiMatEff = habakiMat;
 
@@ -704,6 +701,12 @@ export default function Scaffold3DView({
         color: isWakugumi ? 0x111111 : BIM_COLORS.ecoPallet,
         metalness: 0.15,
         roughness: 0.75,
+      });
+      /** Wakugumi 下桟: span-direction only (both faces), no width ties — same Y band as brace foot; red (brace colour). */
+      const shitasanWkMat = new THREE.MeshStandardMaterial({
+        color: BRACE_COLOR_3D,
+        metalness: metal,
+        roughness: rough,
       });
       const LEVEL_H = isWakugumi ? ((result.frameSizeMm || 1700) / 1000) : LEVEL_H_KUSABI;
       const topGuardNum = Number(
@@ -1161,15 +1164,20 @@ export default function Scaffold3DView({
 
             // Horizontal bars — type-dependent:
             // Kusabi: 手摺 — 内列のみ (外面はブレス)
-            // Wakugumi: 下桟 — BOTH faces
+            // Wakugumi: 下桟 — span-only (both faces, no post-to-post width ties); Y = brace foot (same as ブレス lower band)
             if (isWakugumi) {
-              const shitasanY = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
-              if (!isBracket) {
-                for (const sz of [0, widthM]) {
-                  addPipe(group, x1, shitasanY, sz, x2, shitasanY, sz, shitasanMat, PIPE_R * 0.6);
+              if (!isDoorSpan) {
+                const yDeckLift = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H;
+                const braceBottomY = yDeckLift + 0.18;
+                const isWakugumiTopGuardLift = isWakugumi && !isBracket && lv === levelLoopMax;
+                const shitasanY = isWakugumiTopGuardLift ? yDeckLift + 0.14 : braceBottomY;
+                if (!isBracket) {
+                  for (const sz of [0, widthM]) {
+                    addPipe(group, x1, shitasanY, sz, x2, shitasanY, sz, shitasanWkMat, PIPE_R * 0.6);
+                  }
+                } else {
+                  addPipe(group, x1, shitasanY, 0, x2, shitasanY, 0, shitasanWkMat, PIPE_R * 0.6);
                 }
-              } else {
-                addPipe(group, x1, shitasanY, 0, x2, shitasanY, 0, shitasanMat, PIPE_R * 0.6);
               }
             } else if (!isBracket) {
               if (!(skipTesuriOnLastTerminalBay && i === spans.length - 1)) {
@@ -1279,6 +1287,24 @@ export default function Scaffold3DView({
                 const xb = postX[i + 1];
                 addPipe(group, xa, yCapRail, pz, xb, yCapRail, pz, topGuardMat, PIPE_R * 0.65);
               }
+            }
+          }
+
+          // Extended stair bay (600): span-only 下桟 at ext Z — same Y as main-face braces (no width ties to z=0)
+          if (isWakugumi && !isBracket && needsExtendedBay && uniqueStairPos.length > 0) {
+            const yDeckLift = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H;
+            const braceBottomY = yDeckLift + 0.18;
+            const isWakugumiTopGuardLift = lv === levelLoopMax;
+            const shitasanYExt = isWakugumiTopGuardLift ? yDeckLift + 0.14 : braceBottomY;
+            const extZNeg = -0.9;
+            for (const stairSpanIdx of uniqueStairPos) {
+              if (stairSpanIdx < startSpanIdx || stairSpanIdx >= spans.length) continue;
+              if (doorSpanIndices.has(stairSpanIdx) && lv === 1) continue;
+              const sx1 = postX[stairSpanIdx];
+              const sx2 = postX[stairSpanIdx + 1];
+              const sMidX = (sx1 + sx2) / 2;
+              addPipe(group, sx1, shitasanYExt, extZNeg, sMidX, shitasanYExt, extZNeg, shitasanWkMat, PIPE_R * 0.6);
+              addPipe(group, sMidX, shitasanYExt, extZNeg, sx2, shitasanYExt, extZNeg, shitasanWkMat, PIPE_R * 0.6);
             }
           }
         }
