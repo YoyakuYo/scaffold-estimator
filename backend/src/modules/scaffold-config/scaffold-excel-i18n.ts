@@ -52,6 +52,10 @@ export interface ScaffoldExcelStrings {
   edgeLine2: (cross: string, along: string) => string;
   subtotalEdge: string;
   sameAsAbove: string;
+  /** Second worksheet: thumbnail gallery aligned with app Material Pictures */
+  sheetMaterialPictures: string;
+  materialPicturesSheetTitle: string;
+  colPhoto: string;
 }
 
 const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
@@ -99,6 +103,9 @@ const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
     edgeLine2: (cross, along) => `通り: 交差 ${cross}  |  沿い ${along}`,
     subtotalEdge: '小計（当該辺）',
     sameAsAbove: '〃',
+    sheetMaterialPictures: '部材写真',
+    materialPicturesSheetTitle: '部材写真（参考）',
+    colPhoto: '写真',
   },
   en: {
     sheetName: 'Scaffold quote',
@@ -144,6 +151,9 @@ const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
     edgeLine2: (cross, along) => `Grid: cross ${cross}  |  along ${along}`,
     subtotalEdge: 'Subtotal (this edge)',
     sameAsAbove: '〃',
+    sheetMaterialPictures: 'Material pictures',
+    materialPicturesSheetTitle: 'Material pictures (reference)',
+    colPhoto: 'Photo',
   },
   fr: {
     sheetName: 'Devis échafaudage',
@@ -189,6 +199,9 @@ const STR: Record<ExcelExportLocale, ScaffoldExcelStrings> = {
     edgeLine2: (cross, along) => `Quadrillage : perpend. ${cross}  |  suivant ${along}`,
     subtotalEdge: 'Sous-total (ce côté)',
     sameAsAbove: 'idem',
+    sheetMaterialPictures: 'Photos matériaux',
+    materialPicturesSheetTitle: 'Photos des matériaux (référence)',
+    colPhoto: 'Photo',
   },
 };
 

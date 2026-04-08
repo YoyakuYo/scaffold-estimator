@@ -22,6 +22,11 @@ import {
   normalizeExcelLocale,
   type ScaffoldExcelStrings,
 } from './scaffold-excel-i18n';
+import {
+  buildMaterialGalleryRowsForExcel,
+  readGalleryImageBuffer,
+  resolveScaffoldMaterialsImageRoot,
+} from './scaffold-material-gallery-excel';
 
 const FILL_HEADER = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF2563EB' } };
 const FILL_SECTION = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFE5E7EB' } };
@@ -126,8 +131,105 @@ export class ScaffoldExcelService {
       sheet.getColumn(c).width = c <= 5 ? [6, 14, 26, 18, 8][c - 1] ?? 12 : 11;
     }
 
+    this.writeMaterialPicturesWorksheet(workbook, result, locale, str);
+
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  /**
+   * Second sheet: same material thumbnails as the app Material Pictures gallery
+   * (images from `frontend/public/images/scaffold-materials/` when deployed).
+   */
+  private writeMaterialPicturesWorksheet(
+    workbook: ExcelJS.Workbook,
+    result: ScaffoldCalculationResult,
+    locale: ExcelExportLocale,
+    str: ScaffoldExcelStrings,
+  ) {
+    const scaffoldType = result.scaffoldType === 'wakugumi' ? 'wakugumi' : 'kusabi';
+    const galleryRows = buildMaterialGalleryRowsForExcel(result.summary, scaffoldType);
+    const imageRoot = resolveScaffoldMaterialsImageRoot();
+
+    const picSheet = workbook.addWorksheet(str.sheetMaterialPictures.slice(0, 31), {
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'portrait',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+    });
+
+    const titleRow = picSheet.addRow([str.materialPicturesSheetTitle]);
+    titleRow.font = { bold: true, size: 14 };
+    titleRow.height = 22;
+    picSheet.mergeCells(1, 1, 1, 6);
+    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+    const hdr = picSheet.addRow([
+      str.colPhoto,
+      str.colNo,
+      str.colName,
+      str.colSpec,
+      str.colUnit,
+      str.colTotal,
+    ]);
+    this.styleHeaderRowFull(hdr, 1, 6);
+
+    const nameFor = (r: { labelJa: string; labelEn: string }) =>
+      locale === 'ja' ? r.labelJa : r.labelEn;
+
+    let idx = 1;
+    const imgW = 120;
+    const imgH = 72;
+
+    for (const gr of galleryRows) {
+      const dr = picSheet.addRow([
+        '',
+        idx,
+        nameFor(gr),
+        gr.sizeSpec || str.empty,
+        gr.unit || str.empty,
+        gr.quantity,
+      ]);
+      dr.height = Math.max(64, imgH + 12);
+      for (let c = 1; c <= 6; c++) {
+        dr.getCell(c).border = BORDER_THIN as ExcelJS.Borders;
+      }
+      dr.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+      dr.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      dr.getCell(4).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      dr.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+      dr.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+      dr.getCell(6).font = { bold: true };
+      if (idx % 2 === 0) {
+        for (let c = 1; c <= 6; c++) dr.getCell(c).fill = FILL_ALT;
+      }
+
+      if (imageRoot && gr.imageRelPath) {
+        const buf = readGalleryImageBuffer(imageRoot, gr.imageRelPath);
+        if (buf && buf.length > 0) {
+          const imageId = workbook.addImage({
+            buffer: buf as any,
+            extension: 'png',
+          });
+          const row0 = dr.number - 1;
+          picSheet.addImage(imageId, {
+            tl: { col: 0, row: row0 },
+            ext: { width: imgW, height: imgH },
+          });
+        }
+      }
+      idx++;
+    }
+
+    picSheet.getColumn(1).width = 20;
+    picSheet.getColumn(2).width = 6;
+    picSheet.getColumn(3).width = 28;
+    picSheet.getColumn(4).width = 18;
+    picSheet.getColumn(5).width = 8;
+    picSheet.getColumn(6).width = 12;
   }
 
   private mergeBanner(sheet: ExcelJS.Worksheet, row: ExcelJS.Row, throughCol: number) {
