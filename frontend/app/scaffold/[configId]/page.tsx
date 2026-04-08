@@ -272,6 +272,7 @@ function ScaffoldResultPage() {
       frameSizeMm: result.frameSizeMm ?? config.frameSizeMm,
       habakiCountPerSpan: result.habakiCountPerSpan ?? config.habakiCountPerSpan,
       endStopperType: 'nuno',
+      includePattanko: (result as { includePattanko?: boolean }).includePattanko ?? config.includePattanko ?? true,
     };
   }, [result, config, rawResult]);
 

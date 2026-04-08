@@ -107,6 +107,8 @@ export interface QuickShapeConfig {
   frameSizeMm: number;
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
+  /** Include パッタンコ in BOM (default true). */
+  includePattanko?: boolean;
   kaidanPerSide: Record<string, KaidanConfig>;
   /** Saved with calculate — grid line X1–Xn / Y1–Yn (stations 1–10). */
   edgeHashiraByLabel?: Record<string, EdgeHashiraFormRow>;
@@ -128,6 +130,7 @@ export interface QuickShapeBuilderDraft {
   frameSizeMm: number;
   wakugumiFrameSeries: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
+  includePattanko?: boolean;
   kaidanPerSide: Record<string, KaidanConfig>;
   scaffoldWidthPerSide: Record<string, number | undefined>;
   /** Plan axis + signed run (mm) per edge label — same role as drawing upload XY column. */
@@ -224,6 +227,7 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     frameSizeMm: [1700, 1800, 1900].includes(d.frameSizeMm) ? d.frameSizeMm : 1700,
     wakugumiFrameSeries,
     habakiCountPerSpan: habaki,
+    includePattanko: d.includePattanko !== false,
     kaidanPerSide: d.kaidanPerSide && typeof d.kaidanPerSide === 'object' ? d.kaidanPerSide : {},
     scaffoldWidthPerSide:
       d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object'
@@ -306,6 +310,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     () => mergedInitial?.wakugumiFrameSeries ?? 'FT917',
   );
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(() => mergedInitial?.habakiCountPerSpan ?? 2);
+  const [includePattanko, setIncludePattanko] = useState(() => mergedInitial?.includePattanko !== false);
 
   // Kaidan per side
   const [kaidanPerSide, setKaidanPerSide] = useState<Record<string, KaidanConfig>>(
@@ -346,6 +351,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         frameSizeMm,
         wakugumiFrameSeries,
         habakiCountPerSpan,
+        includePattanko,
         kaidanPerSide,
         scaffoldWidthPerSide,
         edgePlanByLabel,
@@ -369,6 +375,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     frameSizeMm,
     wakugumiFrameSeries,
     habakiCountPerSpan,
+    includePattanko,
     kaidanPerSide,
     scaffoldWidthPerSide,
     edgePlanByLabel,
@@ -442,6 +449,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
       frameSizeMm,
       ...(scaffoldType === 'wakugumi' ? { wakugumiFrameSeries } : {}),
       habakiCountPerSpan,
+      includePattanko,
       kaidanPerSide,
       edgeHashiraByLabel:
         Object.keys(hashiraByLabel).length > 0 ? hashiraByLabel : undefined,
@@ -936,6 +944,19 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                 <div>{t('quickBuilder', 'wakugumiLabel')}</div>
               </button>
             </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffoldExtra', 'pattankoInclude')}</label>
+            <select
+              value={includePattanko ? 'yes' : 'no'}
+              onChange={(e) => setIncludePattanko(e.target.value === 'yes')}
+              className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="yes">{t('common', 'yes')}</option>
+              <option value="no">{t('common', 'no')}</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">{t('scaffoldExtra', 'pattankoIncludeHint')}</p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">

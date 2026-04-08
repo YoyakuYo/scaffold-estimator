@@ -2468,6 +2468,8 @@ export default function Scaffold3DView({
       setLevelVisCap(threeDLevelsCapped);
       maxHeightRef.current = maxH;
 
+      const includePattanko3d = result?.includePattanko !== false;
+
       // ── Tier-aware corner connections (足場コーナー詳細図) ─
       // Iterate per tier group so upper-tier corners are connected correctly
       // and walls from different tiers never cross-connect.
@@ -2593,29 +2595,31 @@ export default function Scaffold3DView({
           const reflexWalkJointOk = isReflexInnerJoint && lastSpanAW === termRef;
 
           if (isReflexInnerJoint && !reflexWalkJointOk) {
-            const pattankoMatRef = cornerPlankMat.clone();
-            if ('color' in pattankoMatRef && pattankoMatRef.color) {
-              pattankoMatRef.color.setHex(0xf97316);
-            }
-            for (let lv = 1; lv <= maxLvThisCorner; lv++) {
-              const yDeck = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
-              const addFiller = (p0: PointXZ, p1: PointXZ) => {
-                const dx = p1.x - p0.x;
-                const dz = p1.z - p0.z;
-                const L = Math.hypot(dx, dz);
-                if (L < 0.03) return;
-                const midX = (p0.x + p1.x) / 2;
-                const midZ = (p0.z + p1.z) / 2;
-                const geo = new THREE.BoxGeometry(Math.min(L * 0.48, 0.38), 0.02, 0.12);
-                const mesh = new THREE.Mesh(geo, pattankoMatRef);
-                mesh.position.set(midX, yDeck + 0.024, midZ);
-                mesh.rotation.y = Math.atan2(dz, dx);
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                cornerGroup.add(mesh);
-              };
-              addFiller(aOuterEnd, bOuterNext);
-              addFiller(aInnerEnd, bInnerNext);
+            if (includePattanko3d) {
+              const pattankoMatRef = cornerPlankMat.clone();
+              if ('color' in pattankoMatRef && pattankoMatRef.color) {
+                pattankoMatRef.color.setHex(0xf97316);
+              }
+              for (let lv = 1; lv <= maxLvThisCorner; lv++) {
+                const yDeck = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
+                const addFiller = (p0: PointXZ, p1: PointXZ) => {
+                  const dx = p1.x - p0.x;
+                  const dz = p1.z - p0.z;
+                  const L = Math.hypot(dx, dz);
+                  if (L < 0.03) return;
+                  const midX = (p0.x + p1.x) / 2;
+                  const midZ = (p0.z + p1.z) / 2;
+                  const geo = new THREE.BoxGeometry(Math.min(L * 0.48, 0.38), 0.02, 0.12);
+                  const mesh = new THREE.Mesh(geo, pattankoMatRef);
+                  mesh.position.set(midX, yDeck + 0.024, midZ);
+                  mesh.rotation.y = Math.atan2(dz, dx);
+                  mesh.castShadow = true;
+                  mesh.receiveShadow = true;
+                  cornerGroup.add(mesh);
+                };
+                addFiller(aOuterEnd, bOuterNext);
+                addFiller(aInnerEnd, bInnerNext);
+              }
             }
             continue;
           }
@@ -2698,7 +2702,7 @@ export default function Scaffold3DView({
               addPipe(cornerGroup, aOuterEnd.x, hY, aOuterEnd.z, bOuterStart.x, hY, bOuterStart.z, habakiMatEff, PIPE_R * 0.5);
               addPipe(cornerGroup, aInnerEnd.x, hY, aInnerEnd.z, bInnerStart.x, hY, bInnerStart.z, habakiMatEff, PIPE_R * 0.5);
             }
-          } else {
+          } else if (includePattanko3d) {
             for (let lv = 1; lv <= maxLvThisCorner; lv++) {
               const y = baseYM_corner + GROUND_Y + JACK_H + lv * LEVEL_H;
               addPattankoFillersForLevel(y, cornerPlankMat);

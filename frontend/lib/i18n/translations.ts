@@ -24,6 +24,8 @@ export const translations = {
     delete: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
     edit: { ja: '編集', en: 'Edit', fr: 'Modifier' },
     confirm: { ja: '確認', en: 'Confirm', fr: 'Confirmer' },
+    yes: { ja: 'はい', en: 'Yes', fr: 'Oui' },
+    no: { ja: 'いいえ', en: 'No', fr: 'Non' },
   },
 
   // ─── Settings redirect (global price master removed) ────────────
@@ -1901,6 +1903,16 @@ export const translations = {
     },
     wakugumiFrameSeries: { ja: '枠タイプ (FT)', en: 'Frame type (FT)', fr: 'Type de cadre (FT)' },
     habakiCount: { ja: '巾木枚数', en: 'Habaki Count', fr: 'Habaki Count' },
+    pattankoInclude: {
+      ja: 'パッタンコ（角部補助踏板）',
+      en: 'Pattanko (corner filler planks)',
+      fr: 'Pattanko (plinthes de coin)',
+    },
+    pattankoIncludeHint: {
+      ja: '見積・3Dに角部の補助踏板を含めるか（枠組の端部は常に自動計上）',
+      en: 'Include corner filler planks in BOM and 3D. Wakugumi end stoppers are always included.',
+      fr: 'Inclure les plinthes de remplissage au BOM et en 3D.',
+    },
     endStopper: { ja: '端部タイプ', en: 'End Stopper', fr: 'End Stopper' },
     multiSegmentWall: { ja: '多段壁', en: 'Multi-Segment Wall', fr: 'Multi-Segment Wall' },
     addSegment: { ja: 'セグメント追加', en: 'Add Segment', fr: 'Add Segment' },

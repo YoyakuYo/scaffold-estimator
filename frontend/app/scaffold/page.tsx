@@ -1143,6 +1143,7 @@ function ScaffoldPageContent() {
   const [frameSizeMm, setFrameSizeMm] = useState(1700);
   const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<WakugumiFrameSeriesId>('FT917');
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
+  const [includePattanko, setIncludePattanko] = useState(true);
   const [walls, setWalls] = useState<WallState[]>(() => initialWizard.walls);
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(() => initialWizard.buildingHeightMm);
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>(
@@ -1196,6 +1197,7 @@ function ScaffoldPageContent() {
     }
     setPreferredMainTatejiMm(editConfig.preferredMainTatejiMm ?? 1800);
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
+    setIncludePattanko(editConfig.includePattanko !== false);
     setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
     const rawPoly = editConfig.calculationResult?.polygonVertices;
     const editPolyMm =
@@ -1770,8 +1772,11 @@ function ScaffoldPageContent() {
       }),
       ...(polygonVertices.length >= 3 && polygonVertices.length === enabledWalls.length && {
         buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
-        pattankoCornerCount: countPattankoCorners(polygonVertices),
+        ...(includePattanko
+          ? { pattankoCornerCount: countPattankoCorners(polygonVertices) }
+          : {}),
       }),
+      includePattanko,
       ...(cornerKindsUseManual &&
         walls.length > 0 &&
         walls.every((w) => w.enabled) &&
@@ -1815,7 +1820,8 @@ function ScaffoldPageContent() {
       walls: wallInputs,
       scaffoldWidthMm: qConfig.scaffoldWidthMm,
       buildingOutline,
-      pattankoCornerCount: countPattankoCorners(vertices),
+      ...(qConfig.includePattanko !== false ? { pattankoCornerCount: countPattankoCorners(vertices) } : {}),
+      includePattanko: qConfig.includePattanko !== false,
       ...(qConfig.scaffoldType === 'kusabi' && {
         preferredMainTatejiMm: qConfig.preferredMainTatejiMm,
       }),
@@ -2133,6 +2139,7 @@ function ScaffoldPageContent() {
                         wakugumiFrameSeries: aiWkSeries,
                       }),
                       buildingOutline,
+                      includePattanko: true,
                       ...(effectiveMassingTiers && effectiveMassingTiers.length > 0 && { massingTiers: effectiveMassingTiers }),
                       ...(obstacles && obstacles.length > 0 && { obstacles }),
                       ...(bimFacadeColors && { bimFacadeColors }),
@@ -2817,6 +2824,26 @@ function ScaffoldPageContent() {
                             )}
                           </div>
                         </div>
+                        <div className="mt-3">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            {t('scaffoldExtra', 'pattankoInclude')}
+                          </label>
+                          <select
+                            value={aiBimPreview.dto.includePattanko !== false ? 'yes' : 'no'}
+                            onChange={(e) => {
+                              const yes = e.target.value === 'yes';
+                              setAiBimPreview({
+                                ...aiBimPreview,
+                                dto: { ...aiBimPreview.dto, includePattanko: yes },
+                              });
+                            }}
+                            className="w-full max-w-xs rounded border border-gray-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-violet-500 bg-white"
+                          >
+                            <option value="yes">{t('common', 'yes')}</option>
+                            <option value="no">{t('common', 'no')}</option>
+                          </select>
+                          <p className="text-[10px] text-gray-500 mt-1">{t('scaffoldExtra', 'pattankoIncludeHint')}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2936,7 +2963,10 @@ function ScaffoldPageContent() {
                           siteEmail: '',
                           sitePhone: '',
                           siteFax: '',
-                          pattankoCornerCount: outline && outline.length >= 3 ? countPattankoCorners(outline) : undefined,
+                          ...(dtoBase.includePattanko !== false && outline && outline.length >= 3
+                            ? { pattankoCornerCount: countPattankoCorners(outline) }
+                            : {}),
+                          includePattanko: dtoBase.includePattanko !== false,
                           ...(edgeHashiraFromAi ? { edgeHashiraLabeling: edgeHashiraFromAi } : {}),
                         };
                         const data = await scaffoldConfigsApi.createAndCalculate(dto);
@@ -3637,6 +3667,8 @@ function ScaffoldPageContent() {
           setPreferredMainTatejiMm={setPreferredMainTatejiMm}
           habakiCountPerSpan={habakiCountPerSpan}
           setHabakiCountPerSpan={setHabakiCountPerSpan}
+          includePattanko={includePattanko}
+          setIncludePattanko={setIncludePattanko}
           setFrameSizeMm={setFrameSizeMm}
         />
 

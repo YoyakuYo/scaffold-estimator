@@ -78,6 +78,8 @@ export interface ScaffoldCalculationInput {
   anchiWidthMm?: number;           // override anchi width (auto from scaffoldWidth if omitted)
   /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
   pattankoCornerCount?: number;
+  /** When false, no PATTANKO line (ignores pattankoCornerCount and reflex-derived corners). */
+  includePattanko?: boolean;
 }
 
 export interface CalculatedComponent {
@@ -154,6 +156,8 @@ export interface ScaffoldCalculationResult {
   endStopperType?: 'nuno';
   /** Wakugumi frame product line (FT-617 / FT-917 / FT-1217). */
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
+  /** Echoed from input; when false, 3D skips corner pattanko meshes. */
+  includePattanko?: boolean;
   /** Parametric: transition connections at corners where width changes (for mitered 3D). */
   parametricTransitions?: Array<{
     cornerIndex: number;
@@ -230,9 +234,11 @@ export class ScaffoldCalculatorService {
     // Get max levels across all walls for summary
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
+    const pattankoOn = input.includePattanko !== false;
+
     /** Reflex (re-entrant) joint without a width-module last span → filler planks between bays (Rule 2). */
     let reflexReentrantPattankoCorners = 0;
-    if (input.walls.length >= 2) {
+    if (pattankoOn && input.walls.length >= 2) {
       const n = input.walls.length;
       const term = cornerTerminalSpanMmKusabi(input.scaffoldWidthMm);
       for (let k = 0; k < n; k++) {
@@ -249,8 +255,9 @@ export class ScaffoldCalculatorService {
     }
 
     // PATTANKO (パッタンコ): DTO count + reflex fallback corners (2 per corner per level).
-    const pattankoCornerCount =
-      (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners;
+    const pattankoCornerCount = pattankoOn
+      ? (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners
+      : 0;
     const pattankoQty = pattankoCornerCount * 2 * maxLevels;
     if (pattankoQty > 0) {
       summary.push({
@@ -278,6 +285,7 @@ export class ScaffoldCalculatorService {
       preferredMainTatejiMm: input.preferredMainTatejiMm,
       topGuardHeightMm: KUSABI_TOP_GUARD_HEIGHT_MM,
       totalLevels: maxLevels,
+      includePattanko: pattankoOn,
     };
   }
 

@@ -64,6 +64,8 @@ export interface CreateScaffoldConfigDto {
   rentalEndDate?: string;
   /** Optional: Number of corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not counted. */
   pattankoCornerCount?: number;
+  /** When false, omit PATTANKO from BOM and 3D corner fillers (default true). */
+  includePattanko?: boolean;
   /** Optional: Building outline polygon (for complex shapes) */
   buildingOutline?: Array<{ xFrac: number; yFrac: number }>;
   /**
@@ -157,6 +159,8 @@ export interface ScaffoldConfiguration {
   habakiCountPerSpan?: number;
   /** Legacy configs may have `frame`; new saves use bar-type 端部 only (`nuno`). */
   endStopperType?: string;
+  /** Include パッタンコ in quantities / 3D (default true when column missing). */
+  includePattanko?: boolean;
   calculationResult: any;
   status: 'configured' | 'calculated' | 'reviewed';
   createdAt: string;
@@ -244,6 +248,7 @@ export interface CalculationResult {
     frameSizeMm?: number;
     habakiCountPerSpan?: number;
     endStopperType?: 'nuno';
+    includePattanko?: boolean;
     totalLevels: number;
   };
   quantities: CalculatedQuantity[];
@@ -306,7 +311,6 @@ export interface ScaffoldRules {
     spanSizes: number[];
     spanOptions: SizeOption[];
     habakiCountOptions: SizeOption[];
-    endStopperTypeOptions: Array<{ value: string; label: string }>;
   };
 }
 

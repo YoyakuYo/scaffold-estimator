@@ -498,7 +498,6 @@ export const ALL_WAKUGUMI_RULES = {
   spanOptions: WAKUGUMI_SPAN_OPTIONS,
   scaffoldWidths: WAKUGUMI_SCAFFOLD_WIDTH_OPTIONS,
   habakiCountOptions: WAKUGUMI_HABAKI_COUNT_OPTIONS,
-  endStopperTypeOptions: [] as Array<{ value: string; label: string }>,
   braceSizes: WAKUGUMI_BRACE_SIZES,
   shitasanSizes: WAKUGUMI_SHITASAN_SIZES,
   habakiSizes: WAKUGUMI_HABAKI_SIZES,

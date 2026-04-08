@@ -54,6 +54,8 @@ export interface WakugumiCalculationInput {
   topGuardHeightMm?: number;
   /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
   pattankoCornerCount?: number;
+  /** When false, no PATTANKO line (ignores pattankoCornerCount and reflex-derived corners). */
+  includePattanko?: boolean;
 }
 
 function getSideLabel(side: string): string {
@@ -96,8 +98,10 @@ export class ScaffoldCalculatorWakugumiService {
     const summary = this.aggregateComponents(wallResults);
     const maxLevels = Math.max(...wallResults.map(w => w.levelCalc.fullLevels), 0);
 
+    const pattankoOn = input.includePattanko !== false;
+
     let reflexReentrantPattankoCorners = 0;
-    if (input.walls.length >= 2) {
+    if (pattankoOn && input.walls.length >= 2) {
       const n = input.walls.length;
       const term = cornerTerminalSpanMmWakugumi(input.scaffoldWidthMm);
       for (let k = 0; k < n; k++) {
@@ -113,8 +117,9 @@ export class ScaffoldCalculatorWakugumiService {
       }
     }
 
-    const pattankoCornerCount =
-      (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners;
+    const pattankoCornerCount = pattankoOn
+      ? (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners
+      : 0;
     const pattankoQty = pattankoCornerCount * 2 * maxLevels;
     if (pattankoQty > 0) {
       summary.push({
@@ -146,6 +151,7 @@ export class ScaffoldCalculatorWakugumiService {
       endStopperType: 'nuno',
       totalLevels: maxLevels,
       wakugumiFrameSeries: input.wakugumiFrameSeries,
+      includePattanko: pattankoOn,
     };
   }
 

@@ -124,6 +124,10 @@ export class ScaffoldConfiguration {
   @Column({ type: 'varchar', length: 10, name: 'wakugumi_frame_series', default: 'FT917' })
   wakugumiFrameSeries: 'FT617' | 'FT917' | 'FT1217';
 
+  /** Include パッタンコ (corner filler) in BOM and 3D corner meshes (kusabi + wakugumi). */
+  @Column({ type: 'boolean', name: 'include_pattanko', default: true })
+  includePattanko: boolean;
+
   // ─── Rental Period (Optional - can be set here or in quotation) ───────
   /** Rental period type: weekly, monthly, custom */
   @Column({ type: 'varchar', length: 20, name: 'rental_type', nullable: true })

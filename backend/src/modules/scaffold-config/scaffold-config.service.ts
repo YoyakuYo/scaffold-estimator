@@ -66,6 +66,11 @@ function stripScaffoldConfigPayloadForMissingColumn(
     delete next.wakugumi_frame_series;
     return { next, strippedSiteColumns: false };
   }
+  if (missingColumn === 'include_pattanko') {
+    const next = { ...payload };
+    delete next.include_pattanko;
+    return { next, strippedSiteColumns: false };
+  }
   return null;
 }
 
@@ -158,7 +163,6 @@ export class ScaffoldConfigService {
         spanSizes: ALL_WAKUGUMI_RULES.spanSizes,
         spanOptions: ALL_WAKUGUMI_RULES.spanOptions,
         habakiCountOptions: ALL_WAKUGUMI_RULES.habakiCountOptions,
-        endStopperTypeOptions: ALL_WAKUGUMI_RULES.endStopperTypeOptions,
       },
     };
   }
@@ -290,6 +294,7 @@ export class ScaffoldConfigService {
         : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan || 2,
       endStopperType: 'nuno',
+      includePattanko: dto.includePattanko !== false,
       rentalType: dto.rentalType || null,
       rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
       rentalEndDate: dto.rentalEndDate ? new Date(dto.rentalEndDate) : null,
@@ -338,6 +343,7 @@ export class ScaffoldConfigService {
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         pattankoCornerCount: dto.pattankoCornerCount,
+        includePattanko: dto.includePattanko !== false,
       });
     } else {
       result = this.calculatorService.calculate({
@@ -346,6 +352,7 @@ export class ScaffoldConfigService {
         scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
         pattankoCornerCount: dto.pattankoCornerCount,
+        includePattanko: dto.includePattanko !== false,
       });
     }
 
@@ -540,6 +547,7 @@ export class ScaffoldConfigService {
         : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan ?? 2,
       endStopperType: 'nuno',
+      includePattanko: dto.includePattanko !== false,
       rentalType: dto.rentalType ?? null,
       rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
       rentalEndDate: dto.rentalEndDate ? new Date(dto.rentalEndDate) : null,
@@ -556,6 +564,7 @@ export class ScaffoldConfigService {
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
         pattankoCornerCount: dto.pattankoCornerCount,
+        includePattanko: dto.includePattanko !== false,
       });
     } else {
       result = this.calculatorService.calculate({
@@ -564,6 +573,7 @@ export class ScaffoldConfigService {
         scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
         pattankoCornerCount: dto.pattankoCornerCount,
+        includePattanko: dto.includePattanko !== false,
       });
     }
     const correctedMassingTiersUpd = correctLegacyMassingTiers(

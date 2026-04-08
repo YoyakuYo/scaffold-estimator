@@ -12,6 +12,7 @@ import {
   ValidateIf,
   IsEmail,
   IsIn,
+  IsBoolean,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { normalizeScaffoldWidthMmToCatalog } from '../scaffold-rules';
@@ -228,6 +229,11 @@ export class CreateScaffoldConfigDto {
   @IsNumber()
   @Min(0)
   pattankoCornerCount?: number;
+
+  /** When false, omit PATTANKO from BOM and corner filler visuals (default true). */
+  @IsOptional()
+  @IsBoolean()
+  includePattanko?: boolean;
 
   /** Optional: Building outline polygon (for reference, not used in calculation) */
   @IsOptional()
