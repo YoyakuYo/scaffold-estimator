@@ -10,6 +10,7 @@ import { PatchSiteContactDto } from './dto/patch-site-contact.dto';
 import {
   ALL_RULES,
   cornerTerminalSpanMmKusabi,
+  countPattankoCornersFromOutline,
   inferReflexVerticesFromOutline,
   KUSABI_TOP_GUARD_HEIGHT_MM,
   normalizeScaffoldWidthMmToCatalog,
@@ -148,6 +149,29 @@ export class ScaffoldConfigService {
       scaffoldWidthMm: scaffoldWidthFromWakugumiFrameSeries(series),
       frameSizeMm: WAKUGUMI_FRAME_HEIGHT_MM,
     };
+  }
+
+  /**
+   * When the client omits `pattankoCornerCount` (e.g. wall count ≠ vertex count), derive it from
+   * the closed footprint so Excel/BOM includes PATTANKO for non-90° corners. If the client sends an
+   * explicit number, use it (must be finite).
+   */
+  private resolvePattankoCornerCount(
+    dto: CreateScaffoldConfigDto,
+    outline: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }> | null | undefined,
+  ): number | undefined {
+    if (dto.includePattanko === false) {
+      return dto.pattankoCornerCount != null && Number.isFinite(dto.pattankoCornerCount)
+        ? Math.max(0, Math.floor(Number(dto.pattankoCornerCount)))
+        : undefined;
+    }
+    if (dto.pattankoCornerCount != null && Number.isFinite(dto.pattankoCornerCount)) {
+      return Math.max(0, Math.floor(Number(dto.pattankoCornerCount)));
+    }
+    if (outline && outline.length >= 3) {
+      return countPattankoCornersFromOutline(outline);
+    }
+    return undefined;
   }
 
   /**
@@ -342,7 +366,7 @@ export class ScaffoldConfigService {
         frameSizeMm: dtoForCalc.frameSizeMm || 1700,
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
-        pattankoCornerCount: dto.pattankoCornerCount,
+        pattankoCornerCount: this.resolvePattankoCornerCount(dto, dto.buildingOutline),
         includePattanko: dto.includePattanko !== false,
       });
     } else {
@@ -351,7 +375,7 @@ export class ScaffoldConfigService {
         structureType: dto.structureType || '改修工事',
         scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
-        pattankoCornerCount: dto.pattankoCornerCount,
+        pattankoCornerCount: this.resolvePattankoCornerCount(dto, dto.buildingOutline),
         includePattanko: dto.includePattanko !== false,
       });
     }
@@ -563,7 +587,7 @@ export class ScaffoldConfigService {
         frameSizeMm: dtoForCalc.frameSizeMm || 1700,
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
-        pattankoCornerCount: dto.pattankoCornerCount,
+        pattankoCornerCount: this.resolvePattankoCornerCount(dto, outlineForCorners),
         includePattanko: dto.includePattanko !== false,
       });
     } else {
@@ -572,7 +596,7 @@ export class ScaffoldConfigService {
         structureType: dto.structureType || '改修工事',
         scaffoldWidthMm: dtoForCalc.scaffoldWidthMm,
         preferredMainTatejiMm: dto.preferredMainTatejiMm || 1800,
-        pattankoCornerCount: dto.pattankoCornerCount,
+        pattankoCornerCount: this.resolvePattankoCornerCount(dto, outlineForCorners),
         includePattanko: dto.includePattanko !== false,
       });
     }

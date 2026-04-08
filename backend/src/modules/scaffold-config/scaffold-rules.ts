@@ -191,6 +191,45 @@ export function pattankoPiecesPerCornerPerLevel(scaffoldWidthMm: number): number
   return modulesAcrossWidth * 2;
 }
 
+/**
+ * Corners that use small PATTANKO filler planks (BOM line) — matches 3D: non-90° joints only.
+ * ~90° corners (|cos| below 0.35) use L-deck, not the PATTANKO SKU. Straight (180°) skipped.
+ * Same thresholds as frontend `countPattankoCorners` / tierPolyData `isLShaped`.
+ */
+export function countPattankoCornersFromOutline(
+  vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
+): number {
+  const n = vertices.length;
+  if (n < 3) return 0;
+  const COS_L_SHAPED_MAX = 0.35;
+  const COS_STRAIGHT_MIN = 0.98;
+  let count = 0;
+  for (let j = 0; j < n; j++) {
+    const prev = (j - 1 + n) % n;
+    const next = (j + 1) % n;
+    const vPrev = vertices[prev];
+    const vJ = vertices[j];
+    const vNext = vertices[next];
+    const xPrev = (vPrev?.x ?? vPrev?.xFrac) ?? 0;
+    const yPrev = (vPrev?.y ?? vPrev?.yFrac) ?? 0;
+    const xJ = (vJ?.x ?? vJ?.xFrac) ?? 0;
+    const yJ = (vJ?.y ?? vJ?.yFrac) ?? 0;
+    const xNext = (vNext?.x ?? vNext?.xFrac) ?? 0;
+    const yNext = (vNext?.y ?? vNext?.yFrac) ?? 0;
+    const dxPrev = xJ - xPrev;
+    const dyPrev = yJ - yPrev;
+    const dxNext = xNext - xJ;
+    const dyNext = yNext - yJ;
+    const lenPrev = Math.hypot(dxPrev, dyPrev);
+    const lenNext = Math.hypot(dxNext, dyNext);
+    if (lenPrev < 1e-9 || lenNext < 1e-9) continue;
+    const cosAngle = (dxPrev * dxNext + dyPrev * dyNext) / (lenPrev * lenNext);
+    if (Math.abs(cosAngle) >= COS_STRAIGHT_MIN) continue;
+    if (Math.abs(cosAngle) >= COS_L_SHAPED_MAX) count++;
+  }
+  return count;
+}
+
 // ─── Brace (ブレス) Catalog ──────────────────────────────────
 // X-brace used on OUTER face only, 1 per span per level
 

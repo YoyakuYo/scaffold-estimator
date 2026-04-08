@@ -11,6 +11,7 @@ import {
   finalizeStandardSpanRowWithNominal,
   fitSpansToWallLengthWithCorner,
   inferReflexVerticesFromOutline,
+  countPattankoCornersFromOutline,
   pattankoPiecesPerCornerPerLevel,
   scaffoldFacadeBasisMmFromCorners,
 } from './scaffold-rules';
@@ -278,5 +279,25 @@ describe('pattankoPiecesPerCornerPerLevel', () => {
   it('1219 → 4 (2 full × 2 rows)', () => {
     expect(pattankoPiecesPerCornerPerLevel(1219)).toBe(4);
     expect(pattankoPiecesPerCornerPerLevel(1200)).toBe(4);
+  });
+});
+
+describe('countPattankoCornersFromOutline', () => {
+  it('axis-aligned rectangle: 90° only → 0 PATTANKO corners (L-deck in 3D)', () => {
+    const rect = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 0, y: 50 },
+    ];
+    expect(countPattankoCornersFromOutline(rect)).toBe(0);
+  });
+  it('regular hexagon: 120° at each vertex → 6 (|cos| = 0.5 ≥ 0.35)', () => {
+    const r = 100;
+    const verts = [0, 1, 2, 3, 4, 5].map((k) => {
+      const a = (k * 2 * Math.PI) / 6 - Math.PI / 2;
+      return { x: r * Math.cos(a), y: r * Math.sin(a) };
+    });
+    expect(countPattankoCornersFromOutline(verts)).toBe(6);
   });
 });

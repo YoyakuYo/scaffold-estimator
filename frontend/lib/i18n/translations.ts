@@ -1947,9 +1947,12 @@ export const translations = {
       fr: 'Pattanko (plinthes de coin)',
     },
     pattankoIncludeHint: {
-      ja: '見積・3Dに角部の補助踏板を含めるか（枠組の端部は常に自動計上）',
-      en: 'Include corner filler planks in BOM and 3D. Wakugumi end stoppers are always included.',
-      fr: 'Inclure les plinthes de remplissage au BOM et en 3D.',
+      ja:
+        'ON時は非90°角のパッタンコを見積・3Dに反映（直角はLデッキ側）。数量0ならExcel行は出ません。枠組の端部は常に自動計上',
+      en:
+        'When on, BOM and 3D include PATTANKO at non-90° corners only; ~90° corners use L-deck (no PATTANKO line). Excel lists a row only when quantity is greater than zero. Wakugumi end stoppers are always included.',
+      fr:
+        'Si activé, le BOM et la 3D n’incluent des PATTANKO qu’aux angles autres que 90°; les angles droits utilisent le plateau en L (pas de ligne PATTANKO). Excel n’affiche une ligne que si la quantité est supérieure à zéro.',
     },
     endStopper: { ja: '端部タイプ', en: 'End Stopper', fr: 'End Stopper' },
     multiSegmentWall: { ja: '多段壁', en: 'Multi-Segment Wall', fr: 'Multi-Segment Wall' },
