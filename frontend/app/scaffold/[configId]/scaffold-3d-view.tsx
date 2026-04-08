@@ -41,6 +41,8 @@ import { fitSpansToWallLengthWithCornerWakugumi } from '@/lib/wakugumi-corner-sp
  * wall’s terminal bay. 枠組: each wall meshes its own corner frame (startPostIdx=0 when a corner layout applies).
  * Corner placement uses postX[last] along local +X from the vertex, not (postX[last]−postX[0]), so the
  * terminal bay and 端部 align with the steel (the −300mm overrun lives in negative postX[0]).
+ * Visualization-only: for 枠組, the wall group origin is shifted slightly along the wall into the first bay
+ * at polygon corners so the next wall’s frames read in front of the previous wall’s inner row (small visible gap).
  */
 
 const PIPE_R = 0.024;
@@ -57,6 +59,11 @@ const CORNER_OVERRUN_M = 0.3;
  * Per-axis offset = 2/√2 mm so center-to-center distance ≈ 2 mm at 90° (gap for pattanko).
  */
 const WAKUGUMI_L_CORNER_ECO_OFFSET_PER_AXIS_M = 0.002 / Math.SQRT2;
+/**
+ * Closed polygon: shift whole wall scaffold along +edge (into the first span) at a corner start so the
+ * first frames of wall B sit clearly ahead of wall A’s terminal bay (visual gap only; BOM unchanged).
+ */
+const WAKUGUMI_CORNER_WALL_ORIGIN_GAP_M = 0.05;
 /** Match backend `cornerTerminalSpanMmKusabi` (same catalog modules as wakugumi). */
 function cornerTerminalSpanMmKusabi3d(scaffoldWidthMm: number): number {
   return normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
@@ -2444,8 +2451,15 @@ export default function Scaffold3DView({
         //   origin → v1 (centered) + standoff from building so near posts are 250–500mm from wall
 
         // Translation: place scaffold start on the mitered near-row path.
-        const tx = nearStart.x - cx;
-        const tz = nearStart.z - cz;
+        const wallOriginGapM =
+          isWakugumi &&
+          closedLoopCorners &&
+          wall.layoutMode !== 'bracket' &&
+          (tHCS[localIdx] ?? false)
+            ? WAKUGUMI_CORNER_WALL_ORIGIN_GAP_M
+            : 0;
+        const tx = nearStart.x - cx + wallOriginGapM * edgeDirX;
+        const tz = nearStart.z - cz + wallOriginGapM * edgeDirZ;
 
         // Tier-wall elevation: scaffold starts at baseHeightMm instead of ground.
         // For ground-level walls (tierIndex 0 or undefined), always start at ground.
@@ -2512,8 +2526,10 @@ export default function Scaffold3DView({
         const dimGroup = new THREE.Group();
         const dimOffset = standoffM + wallWidthM + 0.4;
         const runLenForDims = spanSumLenM * fitScale;
-        const startX = nearStart.x - cx + nx * dimOffset;
-        const startZ = nearStart.z - cz + nz * dimOffset;
+        const dimOriginX = nearStart.x + wallOriginGapM * edgeDirX;
+        const dimOriginZ = nearStart.z + wallOriginGapM * edgeDirZ;
+        const startX = dimOriginX - cx + nx * dimOffset;
+        const startZ = dimOriginZ - cz + nz * dimOffset;
         const endX = startX + edgeDirX * runLenForDims;
         const endZ = startZ + edgeDirZ * runLenForDims;
         const dimY = GROUND_Y - 0.15;
