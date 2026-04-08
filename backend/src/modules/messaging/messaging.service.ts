@@ -13,6 +13,9 @@ import { MailerService } from '../mailer/mailer.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 
+/** DB user for public landing contact → appears in /admin/messages (see supabase-migrations/131_landing_contact_inbox_user.sql). */
+const LANDING_CONTACT_USER_EMAIL = '__landing_contact__@system.local';
+
 @Injectable()
 export class MessagingService {
   private readonly logger = new Logger(MessagingService.name);
@@ -174,6 +177,17 @@ export class MessagingService {
     return this.sendMessage(conv.id, userId, body);
   }
 
+  /** Synthetic inbox user for marketing-site contact form (not for login). */
+  private async getLandingContactUserId(): Promise<string | null> {
+    const { data } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('id')
+      .eq('email', LANDING_CONTACT_USER_EMAIL)
+      .maybeSingle();
+    return ((data as { id?: string } | null)?.id ?? null) || null;
+  }
+
   async markAsRead(conversationId: string, readerId: string): Promise<void> {
     const client = this.supabase.getClient();
     const { data: rows } = await client.from('messages').select('id').eq('conversation_id', conversationId).neq('sender_id', readerId).is('read_at', null);
@@ -239,18 +253,45 @@ export class MessagingService {
     let inAppDelivered = 0;
     let emailSent = false;
 
-    for (const row of admins) {
-      const aid = (row as { id: string }).id;
-      const adminEmail = ((row as { email?: string }).email || '').trim();
+    const landingUserId = await this.getLandingContactUserId();
+    if (landingUserId) {
       try {
-        await this.notificationsService.create(aid, 'system', 'Landing page contact', {
-          body: `${trimmedName} · ${trimmedEmail}: ${preview}`,
-          link: '/superadmin/dashboard',
-        });
-        inAppDelivered += 1;
+        const conv = await this.getOrCreateConversationForUser(landingUserId);
+        const inboxBody = [
+          '[Landing page contact]',
+          `Name: ${trimmedName}`,
+          `Email: ${trimmedEmail}`,
+          '',
+          trimmedMessage,
+        ].join('\n');
+        await this.sendMessage(conv.id, landingUserId, inboxBody);
+        inAppDelivered = 1;
       } catch (e) {
-        this.logger.error(`submitPublicContact notification for ${aid}: ${(e as Error)?.message}`);
+        this.logger.error(`submitPublicContact inbox message: ${(e as Error)?.message}`);
       }
+    } else {
+      this.logger.warn(
+        `submitPublicContact: no user ${LANDING_CONTACT_USER_EMAIL} — run migration 131_landing_contact_inbox_user.sql; using notification bell only.`,
+      );
+    }
+
+    if (inAppDelivered === 0) {
+      for (const row of admins) {
+        const aid = (row as { id: string }).id;
+        try {
+          await this.notificationsService.create(aid, 'system', 'Landing page contact', {
+            body: `${trimmedName} · ${trimmedEmail}: ${preview}`,
+            link: '/admin/messages',
+          });
+          inAppDelivered += 1;
+        } catch (e) {
+          this.logger.error(`submitPublicContact notification for ${aid}: ${(e as Error)?.message}`);
+        }
+      }
+    }
+
+    for (const row of admins) {
+      const adminEmail = ((row as { email?: string }).email || '').trim();
       if (adminEmail && !emailed.has(adminEmail.toLowerCase())) {
         emailed.add(adminEmail.toLowerCase());
         const sent = await this.mailerService.sendLandingContactEmail(

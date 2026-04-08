@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Shield, Users, MessageSquare, User, LogOut, CreditCard, Globe, Menu, X } from 'lucide-react';
 import { authApi } from '@/lib/api/auth';
 import { useI18n } from '@/lib/i18n';
+import { NotificationBell } from '@/components/notification-bell';
 
 export function SuperAdminNavigation() {
   const router = useRouter();
@@ -81,6 +82,7 @@ export function SuperAdminNavigation() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <NotificationBell />
           <div className="relative" ref={localeMenuRef}>
             <button
               type="button"
