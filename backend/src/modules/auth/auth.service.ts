@@ -26,6 +26,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+import { LANDING_CONTACT_USER_EMAIL, isSyntheticListedUser } from '../../common/constants/system-users';
 
 @Injectable()
 export class AuthService {
@@ -188,13 +189,18 @@ export class AuthService {
       .select('*')
       .eq('is_active', true)
       .eq('approval_status', 'approved')
+      .neq('email', LANDING_CONTACT_USER_EMAIL)
       .order('last_active_at', { ascending: false });
 
     if (error) return [];
     const users = mapRowsToCamel<User>(rows || []);
     const cutoff = new Date(Date.now() - 3 * 60 * 1000);
     const online = users.filter(
-      (u) => u.role !== 'superadmin' && u.lastActiveAt && new Date(u.lastActiveAt) >= cutoff,
+      (u) =>
+        u.role !== 'superadmin' &&
+        !isSyntheticListedUser(u.email) &&
+        u.lastActiveAt &&
+        new Date(u.lastActiveAt) >= cutoff,
     );
     return online.map(({ passwordHash, ...rest }) => rest);
   }
@@ -362,7 +368,12 @@ export class AuthService {
   }
 
   async listUsers(companyId?: string): Promise<any[]> {
-    let q = this.supabase.getClient().from('users').select('*, companies(name)').order('created_at', { ascending: false });
+    let q = this.supabase
+      .getClient()
+      .from('users')
+      .select('*, companies(name)')
+      .neq('email', LANDING_CONTACT_USER_EMAIL)
+      .order('created_at', { ascending: false });
     if (companyId) q = q.eq('company_id', companyId);
     const { data: rows, error } = await q;
     if (error) return [];
@@ -374,7 +385,7 @@ export class AuthService {
       if (companies && typeof companies === 'object' && 'name' in companies) out.companyName = (companies as { name: string }).name;
       return out;
     });
-    return users.filter((u) => u && u.role !== 'superadmin');
+    return users.filter((u) => u && u.role !== 'superadmin' && !isSyntheticListedUser(u.email));
   }
 
   async getUser(userId: string, options?: { withCompany?: boolean }): Promise<any> {
@@ -850,9 +861,14 @@ export class AuthService {
     const { count: userCount, error: cErr } = await client
       .from('users')
       .select('*', { count: 'exact', head: true })
-      .neq('role', 'superadmin');
+      .neq('role', 'superadmin')
+      .neq('email', LANDING_CONTACT_USER_EMAIL);
     if (cErr) this.logger.warn(`tenant user count fallback: ${cErr.message}`);
-    const { data: rows, error: rErr } = await client.from('users').select('company_id').neq('role', 'superadmin');
+    const { data: rows, error: rErr } = await client
+      .from('users')
+      .select('company_id')
+      .neq('role', 'superadmin')
+      .neq('email', LANDING_CONTACT_USER_EMAIL);
     if (rErr) {
       this.logger.warn(`distinct company fallback: ${rErr.message}`);
       return { users: userCount ?? 0, companies: 0 };
@@ -889,7 +905,11 @@ export class AuthService {
   > {
     const client = this.supabase.getClient();
     const { data: companiesRows } = await client.from('companies').select('id, name').order('name');
-    const { data: usersRows } = await client.from('users').select('company_id').neq('role', 'superadmin');
+    const { data: usersRows } = await client
+      .from('users')
+      .select('company_id')
+      .neq('role', 'superadmin')
+      .neq('email', LANDING_CONTACT_USER_EMAIL);
     const { data: branchesRows } = await client.from('company_branches').select('id, company_id, name, is_headquarters').order('name');
 
     const countMap = new Map<string, number>();

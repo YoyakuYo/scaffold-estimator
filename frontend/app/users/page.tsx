@@ -65,10 +65,10 @@ function UsersPage() {
   const [inviteRole, setInviteRole] = useState<'viewer' | 'estimator'>('viewer');
   const [lastJoinUrl, setLastJoinUrl] = useState<string | null>(null);
   
-  // Get filter from URL or default to 'all'
+  // Get filter from URL or default to approved (real members only; use All / Pending for moderation)
   const filterParam = searchParams.get('filter') as 'all' | 'pending' | 'approved' | 'rejected' | null;
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>(
-    filterParam && ['all', 'pending', 'approved', 'rejected'].includes(filterParam) ? filterParam : 'all'
+    filterParam && ['all', 'pending', 'approved', 'rejected'].includes(filterParam) ? filterParam : 'approved'
   );
 
   // Update filter when URL changes

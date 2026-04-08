@@ -12,9 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
-
-/** DB user for public landing contact → appears in /admin/messages (see supabase-migrations/131_landing_contact_inbox_user.sql). */
-const LANDING_CONTACT_USER_EMAIL = '__landing_contact__@system.local';
+import { LANDING_CONTACT_USER_EMAIL } from '../../common/constants/system-users';
 
 @Injectable()
 export class MessagingService {
