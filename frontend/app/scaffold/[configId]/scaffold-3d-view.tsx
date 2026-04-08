@@ -29,6 +29,7 @@ import {
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
 import { finalizeWallSpansForThreeD } from '@/lib/scaffold-span-merge';
+import { fitSpansToWallLengthWithCornerWakugumi } from '@/lib/wakugumi-corner-spans';
 
 /**
  * 3D Scaffold View — Closed Polygon
@@ -817,6 +818,8 @@ export default function Scaffold3DView({
         flushDeckAtCornerEnd?: boolean,
         /** Non-L corners: place steel at local postX[0] instead of skipping (reuse with previous wall). */
         doublePostAtCornerStart?: boolean,
+        /** Closed polygon: recompute wakugumi spans from wall+300+terminal rule (avoids stale DB spans). */
+        closedPolygonWakugumiCornerSpans?: boolean,
       ): {
         runLenM: number;
         /** Σ spans (m) along the wall — wallLength + overrun + terminal for closed polygon corners. */
@@ -830,9 +833,28 @@ export default function Scaffold3DView({
         const widthMm = normalizeScaffoldWidthMmToCatalog(rawWidthMm);
         const widthM = widthMm / 1000;
         const isBracket = wall.layoutMode === 'bracket';
-        const baseSpansRaw = Array.isArray(wall.spans) && wall.spans.length > 0
-          ? wall.spans
-          : [Math.max(600, Number(wall.wallLengthMm) || 600)];
+        const hasDoorOpenings =
+          (wall.doorOpenings?.length ?? 0) > 0 ||
+          (Array.isArray((wall as any).door_openings) && (wall as any).door_openings.length > 0);
+        let baseSpansRaw: number[];
+        if (
+          isWakugumi &&
+          !isBracket &&
+          closedPolygonWakugumiCornerSpans &&
+          !hasDoorOpenings &&
+          typeof wall.wallLengthMm === 'number' &&
+          wall.wallLengthMm > 0
+        ) {
+          baseSpansRaw = fitSpansToWallLengthWithCornerWakugumi(wall.wallLengthMm, widthMm, {
+            startCornerKind: wall.startCornerKind ?? 'convex',
+            endCornerKind: wall.endCornerKind ?? 'convex',
+          });
+        } else {
+          baseSpansRaw =
+            Array.isArray(wall.spans) && wall.spans.length > 0
+              ? wall.spans
+              : [Math.max(600, Number(wall.wallLengthMm) || 600)];
+        }
         const allSpans: number[] = finalizeWallSpansForThreeD(baseSpansRaw);
         // Closed polygon: [1829, …middle…, terminal = catalog 610/914/1219]; sum = wallLength+300+terminal.
         const spans = maxSpans != null && maxSpans < allSpans.length
@@ -2277,12 +2299,16 @@ export default function Scaffold3DView({
           cornerStart,
           flushDeckAtCornerEnd,
           doublePostAtCornerStart,
+          closedLoopCorners,
         );
 
         // Σ spans along the bay line (incl. 300mm overrun + terminal) often exceeds the offset-path
         // segment v1→v2. If we treated that as a "non-corner" wall, fitScale would compress local X
         // (when |1 − len/run| ≤ 0.1) and the overrun + terminal bay vanished visually.
-        const needsFullScaffoldRunAlongEdge = runLenM > lenAlongMiter + 0.02;
+        // Use max(runLen, runSpanSum): postX[0] can be negative (overrun), so Σ spans may exceed façade
+        // length even when postX[last] alone does not — both must trigger full-run placement.
+        const needsFullScaffoldRunAlongEdge =
+          Math.max(runLenM, runSpanSumM) > lenAlongMiter + 0.02;
         const isCornerConnected =
           cornerStart !== 'none' || flushDeckAtCornerEnd || needsFullScaffoldRunAlongEdge;
         const baseLen = Math.max(runLenM, 1e-6);
