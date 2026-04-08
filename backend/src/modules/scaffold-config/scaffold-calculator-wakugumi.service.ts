@@ -39,7 +39,7 @@ import {
  *   - 下桟 (Shitasan) bottom horizontal instead of tesuri
  *   - No tesuri (手摺)
  *   - Habaki count user-selectable (1 or 2)
- *   - End stopper: nuno type or frame type
+ *   - End stopper: transverse bar (端部) at free dead ends only
  */
 
 export interface WakugumiCalculationInput {
@@ -50,7 +50,6 @@ export interface WakugumiCalculationInput {
   /** FT-617 / FT-917 / FT-1217 — walk-through frame width line */
   wakugumiFrameSeries?: WakugumiFrameSeriesCode;
   habakiCountPerSpan: number;      // 1 or 2
-  endStopperType: 'nuno' | 'frame';
   /** @deprecated Ignored; one extra frame level is always applied. */
   topGuardHeightMm?: number;
   /** Corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not added. */
@@ -144,7 +143,7 @@ export class ScaffoldCalculatorWakugumiService {
       topGuardHeightMm: input.frameSizeMm,
       frameSizeMm: input.frameSizeMm,
       habakiCountPerSpan: input.habakiCountPerSpan,
-      endStopperType: input.endStopperType,
+      endStopperType: 'nuno',
       totalLevels: maxLevels,
       wakugumiFrameSeries: input.wakugumiFrameSeries,
     };
@@ -320,36 +319,20 @@ export class ScaffoldCalculatorWakugumiService {
     // ─── 6. 端部 (End Stopper) — free dead ends only (not 90° turns to next wall) ──
     const freeEnds = freeScaffoldEndCountForWall(wallIndex, input.walls.length);
     if (freeEnds > 0) {
-      if (input.endStopperType === 'nuno') {
-        const stopperSize = findNearestSizeWakugumi(widthMm, WAKUGUMI_SHITASAN_SIZES);
-        sortOrder++;
-        components.push({
-          type: 'end_stopper_nuno',
-          category: CAT.stopper.jp,
-          categoryEn: CAT.stopper.en,
-          name: 'End Stopper (Nuno)',
-          nameJp: `端部布材`,
-          sizeSpec: `${stopperSize}`,
-          unit: '本',
-          quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel_nuno * freeEnds * Ltot,
-          sortOrder,
-          materialCode: `WAKU-STOPPER-${widthMm}`,
-        });
-      } else {
-        sortOrder++;
-        components.push({
-          type: 'end_stopper_frame',
-          category: CAT.stopper.jp,
-          categoryEn: CAT.stopper.en,
-          name: 'End Frame Stopper',
-          nameJp: `妻側枠`,
-          sizeSpec: '枠タイプ',
-          unit: '枠',
-          quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel_frame * freeEnds * Ltot,
-          sortOrder,
-          materialCode: 'WAKU-END-FRAME',
-        });
-      }
+      const stopperSize = findNearestSizeWakugumi(widthMm, WAKUGUMI_SHITASAN_SIZES);
+      sortOrder++;
+      components.push({
+        type: 'end_stopper_nuno',
+        category: CAT.stopper.jp,
+        categoryEn: CAT.stopper.en,
+        name: 'End stopper',
+        nameJp: `端部`,
+        sizeSpec: `${stopperSize}`,
+        unit: '本',
+        quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel * freeEnds * Ltot,
+        sortOrder,
+        materialCode: `WAKU-STOPPER-${widthMm}`,
+      });
     }
 
     // ─── 7. 踏板 / アンチ ────────────────────────────────

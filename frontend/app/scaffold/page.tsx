@@ -1143,7 +1143,6 @@ function ScaffoldPageContent() {
   const [frameSizeMm, setFrameSizeMm] = useState(1700);
   const [wakugumiFrameSeries, setWakugumiFrameSeries] = useState<WakugumiFrameSeriesId>('FT917');
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(2);
-  const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>('nuno');
   const [walls, setWalls] = useState<WallState[]>(() => initialWizard.walls);
   const [buildingHeightMm, setBuildingHeightMm] = useState<number | null>(() => initialWizard.buildingHeightMm);
   const [polygonVertices, setPolygonVertices] = useState<Array<{ x: number; y: number }>>(
@@ -1197,7 +1196,6 @@ function ScaffoldPageContent() {
     }
     setPreferredMainTatejiMm(editConfig.preferredMainTatejiMm ?? 1800);
     setHabakiCountPerSpan(editConfig.habakiCountPerSpan ?? 2);
-    setEndStopperType((editConfig.endStopperType as 'nuno' | 'frame') ?? 'nuno');
     setBuildingHeightMm(editConfig.buildingHeightMm ?? null);
     const rawPoly = editConfig.calculationResult?.polygonVertices;
     const editPolyMm =
@@ -1769,7 +1767,6 @@ function ScaffoldPageContent() {
         frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
         wakugumiFrameSeries,
         habakiCountPerSpan,
-        endStopperType,
       }),
       ...(polygonVertices.length >= 3 && polygonVertices.length === enabledWalls.length && {
         buildingOutline: polygonVertices.map((v) => ({ xFrac: v.x, yFrac: v.y })),
@@ -1827,7 +1824,6 @@ function ScaffoldPageContent() {
         wakugumiFrameSeries:
           qConfig.wakugumiFrameSeries ?? wakugumiSeriesFromScaffoldWidthMm(qConfig.scaffoldWidthMm),
         habakiCountPerSpan: qConfig.habakiCountPerSpan,
-        endStopperType: qConfig.endStopperType,
       }),
       inputUiPath: 'quick',
       ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
@@ -3641,8 +3637,6 @@ function ScaffoldPageContent() {
           setPreferredMainTatejiMm={setPreferredMainTatejiMm}
           habakiCountPerSpan={habakiCountPerSpan}
           setHabakiCountPerSpan={setHabakiCountPerSpan}
-          endStopperType={endStopperType}
-          setEndStopperType={setEndStopperType}
           setFrameSizeMm={setFrameSizeMm}
         />
 

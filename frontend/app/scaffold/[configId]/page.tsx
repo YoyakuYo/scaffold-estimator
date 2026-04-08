@@ -271,7 +271,7 @@ function ScaffoldResultPage() {
       scaffoldType: st,
       frameSizeMm: result.frameSizeMm ?? config.frameSizeMm,
       habakiCountPerSpan: result.habakiCountPerSpan ?? config.habakiCountPerSpan,
-      endStopperType: (result.endStopperType ?? config.endStopperType ?? 'nuno') as 'nuno' | 'frame',
+      endStopperType: 'nuno',
     };
   }, [result, config, rawResult]);
 
@@ -649,15 +649,6 @@ function ScaffoldResultPage() {
                 label={t('result', 'habakiCount')}
                 value={`${result.habakiCountPerSpan}${result.habakiCountPerSpan === 1 ? t('result', 'habakiSingle') : t('result', 'habakiDouble')}`}
               />
-              <SummaryCard
-                icon={<ShieldCheck className="h-5 w-5" />}
-                label={t('result', 'endStopperType')}
-                value={
-                  result.endStopperType === 'frame'
-                    ? t('result', 'endStopperSummaryFrame')
-                    : t('result', 'endStopperSummaryNuno')
-                }
-              />
             </>
           ) : (
             <SummaryCard
@@ -677,15 +668,8 @@ function ScaffoldResultPage() {
           <span>
             {t('result', 'specWidth')} {formatMmLabel(result.scaffoldWidthMm)}
             {result.scaffoldType === 'wakugumi'
-              ? (result.frameSizeMm != null &&
-                  ` · ${t('result', 'specFrame')} ${formatMmLabel(result.frameSizeMm)}`) +
-                  (result.endStopperType
-                    ? ` · ${t('result', 'endStopperType')} ${
-                        result.endStopperType === 'frame'
-                          ? t('result', 'endStopperSpecShortFrame')
-                          : t('result', 'endStopperSpecShortNuno')
-                      }`
-                    : '')
+              ? result.frameSizeMm != null &&
+                  ` · ${t('result', 'specFrame')} ${formatMmLabel(result.frameSizeMm)}`
               : result.preferredMainTatejiMm != null &&
                   ` · ${t('result', 'specMainPost')} ${formatMmLabel(result.preferredMainTatejiMm)}`}
           </span>

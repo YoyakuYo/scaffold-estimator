@@ -208,11 +208,6 @@ export class CreateScaffoldConfigDto {
   @Max(2)
   habakiCountPerSpan?: number;
 
-  /** End stopper type: 'nuno' or 'frame' (wakugumi only) */
-  @IsOptional()
-  @IsEnum(['nuno', 'frame'])
-  endStopperType?: 'nuno' | 'frame';
-
   /** Optional: Rental period type */
   @IsOptional()
   @IsEnum(['weekly', 'monthly', 'custom'])

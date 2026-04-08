@@ -125,8 +125,6 @@ export interface BuildingScaffoldSettingsPanelProps extends Partial<SiteContactF
   setPreferredMainTatejiMm: (v: number) => void;
   habakiCountPerSpan: number;
   setHabakiCountPerSpan: (v: number) => void;
-  endStopperType: 'nuno' | 'frame';
-  setEndStopperType: (v: 'nuno' | 'frame') => void;
   setFrameSizeMm: (v: number) => void;
 }
 
@@ -156,8 +154,6 @@ export function BuildingScaffoldSettingsPanel({
   setPreferredMainTatejiMm,
   habakiCountPerSpan,
   setHabakiCountPerSpan,
-  endStopperType,
-  setEndStopperType,
   setFrameSizeMm,
 }: BuildingScaffoldSettingsPanelProps) {
   const { t } = useI18n();
@@ -359,23 +355,6 @@ export function BuildingScaffoldSettingsPanel({
                   {(rules?.wakugumi?.habakiCountOptions || [
                     { value: 1, label: t('scaffold', 'habakiSingle') },
                     { value: 2, label: t('scaffold', 'habakiDouble') },
-                  ]).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('scaffoldExtra', 'endStopper')}</label>
-                <select
-                  value={endStopperType}
-                  onChange={(e) => setEndStopperType(e.target.value as 'nuno' | 'frame')}
-                  className="w-full rounded-lg border border-orange-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50/30"
-                >
-                  {(rules?.wakugumi?.endStopperTypeOptions || [
-                    { value: 'nuno', label: t('scaffold', 'endStopperNuno') },
-                    { value: 'frame', label: t('scaffold', 'endStopperFrame') },
                   ]).map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}

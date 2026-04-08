@@ -289,7 +289,7 @@ export class ScaffoldConfigService {
         ? { wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries }
         : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan || 2,
-      endStopperType: dto.endStopperType || 'nuno',
+      endStopperType: 'nuno',
       rentalType: dto.rentalType || null,
       rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
       rentalEndDate: dto.rentalEndDate ? new Date(dto.rentalEndDate) : null,
@@ -337,7 +337,6 @@ export class ScaffoldConfigService {
         frameSizeMm: dtoForCalc.frameSizeMm || 1700,
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
-        endStopperType: dto.endStopperType || 'nuno',
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     } else {
@@ -540,7 +539,7 @@ export class ScaffoldConfigService {
         ? { wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries }
         : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan ?? 2,
-      endStopperType: dto.endStopperType ?? 'nuno',
+      endStopperType: 'nuno',
       rentalType: dto.rentalType ?? null,
       rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
       rentalEndDate: dto.rentalEndDate ? new Date(dto.rentalEndDate) : null,
@@ -556,7 +555,6 @@ export class ScaffoldConfigService {
         frameSizeMm: dtoForCalc.frameSizeMm || 1700,
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
-        endStopperType: dto.endStopperType || 'nuno',
         pattankoCornerCount: dto.pattankoCornerCount,
       });
     } else {

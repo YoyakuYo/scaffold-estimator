@@ -48,8 +48,7 @@ function scaffoldTypeJa(t?: string): string {
 }
 
 function endStopperJa(t?: string): string {
-  if (t === 'nuno') return '布材';
-  if (t === 'frame') return '枠';
+  if (t === 'nuno' || t === 'frame') return '端部';
   return t ? String(t) : '';
 }
 

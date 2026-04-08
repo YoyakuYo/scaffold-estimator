@@ -107,7 +107,6 @@ export interface QuickShapeConfig {
   frameSizeMm: number;
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
-  endStopperType: 'nuno' | 'frame';
   kaidanPerSide: Record<string, KaidanConfig>;
   /** Saved with calculate — grid line X1–Xn / Y1–Yn (stations 1–10). */
   edgeHashiraByLabel?: Record<string, EdgeHashiraFormRow>;
@@ -129,7 +128,6 @@ export interface QuickShapeBuilderDraft {
   frameSizeMm: number;
   wakugumiFrameSeries: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan: number;
-  endStopperType: 'nuno' | 'frame';
   kaidanPerSide: Record<string, KaidanConfig>;
   scaffoldWidthPerSide: Record<string, number | undefined>;
   /** Plan axis + signed run (mm) per edge label — same role as drawing upload XY column. */
@@ -192,8 +190,6 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
   const series = d.wakugumiFrameSeries;
   const wakugumiFrameSeries =
     series === 'FT617' || series === 'FT917' || series === 'FT1217' ? series : 'FT917';
-  const est = d.endStopperType;
-  const endStopperType = est === 'nuno' || est === 'frame' ? est : 'nuno';
   const sct = d.scaffoldType;
   const scaffoldType = sct === 'kusabi' || sct === 'wakugumi' ? sct : 'kusabi';
   const habaki = Math.max(1, Math.min(2, Math.round(Number(d.habakiCountPerSpan) || 2)));
@@ -228,7 +224,6 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     frameSizeMm: [1700, 1800, 1900].includes(d.frameSizeMm) ? d.frameSizeMm : 1700,
     wakugumiFrameSeries,
     habakiCountPerSpan: habaki,
-    endStopperType,
     kaidanPerSide: d.kaidanPerSide && typeof d.kaidanPerSide === 'object' ? d.kaidanPerSide : {},
     scaffoldWidthPerSide:
       d.scaffoldWidthPerSide && typeof d.scaffoldWidthPerSide === 'object'
@@ -311,9 +306,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     () => mergedInitial?.wakugumiFrameSeries ?? 'FT917',
   );
   const [habakiCountPerSpan, setHabakiCountPerSpan] = useState(() => mergedInitial?.habakiCountPerSpan ?? 2);
-  const [endStopperType, setEndStopperType] = useState<'nuno' | 'frame'>(
-    () => mergedInitial?.endStopperType ?? 'nuno',
-  );
 
   // Kaidan per side
   const [kaidanPerSide, setKaidanPerSide] = useState<Record<string, KaidanConfig>>(
@@ -354,7 +346,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         frameSizeMm,
         wakugumiFrameSeries,
         habakiCountPerSpan,
-        endStopperType,
         kaidanPerSide,
         scaffoldWidthPerSide,
         edgePlanByLabel,
@@ -378,7 +369,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     frameSizeMm,
     wakugumiFrameSeries,
     habakiCountPerSpan,
-    endStopperType,
     kaidanPerSide,
     scaffoldWidthPerSide,
     edgePlanByLabel,
@@ -452,7 +442,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
       frameSizeMm,
       ...(scaffoldType === 'wakugumi' ? { wakugumiFrameSeries } : {}),
       habakiCountPerSpan,
-      endStopperType,
       kaidanPerSide,
       edgeHashiraByLabel:
         Object.keys(hashiraByLabel).length > 0 ? hashiraByLabel : undefined,
@@ -1015,17 +1004,6 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
                     >
                       <option value={1}>{t('quickBuilder', 'habaki1')}</option>
                       <option value={2}>{t('quickBuilder', 'habaki2')}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'endStopperType')}</label>
-                    <select
-                      value={endStopperType}
-                      onChange={(e) => setEndStopperType(e.target.value as 'nuno' | 'frame')}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="nuno">{t('quickBuilder', 'endStopperNuno')}</option>
-                      <option value="frame">{t('quickBuilder', 'endStopperFrame')}</option>
                     </select>
                   </div>
                 </>

@@ -84,13 +84,6 @@ export const WAKUGUMI_HABAKI_COUNT_OPTIONS: SizeOption[] = [
   { value: 2, label: '2枚 (両面)' },
 ];
 
-// ─── End Stopper Type Options ───────────────────────────────
-
-export const WAKUGUMI_END_STOPPER_TYPE_OPTIONS = [
-  { value: 'nuno',  label: '布材タイプ (端部布材)' },
-  { value: 'frame', label: '枠タイプ (妻側枠)' },
-];
-
 // ─── Plank / Anchi Layout by Width ──────────────────────────
 // Same logic as kusabi
 
@@ -168,12 +161,9 @@ export const WAKUGUMI_CALC_RULES = {
   tesuriPerSpanPerLevel: 0,      // not used
 
   /**
-   * End Stopper (multiply by `freeScaffoldEndCountForWall` × levels — not always 2 ends):
-   * - Nuno: 2 bars per **free** dead end per level
-   * - Frame: 1 per free dead end per level
+   * End stopper (端部): transverse bar + clamps at **free** dead ends only — 2 bars per end per level.
    */
-  stoppersPerEndPerLevel_nuno: 2,   // nuno bars per free end
-  stoppersPerEndPerLevel_frame: 1,  // frame stopper per free end
+  stoppersPerEndPerLevel: 2,
 
   /**
    * Waku (建枠) — double row:
@@ -508,7 +498,7 @@ export const ALL_WAKUGUMI_RULES = {
   spanOptions: WAKUGUMI_SPAN_OPTIONS,
   scaffoldWidths: WAKUGUMI_SCAFFOLD_WIDTH_OPTIONS,
   habakiCountOptions: WAKUGUMI_HABAKI_COUNT_OPTIONS,
-  endStopperTypeOptions: WAKUGUMI_END_STOPPER_TYPE_OPTIONS,
+  endStopperTypeOptions: [] as Array<{ value: string; label: string }>,
   braceSizes: WAKUGUMI_BRACE_SIZES,
   shitasanSizes: WAKUGUMI_SHITASAN_SIZES,
   habakiSizes: WAKUGUMI_HABAKI_SIZES,

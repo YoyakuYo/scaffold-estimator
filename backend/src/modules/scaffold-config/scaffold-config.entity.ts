@@ -116,9 +116,9 @@ export class ScaffoldConfiguration {
   @Column({ type: 'int', name: 'habaki_count_per_span', default: 2 })
   habakiCountPerSpan: number;
 
-  /** End stopper type: 'nuno' (布材) or 'frame' (枠) — wakugumi only */
+  /** Wakugumi 端部 — persisted as `nuno` (legacy `frame` rows are normalized on recalculate). */
   @Column({ type: 'varchar', length: 10, name: 'end_stopper_type', default: 'nuno' })
-  endStopperType: 'nuno' | 'frame';
+  endStopperType: string;
 
   /** Wakugumi walk-through frame line: FT-617 / FT-917 / FT-1217 (width between posts) */
   @Column({ type: 'varchar', length: 10, name: 'wakugumi_frame_series', default: 'FT917' })

@@ -328,7 +328,7 @@ const COMPONENT_INFO: Record<string, { nameJp: string; description: string }> = 
   jack: { nameJp: 'ジャッキベース', description: '支柱の根元に設置し、高さを微調整する部材です。' },
   stair: { nameJp: '階段', description: 'レベル間の昇降用。手摺付きで安全に通行できます。' },
   frame: { nameJp: '建枠', description: '枠組足場の基本ユニット。門型フレームで一層の高さを構成します。' },
-  endStopper: { nameJp: '端部', description: '壁面の両端に設置する端部材。布材タイプまたは枠タイプがあります。' },
+  endStopper: { nameJp: '端部', description: '壁面の自由端に設置する端部材（横材・クランプ式）。' },
 };
 
 export default function Scaffold3DView({
@@ -683,13 +683,6 @@ export default function Scaffold3DView({
         roughness: rough,
         emissive: 0x330000,
         emissiveIntensity: 0.15,
-      });
-      const endStopperFrameMat = new THREE.MeshStandardMaterial({
-        color: END_STOPPER_RED,
-        metalness: metal * 0.35,
-        roughness: rough + 0.05,
-        emissive: 0x330000,
-        emissiveIntensity: 0.12,
       });
       /** Opaque toe/kick at terminal bay — reads as a solid barrier, not a glassy slab. */
       const endStopperKickMat = new THREE.MeshStandardMaterial({
@@ -1360,9 +1353,7 @@ export default function Scaffold3DView({
         // ── End Stoppers at wall ends ─────────────────────────
         // Fall prevention at open deck ends = **transverse horizontal** members (端部布材 / 端部手摺), not uprights.
         // Span **full opening** local z = 0 → widthM: transverse length = nominal 足場幅 (same as post spacing).
-        // 枠タイプ keeps vertical frame legs (妻側枠).
         // Terminal bay (610/914/1219): 端部 sits at the **outer post** of that real span (+ slight façade outset).
-        const endStopperType: 'nuno' | 'frame' = result?.endStopperType || 'nuno';
         if (postX.length >= 2) {
           const exWallEnd = postX[postX.length - 1];
           const zEndStopper = widthM;
@@ -1377,51 +1368,25 @@ export default function Scaffold3DView({
           if (isWakugumi) {
             for (let lv = 1; lv <= levelLoopMax; lv++) {
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
-              if (endStopperType === 'nuno') {
-                const barY1 = y + 0.05;
-                const barY2 = y + 0.45;
-                if (isEndTerminalBay && zEndStopper >= 0.08) {
-                  const kickT = 0.038;
-                  addBox(
-                    group,
-                    xPlane - kickT * 0.5,
-                    y - 0.05,
-                    zEndStopper * 0.5,
-                    kickT,
-                    0.14,
-                    zEndStopper,
-                    endStopperKickMat,
-                  );
-                  addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.05);
-                  addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.0);
-                } else {
-                  addPipe(group, exWallEnd, barY1, 0, exWallEnd, barY1, zEndStopper, endStopperMat, PIPE_R * 0.75);
-                  addPipe(group, exWallEnd, barY2, 0, exWallEnd, barY2, zEndStopper, endStopperMat, PIPE_R * 0.72);
-                }
-              } else {
-                const frameBottom = GROUND_Y + JACK_H + (lv - 1) * LEVEL_H + 0.05;
-                const frameTop = y - 0.05;
-                const xs = isEndTerminalBay ? xPlane : exWallEnd;
-                if (isEndTerminalBay && zEndStopper >= 0.08) {
-                  const kickT = 0.038;
-                  const midY = (frameBottom + frameTop) * 0.5;
-                  const fh = Math.max(0.12, frameTop - frameBottom + 0.04);
-                  addBox(group, xs - kickT * 0.5, midY, zEndStopper * 0.5, kickT, fh, zEndStopper, endStopperKickMat);
-                }
-                addPipe(group, xs, frameBottom, 0, xs, frameTop, 0, endStopperFrameMat, PIPE_R * 0.85);
-                addPipe(
+              const barY1 = y + 0.05;
+              const barY2 = y + 0.45;
+              if (isEndTerminalBay && zEndStopper >= 0.08) {
+                const kickT = 0.038;
+                addBox(
                   group,
-                  xs,
-                  frameBottom,
+                  xPlane - kickT * 0.5,
+                  y - 0.05,
+                  zEndStopper * 0.5,
+                  kickT,
+                  0.14,
                   zEndStopper,
-                  xs,
-                  frameTop,
-                  zEndStopper,
-                  endStopperFrameMat,
-                  PIPE_R * 0.85,
+                  endStopperKickMat,
                 );
-                addPipe(group, xs, frameTop, 0, xs, frameTop, zEndStopper, endStopperFrameMat, PIPE_R * 0.75);
-                addPipe(group, xs, frameBottom, 0, xs, frameBottom, zEndStopper, endStopperFrameMat, PIPE_R * 0.65);
+                addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.05);
+                addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.0);
+              } else {
+                addPipe(group, exWallEnd, barY1, 0, exWallEnd, barY1, zEndStopper, endStopperMat, PIPE_R * 0.75);
+                addPipe(group, exWallEnd, barY2, 0, exWallEnd, barY2, zEndStopper, endStopperMat, PIPE_R * 0.72);
               }
             }
           } else if (!isBracket) {

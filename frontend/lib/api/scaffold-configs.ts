@@ -58,7 +58,6 @@ export interface CreateScaffoldConfigDto {
   /** FT-617 / FT-917 / FT-1217 walk-through frame line (sets layout width) */
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan?: number;
-  endStopperType?: 'nuno' | 'frame';
   // Common optional
   rentalType?: 'weekly' | 'monthly' | 'custom';
   rentalStartDate?: string;
@@ -156,7 +155,8 @@ export interface ScaffoldConfiguration {
   frameSizeMm?: number;
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan?: number;
-  endStopperType?: 'nuno' | 'frame';
+  /** Legacy configs may have `frame`; new saves use bar-type 端部 only (`nuno`). */
+  endStopperType?: string;
   calculationResult: any;
   status: 'configured' | 'calculated' | 'reviewed';
   createdAt: string;
@@ -243,7 +243,7 @@ export interface CalculationResult {
     topGuardHeightMm: number;
     frameSizeMm?: number;
     habakiCountPerSpan?: number;
-    endStopperType?: 'nuno' | 'frame';
+    endStopperType?: 'nuno';
     totalLevels: number;
   };
   quantities: CalculatedQuantity[];
