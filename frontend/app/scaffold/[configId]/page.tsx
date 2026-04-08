@@ -47,6 +47,7 @@ import { buildWallMapsForScaffoldLevel, distributeByScaffoldLevel } from '@/lib/
 import { edgeChordName, edgeHashiraColumnRangeSegment } from '@/lib/edge-hashira-labels';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
+import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import { MaterialGalleryTab } from '@/components/scaffold/material-gallery-tab';
 
 // Dynamic import — Three.js cannot run during SSR
@@ -1103,7 +1104,7 @@ function QuotationTable({
           nameLogic === prevDetailNameLogic && prevDetailNameLogic !== ''
             ? sameNameMark
             : nameLogic;
-        const specLogic = comp.sizeSpec || '';
+        const specLogic = displaySizeSpecForUi(comp.sizeSpec || '');
         const specDisplay =
           specLogic === prevDetailSpecLogic &&
           prevDetailSpecLogic !== '' &&

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scaffoldConfigsApi, CalculatedQuantity, ScaffoldConfiguration } from '@/lib/api/scaffold-configs';
 import { useI18n } from '@/lib/i18n';
+import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import {
   Loader2,
   ArrowLeft,
@@ -173,7 +174,7 @@ export default function QuantitiesPage() {
                     >
                       <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{q.componentName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{q.sizeSpec}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{displaySizeSpecForUi(q.sizeSpec)}</td>
                       <td className="px-4 py-3 text-sm text-center text-gray-600">{q.unit}</td>
                       <td className="px-4 py-3 text-sm text-right font-mono text-gray-700">
                         {formatNumber(q.calculatedQuantity)}

@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quotationsApi } from '@/lib/api/quotations';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/formatters';
 import { useI18n } from '@/lib/i18n';
+import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import {
   Loader2,
   ArrowLeft,
@@ -143,6 +144,7 @@ export default function QuotationDetailPage() {
 
   // Format size spec: convert "500×1800mm" to "500×1800" or "L=600mm" to "600"
   const formatSizeSpec = (sizeSpec: string): string => {
+    if (!displaySizeSpecForUi(sizeSpec)) return '';
     // Handle plank format: "500×1800mm" or "240×1800mm" -> "500×1800" or "240×1800" (keep width, remove mm)
     const plankMatch = sizeSpec.match(/^(\d+)×(\d+)mm$/);
     if (plankMatch) {

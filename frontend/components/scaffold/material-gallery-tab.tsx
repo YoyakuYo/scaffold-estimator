@@ -6,6 +6,7 @@ import {
   buildMaterialGalleryRows,
   type ScaffoldGalleryType,
 } from '@/lib/scaffold-material-gallery';
+import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import { useI18n } from '@/lib/i18n';
 import { Printer, Package } from 'lucide-react';
 
@@ -49,7 +50,9 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
       </div>
 
       <ul className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100 print:border-gray-400">
-        {rows.map((row) => (
+        {rows.map((row) => {
+          const specUi = displaySizeSpecForUi(row.sizeSpec);
+          return (
           <li
             key={row.rowId}
             className="material-gallery-row flex items-start gap-3 sm:gap-5 px-3 py-3 sm:px-4 sm:py-3.5 print:break-inside-avoid"
@@ -79,15 +82,16 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
             </div>
             <div className="flex-1 min-w-0 pt-0.5">
               <h3 className="text-sm font-semibold text-gray-900 leading-snug">{row.label}</h3>
-              {row.sizeSpec ? (
-                <p className="mt-1 text-xs text-gray-600 font-medium leading-snug">{row.sizeSpec}</p>
+              {specUi ? (
+                <p className="mt-1 text-xs text-gray-600 font-medium leading-snug">{specUi}</p>
               ) : null}
               <p className="mt-1 text-xs text-gray-400">
                 {t('resultExtra', 'materialsGalleryUnit')}: {row.unit || '—'}
               </p>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

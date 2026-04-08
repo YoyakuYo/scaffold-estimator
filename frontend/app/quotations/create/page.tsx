@@ -8,6 +8,7 @@ import { quotationsApi, CreateQuotationDto } from '@/lib/api/quotations';
 import { formatNumber } from '@/lib/formatters';
 import { Loader2, ArrowLeft, ArrowRight, FileText } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 
 function CreateQuotationContent() {
   const router = useRouter();
@@ -201,7 +202,7 @@ function CreateQuotationContent() {
                   {quantities.map((q) => (
                     <tr key={q.id} className="hover:bg-gray-50">
                       <td className="px-4 py-2 font-medium">{q.componentName}</td>
-                      <td className="px-4 py-2 text-gray-500">{q.sizeSpec}</td>
+                      <td className="px-4 py-2 text-gray-500">{displaySizeSpecForUi(q.sizeSpec)}</td>
                       <td className="px-4 py-2 text-right font-mono">
                         {formatNumber(q.adjustedQuantity ?? q.calculatedQuantity)}
                       </td>

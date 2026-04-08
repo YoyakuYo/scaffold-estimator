@@ -7,6 +7,7 @@ import { scaffoldConfigsApi, CalculatedQuantity } from '@/lib/api/scaffold-confi
 import { quotationsApi } from '@/lib/api/quotations';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
 import { useI18n } from '@/lib/i18n';
+import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import { ArrowLeft, CheckCircle, FileSpreadsheet, Loader2 } from 'lucide-react';
 
 const RENTAL_COST_CODES = [
@@ -346,7 +347,9 @@ function QuoteWizardInner() {
                       <tr key={q.id} className={up === 0 ? 'bg-amber-50/50' : ''}>
                         <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
                         <td className="px-4 py-2 font-medium">{q.componentName}</td>
-                        <td className="px-4 py-2 text-gray-600 font-mono text-xs">{q.sizeSpec}</td>
+                        <td className="px-4 py-2 text-gray-600 font-mono text-xs">
+                          {displaySizeSpecForUi(q.sizeSpec)}
+                        </td>
                         <td className="px-4 py-2 text-right font-mono">{formatNumber(qty)}</td>
                         <td className="px-4 py-2 text-center text-gray-600">{q.unit}</td>
                         <td className="px-4 py-2 text-right">
@@ -517,11 +520,17 @@ function QuoteWizardInner() {
                   {quantities.map((q: CalculatedQuantity) => {
                     const qty = q.adjustedQuantity ?? q.calculatedQuantity;
                     const up = Math.round(Number(unitPrices[q.id]) || 0);
+                    const specUi = displaySizeSpecForUi(q.sizeSpec);
                     return (
                       <tr key={q.id}>
                         <td className="px-4 py-2">
-                          {q.componentName}{' '}
-                          <span className="text-gray-500 font-mono text-xs">{q.sizeSpec}</span>
+                          {q.componentName}
+                          {specUi ? (
+                            <>
+                              {' '}
+                              <span className="text-gray-500 font-mono text-xs">{specUi}</span>
+                            </>
+                          ) : null}
                         </td>
                         <td className="px-4 py-2 text-right font-mono">{formatCurrency(qty * up)}</td>
                       </tr>
