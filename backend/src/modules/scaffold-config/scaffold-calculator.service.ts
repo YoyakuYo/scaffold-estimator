@@ -15,6 +15,7 @@ import {
   freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
   cornerTerminalSpanMmKusabi,
+  pattankoPiecesPerCornerPerLevel,
   omitKusabiTesuriOnLastSpan,
   meshSheetVerticalRowsForHeightMm,
   MESH_SHEET_VERTICAL_LENGTH_MM,
@@ -254,11 +255,12 @@ export class ScaffoldCalculatorService {
       }
     }
 
-    // PATTANKO (パッタンコ): DTO count + reflex fallback corners (2 per corner per level).
+    // PATTANKO (パッタンコ): corners × levels × (anchi modules across width × 2 rows).
     const pattankoCornerCount = pattankoOn
       ? (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners
       : 0;
-    const pattankoQty = pattankoCornerCount * 2 * maxLevels;
+    const perCornerPerLevel = pattankoPiecesPerCornerPerLevel(input.scaffoldWidthMm);
+    const pattankoQty = pattankoCornerCount * perCornerPerLevel * maxLevels;
     if (pattankoQty > 0) {
       summary.push({
         type: 'pattanko',

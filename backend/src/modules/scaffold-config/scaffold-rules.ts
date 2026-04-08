@@ -179,6 +179,18 @@ export const ANCHI_LAYOUT_BY_WIDTH: Record<number, AnchiLayout> = {
   1219: { fullAnchiWidth: 500, fullAnchiPerSpan: 2, halfAnchiPerSpan: 0 },
 };
 
+/**
+ * PATTANKO (corner filler) width matches 踏板 module widths: count per corner per level
+ * = same number of anchi pieces across the scaffold width (500mm full ± 240mm half), on each of the 2 rows.
+ * 610 → 1/module × 2 rows = 2; 914 → (1 full + 1 half) × 2 rows = 4; 1219 → 2 × 2 = 4.
+ */
+export function pattankoPiecesPerCornerPerLevel(scaffoldWidthMm: number): number {
+  const w = normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
+  const layout = ANCHI_LAYOUT_BY_WIDTH[w] ?? ANCHI_LAYOUT_BY_WIDTH[610];
+  const modulesAcrossWidth = layout.fullAnchiPerSpan + layout.halfAnchiPerSpan;
+  return modulesAcrossWidth * 2;
+}
+
 // ─── Brace (ブレス) Catalog ──────────────────────────────────
 // X-brace used on OUTER face only, 1 per span per level
 

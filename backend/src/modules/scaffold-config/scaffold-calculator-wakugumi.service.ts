@@ -17,6 +17,7 @@ import {
   reflexCornerInsetTotalMm,
   meshSheetVerticalRowsForHeightMm,
   MESH_SHEET_VERTICAL_LENGTH_MM,
+  pattankoPiecesPerCornerPerLevel,
 } from './scaffold-rules';
 import {
   WallCalculationInput,
@@ -120,7 +121,8 @@ export class ScaffoldCalculatorWakugumiService {
     const pattankoCornerCount = pattankoOn
       ? (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners
       : 0;
-    const pattankoQty = pattankoCornerCount * 2 * maxLevels;
+    const perCornerPerLevel = pattankoPiecesPerCornerPerLevel(input.scaffoldWidthMm);
+    const pattankoQty = pattankoCornerCount * perCornerPerLevel * maxLevels;
     if (pattankoQty > 0) {
       summary.push({
         type: 'pattanko',

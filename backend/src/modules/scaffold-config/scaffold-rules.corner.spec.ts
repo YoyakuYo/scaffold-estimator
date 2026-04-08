@@ -11,6 +11,7 @@ import {
   finalizeStandardSpanRowWithNominal,
   fitSpansToWallLengthWithCorner,
   inferReflexVerticesFromOutline,
+  pattankoPiecesPerCornerPerLevel,
   scaffoldFacadeBasisMmFromCorners,
 } from './scaffold-rules';
 import {
@@ -262,5 +263,20 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
     expect(spans[spans.length - 1]).toBe(terminal);
     const sum = spans.reduce((a, b) => a + b, 0);
     expect(sum).toBe(wallMm - WAKUGUMI_CORNER_OVERRUN_MM);
+  });
+});
+
+describe('pattankoPiecesPerCornerPerLevel', () => {
+  it('610 → 2 (1 anchi module × 2 rows)', () => {
+    expect(pattankoPiecesPerCornerPerLevel(610)).toBe(2);
+    expect(pattankoPiecesPerCornerPerLevel(600)).toBe(2);
+  });
+  it('914 → 4 (1 full + 1 half × 2 rows)', () => {
+    expect(pattankoPiecesPerCornerPerLevel(914)).toBe(4);
+    expect(pattankoPiecesPerCornerPerLevel(900)).toBe(4);
+  });
+  it('1219 → 4 (2 full × 2 rows)', () => {
+    expect(pattankoPiecesPerCornerPerLevel(1219)).toBe(4);
+    expect(pattankoPiecesPerCornerPerLevel(1200)).toBe(4);
   });
 });
