@@ -10,8 +10,8 @@ export async function submitPublicContact(payload: {
   name: string;
   email: string;
   message: string;
-  /** Honeypot — leave empty */
-  company?: string;
+  /** Honeypot — leave empty (do not use `company`; autofill fills it) */
+  hp?: string;
 }): Promise<PublicContactResult> {
   const { data } = await apiClient.post<PublicContactResult>('/messages/public-contact', payload);
   return data;

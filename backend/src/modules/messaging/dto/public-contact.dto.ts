@@ -15,9 +15,12 @@ export class PublicContactDto {
   @MaxLength(8000)
   message: string;
 
-  /** Honeypot for bots — must remain empty. */
+  /**
+   * Honeypot — must remain empty. Do not use `company`; browsers/password managers
+   * autofill that and submissions were silently dropped as "bots".
+   */
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  company?: string;
+  hp?: string;
 }

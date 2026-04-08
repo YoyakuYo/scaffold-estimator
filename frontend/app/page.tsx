@@ -210,7 +210,7 @@ export default function LandingPage() {
         name: contactName.trim(),
         email: contactEmail.trim(),
         message: contactMessage.trim(),
-        company: contactHp.trim() || undefined,
+        hp: contactHp.trim() || undefined,
       }),
     onSuccess: (data) => {
       setContactSent(true);
@@ -868,16 +868,24 @@ export default function LandingPage() {
             </h2>
             <p className="mt-3 text-gray-600 leading-relaxed">{t('landing', 'contactSubtitle')}</p>
 
-            {contactSent && (
+            {contactSent && contactDelivery && (
               <div className="mt-6 space-y-3">
-                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-                  {t('landing', 'contactSuccess')}
-                </p>
-                {contactDelivery?.inApp && !contactDelivery.email ? (
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                    {t('landing', 'contactSuccessEmailNotConfigured')}
+                {contactDelivery.inApp || contactDelivery.email ? (
+                  <>
+                    <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+                      {t('landing', 'contactSuccess')}
+                    </p>
+                    {contactDelivery.inApp && !contactDelivery.email ? (
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                        {t('landing', 'contactSuccessEmailNotConfigured')}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-900">
+                    {t('landing', 'contactDeliveryNone')}
                   </p>
-                ) : null}
+                )}
               </div>
             )}
 
@@ -941,9 +949,12 @@ export default function LandingPage() {
                 <label htmlFor="landing-contact-hp">{t('landing', 'contactHpLabel')}</label>
                 <input
                   id="landing-contact-hp"
-                  name="company"
+                  name="hp"
                   tabIndex={-1}
                   autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
                   value={contactHp}
                   onChange={(e) => setContactHp(e.target.value)}
                 />

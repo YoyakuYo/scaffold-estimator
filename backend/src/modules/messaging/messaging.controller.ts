@@ -28,7 +28,7 @@ export class MessagingController {
   @Post('public-contact')
   @HttpCode(HttpStatus.OK)
   async publicContact(@Body() dto: PublicContactDto) {
-    return this.messagingService.submitPublicContact(dto.name, dto.email, dto.message, dto.company);
+    return this.messagingService.submitPublicContact(dto.name, dto.email, dto.message, dto.hp);
   }
 
   /** Get my conversation (user). */

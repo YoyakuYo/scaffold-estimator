@@ -1472,6 +1472,11 @@ export const translations = {
       en: 'Note: email copy was not sent because outgoing mail is not configured on the server. The team is still notified in the admin dashboard.',
       fr: "Note : aucun e-mail n'a été envoyé (envoi non configuré sur le serveur). L'équipe est tout de même notifiée dans l'interface d'administration.",
     },
+    contactDeliveryNone: {
+      ja: 'メッセージを受け付けられませんでした。ブラウザの自動入力をオフにするか、別のブラウザでお試しください。',
+      en: 'Your message could not be delivered. Turn off autofill for this page or try another browser, then submit again.',
+      fr: "Votre message n'a pas pu être envoyé. Désactivez le remplissage automatique pour cette page ou essayez un autre navigateur.",
+    },
     contactError: {
       ja: '送信に失敗しました。時間をおいて再度お試しください。',
       en: 'Could not send right now. Please try again in a moment.',

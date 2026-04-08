@@ -212,6 +212,9 @@ export class MessagingService {
     honeypot?: string,
   ): Promise<{ ok: boolean; inAppDelivered: boolean; emailSent: boolean }> {
     if (honeypot?.trim()) {
+      this.logger.warn(
+        'Public contact rejected: honeypot field was filled (often accidental if the field was named `company` in browser autofill).',
+      );
       return { ok: true, inAppDelivered: false, emailSent: false };
     }
     const trimmedName = name.trim();
@@ -269,6 +272,9 @@ export class MessagingService {
       );
     }
 
+    this.logger.log(
+      `Public contact delivered: inApp=${inAppDelivered} emailSent=${emailSent} admins=${admins.length}`,
+    );
     return { ok: true, inAppDelivered: inAppDelivered > 0, emailSent };
   }
 }
