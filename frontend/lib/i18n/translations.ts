@@ -75,6 +75,11 @@ export const translations = {
     loggingIn: { ja: 'ログイン中...', en: 'Signing in...', fr: 'Connexion...' },
     failed: { ja: 'ログインに失敗しました。バックエンドが起動していない可能性があります。', en: 'Login failed. The backend server may not be running.', fr: "Échec de la connexion. Le serveur backend n'est peut-être pas démarré." },
     networkError: { ja: 'サーバーに接続できません。バックエンドが Render 等で動いている場合は、フロントの環境変数 NEXT_PUBLIC_BACKEND_URL をバックエンドのURL（例: https://xxx.onrender.com/api/v1）に設定して再ビルドしてください。', en: 'Cannot reach the server. If the backend is running on Render etc., set the frontend env NEXT_PUBLIC_BACKEND_URL to the backend URL (e.g. https://xxx.onrender.com/api/v1) and rebuild.', fr: "Impossible de joindre le serveur. Si le backend tourne sur Render etc., définissez NEXT_PUBLIC_BACKEND_URL sur l'URL du backend (ex. https://xxx.onrender.com/api/v1) et recompilez." },
+    networkErrorAttempted: {
+      ja: '接続に使った API のベース: {url}',
+      en: 'API base used for this request: {url}',
+      fr: "Base API utilisée pour cette requête : {url}",
+    },
     devMode: { ja: '🔧 開発モードで入る（バックエンド不要）', en: '🔧 Enter Dev Mode (no backend needed)', fr: '🔧 Mode développement (sans backend)' },
     devModeHint: { ja: 'バックエンド未接続時に画面を確認できます', en: 'Preview the UI without a backend connection', fr: "Aperçu de l'interface sans connexion au backend" },
     forgotPasswordLink: { ja: 'パスワードをお忘れですか？', en: 'Forgot password?', fr: 'Mot de passe oublié ?' },

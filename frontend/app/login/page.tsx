@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
+import { getApiBaseUrl } from '@/lib/api/client';
 import { useMutation } from '@tanstack/react-query';
 import { Globe } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -43,7 +44,9 @@ export default function LoginPage() {
       // No response = network error (wrong URL, CORS, or backend unreachable)
       const msg = err.response?.data?.message;
       if (!err.response) {
-        setError(t('login', 'networkError'));
+        const base = getApiBaseUrl();
+        const detail = t('login', 'networkErrorAttempted').replace('{url}', base);
+        setError(`${t('login', 'networkError')}\n\n${detail}`);
         return;
       }
       setError(msg || t('login', 'failed'));
@@ -117,7 +120,7 @@ export default function LoginPage() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit} suppressHydrationWarning>
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded space-y-2" suppressHydrationWarning>
-              <p>{error}</p>
+              <p className="whitespace-pre-wrap break-words">{error}</p>
               {isSuperAdminError && (
                 <p className="text-sm">
                   <a href="/superadmin" className="font-medium underline hover:text-red-800">
