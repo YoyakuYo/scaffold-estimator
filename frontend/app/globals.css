@@ -144,9 +144,9 @@ body {
     display: table-header-group;
   }
   /* Material gallery: keep photos visible and crisp in Save-as-PDF */
-  .scaffold-result-print .material-gallery-card img {
+  .scaffold-result-print .material-gallery-card {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    max-height: 200px !important;
+    max-height: 56px !important;
   }
 }

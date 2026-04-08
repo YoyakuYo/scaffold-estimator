@@ -48,47 +48,47 @@ export function MaterialGalleryTab({ summary, scaffoldType }: Props) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <ul className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100 print:border-gray-400">
         {rows.map((row) => (
-          <article
+          <li
             key={row.aggregationKey}
-            className="material-gallery-card rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden print:break-inside-avoid print:border-gray-400"
+            className="material-gallery-row flex items-start gap-3 sm:gap-5 px-3 py-3 sm:px-4 sm:py-3.5 print:break-inside-avoid"
           >
-            <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-white border-b border-gray-100 flex items-center justify-center p-4 print:bg-white">
+            <span
+              className="shrink-0 w-14 sm:w-16 text-right text-lg sm:text-xl font-bold tabular-nums text-blue-700 print:text-black leading-tight pt-0.5"
+              title={t('resultExtra', 'materialsGalleryQtyTitle')}
+            >
+              {row.quantity.toLocaleString()}
+            </span>
+            <div className="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-lg bg-gradient-to-b from-slate-50 to-white border border-gray-100 flex items-center justify-center p-1.5 print:bg-white print:border-gray-200">
               {row.imageSrc ? (
                 <img
                   src={row.imageSrc}
                   alt=""
-                  className="max-h-full max-w-full object-contain drop-shadow-sm"
+                  className="material-gallery-card max-h-full max-w-full object-contain drop-shadow-sm"
                   loading="lazy"
                 />
               ) : (
-                <div className="flex flex-col items-center justify-center text-gray-400 gap-2 p-4">
-                  <Package className="h-12 w-12 opacity-40" aria-hidden />
-                  <span className="text-xs text-center font-mono">{row.aggregationKey}</span>
+                <div className="flex flex-col items-center justify-center text-gray-400 gap-0.5">
+                  <Package className="h-6 w-6 sm:h-7 sm:w-7 opacity-40" aria-hidden />
+                  <span className="text-[10px] text-center font-mono leading-none truncate max-w-full">
+                    {row.aggregationKey}
+                  </span>
                 </div>
               )}
             </div>
-            <div className="p-3 sm:p-4">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-sm font-semibold text-gray-900 leading-snug flex-1 min-w-0">{row.label}</h3>
-                <span
-                  className="shrink-0 text-lg sm:text-xl font-bold tabular-nums text-blue-700 print:text-black"
-                  title={t('resultExtra', 'materialsGalleryQtyTitle')}
-                >
-                  {row.quantity.toLocaleString()}
-                </span>
-              </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <h3 className="text-sm font-semibold text-gray-900 leading-snug">{row.label}</h3>
               {row.specSummary ? (
-                <p className="mt-1.5 text-xs text-gray-500 leading-snug line-clamp-3">{row.specSummary}</p>
+                <p className="mt-1 text-xs text-gray-500 leading-snug">{row.specSummary}</p>
               ) : null}
-              <p className="mt-2 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-gray-400">
                 {t('resultExtra', 'materialsGalleryUnit')}: {row.unit || '—'}
               </p>
             </div>
-          </article>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
