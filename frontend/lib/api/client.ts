@@ -19,14 +19,11 @@ function isBrowserLocalhost(hostname: string): boolean {
 /**
  * API base URL including `/api/v1`.
  *
- * 1. `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_API_URL` (trimmed) if set at build time.
- * 2. In the browser on localhost: `http://localhost:3000/api/v1` even when `NODE_ENV`
- *    is production (`next build` + `next start`) so a local Nest on :3000 is used without
- *    `BACKEND_PROXY_TARGET`.
- * 3. Otherwise in the browser: same-origin `/api/v1` (needs `BACKEND_PROXY_TARGET` on the host
- *    unless Next implements those routes).
- * 4. SSR / Node: `BACKEND_PROXY_TARGET` / `INTERNAL_API_URL` + `/api/v1` if set; else dev →
- *    localhost, prod → `/api/v1`.
+ * 1. `NEXT_PUBLIC_BACKEND_URL` / `NEXT_PUBLIC_API_URL` (trimmed) if set at build time — required
+ *    for deployed frontends so the browser calls your API host directly.
+ * 2. In the browser on localhost: `http://localhost:3000/api/v1` when env is unset (local Nest).
+ * 3. Otherwise in the browser: same-origin `/api/v1` (set `NEXT_PUBLIC_BACKEND_URL` for production).
+ * 4. SSR / Node without `NEXT_PUBLIC_*`: dev → `http://localhost:3000/api/v1`, prod → `/api/v1`.
  *
  * `NEXT_PUBLIC_*` values are inlined at build time; change → rebuild the frontend.
  */
@@ -41,12 +38,6 @@ export function getApiBaseUrl(): string {
       return 'http://localhost:3000/api/v1';
     }
     return '/api/v1';
-  }
-
-  const proxy =
-    trimEnv(process.env.BACKEND_PROXY_TARGET) || trimEnv(process.env.INTERNAL_API_URL);
-  if (proxy) {
-    return `${proxy.replace(/\/$/, '')}/api/v1`;
   }
 
   return process.env.NODE_ENV === 'production'

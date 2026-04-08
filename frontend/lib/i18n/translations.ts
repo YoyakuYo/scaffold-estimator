@@ -2320,9 +2320,9 @@ export const translations = {
     subtitle: { ja: '管理者にメッセージを送信できます。返信はこの画面に表示されます。', en: 'Send a message to the platform administrator. You will receive a reply here.', fr: "Envoyez un message à l'administrateur. Vous recevrez une réponse ici." },
     noMessages: { ja: 'まだメッセージはありません。下から送信してください。', en: 'No messages yet. Send a message below.', fr: "Aucun message pour le moment. Envoyez-en un ci-dessous." },
     loadFailed: {
-      ja: '会話を読み込めませんでした。バックエンドの起動、NEXT_PUBLIC_BACKEND_URL、またはホスト側の BACKEND_PROXY_TARGET を確認してください。',
-      en: 'Could not load messages. Check that the API is running, NEXT_PUBLIC_BACKEND_URL points to it, or set BACKEND_PROXY_TARGET on the frontend host when using /api/v1.',
-      fr: "Impossible de charger les messages. Vérifiez l'API, NEXT_PUBLIC_BACKEND_URL, ou BACKEND_PROXY_TARGET si vous utilisez /api/v1.",
+      ja: '会話を読み込めませんでした。バックエンドの起動とフロントの NEXT_PUBLIC_BACKEND_URL を確認してください。',
+      en: 'Could not load messages. Check that the API is running and NEXT_PUBLIC_BACKEND_URL on the frontend points to it.',
+      fr: "Impossible de charger les messages. Vérifiez l'API et que NEXT_PUBLIC_BACKEND_URL sur le frontend pointe vers elle.",
     },
     sendFailed: {
       ja: '送信に失敗しました。接続と権限を確認してください。',
@@ -2697,8 +2697,8 @@ export const translations = {
     sendFirst: { ja: '最初のメッセージを送信', en: 'Send first message', fr: 'Send first message' },
     actionFailed: {
       ja: '操作に失敗しました。API接続を確認してください。',
-      en: 'Action failed. Check API connectivity (NEXT_PUBLIC_BACKEND_URL or BACKEND_PROXY_TARGET).',
-      fr: "Action impossible. Vérifiez l'API (NEXT_PUBLIC_BACKEND_URL ou BACKEND_PROXY_TARGET).",
+      en: 'Action failed. Check API connectivity (NEXT_PUBLIC_BACKEND_URL on the frontend).',
+      fr: "Action impossible. Vérifiez l'API (NEXT_PUBLIC_BACKEND_URL sur le frontend).",
     },
   },
 } as const;
