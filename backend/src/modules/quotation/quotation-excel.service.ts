@@ -41,6 +41,81 @@ const FILL_ALT_ROW = { type: 'pattern' as const, pattern: 'solid' as const, fgCo
 
 const NUM_COLS = 7;
 
+/** Japanese labels for cost formula variables (keys match quotation_cost_items JSON). */
+const COST_VAR_LABEL_JA: Record<string, string> = {
+  totalArea: '対象面積',
+  materialBasicRate: '基本単価',
+  rentalMonths: 'レンタル月数',
+  materialSubtotal: '部材小計',
+  wearRatePercent: '損料率',
+  totalComponents: '部材合計数量',
+  transportRate: '運搬単価',
+  disposalRatePercent: '滅失率',
+  surfacePrepRatePercent: 'ケレン率',
+  repairRate: '修理率',
+};
+
+function formatNumericJa(val: unknown): string {
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    if (Number.isInteger(val)) return val.toLocaleString('ja-JP');
+    return val.toLocaleString('ja-JP', { maximumFractionDigits: 4 });
+  }
+  if (val === null || val === undefined) return '—';
+  return String(val);
+}
+
+/** Unit suffix for known variable keys (readable in 見積 Excel). */
+function valueWithUnitJa(key: string, val: unknown): string {
+  const n = formatNumericJa(val);
+  switch (key) {
+    case 'totalArea':
+      return `${n} m²`;
+    case 'materialBasicRate':
+      return `${n} 円/m²/月`;
+    case 'rentalMonths':
+      return `${n} ヶ月`;
+    case 'materialSubtotal':
+      return `${n} 円`;
+    case 'wearRatePercent':
+      return `${n} %/月`;
+    case 'totalComponents':
+      return `${n} 個`;
+    case 'transportRate':
+      return `${n} 円/個`;
+    case 'disposalRatePercent':
+    case 'surfacePrepRatePercent':
+    case 'repairRate':
+      return `${n} %`;
+    default:
+      return n;
+  }
+}
+
+type FormulaVarEntry = { name?: string; value?: unknown };
+
+/**
+ * Readable cost basis for Excel (values from master / geometry / rental config).
+ * Falls back to raw expression if variables are missing.
+ */
+function formatCostBasisForExcelJa(cost: {
+  formulaVariables?: Record<string, FormulaVarEntry> | null;
+  formulaExpression?: string | null;
+}): string {
+  const raw = (cost.formulaExpression ?? '').trim();
+  const v = cost.formulaVariables;
+  if (!v || typeof v !== 'object') return raw || '—';
+  const keys = Object.keys(v);
+  if (keys.length === 0) return raw || '—';
+  const parts: string[] = [];
+  for (const key of keys) {
+    const entry = v[key] as FormulaVarEntry | undefined;
+    if (!entry || typeof entry !== 'object') continue;
+    const label = COST_VAR_LABEL_JA[key] ?? entry.name ?? key;
+    parts.push(`${label} ${valueWithUnitJa(key, entry.value)}`);
+  }
+  return parts.length ? parts.join(' ／ ') : raw || '—';
+}
+
 function scaffoldTypeJa(t?: string): string {
   if (t === 'kusabi') return 'くさび式足場';
   if (t === 'wakugumi') return '枠組足場';
@@ -85,8 +160,10 @@ export type QuotationLike = {
     sortOrder?: number;
   }>;
   costItems?: Array<{
+    code?: string;
     name?: string;
     formulaExpression?: string;
+    formulaVariables?: Record<string, FormulaVarEntry> | null;
     calculatedValue?: number | string | null;
     userEditedValue?: number | string | null;
     sortOrder?: number;
@@ -117,7 +194,7 @@ export class QuotationExcelService {
     wb.creator = 'Scaffold Estimator';
     wb.created = new Date();
     const ws = wb.addWorksheet('見積書', {
-      views: [{ showGridLines: true }],
+      views: [{ showGridLines: false }],
       pageSetup: {
         paperSize: 9,
         orientation: 'portrait',
@@ -271,14 +348,6 @@ export class QuotationExcelService {
       row++;
     });
 
-    ws.getColumn(1).width = 7;
-    ws.getColumn(2).width = 30;
-    ws.getColumn(3).width = 24;
-    ws.getColumn(4).width = 10;
-    ws.getColumn(5).width = 12;
-    ws.getColumn(6).width = 14;
-    ws.getColumn(7).width = 14;
-
     row += 1;
 
     // ─── レンタル費用 ───
@@ -304,10 +373,10 @@ export class QuotationExcelService {
 
       ws.mergeCells(row, 3, row, 6);
       const h3 = ws.getCell(row, 3);
-      h3.value = '計算式';
+      h3.value = '計算根拠（マスタ・入力値）';
       h3.font = { bold: true, color: { argb: 'FF1F2937' } };
       h3.fill = FILL_HEADER_AMBER;
-      h3.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+      h3.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
       for (let col = 3; col <= 6; col++) {
         ws.getCell(row, col).border = BORDER_THIN as ExcelJS.Borders;
       }
@@ -321,19 +390,28 @@ export class QuotationExcelService {
       row++;
 
       costs.forEach((cost, idx) => {
+        const basisText = formatCostBasisForExcelJa(cost);
+        const fill = idx % 2 === 1 ? FILL_ALT_ROW : undefined;
+
         ws.getCell(row, 1).value = idx + 1;
         ws.getCell(row, 1).alignment = { horizontal: 'center', vertical: 'middle' };
         ws.getCell(row, 1).border = BORDER_THIN as ExcelJS.Borders;
+        if (fill) ws.getCell(row, 1).fill = fill;
 
         ws.getCell(row, 2).value = cost.name ?? '';
-        ws.getCell(row, 2).alignment = { vertical: 'middle', wrapText: true };
+        ws.getCell(row, 2).alignment = { vertical: 'middle', wrapText: true, indent: 1 };
         ws.getCell(row, 2).border = BORDER_THIN as ExcelJS.Borders;
+        if (fill) ws.getCell(row, 2).fill = fill;
 
         ws.mergeCells(row, 3, row, 6);
-        ws.getCell(row, 3).value = cost.formulaExpression ?? '';
-        ws.getCell(row, 3).alignment = { wrapText: true, vertical: 'middle' };
+        const basisCell = ws.getCell(row, 3);
+        basisCell.value = basisText;
+        basisCell.alignment = { wrapText: true, vertical: 'top', horizontal: 'left', indent: 1 };
+        basisCell.font = { size: 10, color: { argb: 'FF334155' } };
         for (let col = 3; col <= 6; col++) {
-          ws.getCell(row, col).border = BORDER_THIN as ExcelJS.Borders;
+          const c = ws.getCell(row, col);
+          c.border = BORDER_THIN as ExcelJS.Borders;
+          if (fill) c.fill = fill;
         }
 
         const amt = Math.round(effectiveCostLineAmount(cost));
@@ -341,6 +419,9 @@ export class QuotationExcelService {
         ws.getCell(row, 7).numFmt = yenFmt;
         ws.getCell(row, 7).alignment = { horizontal: 'right', vertical: 'middle' };
         ws.getCell(row, 7).border = BORDER_THIN as ExcelJS.Borders;
+        ws.getCell(row, 7).font = { bold: true, size: 10 };
+        if (fill) ws.getCell(row, 7).fill = fill;
+        ws.getRow(row).height = Math.max(36, Math.ceil(basisText.length / 55) * 14);
         row++;
       });
       row += 1;
@@ -357,26 +438,49 @@ export class QuotationExcelService {
       ['合計 (¥)', Math.round(Number(quotation.totalAmount) || 0), true],
     ];
 
+    const BORDER_GRAND_TOP: Partial<ExcelJS.Borders> = {
+      top: { style: 'medium', color: { argb: 'FF64748B' } },
+      left: { style: 'thin', color: { argb: 'FF94A3B8' } },
+      bottom: { style: 'thin', color: { argb: 'FF94A3B8' } },
+      right: { style: 'thin', color: { argb: 'FF94A3B8' } },
+    };
+
     for (const [label, value, isGrand] of totals) {
+      ws.mergeCells(row, 1, row, 5);
       const lc = ws.getCell(row, 1);
       lc.value = label;
       lc.font = { bold: true, size: isGrand ? 12 : 10 };
-      lc.alignment = { vertical: 'middle' };
-      lc.border = BORDER_THIN as ExcelJS.Borders;
-      if (isGrand) lc.fill = FILL_LABEL;
+      lc.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
+      for (let col = 1; col <= 5; col++) {
+        const c = ws.getCell(row, col);
+        c.border = (isGrand ? BORDER_GRAND_TOP : BORDER_THIN) as ExcelJS.Borders;
+        if (isGrand) c.fill = FILL_LABEL;
+      }
 
-      ws.mergeCells(row, 2, row, NUM_COLS);
-      const v = ws.getCell(row, 2);
+      ws.mergeCells(row, 6, row, 7);
+      const v = ws.getCell(row, 6);
       v.value = value;
       v.numFmt = yenFmt;
       v.font = { bold: isGrand, size: isGrand ? 12 : 10 };
       v.alignment = { horizontal: 'right', vertical: 'middle' };
       if (isGrand) v.fill = FILL_LABEL;
-      for (let col = 2; col <= NUM_COLS; col++) {
-        ws.getCell(row, col).border = BORDER_THIN as ExcelJS.Borders;
+      for (let col = 6; col <= 7; col++) {
+        const c = ws.getCell(row, col);
+        c.border = (isGrand ? BORDER_GRAND_TOP : BORDER_THIN) as ExcelJS.Borders;
+        if (isGrand) c.fill = FILL_LABEL;
       }
+      if (isGrand) ws.getRow(row).height = 26;
       row++;
     }
+
+    // Column widths: wide enough for Japanese labels + wrapped cost basis (applied to whole sheet).
+    ws.getColumn(1).width = 9;
+    ws.getColumn(2).width = 22;
+    ws.getColumn(3).width = 14;
+    ws.getColumn(4).width = 14;
+    ws.getColumn(5).width = 14;
+    ws.getColumn(6).width = 14;
+    ws.getColumn(7).width = 16;
 
     const buffer = await wb.xlsx.writeBuffer();
     return Buffer.from(buffer);
