@@ -43,7 +43,10 @@ export function materialGalleryImageSrc(
     case 'shitasan':
       return `${IMG_BASE}/wakugumi/shita-san.png`;
     case 'end_stopper_nuno':
-      return `${IMG_BASE}/kusabi/nuno-bar.png`;
+      // Wakugumi BOM uses this type for 端部 (bar-type); kusabi rolls stopper into `nuno_bar` rows.
+      return scaffoldType === 'wakugumi'
+        ? `${IMG_BASE}/wakugumi/end-stopper.png`
+        : `${IMG_BASE}/kusabi/nuno-bar.png`;
     case 'end_stopper_frame':
       return `${IMG_BASE}/wakugumi/end-stopper.png`;
     case 'anchi_group':

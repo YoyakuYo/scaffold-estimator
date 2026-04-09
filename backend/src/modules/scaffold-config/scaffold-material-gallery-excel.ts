@@ -40,7 +40,7 @@ export function materialGalleryImageRelativePath(
     case 'shitasan':
       return 'wakugumi/shita-san.png';
     case 'end_stopper_nuno':
-      return 'kusabi/nuno-bar.png';
+      return scaffoldType === 'wakugumi' ? 'wakugumi/end-stopper.png' : 'kusabi/nuno-bar.png';
     case 'end_stopper_frame':
       return 'wakugumi/end-stopper.png';
     case 'anchi_group':
