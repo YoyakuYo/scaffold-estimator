@@ -1748,9 +1748,9 @@ export const translations = {
     tabOverall: { ja: '全体数量', en: 'Overall Totals', fr: 'Totaux généraux' },
     tabMaterials: { ja: '材料写真', en: 'Material Pictures', fr: 'Photos des matériaux' },
     materialsGalleryHint: {
-      ja: '計算結果の部材を種類ごとに写真と合計数量で表示します（規格が複数ある場合は規格を併記）。',
-      en: 'Photos with total quantities per material group from this calculation (multiple specs are listed when needed).',
-      fr: 'Photos et quantités totales par groupe de matériaux pour ce calcul (plusieurs spécifications listées si besoin).',
+      ja: '計算結果の部材を種類ごとに写真と合計数量で表示します（規格が複数ある場合は規格を併記）。枠組の端部は「開いた端」がある場合のみ全体集計に計上されるため、その場合だけここにも表示されます（閉じた矩形の周回では数量0のため行がありません）。',
+      en: 'Photos with total quantities per material group from this calculation (multiple specs are listed when needed). Frame end stoppers (端部) only appear when the BOM includes them—open-ended runs (e.g. U-shape), not closed rectangular perimeters where the count is zero.',
+      fr: 'Photos et quantités totales par groupe de matériaux pour ce calcul (plusieurs spécifications listées si besoin). Les arrêts d’extrémité (cadres) n’apparaissent que si le métré les compte — extrémités libres (ex. U), pas pour un périmètre fermé où la quantité est nulle.',
     },
     materialsGalleryPrintPdf: {
       ja: '印刷 / PDF 保存',
