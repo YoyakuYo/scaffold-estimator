@@ -41,6 +41,10 @@ import {
   type QuickShapeBuilderDraft,
 } from '@/components/quick-shape-builder';
 import {
+  ManualDoorOpeningsEditor,
+  type ManualDoorOpeningRow,
+} from '@/components/manual-door-openings-editor';
+import {
   visionBimApi,
   type IfcPremiumMetadata,
   type PremiumScheduleImportResult,
@@ -953,6 +957,8 @@ interface RawWizardDraft {
   aiBimPreview?: AiBimWizardPreview;
   aiBimEdgeHashira?: EdgeHashiraFormRow[];
   aiBimEdgeCf?: string[];
+  /** Manual doors for file upload / CAD / drawing wall table (wallIndex = index in `walls`). */
+  drawingManualDoorOpenings?: ManualDoorOpeningRow[];
 }
 
 interface WizardSessionBootstrap {
@@ -969,6 +975,7 @@ interface WizardSessionBootstrap {
   aiBimPreview: AiBimWizardPreview | null;
   aiBimEdgeHashira: EdgeHashiraFormRow[];
   aiBimEdgeCf: ScaffoldWallCfKey[];
+  drawingManualDoorOpenings: ManualDoorOpeningRow[];
 }
 
 function wizardSessionDefaults(): WizardSessionBootstrap {
@@ -986,6 +993,7 @@ function wizardSessionDefaults(): WizardSessionBootstrap {
     aiBimPreview: null,
     aiBimEdgeHashira: [],
     aiBimEdgeCf: [],
+    drawingManualDoorOpenings: [],
   };
 }
 
@@ -1051,6 +1059,20 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
     if (parsed.pendingInputUiPath !== undefined) d.pendingInputUiPath = parsed.pendingInputUiPath ?? null;
     if (typeof parsed.scaffoldWidthMm === 'number') {
       d.scaffoldWidthMm = normalizeScaffoldWidthMmToCatalog(parsed.scaffoldWidthMm);
+    }
+
+    if (
+      mode !== 'ai_extract' &&
+      Array.isArray(parsed.drawingManualDoorOpenings)
+    ) {
+      d.drawingManualDoorOpenings = parsed.drawingManualDoorOpenings.filter(
+        (row): row is ManualDoorOpeningRow =>
+          row != null &&
+          typeof row === 'object' &&
+          Number.isFinite(Number((row as ManualDoorOpeningRow).wallIndex)) &&
+          Number.isFinite(Number((row as ManualDoorOpeningRow).positionMm)) &&
+          Number.isFinite(Number((row as ManualDoorOpeningRow).widthMm)),
+      );
     }
 
     return d;
@@ -1208,6 +1230,9 @@ function ScaffoldPageContent() {
   const handleQuickShapeDraftChange = useCallback((next: QuickShapeBuilderDraft) => {
     setQuickShapeDraft(next);
   }, []);
+  const [drawingManualDoorOpenings, setDrawingManualDoorOpenings] = useState<ManualDoorOpeningRow[]>(
+    () => initialWizard.drawingManualDoorOpenings ?? [],
+  );
 
   const { data: editConfig, isLoading: editConfigLoading } = useQuery({
     queryKey: ['scaffold-config', editConfigId!],
@@ -1373,6 +1398,7 @@ function ScaffoldPageContent() {
             aiBimPreview,
             aiBimEdgeHashira,
             aiBimEdgeCf,
+            drawingManualDoorOpenings,
           }),
         );
       } catch {
@@ -1395,6 +1421,7 @@ function ScaffoldPageContent() {
     aiBimPreview,
     aiBimEdgeHashira,
     aiBimEdgeCf,
+    drawingManualDoorOpenings,
   ]);
 
   const closedFootprintChords =
@@ -1406,6 +1433,36 @@ function ScaffoldPageContent() {
     if (walls.length < 3) return null;
     return footprintVerticesForWallPreview(polygonVertices, walls, closedFootprintChords);
   }, [polygonVertices, walls, closedFootprintChords]);
+
+  const drawingManualDoorWallOptions = useMemo(() => {
+    return walls
+      .map((w, i) => ({ w, i }))
+      .filter(({ w }) => w.enabled)
+      .map(({ w, i }) => {
+        const lenMm =
+          w.isMultiSegment && w.segments.length > 0 ? calcTotalFromSegments(w.segments) : w.lengthMm;
+        return {
+          wallIndex: i,
+          label: `${edgeChordName(i, walls.length, closedFootprintChords)} (${formatMmLabel(lenMm)})`,
+        };
+      });
+  }, [walls, closedFootprintChords]);
+
+  const drawingManualDoorDefaultAddPos = useMemo(() => {
+    const first = walls.find((w) => w.enabled);
+    if (!first) return 1500;
+    const lenMm =
+      first.isMultiSegment && first.segments.length > 0
+        ? calcTotalFromSegments(first.segments)
+        : first.lengthMm;
+    return Math.round(lenMm / 2);
+  }, [walls]);
+
+  const showDrawingManualDoorSection =
+    walls.length > 0 &&
+    manualSubTab === 'drawing' &&
+    inputMode !== 'ai_extract' &&
+    inputMode !== 'quick';
 
   useEffect(() => {
     if (!cornerKindsUseManual || walls.length < 3) return;
@@ -1790,6 +1847,26 @@ function ScaffoldPageContent() {
 
     const edgeHashiraLabeling = labelingForEnabledWallIndices(enabledOriginalIndices, hashiraRows);
 
+    const manualMappedForDto = drawingManualDoorOpenings
+      .map((d) => {
+        const orig = Math.floor(Number(d.wallIndex) || 0);
+        const dtoIdx = enabledOriginalIndices.indexOf(orig);
+        if (dtoIdx < 0) return null;
+        return {
+          wallIndex: dtoIdx,
+          positionMm: d.positionMm,
+          widthMm: d.widthMm,
+          doorTopHeightMmFromGround: d.doorTopHeightMmFromGround,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+
+    const mergedObstacles = mergeAiExtractObstaclesForDto(
+      undefined,
+      manualMappedForDto,
+      enabledWalls.length,
+    );
+
     const dto: CreateScaffoldConfigDto = {
       projectId: editConfig?.projectId ?? 'default-project',
       mode: 'manual',
@@ -1832,6 +1909,7 @@ function ScaffoldPageContent() {
         if (manualSubTab === 'quick') return 'quick';
         return 'drawing';
       })(),
+      ...(mergedObstacles.length > 0 ? { obstacles: mergedObstacles } : {}),
     };
     calculateMutation.mutate({ dto, configId: editConfigId });
   };
@@ -3252,7 +3330,9 @@ function ScaffoldPageContent() {
       {/* ═══════════════════════════════════════════════════════
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
-      {((inputMode !== 'ai_extract' && inputMode !== 'cad_draw') || editConfigId) &&
+      {((inputMode !== 'ai_extract' &&
+        (inputMode !== 'cad_draw' || walls.length > 0)) ||
+        editConfigId) &&
         (canFile || canQuick || !!editConfigId) && (<>
       {/* Sub-tab selector (disabled while editing an existing config) */}
       {(canFile || canQuick) && (
@@ -3851,6 +3931,19 @@ function ScaffoldPageContent() {
             </div>
           </div>
         </div>
+
+        {showDrawingManualDoorSection && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
+            <ManualDoorOpeningsEditor
+              rows={drawingManualDoorOpenings}
+              onRowsChange={setDrawingManualDoorOpenings}
+              wallOptions={drawingManualDoorWallOptions}
+              idPrefix="drawing"
+              addDisabled={drawingManualDoorWallOptions.length === 0}
+              defaultAddPositionMm={drawingManualDoorDefaultAddPos}
+            />
+          </div>
+        )}
 
         <BuildingScaffoldSettingsPanel
           showSiteContact={false}
