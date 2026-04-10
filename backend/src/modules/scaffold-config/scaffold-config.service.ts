@@ -268,15 +268,25 @@ export class ScaffoldConfigService {
 
     // Inject door openings from obstacles into wall inputs
     if (dto.obstacles && dto.obstacles.length > 0) {
-      const doorObs = dto.obstacles.filter((o): o is { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number } => o.type === 'door');
+      const doorObs = dto.obstacles.filter((o): o is {
+        type: 'door';
+        wallIndex?: number;
+        positionMm?: number;
+        widthMm?: number;
+        doorTopHeightMmFromGround?: number;
+      } => o.type === 'door');
       for (const door of doorObs) {
         const wi = door.wallIndex ?? 0;
         if (wi >= 0 && wi < wallsToCalculate.length) {
           const wall = wallsToCalculate[wi];
           if (!wall.doorOpenings) wall.doorOpenings = [];
+          const th = door.doorTopHeightMmFromGround;
           wall.doorOpenings.push({
             positionMm: door.positionMm ?? Math.round(wall.wallLengthMm / 2),
             widthMm: door.widthMm ?? 1800,
+            ...(typeof th === 'number' && Number.isFinite(th) && th > 0
+              ? { doorTopHeightMmFromGround: Math.round(th) }
+              : {}),
           });
         }
       }
@@ -520,15 +530,25 @@ export class ScaffoldConfigService {
 
     // Inject door openings from obstacles into wall inputs (update path)
     if (dto.obstacles && dto.obstacles.length > 0) {
-      const doorObs = dto.obstacles.filter((o): o is { type: 'door'; wallIndex?: number; positionMm?: number; widthMm?: number } => o.type === 'door');
+      const doorObs = dto.obstacles.filter((o): o is {
+        type: 'door';
+        wallIndex?: number;
+        positionMm?: number;
+        widthMm?: number;
+        doorTopHeightMmFromGround?: number;
+      } => o.type === 'door');
       for (const door of doorObs) {
         const wi = door.wallIndex ?? 0;
         if (wi >= 0 && wi < wallsToCalculate.length) {
           const wall = wallsToCalculate[wi] as any;
           if (!wall.doorOpenings) wall.doorOpenings = [];
+          const th = door.doorTopHeightMmFromGround;
           wall.doorOpenings.push({
             positionMm: door.positionMm ?? Math.round(wall.wallLengthMm / 2),
             widthMm: door.widthMm ?? 1800,
+            ...(typeof th === 'number' && Number.isFinite(th) && th > 0
+              ? { doorTopHeightMmFromGround: Math.round(th) }
+              : {}),
           });
         }
       }

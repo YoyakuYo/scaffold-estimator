@@ -275,6 +275,8 @@ export class CreateScaffoldConfigDto {
         wallIndex?: number;
         positionMm?: number;
         widthMm?: number;
+        /** Optional: vertical extent for records / BOM (mm from ground to top of door opening). */
+        doorTopHeightMmFromGround?: number;
       }
   >;
 

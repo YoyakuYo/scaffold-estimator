@@ -527,22 +527,28 @@ export class ScaffoldCalculatorWakugumiService {
           hariwakuMm += spans[si];
         }
 
+        const topH = door.doorTopHeightMmFromGround;
+        const hasTopH = typeof topH === 'number' && Number.isFinite(topH) && topH > 0;
         resolvedDoors.push({
           positionMm: door.positionMm,
           widthMm: door.widthMm,
           startSpanIndex: startIdx,
           spanCount,
           hariwakuSizeMm: hariwakuMm,
+          ...(hasTopH ? { doorTopHeightMmFromGround: Math.round(topH) } : {}),
         });
 
         sortOrder++;
+        const hariwakuSizeSpec = hasTopH
+          ? `${hariwakuMm}mm (${spanCount}スパン) · 開口高(地上〜頭) ${Math.round(topH)}mm`
+          : `${hariwakuMm}mm (${spanCount}スパン)`;
         components.push({
           type: 'hariwaku',
           category: '梁枠',
           categoryEn: 'Beam Frame',
           name: 'Beam Frame (Hariwaku)',
           nameJp: '梁枠',
-          sizeSpec: `${hariwakuMm}mm (${spanCount}スパン)`,
+          sizeSpec: hariwakuSizeSpec,
           unit: '基',
           quantity: 1,
           sortOrder,

@@ -60,7 +60,7 @@ export interface WallCalculationInput {
   /** Buragetto: 'bracket' = single-pole + bracket when obstacle clearance < width+200mm. */
   layoutMode?: 'double_post' | 'bracket';
   /** Door openings on this wall — each gets a 梁枠 (hariwaku / beam frame) at ground level. */
-  doorOpenings?: Array<{ positionMm: number; widthMm: number }>;
+  doorOpenings?: Array<{ positionMm: number; widthMm: number; doorTopHeightMmFromGround?: number }>;
   /** Tier base elevation (mm). For stepped buildings, scaffold starts at this height. */
   baseHeightMm?: number;
   /** Logical side group for BOM aggregation (e.g. 'east' groups all east tier-walls). */
@@ -124,6 +124,8 @@ export interface WallCalculationResult {
     spanCount: number;
     /** Hariwaku size: total mm of the beam frame. */
     hariwakuSizeMm: number;
+    /** Echo from input when provided (mm from ground to top of door). */
+    doorTopHeightMmFromGround?: number;
   }>;
   /** Tier base elevation (mm). For stepped buildings, scaffold starts at this height. */
   baseHeightMm?: number;
@@ -763,22 +765,28 @@ export class ScaffoldCalculatorService {
           hariwakuMm += spans[si];
         }
 
+        const topH = door.doorTopHeightMmFromGround;
+        const hasTopH = typeof topH === 'number' && Number.isFinite(topH) && topH > 0;
         resolvedDoors.push({
           positionMm: door.positionMm,
           widthMm: door.widthMm,
           startSpanIndex: startIdx,
           spanCount,
           hariwakuSizeMm: hariwakuMm,
+          ...(hasTopH ? { doorTopHeightMmFromGround: Math.round(topH) } : {}),
         });
 
         sortOrder++;
+        const hariwakuSizeSpec = hasTopH
+          ? `${hariwakuMm}mm (${spanCount}スパン) · 開口高(地上〜頭) ${Math.round(topH)}mm`
+          : `${hariwakuMm}mm (${spanCount}スパン)`;
         components.push({
           type: 'hariwaku',
           category: '梁枠',
           categoryEn: 'Beam Frame',
           name: 'Beam Frame (Hariwaku)',
           nameJp: '梁枠',
-          sizeSpec: `${hariwakuMm}mm (${spanCount}スパン)`,
+          sizeSpec: hariwakuSizeSpec,
           unit: '基',
           quantity: 1,
           sortOrder,

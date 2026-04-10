@@ -91,6 +91,8 @@ export interface CreateScaffoldConfigDto {
         wallIndex?: number;
         positionMm?: number;
         widthMm?: number;
+        /** Optional: mm from ground to top of door (stored for BOM / display). */
+        doorTopHeightMmFromGround?: number;
       }
   >;
   /** Optional: URL to stored IFC file for frontend 3D rendering */
@@ -209,6 +211,8 @@ export interface WallCalculationResult {
     startSpanIndex: number;
     spanCount: number;
     hariwakuSizeMm: number;
+    /** Echo from input when provided (mm from ground to top of door). */
+    doorTopHeightMmFromGround?: number;
   }>;
   levelCalc: {
     fullLevels: number;
