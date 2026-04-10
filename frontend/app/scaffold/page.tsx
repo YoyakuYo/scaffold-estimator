@@ -2100,7 +2100,7 @@ function ScaffoldPageContent() {
     ],
   );
 
-  /** Leave `?edit=` recalculate flow: clear draft, remount wizard via `?start=` (see ScaffoldPageRouteShell key). */
+  /** Manual drawing vs quick: top-level tabs; from `?edit=` navigates to fresh `?start=` scaffold. */
   const goToFreshManualSubtab = useCallback(
     (tab: 'drawing' | 'quick') => {
       if (editConfigId) {
@@ -2169,26 +2169,36 @@ function ScaffoldPageContent() {
                 </button>
               )}
               {(canFile || canQuick) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (canFile) {
-                      setInputMode('drawing');
-                      setManualSubTab('drawing');
-                    } else {
-                      setInputMode('quick');
-                      setManualSubTab('quick');
-                    }
-                  }}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                    inputMode === 'drawing' || inputMode === 'quick'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  <Upload className="h-4 w-4" />
-                  {canFile ? t('scaffoldExtra', 'fileUploadTab') : t('scaffoldExtra', 'quickBuilder')}
-                </button>
+                <>
+                  {canFile && (
+                    <button
+                      type="button"
+                      onClick={() => goToFreshManualSubtab('drawing')}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                        inputMode === 'drawing'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {t('scaffoldExtra', 'drawingUpload')}
+                    </button>
+                  )}
+                  {canQuick && (
+                    <button
+                      type="button"
+                      onClick={() => goToFreshManualSubtab('quick')}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                        inputMode === 'quick'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      <Zap className="h-4 w-4" />
+                      {t('scaffoldExtra', 'quickBuilder')}
+                    </button>
+                  )}
+                </>
               )}
               {canCad && (
                 <button
@@ -2227,6 +2237,30 @@ function ScaffoldPageContent() {
           {editConfigId && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <p className="text-sm text-gray-600">{t('scaffold', 'editRecalculateModeHint')}</p>
+              {(canFile || canQuick) && (
+                <>
+                  {canFile && (
+                    <button
+                      type="button"
+                      onClick={() => goToFreshManualSubtab('drawing')}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50"
+                    >
+                      <Upload className="h-4 w-4" />
+                      {t('scaffoldExtra', 'drawingUpload')}
+                    </button>
+                  )}
+                  {canQuick && (
+                    <button
+                      type="button"
+                      onClick={() => goToFreshManualSubtab('quick')}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50"
+                    >
+                      <Zap className="h-4 w-4" />
+                      {t('scaffoldExtra', 'quickBuilder')}
+                    </button>
+                  )}
+                </>
+              )}
               <button
                 type="button"
                 onClick={startNewScaffoldJob}
@@ -3595,41 +3629,6 @@ function ScaffoldPageContent() {
         (inputMode !== 'cad_draw' || walls.length > 0)) ||
         editConfigId) &&
         (canFile || canQuick || !!editConfigId) && (<>
-      {/* Sub-tab selector (disabled while editing an existing config) */}
-      {(canFile || canQuick) && (
-      <div className="max-w-[1600px] mx-auto px-4 mb-4">
-        <div className="inline-flex rounded-lg bg-gray-100 p-1">
-          {canFile && (
-          <button
-            type="button"
-            onClick={() => goToFreshManualSubtab('drawing')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              manualSubTab === 'drawing'
-                ? 'bg-white text-blue-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <PenTool className="h-3.5 w-3.5" />
-            {t('scaffoldExtra', 'drawingUpload')}
-          </button>
-          )}
-          {canQuick && (
-          <button
-            type="button"
-            onClick={() => goToFreshManualSubtab('quick')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              manualSubTab === 'quick'
-                ? 'bg-white text-green-700 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            {t('scaffoldExtra', 'quickBuilder')}
-          </button>
-          )}
-        </div>
-      </div>
-      )}
 
       {/* Quick Shape Builder */}
       {manualSubTab === 'quick' && !editConfigId && canQuick && (
