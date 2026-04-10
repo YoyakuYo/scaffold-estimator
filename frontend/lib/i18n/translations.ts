@@ -524,6 +524,16 @@ export const translations = {
       en: 'Stepped-massing AI requires a plan that includes AI extraction (Premium).',
       fr: 'L’IA pour le massing en retrait necessite une offre avec extraction IA (Premium).',
     },
+    steppedMassingPreview3d: {
+      ja: '3D プレビュー（建物外形）',
+      en: '3D preview (building massing)',
+      fr: 'Apercu 3D (massing du batiment)',
+    },
+    steppedMassingPreview3dHint: {
+      ja: 'ドラッグで回転、ホイールでズーム。下の表を変えると更新されます（足場本体の編集は積算後の画面で行います）。',
+      en: 'Drag to rotate, scroll to zoom. Updates when you change the tier table below (scaffold editing is on the result page after calculate).',
+      fr: 'Glisser pour tourner, molette pour zoomer. Se met a jour avec le tableau des paliers (l’echafaudage s’edite apres calcul).',
+    },
     aiBim3dSteppedHint: {
       ja: '3Dビューで段々が検出されなかった場合、階数に合わせた入れ子外形を自動で作成しました。下表で各段の長さ・高さを調整してください。',
       en: 'No stepped footprints were returned — a nested outline was synthesized from floor count. Adjust tier lengths and heights in the table below.',

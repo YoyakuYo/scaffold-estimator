@@ -11,6 +11,8 @@ import {
   type TaperAxis,
 } from '@/lib/stepped-rectangular-massing';
 import { visionBimApi, type VisionMassingTier } from '@/lib/api/vision-bim';
+import { normalizeMassingTiersForPreview } from '@/lib/massing-tiers-preview-normalize';
+import { Building3DPreview } from '@/components/scaffold/building-massing-3d-preview';
 
 const STEPPED_AI_IMAGE_ACCEPT = 'image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp';
 
@@ -300,6 +302,21 @@ export function SteppedMassingWizard({
     [tierHeightsMm],
   );
 
+  /** Ground footprint in plan coords (mm in xFrac/yFrac fields — same as AI BIM / computeBimPreviewPlanToM). */
+  const outlineFor3d = useMemo(() => {
+    const t0 = massingTiers[0];
+    if (!t0?.vertices?.length) return [] as Array<{ xFrac: number; yFrac: number }>;
+    return (t0.vertices as Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>).map((v) => ({
+      xFrac: v.xFrac ?? v.x ?? 0,
+      yFrac: v.yFrac ?? v.y ?? 0,
+    }));
+  }, [massingTiers]);
+
+  const massingTiersFor3d = useMemo(
+    () => normalizeMassingTiersForPreview(outlineFor3d, massingTiers),
+    [outlineFor3d, massingTiers],
+  );
+
   const groundVerticesMm = useMemo(() => {
     const t0 = massingTiers[0];
     if (!t0?.vertices?.length) return [];
@@ -441,6 +458,20 @@ export function SteppedMassingWizard({
             totalHeightMm={buildingHeightMm}
           />
         </div>
+
+        {outlineFor3d.length >= 3 && massingTiers.length > 0 && (
+          <div className="mt-6 space-y-2">
+            <span className="text-xs font-medium text-gray-700">{t('scaffold', 'steppedMassingPreview3d')}</span>
+            <p className="text-[11px] text-gray-500">{t('scaffold', 'steppedMassingPreview3dHint')}</p>
+            <Building3DPreview
+              outline={outlineFor3d}
+              buildingHeightMm={buildingHeightMm}
+              massingTiers={massingTiersFor3d.length > 0 ? massingTiersFor3d : massingTiers}
+              className="w-full rounded-lg border border-gray-200 bg-slate-50"
+              style={{ minHeight: 280, height: 320 }}
+            />
+          </div>
+        )}
 
         <SteppedMassingTierTable
           tierLengthsMm={tierLengthsMm}
