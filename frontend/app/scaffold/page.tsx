@@ -2280,9 +2280,21 @@ function ScaffoldPageContent() {
                             commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, depthMm: mm })
                           }
                           taperAxis={aiSteppedMassingDraft.taperAxis}
-                          onTaperAxisChange={(a) =>
-                            commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, taperAxis: a })
-                          }
+                          onTaperAxisChange={(a) => {
+                            const d = aiSteppedMassingDraft;
+                            if (a === 'both') {
+                              const firstL = d.tierLengthsMm[0] ?? 20_000;
+                              const tierDepthsMm = d.tierLengthsMm.map((L) =>
+                                Math.max(
+                                  600,
+                                  Math.round(d.depthMm * Math.min(1, L / Math.max(firstL, 1))),
+                                ),
+                              );
+                              commitAiSteppedMassingDraft({ ...d, taperAxis: a, tierDepthsMm });
+                            } else {
+                              commitAiSteppedMassingDraft({ ...d, taperAxis: a });
+                            }
+                          }}
                           totalHeightMm={aiSteppedMassingDraft.tierHeightsMm.reduce(
                             (s, h) => s + Math.max(0, h),
                             0,
@@ -2293,6 +2305,16 @@ function ScaffoldPageContent() {
                           compactTopMargin
                           tierLengthsMm={aiSteppedMassingDraft.tierLengthsMm}
                           tierHeightsMm={aiSteppedMassingDraft.tierHeightsMm}
+                          taperAxis={aiSteppedMassingDraft.taperAxis}
+                          tierDepthsMm={aiSteppedMassingDraft.tierDepthsMm}
+                          onTierDepthChange={(idx, raw) => {
+                            const tierDepthsMm = [...(aiSteppedMassingDraft.tierDepthsMm ?? [])];
+                            while (tierDepthsMm.length < aiSteppedMassingDraft.tierLengthsMm.length) {
+                              tierDepthsMm.push(aiSteppedMassingDraft.depthMm);
+                            }
+                            tierDepthsMm[idx] = Math.max(600, Math.round(raw));
+                            commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, tierDepthsMm });
+                          }}
                           onTierLengthChange={(idx, raw) => {
                             const tierLengthsMm = [...aiSteppedMassingDraft.tierLengthsMm];
                             tierLengthsMm[idx] = Math.max(600, Math.round(raw));
@@ -2304,25 +2326,28 @@ function ScaffoldPageContent() {
                             commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, tierHeightsMm });
                           }}
                           onAddTier={() => {
-                            const lastL =
-                              aiSteppedMassingDraft.tierLengthsMm[
-                                aiSteppedMassingDraft.tierLengthsMm.length - 1
-                              ] ?? 10_000;
+                            const d = aiSteppedMassingDraft;
+                            const lastL = d.tierLengthsMm[d.tierLengthsMm.length - 1] ?? 10_000;
+                            const lastD =
+                              (d.tierDepthsMm?.[d.tierDepthsMm.length - 1] ?? d.depthMm) || d.depthMm;
                             commitAiSteppedMassingDraft({
-                              ...aiSteppedMassingDraft,
-                              tierLengthsMm: [
-                                ...aiSteppedMassingDraft.tierLengthsMm,
-                                Math.max(600, Math.round(lastL * 0.95)),
-                              ],
-                              tierHeightsMm: [...aiSteppedMassingDraft.tierHeightsMm, 3000],
+                              ...d,
+                              tierLengthsMm: [...d.tierLengthsMm, Math.max(600, Math.round(lastL * 0.95))],
+                              tierHeightsMm: [...d.tierHeightsMm, 3000],
+                              tierDepthsMm:
+                                d.taperAxis === 'both'
+                                  ? [...(d.tierDepthsMm ?? []), Math.max(600, Math.round(lastD * 0.95))]
+                                  : d.tierDepthsMm,
                             });
                           }}
                           onRemoveTier={(idx) => {
                             if (aiSteppedMassingDraft.tierLengthsMm.length <= 1) return;
+                            const d = aiSteppedMassingDraft;
                             commitAiSteppedMassingDraft({
-                              ...aiSteppedMassingDraft,
-                              tierLengthsMm: aiSteppedMassingDraft.tierLengthsMm.filter((_, i) => i !== idx),
-                              tierHeightsMm: aiSteppedMassingDraft.tierHeightsMm.filter((_, i) => i !== idx),
+                              ...d,
+                              tierLengthsMm: d.tierLengthsMm.filter((_, i) => i !== idx),
+                              tierHeightsMm: d.tierHeightsMm.filter((_, i) => i !== idx),
+                              tierDepthsMm: d.tierDepthsMm?.filter((_, i) => i !== idx),
                             });
                           }}
                         />

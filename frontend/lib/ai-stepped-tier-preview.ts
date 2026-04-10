@@ -18,6 +18,8 @@ export type SteppedMassingEditableDraft = {
   taperAxis: TaperAxis;
   tierLengthsMm: number[];
   tierHeightsMm: number[];
+  /** Set when taperAxis is 'both' — per-tier depth (mm), same length as tierLengthsMm. */
+  tierDepthsMm?: number[];
 };
 
 function spanOfTierInPlanM(
@@ -62,24 +64,46 @@ export function inferRectangularSteppedDraftFromMassingTiers(params: {
     toPlanM,
     sorted[sorted.length - 1]!.vertices as BimPreviewVertex[],
   );
-  const taperAlongX = Math.abs(first.sx - last.sx) >= Math.abs(first.sz - last.sz);
-  const taperAxis: TaperAxis = taperAlongX ? 'x' : 'y';
+  const deltaX = Math.abs(first.sx - last.sx);
+  const deltaZ = Math.abs(first.sz - last.sz);
+  const scaleM = Math.max(first.sx, first.sz, 1e-6);
+  const tol = scaleM * 0.03;
 
-  const tierLengthsMm = sorted.map((t) => {
-    const { sx, sz } = spanOfTierInPlanM(toPlanM, t.vertices as BimPreviewVertex[]);
-    const m = taperAxis === 'x' ? sx : sz;
-    return Math.round(Math.max(600, m * 1000));
-  });
+  let taperAxis: TaperAxis;
+  let tierLengthsMm: number[];
+  let tierDepthsMm: number[] | undefined;
+  let depthMm: number;
+
+  if (deltaX > tol && deltaZ > tol) {
+    taperAxis = 'both';
+    tierLengthsMm = sorted.map((t) => {
+      const { sx } = spanOfTierInPlanM(toPlanM, t.vertices as BimPreviewVertex[]);
+      return Math.round(Math.max(600, sx * 1000));
+    });
+    tierDepthsMm = sorted.map((t) => {
+      const { sz } = spanOfTierInPlanM(toPlanM, t.vertices as BimPreviewVertex[]);
+      return Math.round(Math.max(600, sz * 1000));
+    });
+    depthMm = tierDepthsMm[0] ?? 14_000;
+  } else {
+    const taperAlongX = deltaX >= deltaZ;
+    taperAxis = taperAlongX ? 'x' : 'y';
+    tierLengthsMm = sorted.map((t) => {
+      const { sx, sz } = spanOfTierInPlanM(toPlanM, t.vertices as BimPreviewVertex[]);
+      const m = taperAxis === 'x' ? sx : sz;
+      return Math.round(Math.max(600, m * 1000));
+    });
+    tierDepthsMm = undefined;
+    depthMm = Math.round(
+      Math.max(600, (taperAxis === 'x' ? first.sz : first.sx) * 1000),
+    );
+  }
 
   const tierHeightsMm = sorted.map((t) =>
     Math.round(Math.max(1000, (t.topHeightMm ?? 0) - (t.baseHeightMm ?? 0))),
   );
 
-  const depthMm = Math.round(
-    Math.max(600, (taperAxis === 'x' ? first.sz : first.sx) * 1000),
-  );
-
-  return { depthMm, taperAxis, tierLengthsMm, tierHeightsMm };
+  return { depthMm, taperAxis, tierLengthsMm, tierHeightsMm, tierDepthsMm };
 }
 
 type AiPreviewForStepped = {
@@ -95,11 +119,27 @@ export function applySteppedDraftToAiBimPreview(
   draft: SteppedMassingEditableDraft,
   manager: ScaffoldManager,
 ): AiPreviewForStepped & { massingTiers: VisionMassingTier[] } {
+  const tierDepthsForBoth =
+    draft.taperAxis === 'both'
+      ? draft.tierDepthsMm?.length === draft.tierLengthsMm.length
+        ? draft.tierDepthsMm
+        : draft.tierLengthsMm.map((L) => {
+            const firstL = draft.tierLengthsMm[0] ?? 20_000;
+            return Math.max(
+              600,
+              Math.round(draft.depthMm * Math.min(1, L / Math.max(firstL, 1))),
+            );
+          })
+      : undefined;
+
   const built = buildRectangularSetbackMassingTiers({
     depthMm: draft.depthMm,
     tierLengthsMm: draft.tierLengthsMm,
     tierHeightsMm: draft.tierHeightsMm,
     taperAxis: draft.taperAxis,
+    ...(draft.taperAxis === 'both' && tierDepthsForBoth?.length
+      ? { tierDepthsMm: tierDepthsForBoth }
+      : {}),
   });
   const remapped = remapRectangularTiersToOutline(preview.buildingOutline, built);
   const buildingHeightMm = draft.tierHeightsMm.reduce((s, h) => s + Math.max(0, h), 0);

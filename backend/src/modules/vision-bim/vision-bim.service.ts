@@ -102,11 +102,27 @@ export interface VisionFootprintResult {
 /** AI output for stepped / setback massing wizard (rectangular tiers). */
 export interface SteppedMassingAiResult {
   depthMm: number;
-  taperAxis: 'x' | 'y';
+  /** Single-axis taper, or "both" when the footprint shrinks on X and Y each tier. */
+  taperAxis: 'x' | 'y' | 'both';
   tierLengthsMm: number[];
   tierHeightsMm: number[];
   buildingHeightMm: number;
   confidence?: number;
+  /**
+   * Required when taperAxis is "both": orthogonal plan span (mm) per tier, non-increasing, same length as tierLengthsMm.
+   * For "x"/"y", omit — depthMm holds the constant orthogonal span.
+   */
+  tierDepthsMm?: number[];
+  /** Heuristic classification from the image (L-shape, multi-volume, etc.). */
+  footprintComplexity?:
+    | 'simple_rectangle'
+    | 'l_shape'
+    | 'u_shape'
+    | 'multi_volume'
+    | 'facade_bays'
+    | 'unknown';
+  /** Short caveats: non-rectangular footprint, scaffolding, roof clutter, etc. */
+  analysisWarnings?: string[];
 }
 
 /** Supported file extensions (lowercase). */
@@ -564,18 +580,34 @@ export class VisionBimService {
     const model =
       this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
 
-    const userPrompt = `You are analyzing a building that may be a stepped/setback tower (wedding-cake massing, terraces stepping inward on one or more façades).
+    const userPrompt = `You are analyzing a building image (3D render, BIM viewport, elevation, or photo). The app only supports AXIS-ALIGNED RECTANGULAR tiers stacked in elevation (wedding-cake / setback). It does NOT reconstruct true L-shaped, U-shaped, or multi-wing footprints from one image — you must approximate or warn.
 
 Output ONLY a single JSON object (no markdown). Fields:
-- depthMm: number — depth in millimeters along the building side that stays constant (orthogonal to the stepping direction). Typical 8000–25000 for mid-rise.
-- taperAxis: "x" OR "y" — which horizontal axis gets shorter toward the roof (the direction in which footprint length shrinks per tier). Use "x" if the stepping runs left-right in the image, "y" if it runs up-down on the page.
-- tierLengthsMm: number[] — length in mm along taperAxis for EACH vertical band from ground to roof. Index 0 = widest (ground). At least 2 tiers if setbacks exist. Lengths must be non-increasing (each tier <= the one below).
-- tierHeightsMm: number[] — height in mm of each band (floor-to-floor or visible riser height). Same array length as tierLengthsMm. Typical 2800–3600 per band.
-- buildingHeightMm: number — total building height from ground to highest roof point; should approximately equal the sum of tierHeightsMm.
-- confidence: optional number 0–1
 
-If the building looks like a simple box with no setbacks, use 2 tiers with equal tierLengthsMm.
-If dimensions are unknown, estimate plausible mm values for a commercial tower. Never output fractions — only integers for mm.`;
+REQUIRED:
+- depthMm: number — when taperAxis is "x" or "y": the plan span in mm that stays CONSTANT across all tiers (orthogonal to the direction that shrinks). When taperAxis is "both", still set this to the ground-tier orthogonal span (or the larger of the two ground dimensions) as a hint.
+- taperAxis: "x" | "y" | "both"
+  * "x" — only the horizontal span along the image X direction shrinks per tier (depth along Y is constant = depthMm).
+  * "y" — only the span along the image Y direction shrinks (constant span along X = depthMm).
+  * "both" — BOTH plan dimensions shrink tier-by-tier (true pyramid / terrace on two faces). You MUST then fill tierDepthsMm.
+- tierLengthsMm: number[] — for "x" or "both": the span in mm along X for each vertical band (ground → roof). For "y" only, this is the span along Y that shrinks. Non-increasing. Index 0 = widest/lowest band.
+- tierHeightsMm: number[] — height in mm of each band. Same length as tierLengthsMm. Typical 2800–3600 per storey band.
+- buildingHeightMm: number — total height; should approximate sum(tierHeightsMm).
+
+WHEN taperAxis is "both" (setbacks on two perpendicular façades):
+- tierDepthsMm: number[] — REQUIRED, same length as tierLengthsMm. The span in mm along Y for each tier (if tierLengthsMm is along X), non-increasing. Each tier is a rectangle tierLengthsMm[i] × tierDepthsMm[i].
+
+OPTIONAL (strongly recommended for complex buildings):
+- tierDepthsMm: omit when taperAxis is "x" or "y".
+- footprintComplexity: one of "simple_rectangle" | "l_shape" | "u_shape" | "multi_volume" | "facade_bays" | "unknown"
+- analysisWarnings: string[] — 1–6 short English messages, e.g. "L-shaped footprint; rectangular approximation only", "Multiple building volumes; dominant block approximated", "Scaffolding obscures façade", "Roof penthouses ignored for tier count", "Horizontal bay rhythm is not stepped massing — using dominant tower"
+- confidence: 0–1
+
+RULES:
+- L/U/C-shaped plans, separate wings, or corner-only towers: set footprintComplexity appropriately and add analysisWarnings. Still output the best-fit rectangular tier stack for the DOMINANT mass or enclosing rectangle.
+- Balconies, louvers, and small façade projections are NOT tier boundaries unless they change the main structural setback.
+- If the building is a simple box with no setbacks, use taperAxis "x" or "y", 2 tiers, equal tierLengthsMm.
+- Integers only for all mm fields. If unknown, estimate plausible mid-rise values.`;
 
     const message = await client.messages.create({
       model,
@@ -644,7 +676,13 @@ If dimensions are unknown, estimate plausible mm values for a commercial tower. 
     }
 
     const depthMm = Math.max(600, Math.round(Number(raw.depthMm) || 14_000));
-    const taperAxis = raw.taperAxis === 'y' ? 'y' : 'x';
+    const taperRaw = raw.taperAxis;
+    const taperAxis: 'x' | 'y' | 'both' =
+      taperRaw === 'both'
+        ? 'both'
+        : taperRaw === 'y'
+          ? 'y'
+          : 'x';
     let tierLengthsMm = Array.isArray(raw.tierLengthsMm)
       ? (raw.tierLengthsMm as unknown[])
           .map((x) => Math.max(600, Math.round(Number(x) || 0)))
@@ -683,6 +721,45 @@ If dimensions are unknown, estimate plausible mm values for a commercial tower. 
         ? Math.min(1, Math.max(0, raw.confidence))
         : undefined;
 
+    let tierDepthsMm: number[] | undefined;
+    if (taperAxis === 'both') {
+      let td = Array.isArray(raw.tierDepthsMm)
+        ? (raw.tierDepthsMm as unknown[])
+            .map((x) => Math.max(600, Math.round(Number(x) || 0)))
+            .filter((x) => x > 0)
+        : [];
+      const nTiers = tierLengthsMm.length;
+      if (td.length !== nTiers) {
+        const firstL = tierLengthsMm[0] ?? depthMm;
+        td = tierLengthsMm.map((L, i) => {
+          const ratio = firstL > 0 ? L / firstL : 1 - i * 0.05;
+          return Math.max(600, Math.round(depthMm * Math.min(1, ratio)));
+        });
+      }
+      for (let i = 1; i < td.length; i++) {
+        if (td[i]! > td[i - 1]!) td[i] = td[i - 1]!;
+      }
+      tierDepthsMm = td.slice(0, nTiers);
+    }
+
+    const complexityRaw = raw.footprintComplexity;
+    const footprintComplexity =
+      complexityRaw === 'simple_rectangle' ||
+      complexityRaw === 'l_shape' ||
+      complexityRaw === 'u_shape' ||
+      complexityRaw === 'multi_volume' ||
+      complexityRaw === 'facade_bays' ||
+      complexityRaw === 'unknown'
+        ? complexityRaw
+        : undefined;
+
+    const analysisWarnings = Array.isArray(raw.analysisWarnings)
+      ? (raw.analysisWarnings as unknown[])
+          .map((x) => String(x).trim())
+          .filter((s) => s.length > 0)
+          .slice(0, 8)
+      : undefined;
+
     this.logger.log(
       `Stepped massing AI: tiers=${tierLengthsMm.length}, height=${buildingHeightMm}mm, taper=${taperAxis}`,
     );
@@ -694,6 +771,9 @@ If dimensions are unknown, estimate plausible mm values for a commercial tower. 
       tierHeightsMm,
       buildingHeightMm,
       ...(confidence !== undefined ? { confidence } : {}),
+      ...(taperAxis === 'both' && tierDepthsMm?.length ? { tierDepthsMm } : {}),
+      ...(footprintComplexity ? { footprintComplexity } : {}),
+      ...(analysisWarnings?.length ? { analysisWarnings } : {}),
     };
   }
 

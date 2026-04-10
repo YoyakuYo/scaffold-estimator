@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { AlertCircle, Layers, Loader2, Plus, ScanLine, Trash2, Upload } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { formatMmLabel } from '@/lib/dimension-meters';
@@ -22,9 +22,11 @@ function applySteppedMassingAiToState(
   setTaperAxis: (a: TaperAxis) => void,
   setTierLengthsMm: (a: number[]) => void,
   setTierHeightsMm: (a: number[]) => void,
+  setTierDepthsMm: (a: number[]) => void,
 ) {
   const depth = Math.max(600, Math.round(Number(result.depthMm) || 0));
-  const axis: TaperAxis = result.taperAxis === 'y' ? 'y' : 'x';
+  const axis: TaperAxis =
+    result.taperAxis === 'both' ? 'both' : result.taperAxis === 'y' ? 'y' : 'x';
   const rawL = result.tierLengthsMm ?? [];
   const rawH = result.tierHeightsMm ?? [];
   const count = Math.max(1, Math.min(40, Math.max(rawL.length, rawH.length)));
@@ -44,6 +46,18 @@ function applySteppedMassingAiToState(
   setTaperAxis(axis);
   setTierLengthsMm(lengths);
   setTierHeightsMm(heights);
+  if (axis === 'both' && Array.isArray(result.tierDepthsMm) && result.tierDepthsMm.length > 0) {
+    const tdRaw = result.tierDepthsMm.map((x) => Math.max(600, Math.round(Number(x) || 0)));
+    const td = lengths.map((_, i) => tdRaw[i] ?? tdRaw[tdRaw.length - 1] ?? depth);
+    setTierDepthsMm(td);
+  } else if (axis === 'both') {
+    const firstL = lengths[0] ?? 20_000;
+    setTierDepthsMm(
+      lengths.map((L) => Math.max(600, Math.round(depth * Math.min(1, L / Math.max(firstL, 1))))),
+    );
+  } else {
+    setTierDepthsMm(lengths.map(() => depth));
+  }
 }
 
 export type SteppedMassingWizardSubmitPayload = {
@@ -142,18 +156,22 @@ export function SteppedMassingTierPlanSettings({
   const { t } = useI18n();
   return (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-gray-700">
-        {t('scaffold', 'steppedMassingDepthMm')}
-        <input
-          type="number"
-          min={600}
-          step={100}
-          value={depthMm}
-          onChange={(e) => onDepthMmChange(Math.max(600, Number(e.target.value) || 0))}
-          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
-        />
-      </label>
-      <fieldset className="flex flex-wrap gap-4 text-sm">
+      {taperAxis === 'both' ? (
+        <p className="text-xs text-gray-600">{t('scaffold', 'steppedMassingDualAxisDepthHint')}</p>
+      ) : (
+        <label className="block text-sm font-medium text-gray-700">
+          {t('scaffold', 'steppedMassingDepthMm')}
+          <input
+            type="number"
+            min={600}
+            step={100}
+            value={depthMm}
+            onChange={(e) => onDepthMmChange(Math.max(600, Number(e.target.value) || 0))}
+            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          />
+        </label>
+      )}
+      <fieldset className="flex flex-wrap gap-3 text-sm">
         <legend className="sr-only">{t('scaffold', 'steppedMassingTaperAxis')}</legend>
         <label className="inline-flex items-center gap-2 cursor-pointer">
           <input
@@ -173,6 +191,15 @@ export function SteppedMassingTierPlanSettings({
           />
           {t('scaffold', 'steppedMassingTaperAlongY')}
         </label>
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name={radioName}
+            checked={taperAxis === 'both'}
+            onChange={() => onTaperAxisChange('both')}
+          />
+          {t('scaffold', 'steppedMassingTaperBoth')}
+        </label>
       </fieldset>
       <p className="text-xs text-gray-500">
         {t('scaffold', 'steppedMassingBuildingHeight')}: {formatMmLabel(totalHeightMm)}
@@ -190,6 +217,9 @@ export function SteppedMassingTierTable({
   onAddTier,
   onRemoveTier,
   compactTopMargin,
+  taperAxis = 'x',
+  tierDepthsMm,
+  onTierDepthChange,
 }: {
   tierLengthsMm: number[];
   tierHeightsMm: number[];
@@ -198,8 +228,12 @@ export function SteppedMassingTierTable({
   onAddTier: () => void;
   onRemoveTier: (idx: number) => void;
   compactTopMargin?: boolean;
+  taperAxis?: TaperAxis;
+  tierDepthsMm?: number[];
+  onTierDepthChange?: (idx: number, mm: number) => void;
 }) {
   const { t } = useI18n();
+  const dual = taperAxis === 'both';
   return (
     <div className={compactTopMargin ? 'mt-4 overflow-x-auto' : 'mt-6 overflow-x-auto'}>
       <table className="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
@@ -207,6 +241,9 @@ export function SteppedMassingTierTable({
           <tr>
             <th className="px-3 py-2">#</th>
             <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierLengthMm')}</th>
+            {dual && (
+              <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierDepthMm')}</th>
+            )}
             <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierHeightMm')}</th>
             <th className="px-3 py-2 w-24">{t('scaffold', 'steppedMassingTierRemove')}</th>
           </tr>
@@ -225,6 +262,18 @@ export function SteppedMassingTierTable({
                   className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
                 />
               </td>
+              {dual && (
+                <td className="px-3 py-2">
+                  <input
+                    type="number"
+                    min={600}
+                    step={100}
+                    value={tierDepthsMm?.[idx] ?? 600}
+                    onChange={(e) => onTierDepthChange?.(idx, Number(e.target.value))}
+                    className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
+                  />
+                </td>
+              )}
               <td className="px-3 py-2">
                 <input
                   type="number"
@@ -279,23 +328,37 @@ export function SteppedMassingWizard({
     20_000, 19_000, 18_000, 17_000, 16_000, 15_000, 14_000, 13_000, 12_000, 11_000,
   ]);
   const [tierHeightsMm, setTierHeightsMm] = useState<number[]>(Array(10).fill(3_000));
+  const [tierDepthsMm, setTierDepthsMm] = useState<number[]>(() => Array(10).fill(14_000));
   const [viewZoom, setViewZoom] = useState(1);
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
   const [steppedAiLoading, setSteppedAiLoading] = useState(false);
   const [steppedAiError, setSteppedAiError] = useState<string | null>(null);
+  const [steppedAiWarnings, setSteppedAiWarnings] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (taperAxis !== 'both') return;
+    if (tierDepthsMm.length === tierLengthsMm.length) return;
+    const firstL = tierLengthsMm[0] ?? 20_000;
+    setTierDepthsMm(
+      tierLengthsMm.map((L) =>
+        Math.max(600, Math.round(depthMm * Math.min(1, L / Math.max(firstL, 1)))),
+      ),
+    );
+  }, [taperAxis, tierLengthsMm, depthMm, tierDepthsMm.length]);
 
   const massingTiers = useMemo(() => {
     try {
       return buildRectangularSetbackMassingTiers({
-        depthMm: taperAxis === 'x' ? depthMm : depthMm,
+        depthMm,
         tierLengthsMm,
         tierHeightsMm,
         taperAxis,
+        ...(taperAxis === 'both' ? { tierDepthsMm } : {}),
       });
     } catch {
       return [];
     }
-  }, [depthMm, tierLengthsMm, tierHeightsMm, taperAxis]);
+  }, [depthMm, tierLengthsMm, tierHeightsMm, taperAxis, tierDepthsMm]);
 
   const buildingHeightMm = useMemo(
     () => tierHeightsMm.reduce((s, h) => s + Math.max(0, h), 0),
@@ -328,14 +391,17 @@ export function SteppedMassingWizard({
 
   const addTier = useCallback(() => {
     const lastL = tierLengthsMm[tierLengthsMm.length - 1] ?? 10_000;
+    const lastD = tierDepthsMm[tierDepthsMm.length - 1] ?? depthMm;
     setTierLengthsMm((prev) => [...prev, Math.max(600, Math.round(lastL * 0.95))]);
     setTierHeightsMm((prev) => [...prev, 3000]);
-  }, [tierLengthsMm]);
+    setTierDepthsMm((prev) => [...prev, Math.max(600, Math.round(lastD * 0.95))]);
+  }, [tierLengthsMm, tierDepthsMm, depthMm]);
 
   const removeTier = useCallback((idx: number) => {
     if (tierLengthsMm.length <= 1) return;
     setTierLengthsMm((prev) => prev.filter((_, i) => i !== idx));
     setTierHeightsMm((prev) => prev.filter((_, i) => i !== idx));
+    setTierDepthsMm((prev) => prev.filter((_, i) => i !== idx));
   }, [tierLengthsMm.length]);
 
   const updateLength = (idx: number, v: number) => {
@@ -350,6 +416,14 @@ export function SteppedMassingWizard({
     setTierHeightsMm((prev) => {
       const next = [...prev];
       next[idx] = Math.max(1000, Math.round(v));
+      return next;
+    });
+  };
+
+  const updateTierDepth = (idx: number, v: number) => {
+    setTierDepthsMm((prev) => {
+      const next = [...prev];
+      next[idx] = Math.max(600, Math.round(v));
       return next;
     });
   };
@@ -384,6 +458,7 @@ export function SteppedMassingWizard({
                   const file = e.target.files?.[0];
                   if (!file) return;
                   setSteppedAiError(null);
+                  setSteppedAiWarnings(null);
                   setSteppedAiLoading(true);
                   try {
                     const data = await visionBimApi.analyzeSteppedMassing(file);
@@ -393,6 +468,10 @@ export function SteppedMassingWizard({
                       setTaperAxis,
                       setTierLengthsMm,
                       setTierHeightsMm,
+                      setTierDepthsMm,
+                    );
+                    setSteppedAiWarnings(
+                      data.analysisWarnings?.length ? data.analysisWarnings : null,
                     );
                   } catch (err: unknown) {
                     const msg =
@@ -417,6 +496,16 @@ export function SteppedMassingWizard({
               <div className="mt-2 flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{steppedAiError}</span>
+              </div>
+            )}
+            {steppedAiWarnings && steppedAiWarnings.length > 0 && (
+              <div className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1">
+                <p className="font-semibold">{t('scaffold', 'steppedMassingAiWarningsTitle')}</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {steppedAiWarnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
@@ -454,7 +543,17 @@ export function SteppedMassingWizard({
             depthMm={depthMm}
             onDepthMmChange={setDepthMm}
             taperAxis={taperAxis}
-            onTaperAxisChange={setTaperAxis}
+            onTaperAxisChange={(a) => {
+              setTaperAxis(a);
+              if (a === 'both') {
+                const firstL = tierLengthsMm[0] ?? 20_000;
+                setTierDepthsMm(
+                  tierLengthsMm.map((L) =>
+                    Math.max(600, Math.round(depthMm * Math.min(1, L / Math.max(firstL, 1)))),
+                  ),
+                );
+              }
+            }}
             totalHeightMm={buildingHeightMm}
           />
         </div>
@@ -480,6 +579,9 @@ export function SteppedMassingWizard({
           onTierHeightChange={updateHeight}
           onAddTier={addTier}
           onRemoveTier={removeTier}
+          taperAxis={taperAxis}
+          tierDepthsMm={tierDepthsMm}
+          onTierDepthChange={updateTierDepth}
         />
 
         <div className="mt-6 flex justify-end">

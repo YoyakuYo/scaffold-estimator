@@ -52,11 +52,21 @@ export interface PremiumScheduleImportResult {
 /** AI suggestion for stepped / setback massing wizard (raster image upload). */
 export interface SteppedMassingAiResult {
   depthMm: number;
-  taperAxis: 'x' | 'y';
+  taperAxis: 'x' | 'y' | 'both';
   tierLengthsMm: number[];
   tierHeightsMm: number[];
   buildingHeightMm: number;
   confidence?: number;
+  /** When taperAxis is "both": per-tier depth (mm), same length as tierLengthsMm. */
+  tierDepthsMm?: number[];
+  footprintComplexity?:
+    | 'simple_rectangle'
+    | 'l_shape'
+    | 'u_shape'
+    | 'multi_volume'
+    | 'facade_bays'
+    | 'unknown';
+  analysisWarnings?: string[];
 }
 
 export interface VisionFootprintResult {

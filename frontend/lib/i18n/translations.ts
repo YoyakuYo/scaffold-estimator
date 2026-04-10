@@ -487,6 +487,26 @@ export const translations = {
     steppedMassingTaperAxis: { ja: '短くなる方向', en: 'Taper axis', fr: 'Axe de retrait' },
     steppedMassingTaperAlongX: { ja: 'X 方向に段々', en: 'Taper along X', fr: 'Retrait selon X' },
     steppedMassingTaperAlongY: { ja: 'Y 方向に段々', en: 'Taper along Y', fr: 'Retrait selon Y' },
+    steppedMassingTaperBoth: {
+      ja: 'X と Y の両方にセットバック',
+      en: 'Taper on both X and Y (dual-axis)',
+      fr: 'Retrait sur X et Y (bi-axe)',
+    },
+    steppedMassingDualAxisDepthHint: {
+      ja: '両軸セットバックでは、各段の奥行きは下の表の「段の奥行き」列で編集します。',
+      en: 'For dual-axis setbacks, edit each tier’s depth in the “Tier depth” column in the table below.',
+      fr: 'Pour un retrait bi-axe, modifiez la profondeur de chaque palier dans le tableau.',
+    },
+    steppedMassingTierDepthMm: {
+      ja: '段の奥行き (mm)',
+      en: 'Tier depth (mm)',
+      fr: 'Profondeur du palier (mm)',
+    },
+    steppedMassingAiWarningsTitle: {
+      ja: 'AI の注意（図形の近似）',
+      en: 'AI notes (geometry is approximate)',
+      fr: 'Notes IA (geometrie approchee)',
+    },
     steppedMassingBuildingHeight: { ja: '合計建物高', en: 'Total building height', fr: 'Hauteur totale' },
     steppedMassingTierLengthMm: { ja: '段の長さ (mm)', en: 'Tier length (mm)', fr: 'Longueur du palier (mm)' },
     steppedMassingTierHeightMm: { ja: '段の高さ (mm)', en: 'Tier height (mm)', fr: 'Hauteur du palier (mm)' },

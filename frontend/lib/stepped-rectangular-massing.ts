@@ -5,17 +5,27 @@
 
 import type { VisionMassingTier } from '@/lib/api/vision-bim';
 
-export type TaperAxis = 'x' | 'y';
+/** Single-axis taper (one plan dimension shrinks per tier) or both (rectangle shrinks on X and Y). */
+export type TaperAxis = 'x' | 'y' | 'both';
 
 export type SteppedRectangularMassingParams = {
-  /** Depth (mm) along Y when taperAxis is 'x' (constant across tiers). */
+  /**
+   * Depth (mm) along Y when taperAxis is 'x' (constant across tiers);
+   * or span along X when taperAxis is 'y' (constant across tiers).
+   * Ignored when taperAxis is 'both' (use tierDepthsMm per tier instead).
+   */
   depthMm: number;
-  /** Length (mm) along X for each tier band, ground → roof (typically decreasing). */
+  /** Length (mm) along the taper direction for each tier band, ground → roof (typically decreasing). */
   tierLengthsMm: number[];
   /** Vertical height (mm) of each tier band; must match tierLengthsMm.length. */
   tierHeightsMm: number[];
-  /** Which horizontal axis shrinks: 'x' = length along X steps, Y depth constant. */
+  /** Which horizontal axes shrink between tiers. */
   taperAxis: TaperAxis;
+  /**
+   * When taperAxis is 'both': depth (mm) along Y for each tier (same length as tierLengthsMm).
+   * Each tier is axis-aligned rectangle (0,0)–(L,0)–(L,W)–(0,W).
+   */
+  tierDepthsMm?: number[];
 };
 
 function polygonAreaMm(verts: Array<{ x: number; y: number }>): number {
@@ -34,13 +44,34 @@ function polygonAreaMm(verts: Array<{ x: number; y: number }>): number {
 export function buildRectangularSetbackMassingTiers(
   params: SteppedRectangularMassingParams,
 ): VisionMassingTier[] {
-  const { depthMm, tierLengthsMm, tierHeightsMm, taperAxis } = params;
+  const { depthMm, tierLengthsMm, tierHeightsMm, taperAxis, tierDepthsMm } = params;
   const n = tierLengthsMm.length;
   if (n === 0 || tierHeightsMm.length !== n) return [];
 
-  const W = Math.max(600, Math.round(depthMm));
   const out: VisionMassingTier[] = [];
   let base = 0;
+
+  if (taperAxis === 'both') {
+    const depths = tierDepthsMm ?? [];
+    if (depths.length !== n) return [];
+    for (let i = 0; i < n; i++) {
+      const L = Math.max(600, Math.round(tierLengthsMm[i]!));
+      const W = Math.max(600, Math.round(depths[i]!));
+      const h = Math.max(1000, Math.round(tierHeightsMm[i]!));
+      const top = base + h;
+      const vertices: Array<{ x: number; y: number }> = [
+        { x: 0, y: 0 },
+        { x: L, y: 0 },
+        { x: L, y: W },
+        { x: 0, y: W },
+      ];
+      out.push({ vertices, baseHeightMm: base, topHeightMm: top });
+      base = top;
+    }
+    return out;
+  }
+
+  const W = Math.max(600, Math.round(depthMm));
 
   for (let i = 0; i < n; i++) {
     const L = Math.max(600, Math.round(tierLengthsMm[i]!));
