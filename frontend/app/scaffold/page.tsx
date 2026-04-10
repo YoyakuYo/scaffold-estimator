@@ -57,10 +57,6 @@ import {
   inferRectangularSteppedDraftFromMassingTiers,
   type SteppedMassingEditableDraft,
 } from '@/lib/ai-stepped-tier-preview';
-import {
-  synthesizeSteppedTiersFrom3dHeuristic,
-  remapRectangularTiersToOutline,
-} from '@/lib/stepped-rectangular-massing';
 import type { BuildingMassingTier } from '@/lib/api/scaffold-configs';
 import {
   visionBimApi,
@@ -114,6 +110,9 @@ import {
   SCAFFOLD_WIDTH_CATALOG_MM,
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
+
+/** Legacy full-plan AI extraction tab. Hidden by default; set `NEXT_PUBLIC_SHOW_LEGACY_AI_EXTRACT_TAB=true` to show. */
+const SHOW_LEGACY_AI_EXTRACT_TAB = process.env.NEXT_PUBLIC_SHOW_LEGACY_AI_EXTRACT_TAB === 'true';
 
 function ScaffoldCadCanvasLoading() {
   const { t } = useI18n();
@@ -884,8 +883,6 @@ type AiBimWizardPreview = {
     /** mm from ground to top of door (optional; recorded on obstacle / BOM). */
     doorTopHeightMmFromGround?: number;
   }>;
-  /** True when 3D upload had no tiers and we synthesized stepped rectangles from floor count. */
-  massingWasSynthesized?: boolean;
 };
 
 /** Merge AI obstacles with manually entered doors for `createAndCalculate` (backend injects doors into wall inputs). */
@@ -1053,6 +1050,9 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
       parsed.manualSubTab === 'quick' ? 'quick' : 'drawing';
     if (mtab === 'quick') mode = 'quick';
     if (mode === 'quick') mtab = 'quick';
+    if (mode === 'ai_extract' && !SHOW_LEGACY_AI_EXTRACT_TAB) {
+      mode = 'stepped_massing';
+    }
 
     d.inputMode = mode;
     d.manualSubTab = mtab;
@@ -1678,6 +1678,10 @@ function ScaffoldPageContent() {
   const canSteppedMassing = canQuick;
 
   useEffect(() => {
+    if (!SHOW_LEGACY_AI_EXTRACT_TAB && inputMode === 'ai_extract') {
+      setInputMode('stepped_massing');
+      return;
+    }
     if (planGatesRelaxed) return;
     if (inputMode === 'ai_extract' && !canAi) setInputMode('drawing');
     if (inputMode === 'cad_draw' && !canCad) setInputMode('drawing');
@@ -1702,6 +1706,7 @@ function ScaffoldPageContent() {
     planGatesRelaxed,
     planIdentityReady,
     isOrgSeatOnScaffold,
+    SHOW_LEGACY_AI_EXTRACT_TAB,
     canAi,
     canCad,
     canFile,
@@ -2149,7 +2154,7 @@ function ScaffoldPageContent() {
           {/* ─── Mode Selector (4 sections); full strip hidden during edit, use “Start new job” below ─── */}
           {!editConfigId && (
             <div className="flex flex-wrap gap-2 mt-4">
-              {canAi && (
+              {canAi && SHOW_LEGACY_AI_EXTRACT_TAB && (
                 <button
                   type="button"
                   onClick={() => setInputMode('ai_extract')}
@@ -2259,7 +2264,7 @@ function ScaffoldPageContent() {
       {/* ═══════════════════════════════════════════════════════
           AI EXTRACTION / AI BIM/IFC MODES
          ═══════════════════════════════════════════════════════ */}
-      {inputMode === 'ai_extract' && !editConfigId && (
+      {inputMode === 'ai_extract' && !editConfigId && SHOW_LEGACY_AI_EXTRACT_TAB && (
         <div className="max-w-[1800px] mx-auto px-4 pb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
@@ -2388,48 +2393,13 @@ function ScaffoldPageContent() {
                         }) : tier.vertices,
                       }));
                     })();
-                    // When massingTiers are missing but wallHeightsMm varies, auto-synthesize
-                    // approximate tiers from the outline so decomposeTierWalls can work.
-                    // Only create tiers when the upper tier has a genuinely SMALLER footprint.
-                    // Also: 3D renders with no tiers — synthesize nested rectangular setbacks from floor count.
-                    let massingWasSynthesized = false;
+                    // When massingTiers are missing but per-edge wallHeightsMm varies, synthesize
+                    // approximate tiers from the outline (stepped / wedding-cake flows use the Stepped massing tab + dedicated AI instead).
                     const effectiveMassingTiers = (() => {
                       if (normalizedMassingTiers && normalizedMassingTiers.length > 0) {
                         return normalizedMassingTiers;
                       }
                       if (!Array.isArray(wallHeightsMm) || wallHeightsMm.length === 0) {
-                        if (
-                          footprint.drawingType === '3d' &&
-                          buildingOutline &&
-                          buildingOutline.length >= 3
-                        ) {
-                          const lens = (wallLengthsMm ?? walls.map((w) => w.wallLengthMm)).filter(
-                            (x): x is number => typeof x === 'number' && x > 0,
-                          );
-                          if (lens.length >= 1) {
-                            const long = lens.length >= 2 ? Math.max(...lens) : lens[0]!;
-                            const short = lens.length >= 2 ? Math.min(...lens) : lens[0]!;
-                            const floors = Math.max(
-                              2,
-                              Math.min(
-                                40,
-                                footprint.floorCount ?? Math.round(footprint.buildingHeightMm / 3000),
-                              ),
-                            );
-                            const syn = synthesizeSteppedTiersFrom3dHeuristic({
-                              buildingHeightMm: footprint.buildingHeightMm,
-                              floorCount: floors,
-                              baseLongMm: long,
-                              baseShortMm: short,
-                              taperAlongLongEdge: long >= short,
-                              totalSetbackFraction: 0.35,
-                            });
-                            if (syn?.length) {
-                              massingWasSynthesized = true;
-                              return remapRectangularTiersToOutline(buildingOutline as any, syn);
-                            }
-                          }
-                        }
                         return undefined;
                       }
                       if (!buildingOutline || buildingOutline.length < 3) return undefined;
@@ -2474,7 +2444,6 @@ function ScaffoldPageContent() {
                       isStepped,
                       obstacles,
                       dto,
-                      massingWasSynthesized,
                       ...(footprint.ifcPremiumMetadata && { ifcPremiumMetadata: footprint.ifcPremiumMetadata }),
                     });
                     setAiBimExtractOutline(
@@ -2574,11 +2543,6 @@ function ScaffoldPageContent() {
                         );
                       })()}
                     </div>
-                  )}
-                  {aiBimPreview.massingWasSynthesized && (
-                    <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-                      {t('scaffold', 'aiBim3dSteppedHint')}
-                    </p>
                   )}
                   <div
                     className="relative flex-1 min-h-[280px] rounded-lg border border-gray-200 bg-white overflow-hidden"
@@ -3559,6 +3523,7 @@ function ScaffoldPageContent() {
         <SteppedMassingWizard
           onSubmit={handleSteppedMassingSubmit}
           isCalculating={calculateMutation.isPending}
+          canUseAi={canAi}
         />
       )}
 

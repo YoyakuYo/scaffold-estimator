@@ -494,6 +494,36 @@ export const translations = {
     steppedMassingAddTier: { ja: '段を追加', en: 'Add tier', fr: 'Ajouter un palier' },
     steppedMassingCalculate: { ja: '積算する', en: 'Calculate scaffold', fr: 'Calculer l\'echafaudage' },
     steppedMassingTab: { ja: '段々建物', en: 'Stepped massing', fr: 'Massing retrait' },
+    steppedMassingAiTitle: {
+      ja: 'AI で立面・パースから段を読み取る',
+      en: 'AI: read tiers from elevation or render',
+      fr: 'IA : lire les paliers depuis une elevation ou un rendu',
+    },
+    steppedMassingAiHint: {
+      ja: 'PNG / JPEG / WebP などの画像をアップロードすると、奥行き・テーパー方向・各段の長さ・高さの候補が表に入ります。必要に応じて数値を直してから積算してください。',
+      en: 'Upload a raster image (PNG, JPEG, WebP, …). We suggest depth, taper axis, and tier lengths/heights — edit the table as needed, then calculate.',
+      fr: 'Chargez une image (PNG, JPEG, WebP…). Profondeur, axe et paliers sont proposes — ajustez le tableau puis calculez.',
+    },
+    steppedMassingAiUpload: {
+      ja: '画像を選択',
+      en: 'Choose image',
+      fr: 'Choisir une image',
+    },
+    steppedMassingAiAnalyzing: {
+      ja: '解析中…',
+      en: 'Analyzing…',
+      fr: 'Analyse…',
+    },
+    steppedMassingAiError: {
+      ja: '段々の読み取りに失敗しました。',
+      en: 'Could not read stepped massing from the image.',
+      fr: 'Impossible de lire le massing en retrait.',
+    },
+    steppedMassingAiPremiumHint: {
+      ja: '段々の AI 読み取りはプレミアム（AI 抽出）の契約で利用できます。',
+      en: 'Stepped-massing AI requires a plan that includes AI extraction (Premium).',
+      fr: 'L’IA pour le massing en retrait necessite une offre avec extraction IA (Premium).',
+    },
     aiBim3dSteppedHint: {
       ja: '3Dビューで段々が検出されなかった場合、階数に合わせた入れ子外形を自動で作成しました。下表で各段の長さ・高さを調整してください。',
       en: 'No stepped footprints were returned — a nested outline was synthesized from floor count. Adjust tier lengths and heights in the table below.',

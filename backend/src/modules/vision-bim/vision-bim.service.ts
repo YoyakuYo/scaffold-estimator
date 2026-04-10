@@ -99,6 +99,16 @@ export interface VisionFootprintResult {
   ifcPremiumMetadata?: IfcPremiumMetadata;
 }
 
+/** AI output for stepped / setback massing wizard (rectangular tiers). */
+export interface SteppedMassingAiResult {
+  depthMm: number;
+  taperAxis: 'x' | 'y';
+  tierLengthsMm: number[];
+  tierHeightsMm: number[];
+  buildingHeightMm: number;
+  confidence?: number;
+}
+
 /** Supported file extensions (lowercase). */
 const CAD_EXTENSIONS = ['.dxf'];
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
@@ -502,6 +512,189 @@ export class VisionBimService {
         );
       }
     }
+  }
+
+  /**
+   * Dedicated Claude Vision pass for stepped/setback "wedding cake" towers.
+   * Returns rectangular tier parameters for the scaffold stepped-massing wizard (not a full plan footprint).
+   * Images only (PNG/JPEG/WebP/GIF/BMP).
+   */
+  async processSteppedMassingImage(
+    buffer: Buffer,
+    filename?: string,
+  ): Promise<SteppedMassingAiResult> {
+    const ext = filename?.includes('.')
+      ? '.' + filename.split('.').pop()!.toLowerCase()
+      : '';
+    const isImageExt = IMAGE_EXTENSIONS.includes(ext);
+    const isRaster = isImageExt || this.looksLikeImage(buffer);
+    if (!isRaster) {
+      throw new Error(
+        'Stepped massing AI accepts raster images only (PNG, JPEG, WebP, GIF, BMP). Use the main upload for DXF/IFC/PDF.',
+      );
+    }
+
+    const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
+    if (!apiKey) {
+      throw new Error('ANTHROPIC_API_KEY is not set (stepped massing AI is unavailable)');
+    }
+
+    const sharp = (await import('sharp')).default;
+    const maxPx = 2048;
+    let imageBuffer = buffer;
+    try {
+      const meta = await sharp(buffer).metadata();
+      if (
+        meta.width &&
+        meta.height &&
+        Math.max(meta.width, meta.height) > maxPx
+      ) {
+        imageBuffer = await sharp(buffer)
+          .resize(maxPx, maxPx, { fit: 'inside', withoutEnlargement: true })
+          .toBuffer();
+      }
+    } catch {
+      /* use original */
+    }
+
+    const Anthropic = await import('@anthropic-ai/sdk');
+    const client = new Anthropic.default({ apiKey });
+    const base64 = imageBuffer.toString('base64');
+    const mediaType = this.detectImageMediaType(imageBuffer);
+    const model =
+      this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
+
+    const userPrompt = `You are analyzing a building that may be a stepped/setback tower (wedding-cake massing, terraces stepping inward on one or more façades).
+
+Output ONLY a single JSON object (no markdown). Fields:
+- depthMm: number — depth in millimeters along the building side that stays constant (orthogonal to the stepping direction). Typical 8000–25000 for mid-rise.
+- taperAxis: "x" OR "y" — which horizontal axis gets shorter toward the roof (the direction in which footprint length shrinks per tier). Use "x" if the stepping runs left-right in the image, "y" if it runs up-down on the page.
+- tierLengthsMm: number[] — length in mm along taperAxis for EACH vertical band from ground to roof. Index 0 = widest (ground). At least 2 tiers if setbacks exist. Lengths must be non-increasing (each tier <= the one below).
+- tierHeightsMm: number[] — height in mm of each band (floor-to-floor or visible riser height). Same array length as tierLengthsMm. Typical 2800–3600 per band.
+- buildingHeightMm: number — total building height from ground to highest roof point; should approximately equal the sum of tierHeightsMm.
+- confidence: optional number 0–1
+
+If the building looks like a simple box with no setbacks, use 2 tiers with equal tierLengthsMm.
+If dimensions are unknown, estimate plausible mm values for a commercial tower. Never output fractions — only integers for mm.`;
+
+    const message = await client.messages.create({
+      model,
+      max_tokens: 2048,
+      temperature: 0,
+      system:
+        'You output only valid JSON for construction scaffold estimation. No prose, no code fences.',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64 },
+            },
+            { type: 'text', text: userPrompt },
+          ],
+        },
+      ],
+    });
+
+    const textBlock = message.content.find((b: any) => b.type === 'text');
+    const text =
+      textBlock && typeof (textBlock as any).text === 'string'
+        ? (textBlock as any).text
+        : '';
+    const cleaned = text.replace(/```json?\s*/gi, '').replace(/```/g, '').trim();
+    const start = cleaned.indexOf('{');
+    if (start < 0) throw new Error('Stepped massing AI did not return JSON');
+    let depth = 0;
+    let end = -1;
+    let i = start;
+    while (i < cleaned.length) {
+      const c = cleaned[i];
+      if (c === '"') {
+        i++;
+        while (i < cleaned.length) {
+          if (cleaned[i] === '\\') i += 2;
+          else if (cleaned[i] === '"') {
+            i++;
+            break;
+          } else i++;
+        }
+        continue;
+      }
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+      i++;
+    }
+    if (end < start) throw new Error('Stepped massing AI returned invalid JSON object');
+    let jsonStr = cleaned.slice(start, end + 1);
+    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+
+    let raw: Record<string, unknown>;
+    try {
+      raw = JSON.parse(jsonStr) as Record<string, unknown>;
+    } catch (e) {
+      this.logger.error(`Stepped massing JSON parse failed: ${(e as Error).message}`);
+      throw new Error('Stepped massing AI returned invalid JSON');
+    }
+
+    const depthMm = Math.max(600, Math.round(Number(raw.depthMm) || 14_000));
+    const taperAxis = raw.taperAxis === 'y' ? 'y' : 'x';
+    let tierLengthsMm = Array.isArray(raw.tierLengthsMm)
+      ? (raw.tierLengthsMm as unknown[])
+          .map((x) => Math.max(600, Math.round(Number(x) || 0)))
+          .filter((x) => x > 0)
+      : [];
+    let tierHeightsMm = Array.isArray(raw.tierHeightsMm)
+      ? (raw.tierHeightsMm as unknown[])
+          .map((x) => Math.max(1000, Math.round(Number(x) || 0)))
+          .filter((x) => x > 0)
+      : [];
+
+    if (tierLengthsMm.length === 0) {
+      tierLengthsMm = [20_000, 18_000];
+    }
+    if (tierHeightsMm.length === 0) {
+      tierHeightsMm = tierLengthsMm.map(() => 3000);
+    }
+    const n = Math.min(tierLengthsMm.length, tierHeightsMm.length, 40);
+    tierLengthsMm = tierLengthsMm.slice(0, n);
+    tierHeightsMm = tierHeightsMm.slice(0, n);
+    while (tierLengthsMm.length < tierHeightsMm.length) {
+      tierLengthsMm.push(tierLengthsMm[tierLengthsMm.length - 1] ?? 10_000);
+    }
+    while (tierHeightsMm.length < tierLengthsMm.length) {
+      tierHeightsMm.push(3000);
+    }
+    const sumH = tierHeightsMm.reduce((s, h) => s + h, 0);
+    let buildingHeightMm = Math.max(
+      sumH,
+      Math.round(Number(raw.buildingHeightMm) || sumH),
+    );
+    if (buildingHeightMm < sumH) buildingHeightMm = sumH;
+
+    const confidence =
+      typeof raw.confidence === 'number'
+        ? Math.min(1, Math.max(0, raw.confidence))
+        : undefined;
+
+    this.logger.log(
+      `Stepped massing AI: tiers=${tierLengthsMm.length}, height=${buildingHeightMm}mm, taper=${taperAxis}`,
+    );
+
+    return {
+      depthMm,
+      taperAxis,
+      tierLengthsMm,
+      tierHeightsMm,
+      buildingHeightMm,
+      ...(confidence !== undefined ? { confidence } : {}),
+    };
   }
 
   private looksLikeDxf(buffer: Buffer): boolean {

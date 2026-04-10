@@ -17,6 +17,7 @@ import {
   VisionBimService,
   VisionFootprintResult,
   type PremiumScheduleImportResult,
+  type SteppedMassingAiResult,
 } from './vision-bim.service';
 
 @Controller('vision-bim')
@@ -86,6 +87,40 @@ export class VisionBimController {
       return await this.visionBim.processFile(buffer, filename);
     } catch (err: any) {
       const msg = err?.message || 'File processing failed';
+      if (
+        msg.includes('ANTHROPIC_API_KEY') ||
+        msg.includes('network') ||
+        msg.includes('timeout')
+      ) {
+        throw new InternalServerErrorException(msg);
+      }
+      throw new BadRequestException(msg);
+    }
+  }
+
+  /**
+   * POST /vision-bim/analyze-stepped-massing
+   * Raster images only: AI suggests depth, taper axis, per-tier lengths/heights for the stepped wizard.
+   */
+  @Post('analyze-stepped-massing')
+  @Throttle({ default: { limit: 24, ttl: 60000 } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
+  async analyzeSteppedMassing(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<SteppedMassingAiResult> {
+    if (!file) throw new BadRequestException('No file uploaded');
+    const buffer = (file as any).buffer as Buffer | undefined;
+    if (!buffer?.length) throw new BadRequestException('File has no content');
+    const filename = file.originalname;
+    try {
+      return await this.visionBim.processSteppedMassingImage(buffer, filename);
+    } catch (err: any) {
+      const msg = err?.message || 'Stepped massing analysis failed';
       if (
         msg.includes('ANTHROPIC_API_KEY') ||
         msg.includes('network') ||

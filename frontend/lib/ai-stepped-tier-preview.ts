@@ -88,7 +88,6 @@ type AiPreviewForStepped = {
   dto: CreateScaffoldConfigDto;
   buildingHeightMm: number;
   massingTiers?: VisionMassingTier[];
-  massingWasSynthesized?: boolean;
 };
 
 export function applySteppedDraftToAiBimPreview(
@@ -120,7 +119,6 @@ export function applySteppedDraftToAiBimPreview(
         ...preview.dto,
         massingTiers: remapped as BuildingMassingTier[],
       },
-      massingWasSynthesized: false,
     };
   }
 
@@ -159,7 +157,6 @@ export function applySteppedDraftToAiBimPreview(
     ...preview,
     massingTiers: remapped,
     buildingHeightMm,
-    massingWasSynthesized: false,
     walls: mergedWalls,
     dto: {
       ...preview.dto,

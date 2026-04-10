@@ -49,6 +49,16 @@ export interface PremiumScheduleImportResult {
   warnings: string[];
 }
 
+/** AI suggestion for stepped / setback massing wizard (raster image upload). */
+export interface SteppedMassingAiResult {
+  depthMm: number;
+  taperAxis: 'x' | 'y';
+  tierLengthsMm: number[];
+  tierHeightsMm: number[];
+  buildingHeightMm: number;
+  confidence?: number;
+}
+
 export interface VisionFootprintResult {
   vertices: Array<{ x: number; y: number } | { xFrac: number; yFrac: number }>;
   buildingHeightMm: number;
@@ -126,6 +136,21 @@ export const visionBimApi = {
       '/vision-bim/import-premium-schedule',
       form,
       { timeout: 60000 },
+    );
+    return response.data;
+  },
+
+  /**
+   * Stepped massing: upload elevation / 3D render (PNG, JPEG, WebP, GIF, BMP).
+   * Returns suggested depth, taper axis, and per-tier lengths/heights for the wizard.
+   */
+  analyzeSteppedMassing: async (file: File): Promise<SteppedMassingAiResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await apiClient.post<SteppedMassingAiResult>(
+      '/vision-bim/analyze-stepped-massing',
+      form,
+      { timeout: 120000 },
     );
     return response.data;
   },

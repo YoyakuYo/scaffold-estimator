@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { Layers, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, Layers, Loader2, Plus, ScanLine, Trash2, Upload } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { formatMmLabel } from '@/lib/dimension-meters';
 import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
@@ -10,7 +10,39 @@ import {
   buildRectangularSetbackMassingTiers,
   type TaperAxis,
 } from '@/lib/stepped-rectangular-massing';
-import type { VisionMassingTier } from '@/lib/api/vision-bim';
+import { visionBimApi, type VisionMassingTier } from '@/lib/api/vision-bim';
+
+const STEPPED_AI_IMAGE_ACCEPT = 'image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp';
+
+function applySteppedMassingAiToState(
+  result: Awaited<ReturnType<typeof visionBimApi.analyzeSteppedMassing>>,
+  setDepthMm: (n: number) => void,
+  setTaperAxis: (a: TaperAxis) => void,
+  setTierLengthsMm: (a: number[]) => void,
+  setTierHeightsMm: (a: number[]) => void,
+) {
+  const depth = Math.max(600, Math.round(Number(result.depthMm) || 0));
+  const axis: TaperAxis = result.taperAxis === 'y' ? 'y' : 'x';
+  const rawL = result.tierLengthsMm ?? [];
+  const rawH = result.tierHeightsMm ?? [];
+  const count = Math.max(1, Math.min(40, Math.max(rawL.length, rawH.length)));
+  const lengths: number[] = [];
+  const heights: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const l = rawL[i];
+    const h = rawH[i];
+    const prevL = i > 0 ? lengths[i - 1]! : 20_000;
+    const prevH = i > 0 ? heights[i - 1]! : 3000;
+    const lr = typeof l === 'number' && Number.isFinite(l) ? l : prevL;
+    const hr = typeof h === 'number' && Number.isFinite(h) ? h : prevH;
+    lengths.push(Math.max(600, Math.round(lr)));
+    heights.push(Math.max(1000, Math.round(hr)));
+  }
+  setDepthMm(depth);
+  setTaperAxis(axis);
+  setTierLengthsMm(lengths);
+  setTierHeightsMm(heights);
+}
 
 export type SteppedMassingWizardSubmitPayload = {
   massingTiers: VisionMassingTier[];
@@ -231,9 +263,12 @@ export function SteppedMassingTierTable({
 export function SteppedMassingWizard({
   onSubmit,
   isCalculating,
+  canUseAi = false,
 }: {
   onSubmit: (payload: SteppedMassingWizardSubmitPayload) => void;
   isCalculating?: boolean;
+  /** Premium AI extraction: suggest tier table from a raster elevation / 3D render. */
+  canUseAi?: boolean;
 }) {
   const { t } = useI18n();
   const [depthMm, setDepthMm] = useState(14_000);
@@ -244,6 +279,8 @@ export function SteppedMassingWizard({
   const [tierHeightsMm, setTierHeightsMm] = useState<number[]>(Array(10).fill(3_000));
   const [viewZoom, setViewZoom] = useState(1);
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
+  const [steppedAiLoading, setSteppedAiLoading] = useState(false);
+  const [steppedAiError, setSteppedAiError] = useState<string | null>(null);
 
   const massingTiers = useMemo(() => {
     try {
@@ -308,6 +345,69 @@ export function SteppedMassingWizard({
           {t('scaffold', 'steppedMassingSectionTitle')}
         </h2>
         <p className="text-sm text-gray-600 mb-4">{t('scaffold', 'steppedMassingSectionHint')}</p>
+
+        {canUseAi ? (
+          <div className="mb-6 rounded-lg border border-violet-200 bg-violet-50/60 p-4">
+            <h3 className="text-sm font-semibold text-violet-900 flex items-center gap-2 mb-1">
+              <ScanLine className="h-4 w-4" />
+              {t('scaffold', 'steppedMassingAiTitle')}
+            </h3>
+            <p className="text-xs text-violet-800/90 mb-3">{t('scaffold', 'steppedMassingAiHint')}</p>
+            <label className="flex flex-col sm:flex-row sm:items-center gap-3 cursor-pointer">
+              <span className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed border-violet-300 bg-white text-violet-700 text-sm font-medium hover:bg-violet-50 transition-colors">
+                <Upload className="h-4 w-4 shrink-0" />
+                {t('scaffold', 'steppedMassingAiUpload')}
+              </span>
+              <input
+                type="file"
+                className="hidden"
+                accept={STEPPED_AI_IMAGE_ACCEPT}
+                disabled={steppedAiLoading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setSteppedAiError(null);
+                  setSteppedAiLoading(true);
+                  try {
+                    const data = await visionBimApi.analyzeSteppedMassing(file);
+                    applySteppedMassingAiToState(
+                      data,
+                      setDepthMm,
+                      setTaperAxis,
+                      setTierLengthsMm,
+                      setTierHeightsMm,
+                    );
+                  } catch (err: unknown) {
+                    const msg =
+                      err && typeof err === 'object' && 'message' in err
+                        ? String((err as { message?: string }).message)
+                        : t('scaffold', 'steppedMassingAiError');
+                    setSteppedAiError(msg);
+                  } finally {
+                    setSteppedAiLoading(false);
+                    e.target.value = '';
+                  }
+                }}
+              />
+              {steppedAiLoading && (
+                <span className="inline-flex items-center gap-2 text-sm text-violet-700">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('scaffold', 'steppedMassingAiAnalyzing')}
+                </span>
+              )}
+            </label>
+            {steppedAiError && (
+              <div className="mt-2 flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{steppedAiError}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mb-4 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 max-w-2xl">
+            {t('scaffold', 'steppedMassingAiPremiumHint')}
+          </p>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-2">
