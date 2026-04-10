@@ -449,9 +449,9 @@ export const translations = {
       fr: 'Ouvertures portes (manuel)',
     },
     manualDoorSectionHint: {
-      ja: 'AIが検出しなかった場合、壁面・沿い位置・ドア幅・地上から扉頭までの高さを入力してください。梁枠（はりわく）は計算時に反映されます。',
-      en: 'If the platform did not detect a door, choose the wall, distance along the edge from the start (mm), door width, and height from ground to the top of the door (mm). Beam-frame (hariwaku) is applied on calculate.',
-      fr: 'Si la plateforme n\'a pas detecte de porte, indiquez le mur, la position le long de l\'arete (mm depuis le debut), la largeur de la porte et la hauteur du sol au haut de l\'ouverture (mm). Le chass est pris en compte au calcul.',
+      ja: 'AIが検出しなかった場合、壁面・沿い位置・ドア幅・地上から扉頭までの高さを入力してください。梁枠は前後2列に各1本ずつ（開口1件あたり2基）で計上されます。',
+      en: 'If the platform did not detect a door, choose the wall, distance along the edge from the start (mm), door width, and height from ground to the top of the door (mm). Each opening is counted as two beam frames (hariwaku front row + back row). Width maps to span coverage (e.g. 5487 mm ≈ 3×1829 mm spans).',
+      fr: 'Si la plateforme n\'a pas detecte de porte, indiquez le mur, la position le long de l\'arete (mm depuis le debut), la largeur de la porte et la hauteur du sol au haut de l\'ouverture (mm). Chaque ouverture compte deux cadres (travée avant + arriere).',
     },
     manualDoorWall: { ja: '壁面', en: 'Wall', fr: 'Mur' },
     manualDoorPositionMm: {

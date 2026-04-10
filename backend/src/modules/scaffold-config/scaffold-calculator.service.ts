@@ -59,7 +59,10 @@ export interface WallCalculationInput {
   scaffoldWidthMm?: number;
   /** Buragetto: 'bracket' = single-pole + bracket when obstacle clearance < width+200mm. */
   layoutMode?: 'double_post' | 'bracket';
-  /** Door openings on this wall — each gets a 梁枠 (hariwaku / beam frame) at ground level. */
+  /**
+   * Door openings on this wall — each opening uses 梁枠 (hariwaku) across the span width.
+   * Double-row scaffold: BOM counts **2 基 per opening** (one on the front row, one on the back row).
+   */
   doorOpenings?: Array<{ positionMm: number; widthMm: number; doorTopHeightMmFromGround?: number }>;
   /** Tier base elevation (mm). For stepped buildings, scaffold starts at this height. */
   baseHeightMm?: number;
@@ -778,8 +781,8 @@ export class ScaffoldCalculatorService {
 
         sortOrder++;
         const hariwakuSizeSpec = hasTopH
-          ? `${hariwakuMm}mm (${spanCount}スパン) · 開口高(地上〜頭) ${Math.round(topH)}mm`
-          : `${hariwakuMm}mm (${spanCount}スパン)`;
+          ? `${hariwakuMm}mm (${spanCount}スパン) · 前後2列 · 開口高(地上〜頭) ${Math.round(topH)}mm`
+          : `${hariwakuMm}mm (${spanCount}スパン) · 前後2列`;
         components.push({
           type: 'hariwaku',
           category: '梁枠',
@@ -788,7 +791,7 @@ export class ScaffoldCalculatorService {
           nameJp: '梁枠',
           sizeSpec: hariwakuSizeSpec,
           unit: '基',
-          quantity: 1,
+          quantity: 2,
           sortOrder,
           materialCode: `HARIWAKU-${spanCount}SPAN`,
         });

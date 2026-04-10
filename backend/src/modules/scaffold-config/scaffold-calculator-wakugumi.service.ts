@@ -540,8 +540,8 @@ export class ScaffoldCalculatorWakugumiService {
 
         sortOrder++;
         const hariwakuSizeSpec = hasTopH
-          ? `${hariwakuMm}mm (${spanCount}スパン) · 開口高(地上〜頭) ${Math.round(topH)}mm`
-          : `${hariwakuMm}mm (${spanCount}スパン)`;
+          ? `${hariwakuMm}mm (${spanCount}スパン) · 前後2列 · 開口高(地上〜頭) ${Math.round(topH)}mm`
+          : `${hariwakuMm}mm (${spanCount}スパン) · 前後2列`;
         components.push({
           type: 'hariwaku',
           category: '梁枠',
@@ -550,7 +550,7 @@ export class ScaffoldCalculatorWakugumiService {
           nameJp: '梁枠',
           sizeSpec: hariwakuSizeSpec,
           unit: '基',
-          quantity: 1,
+          quantity: 2,
           sortOrder,
           materialCode: `HARIWAKU-${spanCount}SPAN`,
         });
