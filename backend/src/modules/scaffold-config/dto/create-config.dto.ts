@@ -325,6 +325,6 @@ export class CreateScaffoldConfigDto {
 
   /** Which scaffold page UI created this config (stored on calculationResult for recalculate routing). */
   @IsOptional()
-  @IsIn(['quick', 'drawing', 'ai_extract', 'cad_draw'])
-  inputUiPath?: 'quick' | 'drawing' | 'ai_extract' | 'cad_draw';
+  @IsIn(['quick', 'drawing', 'ai_extract', 'cad_draw', 'stepped_massing'])
+  inputUiPath?: 'quick' | 'drawing' | 'ai_extract' | 'cad_draw' | 'stepped_massing';
 }

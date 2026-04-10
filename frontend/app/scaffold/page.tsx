@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileText,
+  Layers,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import {
@@ -44,6 +45,16 @@ import {
   ManualDoorOpeningsEditor,
   type ManualDoorOpeningRow,
 } from '@/components/manual-door-openings-editor';
+import {
+  SteppedMassingWizard,
+  SteppedMassingPlanSvg,
+  type SteppedMassingWizardSubmitPayload,
+} from '@/components/stepped-massing-wizard';
+import {
+  synthesizeSteppedTiersFrom3dHeuristic,
+  remapRectangularTiersToOutline,
+} from '@/lib/stepped-rectangular-massing';
+import type { BuildingMassingTier } from '@/lib/api/scaffold-configs';
 import {
   visionBimApi,
   type IfcPremiumMetadata,
@@ -862,6 +873,8 @@ type AiBimWizardPreview = {
     /** mm from ground to top of door (optional; recorded on obstacle / BOM). */
     doorTopHeightMmFromGround?: number;
   }>;
+  /** True when 3D upload had no tiers and we synthesized stepped rectangles from floor count. */
+  massingWasSynthesized?: boolean;
 };
 
 /** Merge AI obstacles with manually entered doors for `createAndCalculate` (backend injects doors into wall inputs). */
@@ -962,7 +975,7 @@ interface RawWizardDraft {
 }
 
 interface WizardSessionBootstrap {
-  inputMode: 'drawing' | 'quick' | 'ai_extract' | 'cad_draw';
+  inputMode: 'drawing' | 'quick' | 'ai_extract' | 'cad_draw' | 'stepped_massing';
   manualSubTab: 'drawing' | 'quick';
   walls: WallState[];
   polygonVertices: Array<{ x: number; y: number }>;
@@ -1021,6 +1034,7 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
       parsed.inputMode === 'ai_extract' ||
       parsed.inputMode === 'cad_draw' ||
       parsed.inputMode === 'quick' ||
+      parsed.inputMode === 'stepped_massing' ||
       parsed.inputMode === 'drawing'
         ? parsed.inputMode
         : 'drawing';
@@ -1115,11 +1129,16 @@ function ScaffoldPageContent() {
     if (startFreshParam === 'drawing') {
       return { ...base, inputMode: 'drawing' as const, manualSubTab: 'drawing' as const };
     }
+    if (startFreshParam === 'stepped') {
+      return { ...base, inputMode: 'stepped_massing' as const, manualSubTab: 'drawing' as const };
+    }
     return base;
   }, [editConfigId, startFreshParam]);
 
   // ─── Input Mode ────────────────────────────────────────
-  const [inputMode, setInputMode] = useState<'drawing' | 'quick' | 'ai_extract' | 'cad_draw'>(() => initialWizard.inputMode);
+  const [inputMode, setInputMode] = useState<
+    'drawing' | 'quick' | 'ai_extract' | 'cad_draw' | 'stepped_massing'
+  >(() => initialWizard.inputMode);
   const [manualSubTab, setManualSubTab] = useState<'drawing' | 'quick'>(() => initialWizard.manualSubTab);
   /** First calculate after CAD complete — tag config as cad_draw until saved */
   const [pendingInputUiPath, setPendingInputUiPath] = useState<CreateScaffoldConfigDto['inputUiPath'] | null>(
@@ -1615,18 +1634,21 @@ function ScaffoldPageContent() {
   const canCad = planGatesRelaxed || caps?.cadDraw === true;
   const canFile = planGatesRelaxed || caps?.fileUpload === true;
   const canQuick = planGatesRelaxed || caps?.quickShape === true;
+  const canSteppedMassing = canQuick;
 
   useEffect(() => {
     if (planGatesRelaxed) return;
     if (inputMode === 'ai_extract' && !canAi) setInputMode('drawing');
     if (inputMode === 'cad_draw' && !canCad) setInputMode('drawing');
+    if (inputMode === 'stepped_massing' && !canSteppedMassing) setInputMode('drawing');
     // Do not yank users off CAD / AI into Quick when file upload is gated (manualSubTab defaults to 'drawing').
     if (
       !canFile &&
       manualSubTab === 'drawing' &&
       !editConfigId &&
       inputMode !== 'cad_draw' &&
-      inputMode !== 'ai_extract'
+      inputMode !== 'ai_extract' &&
+      inputMode !== 'stepped_massing'
     ) {
       setManualSubTab('quick');
       setInputMode('quick');
@@ -1643,6 +1665,7 @@ function ScaffoldPageContent() {
     canCad,
     canFile,
     canQuick,
+    canSteppedMassing,
     inputMode,
     manualSubTab,
     editConfigId,
@@ -1961,6 +1984,76 @@ function ScaffoldPageContent() {
     calculateMutation.mutate({ dto, configId: null });
   };
 
+  const handleSteppedMassingSubmit = useCallback(
+    async (payload: SteppedMassingWizardSubmitPayload) => {
+      const { massingTiers, buildingHeightMm, groundVerticesMm } = payload;
+      if (groundVerticesMm.length < 3 || massingTiers.length === 0) return;
+      const n = groundVerticesMm.length;
+      let maxEdge = 0;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        maxEdge = Math.max(
+          maxEdge,
+          Math.hypot(groundVerticesMm[j]!.x - groundVerticesMm[i]!.x, groundVerticesMm[j]!.y - groundVerticesMm[i]!.y),
+        );
+      }
+      const vertices = groundVerticesMm.map((v) => ({ x: v.x, y: v.y }));
+      const manager = scaffoldManagerRef.current!;
+      const { walls, buildingOutline } = manager.injectFootprintAndGetWalls(
+        vertices,
+        buildingHeightMm,
+        maxEdge > 0 ? maxEdge : undefined,
+      );
+      const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
+      const decomposed = decomposeTierWalls(
+        walls,
+        massingTiers as BuildingMassingTier[],
+        buildingHeightMm,
+      );
+      const finalWalls = decomposed.length > 0 ? decomposed : walls;
+      const mergedObstacles = mergeAiExtractObstaclesForDto(undefined, undefined, finalWalls.length);
+
+      const dto: CreateScaffoldConfigDto = {
+        projectId: 'default-project',
+        mode: 'manual',
+        scaffoldType,
+        walls: finalWalls,
+        scaffoldWidthMm,
+        siteName: '',
+        siteAddress: '',
+        siteEmail: '',
+        sitePhone: '',
+        siteFax: '',
+        ...(scaffoldType === 'kusabi' && {
+          preferredMainTatejiMm,
+        }),
+        ...(scaffoldType === 'wakugumi' && {
+          frameSizeMm: WAKUGUMI_FIXED_FRAME_HEIGHT_MM,
+          wakugumiFrameSeries,
+          habakiCountPerSpan,
+        }),
+        buildingOutline,
+        includePattanko,
+        ...(buildingOutline.length >= 3 && {
+          ...(includePattanko ? { pattankoCornerCount: countPattankoCorners(buildingOutline) } : {}),
+        }),
+        ...(decomposed.length > 0 && massingTiers.length > 0 ? { massingTiers: massingTiers as BuildingMassingTier[] } : {}),
+        inputUiPath: 'stepped_massing',
+        ...(mergedObstacles.length > 0 ? { obstacles: mergedObstacles } : {}),
+      };
+      calculateMutation.mutate({ dto, configId: null });
+    },
+    [
+      calculateMutation,
+      scaffoldType,
+      scaffoldWidthMm,
+      preferredMainTatejiMm,
+      wakugumiFrameSeries,
+      habakiCountPerSpan,
+      includePattanko,
+    ],
+  );
+
   /** Leave `?edit=` recalculate flow: clear draft, remount wizard via `?start=` (see ScaffoldPageRouteShell key). */
   const goToFreshManualSubtab = useCallback(
     (tab: 'drawing' | 'quick') => {
@@ -2063,6 +2156,23 @@ function ScaffoldPageContent() {
                 >
                   <PenTool className="h-4 w-4" />
                   {t('scaffoldExtra', 'cadDrawTab')}
+                </button>
+              )}
+              {canSteppedMassing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputMode('stepped_massing');
+                    setManualSubTab('drawing');
+                  }}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    inputMode === 'stepped_massing'
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-800 shadow-sm'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <Layers className="h-4 w-4" />
+                  {t('scaffold', 'steppedMassingTab')}
                 </button>
               )}
             </div>
@@ -2240,9 +2350,47 @@ function ScaffoldPageContent() {
                     // When massingTiers are missing but wallHeightsMm varies, auto-synthesize
                     // approximate tiers from the outline so decomposeTierWalls can work.
                     // Only create tiers when the upper tier has a genuinely SMALLER footprint.
+                    // Also: 3D renders with no tiers — synthesize nested rectangular setbacks from floor count.
+                    let massingWasSynthesized = false;
                     const effectiveMassingTiers = (() => {
-                      if (normalizedMassingTiers && normalizedMassingTiers.length > 0) return normalizedMassingTiers;
-                      if (!Array.isArray(wallHeightsMm) || wallHeightsMm.length === 0) return undefined;
+                      if (normalizedMassingTiers && normalizedMassingTiers.length > 0) {
+                        return normalizedMassingTiers;
+                      }
+                      if (!Array.isArray(wallHeightsMm) || wallHeightsMm.length === 0) {
+                        if (
+                          footprint.drawingType === '3d' &&
+                          buildingOutline &&
+                          buildingOutline.length >= 3
+                        ) {
+                          const lens = (wallLengthsMm ?? walls.map((w) => w.wallLengthMm)).filter(
+                            (x): x is number => typeof x === 'number' && x > 0,
+                          );
+                          if (lens.length >= 1) {
+                            const long = lens.length >= 2 ? Math.max(...lens) : lens[0]!;
+                            const short = lens.length >= 2 ? Math.min(...lens) : lens[0]!;
+                            const floors = Math.max(
+                              2,
+                              Math.min(
+                                40,
+                                footprint.floorCount ?? Math.round(footprint.buildingHeightMm / 3000),
+                              ),
+                            );
+                            const syn = synthesizeSteppedTiersFrom3dHeuristic({
+                              buildingHeightMm: footprint.buildingHeightMm,
+                              floorCount: floors,
+                              baseLongMm: long,
+                              baseShortMm: short,
+                              taperAlongLongEdge: long >= short,
+                              totalSetbackFraction: 0.35,
+                            });
+                            if (syn?.length) {
+                              massingWasSynthesized = true;
+                              return remapRectangularTiersToOutline(buildingOutline as any, syn);
+                            }
+                          }
+                        }
+                        return undefined;
+                      }
                       if (!buildingOutline || buildingOutline.length < 3) return undefined;
                       if (wallHeightsMm.length !== buildingOutline.length) return undefined;
                       const syn = synthesizeMassingTiersFromWallHeights(buildingOutline, wallHeightsMm);
@@ -2285,6 +2433,7 @@ function ScaffoldPageContent() {
                       isStepped,
                       obstacles,
                       dto,
+                      massingWasSynthesized,
                       ...(footprint.ifcPremiumMetadata && { ifcPremiumMetadata: footprint.ifcPremiumMetadata }),
                     });
                     setAiBimExtractOutline(
@@ -2385,6 +2534,11 @@ function ScaffoldPageContent() {
                       })()}
                     </div>
                   )}
+                  {aiBimPreview.massingWasSynthesized && (
+                    <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                      {t('scaffold', 'aiBim3dSteppedHint')}
+                    </p>
+                  )}
                   <div
                     className="relative flex-1 min-h-[280px] rounded-lg border border-gray-200 bg-white overflow-hidden"
                     onWheel={(e) => {
@@ -2403,13 +2557,31 @@ function ScaffoldPageContent() {
                         }}
                       />
                     </div>
-                    <BuildingShapeSvg
-                      outline={aiBimPreview.buildingOutline}
-                      wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
-                      viewZoom={aiFootprintPreviewZoom}
-                      viewPan={aiFootprintPreviewPan}
-                      className="w-full h-full min-h-[260px]"
-                    />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:divide-x divide-gray-200 h-full min-h-[260px]">
+                      <BuildingShapeSvg
+                        outline={aiBimPreview.buildingOutline}
+                        wallLengthsMm={aiBimPreview.walls.map((w) => w.wallLengthMm)}
+                        viewZoom={aiFootprintPreviewZoom}
+                        viewPan={aiFootprintPreviewPan}
+                        className="w-full h-full min-h-[220px]"
+                      />
+                      {aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 0 ? (
+                        <div className="flex flex-col min-h-[220px] bg-slate-50/80">
+                          <span className="text-[10px] font-semibold text-indigo-800 px-2 py-1 border-b border-indigo-100">
+                            {t('scaffold', 'steppedMassingPlanPreview')}
+                          </span>
+                          <SteppedMassingPlanSvg
+                            tiers={normalizeMassingTiersForPreview(
+                              aiBimPreview.buildingOutline,
+                              aiBimPreview.massingTiers,
+                            )}
+                            className="w-full flex-1 min-h-[180px]"
+                            viewZoom={aiFootprintPreviewZoom}
+                            viewPan={aiFootprintPreviewPan}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button
@@ -3165,29 +3337,17 @@ function ScaffoldPageContent() {
                       setAiBimConfirming(true);
                       try {
                         const outline = aiBimPreview.buildingOutline;
-                        // Auto-decompose walls for stepped/setback buildings.
-                        // ONLY decompose when tiers have genuinely DIFFERENT footprints
-                        // (setback/podium+tower). For simple L/U/T shapes where all walls
-                        // have the same height (or heights differ but footprint is the same),
-                        // skip decomposition to preserve the correct wall count.
+                        // Auto-decompose walls for stepped/setback buildings (multiple massing tiers).
                         let finalWalls = aiBimPreview.dto.walls;
                         if (aiBimPreview.massingTiers && aiBimPreview.massingTiers.length > 1) {
-                          // Check if tiers have different footprint vertex counts
-                          // (indicating genuinely different shapes, not just height zones)
-                          const tierVertCounts = aiBimPreview.massingTiers.map(
-                            (t: any) => Array.isArray(t.vertices) ? t.vertices.length : 0,
+                          const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
+                          const decomposed = decomposeTierWalls(
+                            aiBimPreview.dto.walls,
+                            aiBimPreview.massingTiers as BuildingMassingTier[],
+                            aiBimPreview.buildingHeightMm,
                           );
-                          const hasDifferentFootprints = new Set(tierVertCounts.filter(c => c >= 3)).size > 1;
-                          if (hasDifferentFootprints) {
-                            const { decomposeTierWalls } = await import('@/lib/tier-wall-decomposer');
-                            const decomposed = decomposeTierWalls(
-                              aiBimPreview.dto.walls,
-                              aiBimPreview.massingTiers,
-                              aiBimPreview.buildingHeightMm,
-                            );
-                            if (decomposed.length > 0 && decomposed.length <= aiBimPreview.dto.walls.length * 3) {
-                              finalWalls = decomposed;
-                            }
+                          if (decomposed.length > 0 && decomposed.length <= aiBimPreview.dto.walls.length * 4) {
+                            finalWalls = decomposed;
                           }
                         }
                         // When walls have different heights (stepped building but same footprint),
@@ -3268,6 +3428,16 @@ function ScaffoldPageContent() {
       )}
 
       {/* ═══════════════════════════════════════════════════════
+          STEPPED / SETBACK MASSING — nested footprints per tier
+         ═══════════════════════════════════════════════════════ */}
+      {inputMode === 'stepped_massing' && !editConfigId && canSteppedMassing && (
+        <SteppedMassingWizard
+          onSubmit={handleSteppedMassingSubmit}
+          isCalculating={calculateMutation.isPending}
+        />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════
           CAD DRAWING MODE — Manual plan drawing with polyline/dimension
          ═══════════════════════════════════════════════════════ */}
       {inputMode === 'cad_draw' && !editConfigId && (
@@ -3331,6 +3501,7 @@ function ScaffoldPageContent() {
           MANUAL INPUT — Drawing Upload + Quick Shape Builder
          ═══════════════════════════════════════════════════════ */}
       {((inputMode !== 'ai_extract' &&
+        inputMode !== 'stepped_massing' &&
         (inputMode !== 'cad_draw' || walls.length > 0)) ||
         editConfigId) &&
         (canFile || canQuick || !!editConfigId) && (<>

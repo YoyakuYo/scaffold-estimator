@@ -1,0 +1,314 @@
+'use client';
+
+import { useState, useMemo, useCallback } from 'react';
+import { Layers, Plus, Trash2 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
+import { formatMmLabel } from '@/lib/dimension-meters';
+import { zoomPanViewBox } from '@/lib/svg-view-box-zoom';
+import { PreviewZoomToolbar } from '@/components/scaffold/preview-zoom-toolbar';
+import {
+  buildRectangularSetbackMassingTiers,
+  type TaperAxis,
+} from '@/lib/stepped-rectangular-massing';
+import type { VisionMassingTier } from '@/lib/api/vision-bim';
+
+export type SteppedMassingWizardSubmitPayload = {
+  massingTiers: VisionMassingTier[];
+  buildingHeightMm: number;
+  /** Ground footprint vertices (mm), first tier — for wall injection. */
+  groundVerticesMm: Array<{ x: number; y: number }>;
+  taperAxis: TaperAxis;
+};
+
+function tierPreviewBounds(tiers: VisionMassingTier[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  const pts: Array<{ x: number; y: number }> = [];
+  for (const t of tiers) {
+    for (const v of t.vertices as Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>) {
+      const x = typeof v.xFrac === 'number' ? v.xFrac : (v.x ?? 0);
+      const y = typeof v.yFrac === 'number' ? v.yFrac : (v.y ?? 0);
+      pts.push({ x, y });
+    }
+  }
+  if (pts.length === 0) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+}
+
+/** Exported for AI extraction confirm screen (nested tier footprints). */
+export function SteppedMassingPlanSvg({
+  tiers,
+  className,
+  viewZoom,
+  viewPan,
+}: {
+  tiers: VisionMassingTier[];
+  className?: string;
+  viewZoom: number;
+  viewPan: { x: number; y: number };
+}) {
+  if (tiers.length === 0) return <div className={className} />;
+  const b = tierPreviewBounds(tiers);
+  const span = Math.max(b.maxX - b.minX, b.maxY - b.minY, 1);
+  const pad = span * 0.08;
+  const nx = (x: number) => (x - b.minX + pad) / (span + pad * 2);
+  const ny = (y: number) => (y - b.minY + pad) / (span + pad * 2);
+  const sorted = [...tiers].sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0));
+  const baseVb = { x: -0.05, y: -0.05, w: 1.1, h: 1.1 };
+  const vb = zoomPanViewBox(baseVb, viewZoom, viewPan);
+  const palette = ['#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1', '#4f46e5'];
+  return (
+    <svg
+      viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+      preserveAspectRatio="xMidYMid meet"
+      className={className}
+    >
+      {sorted.map((tier, idx) => {
+        const verts = tier.vertices as Array<{ x?: number; y?: number }>;
+        if (verts.length < 3) return null;
+        const pts = verts.map((v) => `${nx(v.x ?? 0)},${ny(v.y ?? 0)}`).join(' ');
+        const fill = palette[idx % palette.length];
+        return (
+          <polygon
+            key={`tier-${idx}-${tier.baseHeightMm}-${tier.topHeightMm}`}
+            points={pts}
+            fill={fill}
+            fillOpacity={0.35 + idx * 0.08}
+            stroke="#312e81"
+            strokeWidth={0.012}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+export function SteppedMassingWizard({
+  onSubmit,
+  isCalculating,
+}: {
+  onSubmit: (payload: SteppedMassingWizardSubmitPayload) => void;
+  isCalculating?: boolean;
+}) {
+  const { t } = useI18n();
+  const [depthMm, setDepthMm] = useState(14_000);
+  const [taperAxis, setTaperAxis] = useState<TaperAxis>('x');
+  const [tierLengthsMm, setTierLengthsMm] = useState<number[]>([
+    20_000, 19_000, 18_000, 17_000, 16_000, 15_000, 14_000, 13_000, 12_000, 11_000,
+  ]);
+  const [tierHeightsMm, setTierHeightsMm] = useState<number[]>(Array(10).fill(3_000));
+  const [viewZoom, setViewZoom] = useState(1);
+  const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
+
+  const massingTiers = useMemo(() => {
+    try {
+      return buildRectangularSetbackMassingTiers({
+        depthMm: taperAxis === 'x' ? depthMm : depthMm,
+        tierLengthsMm,
+        tierHeightsMm,
+        taperAxis,
+      });
+    } catch {
+      return [];
+    }
+  }, [depthMm, tierLengthsMm, tierHeightsMm, taperAxis]);
+
+  const buildingHeightMm = useMemo(
+    () => tierHeightsMm.reduce((s, h) => s + Math.max(0, h), 0),
+    [tierHeightsMm],
+  );
+
+  const groundVerticesMm = useMemo(() => {
+    const t0 = massingTiers[0];
+    if (!t0?.vertices?.length) return [];
+    return (t0.vertices as Array<{ x?: number; y?: number }>).map((v) => ({
+      x: Math.round(v.x ?? 0),
+      y: Math.round(v.y ?? 0),
+    }));
+  }, [massingTiers]);
+
+  const addTier = useCallback(() => {
+    const lastL = tierLengthsMm[tierLengthsMm.length - 1] ?? 10_000;
+    setTierLengthsMm((prev) => [...prev, Math.max(600, Math.round(lastL * 0.95))]);
+    setTierHeightsMm((prev) => [...prev, 3000]);
+  }, [tierLengthsMm]);
+
+  const removeTier = useCallback((idx: number) => {
+    if (tierLengthsMm.length <= 1) return;
+    setTierLengthsMm((prev) => prev.filter((_, i) => i !== idx));
+    setTierHeightsMm((prev) => prev.filter((_, i) => i !== idx));
+  }, [tierLengthsMm.length]);
+
+  const updateLength = (idx: number, v: number) => {
+    setTierLengthsMm((prev) => {
+      const next = [...prev];
+      next[idx] = Math.max(600, Math.round(v));
+      return next;
+    });
+  };
+
+  const updateHeight = (idx: number, v: number) => {
+    setTierHeightsMm((prev) => {
+      const next = [...prev];
+      next[idx] = Math.max(1000, Math.round(v));
+      return next;
+    });
+  };
+
+  return (
+    <div className="max-w-[1100px] mx-auto px-4 pb-8 space-y-6">
+      <div className="bg-white rounded-xl shadow-sm border border-indigo-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1">
+          <Layers className="h-6 w-6 text-indigo-600" />
+          {t('scaffold', 'steppedMassingSectionTitle')}
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">{t('scaffold', 'steppedMassingSectionHint')}</p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <span className="text-xs font-medium text-gray-700">{t('scaffold', 'steppedMassingPlanPreview')}</span>
+            <div className="relative rounded-lg border border-gray-200 bg-slate-50 aspect-[4/3] max-h-[360px]">
+              <SteppedMassingPlanSvg
+                tiers={massingTiers}
+                className="w-full h-full"
+                viewZoom={viewZoom}
+                viewPan={viewPan}
+              />
+              <div className="absolute top-2 right-2">
+                <PreviewZoomToolbar
+                  onZoomIn={() => setViewZoom((z) => Math.min(4, z * 1.2))}
+                  onZoomOut={() => setViewZoom((z) => Math.max(0.5, z / 1.2))}
+                  onReset={() => {
+                    setViewZoom(1);
+                    setViewPan({ x: 0, y: 0 });
+                  }}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500">{t('scaffold', 'steppedMassingPlanPreviewHint')}</p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              {t('scaffold', 'steppedMassingDepthMm')}
+              <input
+                type="number"
+                min={600}
+                step={100}
+                value={depthMm}
+                onChange={(e) => setDepthMm(Math.max(600, Number(e.target.value) || 0))}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <fieldset className="flex flex-wrap gap-4 text-sm">
+              <legend className="sr-only">{t('scaffold', 'steppedMassingTaperAxis')}</legend>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="taper"
+                  checked={taperAxis === 'x'}
+                  onChange={() => setTaperAxis('x')}
+                />
+                {t('scaffold', 'steppedMassingTaperAlongX')}
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="taper"
+                  checked={taperAxis === 'y'}
+                  onChange={() => setTaperAxis('y')}
+                />
+                {t('scaffold', 'steppedMassingTaperAlongY')}
+              </label>
+            </fieldset>
+            <p className="text-xs text-gray-500">
+              {t('scaffold', 'steppedMassingBuildingHeight')}: {formatMmLabel(buildingHeightMm)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-x-auto">
+          <table className="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+            <thead className="bg-indigo-50 text-left text-xs font-semibold text-indigo-900">
+              <tr>
+                <th className="px-3 py-2">#</th>
+                <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierLengthMm')}</th>
+                <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierHeightMm')}</th>
+                <th className="px-3 py-2 w-24">{t('scaffold', 'steppedMassingTierRemove')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tierLengthsMm.map((len, idx) => (
+                <tr key={idx} className="border-t border-gray-100 bg-white">
+                  <td className="px-3 py-2 text-gray-600">{idx + 1}</td>
+                  <td className="px-3 py-2">
+                    <input
+                      type="number"
+                      min={600}
+                      step={100}
+                      value={len}
+                      onChange={(e) => updateLength(idx, Number(e.target.value))}
+                      className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <input
+                      type="number"
+                      min={1000}
+                      step={100}
+                      value={tierHeightsMm[idx] ?? 3000}
+                      onChange={(e) => updateHeight(idx, Number(e.target.value))}
+                      className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => removeTier(idx)}
+                      disabled={tierLengthsMm.length <= 1}
+                      className="p-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30"
+                      aria-label="remove tier"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button
+            type="button"
+            onClick={addTier}
+            className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 font-medium hover:underline"
+          >
+            <Plus className="h-4 w-4" />
+            {t('scaffold', 'steppedMassingAddTier')}
+          </button>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            disabled={isCalculating || massingTiers.length === 0 || groundVerticesMm.length < 3}
+            onClick={() =>
+              onSubmit({
+                massingTiers,
+                buildingHeightMm,
+                groundVerticesMm,
+                taperAxis,
+              })
+            }
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {t('scaffold', 'steppedMassingCalculate')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
