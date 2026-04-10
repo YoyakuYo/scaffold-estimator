@@ -27,6 +27,11 @@ import {
   ScaffoldCalculationResult,
   WallSegment,
 } from './scaffold-calculator.service';
+import {
+  buildDoorSpanLevelCover,
+  applyWakugumiDoorOpeningDeductionsToComponents,
+  computeWakugumiFrameDoorDeduction,
+} from './scaffold-door-opening-deductions';
 /**
  * ═══════════════════════════════════════════════════════════════
  * 枠組足場 (Wakugumi / Frame Scaffold) Quantity Calculator Engine
@@ -501,6 +506,33 @@ export class ScaffoldCalculatorWakugumiService {
         quantity: finalKaidanCount * L,
         sortOrder,
         materialCode: 'WAKU-STAIR-SET',
+      });
+    }
+
+    // ─── 9b. Door opening deductions (開口部: 地上〜扉頭までの部材を控除) ───
+    if (wall.doorOpenings && wall.doorOpenings.length > 0) {
+      const { ldWork, ldSafety, postIndices } = buildDoorSpanLevelCover(
+        wall.doorOpenings,
+        spans,
+        L,
+        Ltot,
+        input.frameSizeMm,
+      );
+      const jackEcoDeduct = Math.min(2 * postIndices.size, jackBaseQtyW);
+      const frameDeduct = computeWakugumiFrameDoorDeduction(postIndices, Ltot);
+      applyWakugumiDoorOpeningDeductionsToComponents(components, {
+        spans,
+        spanGroups,
+        ldWork,
+        ldSafety,
+        jackEcoDeduct,
+        frameDeduct,
+        anchiLayout: {
+          fullAnchiPerSpan: anchiLayout.fullAnchiPerSpan,
+          halfAnchiPerSpan: anchiLayout.halfAnchiPerSpan,
+        },
+        habakiCountPerSpan: input.habakiCountPerSpan,
+        omitInnerFaceOnTerminalBay,
       });
     }
 

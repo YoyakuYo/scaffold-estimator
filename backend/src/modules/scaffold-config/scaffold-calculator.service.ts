@@ -19,7 +19,13 @@ import {
   omitKusabiTesuriOnLastSpan,
   meshSheetVerticalRowsForHeightMm,
   MESH_SHEET_VERTICAL_LENGTH_MM,
+  LEVEL_HEIGHT_MM,
 } from './scaffold-rules';
+import {
+  buildDoorSpanLevelCover,
+  applyKusabiDoorOpeningDeductionsToComponents,
+  computeKusabiJackAndPostDoorDeductions,
+} from './scaffold-door-opening-deductions';
 /**
  * ═══════════════════════════════════════════════════════════════
  * くさび式足場 (Kusabi Scaffold) Quantity Calculator Engine
@@ -742,6 +748,35 @@ export class ScaffoldCalculatorService {
         quantity: finalKaidanCount * L,
         sortOrder,
         materialCode: 'KUSABI-STAIR-SET',
+      });
+    }
+
+    // ─── 11b. Door opening deductions (開口部: 地上〜扉頭までの部材を控除) ───
+    if (wall.doorOpenings && wall.doorOpenings.length > 0) {
+      const { ldWork, ldSafety, postIndices } = buildDoorSpanLevelCover(
+        wall.doorOpenings,
+        spans,
+        L,
+        Lsafety,
+        LEVEL_HEIGHT_MM,
+      );
+      const { jackEcoDeduct: jd0, mainPostDeduct: mpd0 } = computeKusabiJackAndPostDoorDeductions(
+        postIndices,
+        levelCalc.mainPostsPerLine,
+      );
+      applyKusabiDoorOpeningDeductionsToComponents(components, {
+        spans,
+        spanGroups,
+        ldWork,
+        ldSafety,
+        jackEcoDeduct: Math.min(jd0, jackBaseQty),
+        mainPostDeduct: mpd0,
+        anchiLayout: {
+          fullAnchiPerSpan: anchiLayout.fullAnchiPerSpan,
+          halfAnchiPerSpan: anchiLayout.halfAnchiPerSpan,
+        },
+        skipTesuriOnTerminalBay,
+        yokojiWidthSize,
       });
     }
 
