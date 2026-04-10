@@ -48,8 +48,15 @@ import {
 import {
   SteppedMassingWizard,
   SteppedMassingPlanSvg,
+  SteppedMassingTierPlanSettings,
+  SteppedMassingTierTable,
   type SteppedMassingWizardSubmitPayload,
 } from '@/components/stepped-massing-wizard';
+import {
+  applySteppedDraftToAiBimPreview,
+  inferRectangularSteppedDraftFromMassingTiers,
+  type SteppedMassingEditableDraft,
+} from '@/lib/ai-stepped-tier-preview';
 import {
   synthesizeSteppedTiersFrom3dHeuristic,
   remapRectangularTiersToOutline,
@@ -1156,6 +1163,8 @@ function ScaffoldPageContent() {
   const [aiBimCompareExtract, setAiBimCompareExtract] = useState(false);
   const [aiFootprintPreviewZoom, setAiFootprintPreviewZoom] = useState(1);
   const [aiFootprintPreviewPan, setAiFootprintPreviewPan] = useState({ x: 0, y: 0 });
+  /** Editable rectangular stepped draft when AI preview has massing tiers (nested setbacks). */
+  const [aiSteppedMassingDraft, setAiSteppedMassingDraft] = useState<SteppedMassingEditableDraft | null>(null);
   const scaffoldManagerRef = useRef<ScaffoldManager | null>(null);
   if (!scaffoldManagerRef.current) scaffoldManagerRef.current = new ScaffoldManager();
 
@@ -1394,6 +1403,34 @@ function ScaffoldPageContent() {
     setAiFootprintPreviewZoom(1);
     setAiFootprintPreviewPan({ x: 0, y: 0 });
   }, [aiFootprintKey]);
+
+  /** Init stepped tier draft once per new AI footprint; do not re-infer after user edits (same outline key). */
+  const aiSteppedDraftFootprintRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!aiBimPreview?.massingTiers?.length) {
+      setAiSteppedMassingDraft(null);
+      aiSteppedDraftFootprintRef.current = null;
+      return;
+    }
+    if (aiSteppedDraftFootprintRef.current === aiFootprintKey) return;
+    aiSteppedDraftFootprintRef.current = aiFootprintKey;
+    const inf = inferRectangularSteppedDraftFromMassingTiers({
+      outline: aiBimPreview.buildingOutline,
+      massingTiers: aiBimPreview.massingTiers,
+      wallLengthsMm: aiBimPreview.walls.map((w) => w.wallLengthMm),
+    });
+    if (inf) setAiSteppedMassingDraft(inf);
+  }, [aiBimPreview, aiFootprintKey]);
+
+  const commitAiSteppedMassingDraft = useCallback((next: SteppedMassingEditableDraft) => {
+    setAiSteppedMassingDraft(next);
+    setAiBimPreview((prev) => {
+      if (!prev) return prev;
+      const mgr = scaffoldManagerRef.current;
+      if (!mgr) return prev;
+      return applySteppedDraftToAiBimPreview(prev, next, mgr) as AiBimWizardPreview;
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || editConfigId) return;
@@ -2661,10 +2698,87 @@ function ScaffoldPageContent() {
                       )}
                     </div>
                   )}
+                  {aiBimPreview.massingTiers &&
+                    aiBimPreview.massingTiers.length > 0 &&
+                    aiSteppedMassingDraft && (
+                      <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                            <Layers className="h-4 w-4 shrink-0" />
+                            {t('scaffold', 'aiBimSteppedTierEditTitle')}
+                          </h4>
+                          <p className="text-[11px] text-indigo-900/85 mt-1 leading-snug">
+                            {t('scaffold', 'aiBimSteppedTierEditHint')}
+                          </p>
+                        </div>
+                        <SteppedMassingTierPlanSettings
+                          depthMm={aiSteppedMassingDraft.depthMm}
+                          onDepthMmChange={(mm) =>
+                            commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, depthMm: mm })
+                          }
+                          taperAxis={aiSteppedMassingDraft.taperAxis}
+                          onTaperAxisChange={(a) =>
+                            commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, taperAxis: a })
+                          }
+                          totalHeightMm={aiSteppedMassingDraft.tierHeightsMm.reduce(
+                            (s, h) => s + Math.max(0, h),
+                            0,
+                          )}
+                          radioName="taper-ai-extract"
+                        />
+                        <SteppedMassingTierTable
+                          compactTopMargin
+                          tierLengthsMm={aiSteppedMassingDraft.tierLengthsMm}
+                          tierHeightsMm={aiSteppedMassingDraft.tierHeightsMm}
+                          onTierLengthChange={(idx, raw) => {
+                            const tierLengthsMm = [...aiSteppedMassingDraft.tierLengthsMm];
+                            tierLengthsMm[idx] = Math.max(600, Math.round(raw));
+                            commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, tierLengthsMm });
+                          }}
+                          onTierHeightChange={(idx, raw) => {
+                            const tierHeightsMm = [...aiSteppedMassingDraft.tierHeightsMm];
+                            tierHeightsMm[idx] = Math.max(1000, Math.round(raw));
+                            commitAiSteppedMassingDraft({ ...aiSteppedMassingDraft, tierHeightsMm });
+                          }}
+                          onAddTier={() => {
+                            const lastL =
+                              aiSteppedMassingDraft.tierLengthsMm[
+                                aiSteppedMassingDraft.tierLengthsMm.length - 1
+                              ] ?? 10_000;
+                            commitAiSteppedMassingDraft({
+                              ...aiSteppedMassingDraft,
+                              tierLengthsMm: [
+                                ...aiSteppedMassingDraft.tierLengthsMm,
+                                Math.max(600, Math.round(lastL * 0.95)),
+                              ],
+                              tierHeightsMm: [...aiSteppedMassingDraft.tierHeightsMm, 3000],
+                            });
+                          }}
+                          onRemoveTier={(idx) => {
+                            if (aiSteppedMassingDraft.tierLengthsMm.length <= 1) return;
+                            commitAiSteppedMassingDraft({
+                              ...aiSteppedMassingDraft,
+                              tierLengthsMm: aiSteppedMassingDraft.tierLengthsMm.filter((_, i) => i !== idx),
+                              tierHeightsMm: aiSteppedMassingDraft.tierHeightsMm.filter((_, i) => i !== idx),
+                            });
+                          }}
+                        />
+                      </div>
+                    )}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       {aiBimPreview.isStepped ? t('scaffold', 'aiBimMaxBuildingHeight') : t('scaffold', 'aiBimBuildingHeight')}
                     </label>
+                    {aiSteppedMassingDraft && (aiBimPreview.massingTiers?.length ?? 0) > 0 ? (
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {aiBimPreview.buildingHeightMm >= 1000
+                            ? `${(Math.round(mmToM(aiBimPreview.buildingHeightMm) * 10000) / 10000).toFixed(2)} m`
+                            : '—'}
+                        </p>
+                        <p className="text-xs text-gray-500">{t('scaffold', 'aiBimBuildingHeightFromTiers')}</p>
+                      </div>
+                    ) : (
                     <div className="flex items-center gap-2 max-w-[220px]">
                       <input
                         type="number"
@@ -2692,6 +2806,7 @@ function ScaffoldPageContent() {
                       />
                       <span className="text-xs text-gray-500 shrink-0">m</span>
                     </div>
+                    )}
                     {aiBimPreview.heightConfidence === 'low' && (
                       <div className="mt-1.5 flex items-start gap-1.5 p-2 rounded-md bg-amber-50 border border-amber-200">
                         <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />

@@ -499,6 +499,21 @@ export const translations = {
       en: 'No stepped footprints were returned — a nested outline was synthesized from floor count. Adjust tier lengths and heights in the table below.',
       fr: 'Aucun palier detecte — contour imbrique synthetise. Ajustez les longueurs et hauteurs ci-dessous.',
     },
+    aiBimSteppedTierEditTitle: {
+      ja: '段々（セットバック）外形の編集',
+      en: 'Edit stepped setbacks (tiers)',
+      fr: 'Modifier les retraits (paliers)',
+    },
+    aiBimSteppedTierEditHint: {
+      ja: '固定側の奥行き・テーパー方向・各段の長さと高さを変更すると、左の入れ子プレビューと3Dが更新されます。壁面の周長は土台段に合わせて再計算されます。',
+      en: 'Change fixed depth, taper direction, and each tier length and height. The nested plan and 3D preview update; ground perimeter lengths are recalculated from the base tier.',
+      fr: 'Modifiez la profondeur fixe, la direction du retrait et chaque palier. Le plan imbrique et l’apercu 3D se mettent a jour.',
+    },
+    aiBimBuildingHeightFromTiers: {
+      ja: '合計高さは上の各段の高さの合計です（段々モード）。',
+      en: 'Total height is the sum of tier heights above (stepped mode).',
+      fr: 'La hauteur totale est la somme des hauteurs de paliers ci-dessus.',
+    },
     aiBimAnalyzing: { ja: 'ファイルを解析中…建物形状を検出しています', en: 'Analyzing file... detecting building shape', fr: 'Analyse du fichier... detection de la forme du batiment' },
     aiBimAnalysisFailed: { ja: '解析に失敗しました。別のファイルを試すか、手描きCADモードを使用してください。', en: 'Analysis failed. Try another file or use the Manual CAD Drawing mode.', fr: 'Echec de l\'analyse. Essayez un autre fichier ou utilisez le mode dessin CAO manuel.' },
     aiBimExtractedComplete: { ja: '抽出完了 — 右側で寸法を確認・修正してください', en: 'Extraction complete - review and edit dimensions on the right', fr: 'Extraction terminee - verifiez et modifiez les dimensions a droite' },

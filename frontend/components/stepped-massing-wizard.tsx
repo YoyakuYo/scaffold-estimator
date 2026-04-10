@@ -88,6 +88,146 @@ export function SteppedMassingPlanSvg({
   );
 }
 
+/** Depth + taper + total height (right column in wizard, or stacked in AI review). */
+export function SteppedMassingTierPlanSettings({
+  depthMm,
+  onDepthMmChange,
+  taperAxis,
+  onTaperAxisChange,
+  totalHeightMm,
+  radioName = 'taper-wizard',
+}: {
+  depthMm: number;
+  onDepthMmChange: (mm: number) => void;
+  taperAxis: TaperAxis;
+  onTaperAxisChange: (a: TaperAxis) => void;
+  totalHeightMm: number;
+  /** Unique group name when multiple instances on one page */
+  radioName?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="space-y-3">
+      <label className="block text-sm font-medium text-gray-700">
+        {t('scaffold', 'steppedMassingDepthMm')}
+        <input
+          type="number"
+          min={600}
+          step={100}
+          value={depthMm}
+          onChange={(e) => onDepthMmChange(Math.max(600, Number(e.target.value) || 0))}
+          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        />
+      </label>
+      <fieldset className="flex flex-wrap gap-4 text-sm">
+        <legend className="sr-only">{t('scaffold', 'steppedMassingTaperAxis')}</legend>
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name={radioName}
+            checked={taperAxis === 'x'}
+            onChange={() => onTaperAxisChange('x')}
+          />
+          {t('scaffold', 'steppedMassingTaperAlongX')}
+        </label>
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name={radioName}
+            checked={taperAxis === 'y'}
+            onChange={() => onTaperAxisChange('y')}
+          />
+          {t('scaffold', 'steppedMassingTaperAlongY')}
+        </label>
+      </fieldset>
+      <p className="text-xs text-gray-500">
+        {t('scaffold', 'steppedMassingBuildingHeight')}: {formatMmLabel(totalHeightMm)}
+      </p>
+    </div>
+  );
+}
+
+/** Tier length/height table + add tier (full width below wizard grid, or in AI column). */
+export function SteppedMassingTierTable({
+  tierLengthsMm,
+  tierHeightsMm,
+  onTierLengthChange,
+  onTierHeightChange,
+  onAddTier,
+  onRemoveTier,
+  compactTopMargin,
+}: {
+  tierLengthsMm: number[];
+  tierHeightsMm: number[];
+  onTierLengthChange: (idx: number, mm: number) => void;
+  onTierHeightChange: (idx: number, mm: number) => void;
+  onAddTier: () => void;
+  onRemoveTier: (idx: number) => void;
+  compactTopMargin?: boolean;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className={compactTopMargin ? 'mt-4 overflow-x-auto' : 'mt-6 overflow-x-auto'}>
+      <table className="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+        <thead className="bg-indigo-50 text-left text-xs font-semibold text-indigo-900">
+          <tr>
+            <th className="px-3 py-2">#</th>
+            <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierLengthMm')}</th>
+            <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierHeightMm')}</th>
+            <th className="px-3 py-2 w-24">{t('scaffold', 'steppedMassingTierRemove')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tierLengthsMm.map((len, idx) => (
+            <tr key={idx} className="border-t border-gray-100 bg-white">
+              <td className="px-3 py-2 text-gray-600">{idx + 1}</td>
+              <td className="px-3 py-2">
+                <input
+                  type="number"
+                  min={600}
+                  step={100}
+                  value={len}
+                  onChange={(e) => onTierLengthChange(idx, Number(e.target.value))}
+                  className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
+                />
+              </td>
+              <td className="px-3 py-2">
+                <input
+                  type="number"
+                  min={1000}
+                  step={100}
+                  value={tierHeightsMm[idx] ?? 3000}
+                  onChange={(e) => onTierHeightChange(idx, Number(e.target.value))}
+                  className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
+                />
+              </td>
+              <td className="px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => onRemoveTier(idx)}
+                  disabled={tierLengthsMm.length <= 1}
+                  className="p-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30"
+                  aria-label="remove tier"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button
+        type="button"
+        onClick={onAddTier}
+        className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 font-medium hover:underline"
+      >
+        <Plus className="h-4 w-4" />
+        {t('scaffold', 'steppedMassingAddTier')}
+      </button>
+    </div>
+  );
+}
+
 export function SteppedMassingWizard({
   onSubmit,
   isCalculating,
@@ -193,103 +333,23 @@ export function SteppedMassingWizard({
             <p className="text-[11px] text-gray-500">{t('scaffold', 'steppedMassingPlanPreviewHint')}</p>
           </div>
 
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-gray-700">
-              {t('scaffold', 'steppedMassingDepthMm')}
-              <input
-                type="number"
-                min={600}
-                step={100}
-                value={depthMm}
-                onChange={(e) => setDepthMm(Math.max(600, Number(e.target.value) || 0))}
-                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              />
-            </label>
-            <fieldset className="flex flex-wrap gap-4 text-sm">
-              <legend className="sr-only">{t('scaffold', 'steppedMassingTaperAxis')}</legend>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="taper"
-                  checked={taperAxis === 'x'}
-                  onChange={() => setTaperAxis('x')}
-                />
-                {t('scaffold', 'steppedMassingTaperAlongX')}
-              </label>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="taper"
-                  checked={taperAxis === 'y'}
-                  onChange={() => setTaperAxis('y')}
-                />
-                {t('scaffold', 'steppedMassingTaperAlongY')}
-              </label>
-            </fieldset>
-            <p className="text-xs text-gray-500">
-              {t('scaffold', 'steppedMassingBuildingHeight')}: {formatMmLabel(buildingHeightMm)}
-            </p>
-          </div>
+          <SteppedMassingTierPlanSettings
+            depthMm={depthMm}
+            onDepthMmChange={setDepthMm}
+            taperAxis={taperAxis}
+            onTaperAxisChange={setTaperAxis}
+            totalHeightMm={buildingHeightMm}
+          />
         </div>
 
-        <div className="mt-6 overflow-x-auto">
-          <table className="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-indigo-50 text-left text-xs font-semibold text-indigo-900">
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierLengthMm')}</th>
-                <th className="px-3 py-2">{t('scaffold', 'steppedMassingTierHeightMm')}</th>
-                <th className="px-3 py-2 w-24">{t('scaffold', 'steppedMassingTierRemove')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tierLengthsMm.map((len, idx) => (
-                <tr key={idx} className="border-t border-gray-100 bg-white">
-                  <td className="px-3 py-2 text-gray-600">{idx + 1}</td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min={600}
-                      step={100}
-                      value={len}
-                      onChange={(e) => updateLength(idx, Number(e.target.value))}
-                      className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min={1000}
-                      step={100}
-                      value={tierHeightsMm[idx] ?? 3000}
-                      onChange={(e) => updateHeight(idx, Number(e.target.value))}
-                      className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => removeTier(idx)}
-                      disabled={tierLengthsMm.length <= 1}
-                      className="p-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30"
-                      aria-label="remove tier"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button
-            type="button"
-            onClick={addTier}
-            className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 font-medium hover:underline"
-          >
-            <Plus className="h-4 w-4" />
-            {t('scaffold', 'steppedMassingAddTier')}
-          </button>
-        </div>
+        <SteppedMassingTierTable
+          tierLengthsMm={tierLengthsMm}
+          tierHeightsMm={tierHeightsMm}
+          onTierLengthChange={updateLength}
+          onTierHeightChange={updateHeight}
+          onAddTier={addTier}
+          onRemoveTier={removeTier}
+        />
 
         <div className="mt-6 flex justify-end">
           <button
