@@ -66,6 +66,14 @@ interface KaidanConfig {
   count: number;
 }
 
+/** Manual door openings in Quick Shape Builder (wallIndex = row order in the edges table). */
+export type QuickManualDoorOpening = {
+  wallIndex: number;
+  positionMm: number;
+  widthMm: number;
+  doorTopHeightMmFromGround?: number;
+};
+
 function QuickShapeFootprintSvg({
   vertsMm,
   className = '',
@@ -126,6 +134,8 @@ export interface QuickShapeConfig {
   kaidanPerSide: Record<string, KaidanConfig>;
   /** Saved with calculate — grid line X1–Xn / Y1–Yn (stations 1–10). */
   edgeHashiraByLabel?: Record<string, EdgeHashiraFormRow>;
+  /** Manual door openings (same semantics as AI extract); wallIndex = edge order in the table. */
+  manualDoorOpenings?: QuickManualDoorOpening[];
 }
 
 /** Persisted wizard state for sessionStorage (quick builder tab). */
@@ -153,6 +163,7 @@ export interface QuickShapeBuilderDraft {
   hashiraByLabel?: Record<string, EdgeHashiraFormRow>;
   /** Per-edge CF (R/C) — same as drawing upload CF column. */
   cfNoteByLabel?: Record<string, ScaffoldWallCfKey>;
+  manualDoorOpenings?: QuickManualDoorOpening[];
 }
 
 function isShapeType(v: unknown): v is ShapeType {
@@ -255,6 +266,16 @@ function draftToInitial(d: QuickShapeBuilderDraft | null | undefined): QuickShap
     edgePlanByLabel: parseEdgePlanByLabel(d.edgePlanByLabel),
     hashiraByLabel: parseHashiraByLabel(d.hashiraByLabel),
     cfNoteByLabel: parseCfNoteByLabel(d.cfNoteByLabel),
+    manualDoorOpenings: Array.isArray(d.manualDoorOpenings)
+      ? d.manualDoorOpenings.filter(
+          (row): row is QuickManualDoorOpening =>
+            row != null &&
+            typeof row === 'object' &&
+            Number.isFinite(Number((row as QuickManualDoorOpening).wallIndex)) &&
+            Number.isFinite(Number((row as QuickManualDoorOpening).positionMm)) &&
+            Number.isFinite(Number((row as QuickManualDoorOpening).widthMm)),
+        )
+      : [],
   };
 }
 
@@ -343,6 +364,12 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
   const [cfNoteByLabel, setCfNoteByLabel] = useState<Record<string, ScaffoldWallCfKey>>(
     () => mergedInitial?.cfNoteByLabel ?? {},
   );
+  const [manualDoorOpenings, setManualDoorOpenings] = useState<QuickManualDoorOpening[]>(
+    () =>
+      mergedInitial?.manualDoorOpenings && mergedInitial.manualDoorOpenings.length > 0
+        ? mergedInitial.manualDoorOpenings
+        : [],
+  );
 
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
@@ -371,6 +398,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
         edgePlanByLabel,
         hashiraByLabel,
         cfNoteByLabel,
+        manualDoorOpenings,
       });
     }, 400);
     return () => window.clearTimeout(t);
@@ -395,6 +423,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
     edgePlanByLabel,
     hashiraByLabel,
     cfNoteByLabel,
+    manualDoorOpenings,
   ]);
 
   const sidesList = useMemo((): SideDefinition[] => {
@@ -467,6 +496,7 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
       kaidanPerSide,
       edgeHashiraByLabel:
         Object.keys(hashiraByLabel).length > 0 ? hashiraByLabel : undefined,
+      ...(manualDoorOpenings.length > 0 ? { manualDoorOpenings } : {}),
     });
   };
 
@@ -860,6 +890,143 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
               {t('quickBuilder', 'addSegment')}
             </button>
           )}
+        </section>
+
+        {/* Door openings (manual) — same backend path as AI extract */}
+        <section aria-labelledby="qb-section-doors">
+          <h3 id="qb-section-doors" className={sectionTitleClass}>
+            <LayoutList className="h-5 w-5 text-amber-600 shrink-0" aria-hidden />
+            {t('scaffold', 'manualDoorSectionTitle')}
+          </h3>
+          <p className="text-xs text-amber-900/85 mb-3">{t('scaffold', 'manualDoorSectionHint')}</p>
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/90 p-3">
+            <div className="hidden sm:grid sm:grid-cols-[minmax(0,1.35fr)_5.5rem_5.5rem_6.5rem_auto] sm:gap-x-2 sm:px-2 sm:pb-1 text-[10px] font-medium text-gray-600 border-b border-amber-100/90">
+              <span>{t('scaffold', 'manualDoorWall')}</span>
+              <span className="text-right sm:text-left">{t('scaffold', 'manualDoorPositionMm')}</span>
+              <span className="text-right sm:text-left">{t('scaffold', 'manualDoorWidthMm')}</span>
+              <span className="text-right sm:text-left">{t('scaffold', 'manualDoorTopHeightMmFromGround')}</span>
+              <span className="sr-only">{t('scaffold', 'manualDoorRemove')}</span>
+            </div>
+            {manualDoorOpenings.map((row, idx) => (
+              <div
+                key={`qb-door-${idx}`}
+                className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.35fr)_5.5rem_5.5rem_6.5rem_auto] gap-2 rounded border border-amber-100 bg-white/90 p-2 sm:items-end"
+              >
+                <label className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorWall')}</span>
+                  <select
+                    value={Math.min(sidesList.length - 1, Math.max(0, Math.floor(row.wallIndex)))}
+                    onChange={(e) => {
+                      const wi = Number(e.target.value);
+                      const next = [...manualDoorOpenings];
+                      next[idx] = { ...next[idx], wallIndex: wi };
+                      setManualDoorOpenings(next);
+                    }}
+                    className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-xs bg-white"
+                  >
+                    {sidesList.map((s, i) => (
+                      <option key={`${s.label}-${i}`} value={i}>
+                        {s.label} ({formatMmLabel(s.lengthMm)})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorPositionMm')}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={Number.isFinite(row.positionMm) ? row.positionMm : ''}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = [...manualDoorOpenings];
+                      next[idx] = { ...next[idx], positionMm: Number.isFinite(v) ? v : 0 };
+                      setManualDoorOpenings(next);
+                    }}
+                    className="w-full sm:w-24 rounded border border-gray-300 px-2 py-1 text-xs"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorWidthMm')}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={Number.isFinite(row.widthMm) ? row.widthMm : ''}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = [...manualDoorOpenings];
+                      next[idx] = { ...next[idx], widthMm: Number.isFinite(v) ? v : 1800 };
+                      setManualDoorOpenings(next);
+                    }}
+                    className="w-full sm:w-24 rounded border border-gray-300 px-2 py-1 text-xs"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-[10px] text-gray-600 sm:hidden">
+                    {t('scaffold', 'manualDoorTopHeightMmFromGround')}
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="2100"
+                    value={
+                      row.doorTopHeightMmFromGround != null && Number.isFinite(row.doorTopHeightMmFromGround)
+                        ? row.doorTopHeightMmFromGround
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      const next = [...manualDoorOpenings];
+                      if (raw === '') {
+                        const { doorTopHeightMmFromGround: _omit, ...rest } = next[idx];
+                        next[idx] = rest;
+                      } else {
+                        const v = Number(raw);
+                        next[idx] = {
+                          ...next[idx],
+                          doorTopHeightMmFromGround:
+                            Number.isFinite(v) && v > 0 ? Math.round(v) : undefined,
+                        };
+                      }
+                      setManualDoorOpenings(next);
+                    }}
+                    className="w-full sm:w-28 rounded border border-gray-300 px-2 py-1 text-xs"
+                  />
+                </label>
+                <div className="flex sm:justify-end sm:pb-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setManualDoorOpenings((prev) => prev.filter((_, j) => j !== idx))}
+                    className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-800 hover:bg-red-100"
+                  >
+                    <Trash2 className="h-3 w-3 shrink-0" />
+                    {t('scaffold', 'manualDoorRemove')}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const w0 = sidesList[0];
+                const defaultPos = w0 ? Math.round(w0.lengthMm / 2) : 1500;
+                setManualDoorOpenings((prev) => [
+                  ...prev,
+                  {
+                    wallIndex: 0,
+                    positionMm: defaultPos,
+                    widthMm: 1800,
+                    doorTopHeightMmFromGround: 2100,
+                  },
+                ]);
+              }}
+              disabled={sidesList.length === 0}
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('scaffold', 'manualDoorAdd')}
+            </button>
+          </div>
         </section>
 
         {/* Building height */}

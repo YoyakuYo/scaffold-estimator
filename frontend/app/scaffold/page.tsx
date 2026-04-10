@@ -1852,6 +1852,12 @@ function ScaffoldPageContent() {
       { maxStation: 10 },
     );
 
+    const mergedObstacles = mergeAiExtractObstaclesForDto(
+      undefined,
+      qConfig.manualDoorOpenings,
+      wallInputs.length,
+    );
+
     const dto: CreateScaffoldConfigDto = {
       projectId: 'default-project',
       mode: 'manual',
@@ -1872,6 +1878,7 @@ function ScaffoldPageContent() {
       }),
       inputUiPath: 'quick',
       ...(edgeHashiraLabeling ? { edgeHashiraLabeling } : {}),
+      ...(mergedObstacles.length > 0 ? { obstacles: mergedObstacles } : {}),
     };
     calculateMutation.mutate({ dto, configId: null });
   };
