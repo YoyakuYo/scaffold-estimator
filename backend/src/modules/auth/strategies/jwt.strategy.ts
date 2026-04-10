@@ -21,13 +21,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
-    // Payload is already verified by JWT, just return user info
-    return { 
-      id: payload.sub || payload.id, 
-      email: payload.email, 
-      role: payload.role, 
-      companyId: payload.companyId 
-    };
+  async validate(payload: { sub?: string; id?: string }) {
+    const userId = payload.sub || payload.id;
+    if (!userId || typeof userId !== 'string') {
+      throw new UnauthorizedException('Invalid token');
+    }
+    return this.authService.getUserForJwtPayload(userId);
   }
 }

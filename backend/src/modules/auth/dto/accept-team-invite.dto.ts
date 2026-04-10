@@ -1,4 +1,5 @@
 import { IsString, MinLength } from 'class-validator';
+import { PASSWORD_POLICY_MIN_LENGTH } from '../password-policy';
 
 export class AcceptTeamInviteSignupDto {
   @IsString()
@@ -6,7 +7,7 @@ export class AcceptTeamInviteSignupDto {
   token: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(PASSWORD_POLICY_MIN_LENGTH)
   password: string;
 
   @IsString()

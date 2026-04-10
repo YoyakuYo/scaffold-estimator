@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { redactBodyForLog, redactQueryForLog } from '../utils/redact-for-log';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -27,7 +28,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ? exception.getResponse()
         : 'Internal server error';
 
-    // Enhanced error logging with more details
+    // Request context: always redact passwords/tokens (safe in dev and production).
     const errorDetails = {
       method: request.method,
       url: request.url,
@@ -36,8 +37,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       errorName: exception instanceof Error ? exception.name : 'Unknown',
       errorMessage: exception instanceof Error ? exception.message : String(exception),
       stack: exception instanceof Error ? exception.stack : undefined,
-      body: request.body ? JSON.stringify(request.body).substring(0, 500) : undefined,
-      query: request.query ? JSON.stringify(request.query) : undefined,
+      body: request.body ? redactBodyForLog(request.body) : undefined,
+      query: request.query ? redactQueryForLog(request.query as Record<string, unknown>) : undefined,
     };
 
     this.logger.error(

@@ -7,6 +7,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -30,6 +31,7 @@ export class VisionBimController {
    * Returns structured footprint JSON with vertices, dimensions, and building height.
    */
   @Post('analyze')
+  @Throttle({ default: { limit: 24, ttl: 60000 } })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -66,6 +68,7 @@ export class VisionBimController {
    * Returns same VisionFootprintResult structure.
    */
   @Post('extract-dimensions')
+  @Throttle({ default: { limit: 24, ttl: 60000 } })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -99,6 +102,7 @@ export class VisionBimController {
    * Same subscription guard as AI extraction (Premium tier).
    */
   @Post('import-premium-schedule')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),

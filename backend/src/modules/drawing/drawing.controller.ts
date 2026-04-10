@@ -12,6 +12,7 @@ import {
   Logger,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -31,6 +32,7 @@ export class DrawingController {
   constructor(private readonly drawingService: DrawingService) {}
 
   @Post('upload')
+  @Throttle({ default: { limit: 40, ttl: 60000 } })
   @UseGuards(RolesGuard)
   @Roles('superadmin', 'estimator', 'viewer')
   @UseInterceptors(

@@ -23,7 +23,8 @@ import { SubscriptionModule } from '../subscription/subscription.module';
         return {
           secret,
           signOptions: {
-            expiresIn: configService.get('JWT_EXPIRES_IN', '3600s'),
+            /** Default 30m; override with JWT_EXPIRES_IN (e.g. 3600s, 1h). */
+            expiresIn: configService.get('JWT_EXPIRES_IN', '1800s'),
           },
         };
       },

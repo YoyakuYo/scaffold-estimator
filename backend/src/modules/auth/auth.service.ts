@@ -240,6 +240,36 @@ export class AuthService {
     }
   }
 
+  /**
+   * Load current user from DB on every JWT-authenticated request so role/company/active status
+   * cannot be stale vs the token payload.
+   */
+  async getUserForJwtPayload(userId: string): Promise<{
+    id: string;
+    email: string;
+    role: User['role'];
+    companyId: string | null;
+  }> {
+    const { data: row, error } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('id, email, role, company_id, is_active, approval_status')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error || !row) throw new UnauthorizedException('Invalid token');
+    const user = mapRowToCamel<User>(row as Record<string, unknown>);
+    if (!user || !user.isActive || user.approvalStatus !== 'approved') {
+      throw new UnauthorizedException('User not found, inactive, or not approved');
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      companyId: user.companyId ?? null,
+    };
+  }
+
   // ─── Public Registration ─────────────────────────────────────
 
   async register(dto: RegisterDto): Promise<{ success: boolean; message: string; userId: string }> {

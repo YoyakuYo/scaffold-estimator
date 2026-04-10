@@ -1,6 +1,8 @@
 import { Module, Logger } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bull';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { SupabaseModule } from './modules/supabase/supabase.module';
 import { DrawingModule } from './modules/drawing/drawing.module';
 import { EstimateModule } from './modules/estimate/estimate.module';
@@ -25,6 +27,12 @@ import { TeamChatModule } from './modules/team-chat/team-chat.module';
       envFilePath: '.env',
       ignoreEnvFile: process.env.NODE_ENV === 'production',
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 120,
+      },
+    ]),
     SupabaseModule,
     BullModule.forRootAsync({
       inject: [ConfigService],
@@ -68,6 +76,12 @@ import { TeamChatModule } from './modules/team-chat/team-chat.module';
     SubscriptionModule,
     VisionBimModule,
     TeamChatModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

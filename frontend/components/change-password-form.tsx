@@ -62,7 +62,7 @@ export function ChangePasswordForm() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={10}
             autoComplete="new-password"
             value={passwordForm.newPassword}
             onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
@@ -76,7 +76,7 @@ export function ChangePasswordForm() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={10}
             autoComplete="new-password"
             value={passwordForm.confirmPassword}
             onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}

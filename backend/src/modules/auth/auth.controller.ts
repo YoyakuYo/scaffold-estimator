@@ -13,6 +13,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -41,6 +42,7 @@ export class AuthController {
   // ─── Authentication ───────────────────────────────────────
 
   @UseGuards(AuthGuard('local'))
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   async login(@Request() req: any, @Body() loginDto: LoginDto) {
     const isSuperAdminLogin = loginDto.superadmin === true;
@@ -71,6 +73,7 @@ export class AuthController {
 
   // ─── Public Registration ──────────────────────────────────
 
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -78,12 +81,14 @@ export class AuthController {
 
   // ─── Team invites (join existing company) ─────────────────
 
+  @Throttle({ default: { limit: 40, ttl: 60000 } })
   @Get('team-invites/preview')
   async teamInvitePreview(@Query('token') token: string) {
     if (!token?.trim()) throw new BadRequestException('token is required');
     return this.teamInviteService.getPreviewByToken(token.trim());
   }
 
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
   @Post('team-invites/accept-signup')
   async teamInviteAcceptSignup(@Body() dto: AcceptTeamInviteSignupDto, @Req() req: any) {
     const out = await this.teamInviteService.acceptSignup(dto);
@@ -141,11 +146,13 @@ export class AuthController {
   }
 
   /** Always returns the same shape (no email enumeration). Requires SMTP + migration 118. */
+  @Throttle({ default: { limit: 8, ttl: 900000 } })
   @Post('forgot-password')
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.requestPasswordReset(dto.email);
   }
 
+  @Throttle({ default: { limit: 15, ttl: 900000 } })
   @Post('reset-password')
   async resetPasswordWithToken(@Body() dto: ResetPasswordWithTokenDto) {
     return this.authService.resetPasswordWithToken(dto.token, dto.newPassword);

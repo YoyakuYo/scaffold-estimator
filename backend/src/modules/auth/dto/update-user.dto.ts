@@ -1,5 +1,6 @@
 import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsBoolean } from 'class-validator';
 import { UserRole } from '../user.entity';
+import { PASSWORD_POLICY_MIN_LENGTH } from '../password-policy';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -29,12 +30,12 @@ export class ChangePasswordDto {
   currentPassword: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_POLICY_MIN_LENGTH)
   newPassword: string;
 }
 
 export class AdminResetPasswordDto {
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_POLICY_MIN_LENGTH)
   newPassword: string;
 }

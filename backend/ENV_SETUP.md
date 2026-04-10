@@ -21,7 +21,8 @@ DB_NAME=postgres
 # ============================================
 # Generate secure secrets: openssl rand -base64 32
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-JWT_EXPIRES_IN=3600
+# Access token TTL (e.g. 1800s, 30m, 1h). Default in code is 30 minutes if unset.
+JWT_EXPIRES_IN=1800
 JWT_REFRESH_SECRET=your-refresh-secret-key-also-change-this
 JWT_REFRESH_EXPIRES_IN=86400
 

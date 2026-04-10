@@ -172,7 +172,7 @@ function JoinTeamContent() {
             <input
               type="password"
               required
-              minLength={8}
+              minLength={10}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

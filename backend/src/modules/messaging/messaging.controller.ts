@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -25,6 +26,7 @@ export class MessagingController {
   constructor(private messagingService: MessagingService) {}
 
   /** Public landing-page contact (no auth). Emails superadmins + in-app notification. */
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
   @Post('public-contact')
   @HttpCode(HttpStatus.OK)
   async publicContact(@Body() dto: PublicContactDto) {

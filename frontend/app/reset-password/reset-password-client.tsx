@@ -92,7 +92,7 @@ export function ResetPasswordClient() {
               id="newPassword"
               type="password"
               required
-              minLength={6}
+              minLength={10}
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -107,7 +107,7 @@ export function ResetPasswordClient() {
               id="confirm"
               type="password"
               required
-              minLength={6}
+              minLength={10}
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}

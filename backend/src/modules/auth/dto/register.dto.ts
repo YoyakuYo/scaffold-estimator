@@ -1,4 +1,5 @@
 import { IsEmail, IsString, MinLength, IsOptional, ValidateIf } from 'class-validator';
+import { PASSWORD_POLICY_MIN_LENGTH } from '../password-policy';
 
 export class RegisterDto {
   // User info
@@ -6,7 +7,7 @@ export class RegisterDto {
   email: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_POLICY_MIN_LENGTH)
   password: string;
 
   @IsString()

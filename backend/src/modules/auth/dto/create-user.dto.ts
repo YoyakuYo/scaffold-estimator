@@ -1,12 +1,13 @@
 import { IsEmail, IsString, MinLength, IsOptional, IsEnum } from 'class-validator';
 import { UserRole } from '../user.entity';
+import { PASSWORD_POLICY_MIN_LENGTH } from '../password-policy';
 
 export class CreateUserDto {
   @IsEmail()
   email: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(PASSWORD_POLICY_MIN_LENGTH)
   password: string;
 
   @IsEnum(['superadmin', 'estimator', 'viewer'])
