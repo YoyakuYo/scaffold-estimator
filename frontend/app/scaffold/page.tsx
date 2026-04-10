@@ -340,7 +340,11 @@ function normalizeMassingTiersForPreview(
       return tier;
     })
     .filter((tier) => {
-      const area = previewPolygonArea(tier.vertices as PreviewPlanVertex[]);
+      const tverts = tier.vertices as PreviewPlanVertex[];
+      const tierIsFraction = isFractionLikePreviewVerts(tverts);
+      // mm / pixel coords vs fraction outline: area ratio is meaningless — keep tier; 3D uses computeBimPreviewPlanToM scale.
+      if (!tierIsFraction && outlineIsFraction) return true;
+      const area = previewPolygonArea(tverts);
       // Reject tiers that are effectively invisible or wildly larger than the base footprint.
       return area >= outlineArea * 0.002 && area <= outlineArea * 1.1;
     });
@@ -3482,14 +3486,20 @@ function ScaffoldPageContent() {
                           wallHeightMm: Math.max(w.wallHeightMm ?? aiBimPreview.buildingHeightMm, MIN_WALL_HEIGHT_MM),
                           wallLengthMm: Math.max(w.wallLengthMm, MIN_WALL_LENGTH_MM),
                         }));
-                        // Only include massingTiers in DTO when walls were actually decomposed.
-                        // When decomposition was skipped (same footprint tiers), strip them
-                        // to prevent the 3D view from creating erroneous tier groups.
+                        // Keep massingTiers on the saved config for 3D stepped massing whenever we have
+                        // multiple vertical bands OR decomposition actually expanded walls. Stripping tiers
+                        // when decomposeTierWalls() was skipped left the result page with only a box extrusion.
                         const wallsWereDecomposed = finalWalls !== aiBimPreview.dto.walls && finalWalls !== aiBimPreview.walls;
+                        const multiTierMassing =
+                          Array.isArray(aiBimPreview.massingTiers) && aiBimPreview.massingTiers.length > 1;
+                        const shouldPersistMassingTiers = wallsWereDecomposed || multiTierMassing;
                         const dtoBase = { ...aiBimPreview.dto };
                         delete (dtoBase as Partial<CreateScaffoldConfigDto>).structureType;
-                        if (!wallsWereDecomposed) {
+                        if (!shouldPersistMassingTiers) {
                           delete (dtoBase as any).massingTiers;
+                        } else if (aiBimPreview.massingTiers?.length) {
+                          (dtoBase as CreateScaffoldConfigDto).massingTiers =
+                            aiBimPreview.massingTiers as BuildingMassingTier[];
                         }
                         const hashiraForDto = formRowsFromWallCount(
                           aiBimEdgeHashira,
