@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { extractIfcSemanticMetadata, type IfcPremiumMetadata } from './ifc-semantic-extract';
 import { parsePremiumScheduleBuffer, type PremiumScheduleImportResult } from './premium-schedule-import';
+import { getShapeRulesForVisionPrompt } from './shape-rules-for-vision';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const DxfParser = require('dxf-parser');
@@ -452,6 +453,13 @@ Self-check before outputting (fix silently):
 
 If the drawing has a scale (S=1/100, S=1/200), set scaleDenominator and output vertices in real mm.
 If scale is unknown, use xFrac/yFrac for shape.`;
+
+/** Main vision system prompt + full project shape rules doc (see docs/SHAPE_RULES_AND_AI_EXTRACTION.md). */
+const VISION_SYSTEM_PROMPT_WITH_SHAPE_DOC =
+  VISION_SYSTEM_PROMPT +
+  '\n\n---\nREFERENCE — PROJECT SHAPE RULES (SHAPE_RULES_AND_AI_EXTRACTION.md). Use for footprint classification (rectangle / L / U / T / cross), vertex↔wall counts, reflex corners, orthogonal closure, terraces/balconies, doors, 3D/IFC/DXF hints, and anti-hallucination checks:\n' +
+  getShapeRulesForVisionPrompt();
+
 @Injectable()
 export class VisionBimService {
   private readonly logger = new Logger(VisionBimService.name);
@@ -580,7 +588,7 @@ export class VisionBimService {
     const model =
       this.config.get<string>('ANTHROPIC_VISION_MODEL') || 'claude-sonnet-4-6';
 
-    const userPrompt = `You are analyzing a building image (3D render, BIM viewport, elevation, or photo). The app only supports AXIS-ALIGNED RECTANGULAR tiers stacked in elevation (wedding-cake / setback). It does NOT reconstruct true L-shaped, U-shaped, or multi-wing footprints from one image — you must approximate or warn.
+    const steppedCore = `You are analyzing a building image (3D render, BIM viewport, elevation, or photo). The app only supports AXIS-ALIGNED RECTANGULAR tiers stacked in elevation (wedding-cake / setback). It does NOT reconstruct true L-shaped, U-shaped, or multi-wing footprints from one image — you must approximate or warn.
 
 Output ONLY a single JSON object (no markdown). Fields:
 
@@ -607,7 +615,12 @@ RULES:
 - L/U/C-shaped plans, separate wings, or corner-only towers: set footprintComplexity appropriately and add analysisWarnings. Still output the best-fit rectangular tier stack for the DOMINANT mass or enclosing rectangle.
 - Balconies, louvers, and small façade projections are NOT tier boundaries unless they change the main structural setback.
 - If the building is a simple box with no setbacks, use taperAxis "x" or "y", 2 tiers, equal tierLengthsMm.
-- Integers only for all mm fields. If unknown, estimate plausible mid-rise values.`;
+- Integers only for all mm fields. If unknown, estimate plausible mid-rise values.
+
+Use the SHAPE_RULES_REFERENCE below to classify visible plan/massing type (rectangle vs L/U/T, reflex corners, terraces vs structure) even though your JSON output is only the rectangular tier parameters — set footprintComplexity and analysisWarnings accordingly.`;
+
+    const shapeRef = getShapeRulesForVisionPrompt();
+    const userPrompt = `${steppedCore}\n\n---\nSHAPE_RULES_REFERENCE (project doc SHAPE_RULES_AND_AI_EXTRACTION.md):\n${shapeRef}`;
 
     const message = await client.messages.create({
       model,
@@ -1350,7 +1363,7 @@ Read dimension strings for wall lengths. Return raw JSON only. Include vertices,
           // Reduce randomness to avoid shape changes between identical uploads
           // (Anthropic supports temperature on messages.create).
           temperature: 0,
-          system: VISION_SYSTEM_PROMPT,
+          system: VISION_SYSTEM_PROMPT_WITH_SHAPE_DOC,
           messages: [
             {
               role: 'user',
