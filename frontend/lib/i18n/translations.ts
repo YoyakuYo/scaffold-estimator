@@ -1538,9 +1538,9 @@ export const translations = {
       fr: 'Des offres pour estimateurs seuls et équipes',
     },
     plansIntro: {
-      ja: 'まずは「プロジェクト単価」をご確認ください。図面はお問い合わせフォームから送付いただき、担当が積算してご返信します（目安2営業日）。ライセンス・更新の目安は下表、契約条件・税・振込はログイン後の請求ページで確定します。',
-      en: 'Start with the per-project option below. Send drawings through Contact — our team prepares the estimate and replies (typically within two business days). License fees and renewals are indicative; contract, tax, and payment are confirmed in Billing after sign-in.',
-      fr: 'Commencez par l’offre par projet. Envoyez les plans via Contact — notre équipe prépare le chiffrage (réponse sous ~2 jours ouvrés). Licences et renouvellements sont indicatifs ; contrat et paiement dans Facturation après connexion.',
+      ja: 'プロジェクト単価は ¥100,000（＋税）。図面と会社名・現場の名称・住所をお問い合わせからお送りください。こちらで積算します。24時間以内に数量（Excel）、2D（PDF）、3Dの順でお渡しします。ご相談はお問い合わせからどうぞ。',
+      en: 'Per project: ¥100,000 + tax. Send your documents with your company and site name and address through Contact — we prepare the takeoff here. Within 24 hours: quantities (Excel), 2D (PDF), then 3D. Contact us anytime.',
+      fr: 'Par projet : 100 000 ¥ + TVA. Envoyez vos documents avec le nom de l’entreprise et du chantier et l’adresse via Contact — nous préparons le métré ici. Sous 24 h : quantités (Excel), 2D (PDF), puis 3D. Écrivez-nous quand vous voulez.',
     },
     plansToggleShow: {
       ja: 'プランと料金を表示',
@@ -1563,9 +1563,9 @@ export const translations = {
       fr: "Jusqu'à 5 utilisateurs.\nTout le contenu Basic, plus CAO manuelle et vues 3D interactives et exports.\nMises à jour, maintenance et support : renouvellement annuel.",
     },
     plansPerProjectBody: {
-      ja: '1ユーザー・1プロジェクト単位（銀行振込）。\n図面をお問い合わせから送付いただき、担当が積算して結果をご返信します（目安2営業日）。\n別の案件ごとにお支払いが必要です。',
-      en: 'Single user, billed per project by bank transfer.\nSend your drawings through Contact — our team runs the takeoff and returns the estimate (typically within two business days).\nEach new job is billed separately.',
-      fr: 'Un utilisateur, facturé par projet (virement).\nEnvoyez les plans via Contact — notre équipe établit le métré (réponse sous ~2 jours ouvrés).\nChaque chantier est facturé séparément.',
+      ja: '図面と会社名・現場の名称・住所をお問い合わせからお送りください。こちらで積算します。24時間以内に数量（Excel）、2D（PDF）、3Dの順でお渡しします。',
+      en: 'Send your documents with your company and site name and address through Contact. We prepare the takeoff here. Within 24 hours: quantities (Excel), 2D (PDF), then 3D.',
+      fr: 'Envoyez vos documents avec le nom de l’entreprise et du chantier et l’adresse via Contact. Nous préparons le métré ici. Sous 24 h : quantités (Excel), 2D (PDF), puis 3D.',
     },
     plansPremiumBody: {
       ja: '最大20ユーザー。\nベーシック・ミディアムの内容に加え、AI による外形・寸法の抽出（画像・PDF・DXF 等）と Premium 向けスケジュール取り込み。\n更新・総合サポートは年単位で契約します。',
@@ -1584,9 +1584,9 @@ export const translations = {
       fr: 'Questions',
     },
     contactSubtitle: {
-      ja: 'プロジェクト単価での積算をご希望の場合は、図面・資料を添付のうえお送りください。担当が内容を確認し、目安2営業日以内にご返信します。',
-      en: 'For a per-project estimate, attach your drawings and notes below. Our team will review everything and respond within about two business days.',
-      fr: 'Pour un devis par projet, joignez plans et précisions. Notre équipe examine et répond sous ~2 jours ouvrés.',
+      ja: '図面・資料と、会社名・現場の名称・住所を記載のうえお送りください。24時間以内に数量（Excel）、2D（PDF）、3Dの順でお渡しします。ご不明点はこちらからお問い合わせください。',
+      en: 'Send your documents and include your company and site name and address. Within 24 hours: quantities (Excel), 2D (PDF), then 3D. Contact us anytime.',
+      fr: 'Envoyez vos documents en indiquant l’entreprise, le chantier et l’adresse. Sous 24 h : quantités (Excel), 2D (PDF), puis 3D. Contactez-nous à tout moment.',
     },
     contactPlanUpload: {
       ja: '図面・資料（任意）',
@@ -2383,9 +2383,9 @@ export const translations = {
     planTierMedium: { ja: 'ミディアム', en: 'Medium', fr: 'Moyen' },
     planTierPremium: { ja: 'プレミアム', en: 'Premium', fr: 'Premium' },
     planTierMonthly: {
-      ja: 'プロジェクト単価（フル機能・AI除く）',
-      en: 'Per project (full features, no AI)',
-      fr: 'Par projet (complet, sans IA)',
+      ja: 'プロジェクト単価',
+      en: 'Per project',
+      fr: 'Par projet',
     },
     planTierStandard: { ja: 'スタンダード', en: 'Standard', fr: 'Standard' },
     seatUsage: { ja: 'ユーザー枠: {used} / {limit}', en: 'Seats in use: {used} / {limit}', fr: 'Places utilisées : {used} / {limit}' },
@@ -2438,19 +2438,19 @@ export const translations = {
     },
     planCardMonthlyTitle: { ja: 'プロジェクト単価（銀行振込）', en: 'Per-project bank plan', fr: 'Forfait par projet (virement)' },
     planCardMonthlyPrice: {
-      ja: 'お支払い: ¥150,000 / プロジェクト（＋税）（米国向け標準）',
-      en: '¥150,000 per project + tax (US standard)',
-      fr: '150 000 ¥ par projet + TVA (reference US)',
+      ja: 'お支払い: ¥100,000 / プロジェクト（＋税）',
+      en: '¥100,000 per project + tax',
+      fr: '100 000 ¥ par projet + TVA',
     },
     planCardMonthlyRenewal: {
-      ja: 'お振込み確認後、契約期間を付与。別の案件は追加のお振込みが必要です。',
-      en: 'Access period starts after your wire is confirmed. Additional projects require another payment.',
-      fr: "L'accès court après confirmation du virement. Chaque nouveau projet nécessite un paiement.",
+      ja: '図面と会社名・現場の名称・住所をお問い合わせからお送りください。こちらで積算いたします。',
+      en: 'Send your documents with your company and site name and address through Contact. We prepare the takeoff here.',
+      fr: 'Envoyez vos documents avec le nom de l’entreprise et du chantier et l’adresse via Contact. Nous préparons le métré ici.',
     },
     planCardMonthlySeats: {
-      ja: '1ユーザー・1プロジェクト単位（別案件は別途お支払い）',
-      en: 'Single user, one project at a time (each new job needs its own payment).',
-      fr: 'Un utilisateur, un projet à la fois (chaque nouveau chantier = nouveau paiement).',
+      ja: '24時間以内に数量（Excel）、2D（PDF）、続いて3Dでお渡しします。',
+      en: 'Within 24 hours: quantities (Excel), 2D (PDF), then 3D.',
+      fr: 'Sous 24 h : quantités (Excel), 2D (PDF), puis 3D.',
     },
     planCardMonthlyFeatures: {
       ja: 'Premium と同範囲の機能（手描きCAD・3D・図面アップロード等）。AI 抽出と Premium 向けスケジュール取り込みは含みません。',
@@ -2458,9 +2458,9 @@ export const translations = {
       fr: 'Même périmètre produit que Premium (CAO, 3D, imports, etc.), sans extraction IA ni import planning premium.',
     },
     planCardMonthlyLandingF1: {
-      ja: 'お問い合わせに図面を添付して送信。担当が積算し、目安2営業日以内にご返信します。',
-      en: 'Attach drawings to the contact form — our team prepares the estimate and replies within about two business days.',
-      fr: 'Joignez les plans au formulaire de contact — notre équipe chiffre et répond sous ~2 jours ouvrés.',
+      ja: 'ご不明点はお問い合わせからご連絡ください。',
+      en: 'Contact us anytime.',
+      fr: 'Contactez-nous quand vous voulez.',
     },
     bankTransferTitle: { ja: '銀行振込でお支払い', en: 'Pay by bank transfer', fr: 'Payer par virement bancaire' },
     bankTransferIntro: { ja: '登録メールを振込依頼人名義などにご記載ください。入金確認後、管理者が利用権限を有効にします。', en: 'Include your registered email in the transfer details so we can match your payment. An admin will enable access after confirming the deposit.', fr: 'Indiquez votre e-mail d’inscription pour que nous puissions associer le virement. Un administrateur activera l’accès après réception.' },
