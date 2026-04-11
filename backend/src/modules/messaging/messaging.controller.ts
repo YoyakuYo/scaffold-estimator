@@ -8,8 +8,17 @@ import {
   Logger,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
+  Res,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Response } from 'express';
+import { join, resolve, extname } from 'path';
+import { existsSync } from 'fs';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -17,7 +26,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { MessagingService } from './messaging.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { AdminStartConversationDto } from './dto/admin-start-conversation.dto';
-import { PublicContactDto } from './dto/public-contact.dto';
+
+const LANDING_FILE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[^.]{1,24}$/i;
 
 @Controller('messages')
 export class MessagingController {
@@ -25,12 +35,56 @@ export class MessagingController {
 
   constructor(private messagingService: MessagingService) {}
 
-  /** Public landing-page contact (no auth). Emails superadmins + in-app notification. */
+  /**
+   * Public landing-page contact (no auth). Multipart: name, email, message, optional hp honeypot, optional file.
+   * Emails superadmins + in-app notification.
+   */
   @Throttle({ default: { limit: 10, ttl: 3600000 } })
   @Post('public-contact')
   @HttpCode(HttpStatus.OK)
-  async publicContact(@Body() dto: PublicContactDto) {
-    return this.messagingService.submitPublicContact(dto.name, dto.email, dto.message, dto.hp);
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 25 * 1024 * 1024 },
+    }),
+  )
+  async publicContact(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { name?: string; email?: string; message?: string; hp?: string; company?: string },
+  ) {
+    const name = String(body?.name ?? '').trim();
+    const email = String(body?.email ?? '').trim();
+    const message = String(body?.message ?? '').trim();
+    const hp = body?.hp?.trim();
+    if (name.length < 1 || name.length > 120) {
+      throw new BadRequestException('Invalid name');
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
+      throw new BadRequestException('Invalid email');
+    }
+    if (message.length < 5 || message.length > 8000) {
+      throw new BadRequestException('Message must be between 5 and 8000 characters');
+    }
+    return this.messagingService.submitPublicContact(name, email, message, hp, file);
+  }
+
+  /** Superadmin: download a plan file uploaded via the public contact form. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Get('admin/landing-contact-files/:fileName')
+  async downloadLandingContactFile(@Param('fileName') fileName: string, @Res() res: Response) {
+    if (!LANDING_FILE_RE.test(fileName)) {
+      throw new BadRequestException('Invalid file name');
+    }
+    const base = resolve(join(process.cwd(), 'uploads', 'landing-contact'));
+    const full = resolve(join(base, fileName));
+    if (!full.startsWith(base)) {
+      throw new BadRequestException('Invalid path');
+    }
+    if (!existsSync(full)) {
+      throw new BadRequestException('File not found');
+    }
+    return res.sendFile(full);
   }
 
   /** Get my conversation (user). */

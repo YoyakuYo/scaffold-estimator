@@ -2,6 +2,7 @@
 
 import { Plus, Trash2, LayoutList } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { MmIntegerTextInput, OptionalMmIntegerTextInput } from '@/components/inputs/meter-text-input';
 
 export type ManualDoorOpeningRow = {
   wallIndex: number;
@@ -86,31 +87,27 @@ export function ManualDoorOpeningsEditor({
             </label>
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorPositionMm')}</span>
-              <input
-                type="number"
-                min={0}
-                value={Number.isFinite(row.positionMm) ? row.positionMm : ''}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
+              <MmIntegerTextInput
+                valueMm={Number.isFinite(row.positionMm) ? row.positionMm : 0}
+                onCommitMm={(mm) => {
                   const next = [...rows];
-                  next[idx] = { ...next[idx], positionMm: Number.isFinite(v) ? v : 0 };
+                  next[idx] = { ...next[idx], positionMm: mm };
                   onRowsChange(next);
                 }}
+                minMm={0}
                 className="w-full sm:w-24 rounded border border-gray-300 px-2 py-1 text-xs"
               />
             </label>
             <label className="flex flex-col gap-0.5">
               <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorWidthMm')}</span>
-              <input
-                type="number"
-                min={1}
-                value={Number.isFinite(row.widthMm) ? row.widthMm : ''}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
+              <MmIntegerTextInput
+                valueMm={Number.isFinite(row.widthMm) ? row.widthMm : 1800}
+                onCommitMm={(mm) => {
                   const next = [...rows];
-                  next[idx] = { ...next[idx], widthMm: Number.isFinite(v) ? v : 1800 };
+                  next[idx] = { ...next[idx], widthMm: Math.max(1, mm) };
                   onRowsChange(next);
                 }}
+                minMm={1}
                 className="w-full sm:w-24 rounded border border-gray-300 px-2 py-1 text-xs"
               />
             </label>
@@ -118,31 +115,20 @@ export function ManualDoorOpeningsEditor({
               <span className="text-[10px] text-gray-600 sm:hidden">
                 {t('scaffold', 'manualDoorTopHeightMmFromGround')}
               </span>
-              <input
-                type="number"
-                min={1}
-                placeholder="2100"
-                value={
-                  row.doorTopHeightMmFromGround != null && Number.isFinite(row.doorTopHeightMmFromGround)
-                    ? row.doorTopHeightMmFromGround
-                    : ''
-                }
-                onChange={(e) => {
-                  const raw = e.target.value.trim();
+              <OptionalMmIntegerTextInput
+                valueMm={row.doorTopHeightMmFromGround}
+                onCommitMm={(mm) => {
                   const next = [...rows];
-                  if (raw === '') {
+                  if (mm === undefined) {
                     const { doorTopHeightMmFromGround: _omit, ...rest } = next[idx];
                     next[idx] = rest;
                   } else {
-                    const v = Number(raw);
-                    next[idx] = {
-                      ...next[idx],
-                      doorTopHeightMmFromGround:
-                        Number.isFinite(v) && v > 0 ? Math.round(v) : undefined,
-                    };
+                    next[idx] = { ...next[idx], doorTopHeightMmFromGround: mm };
                   }
                   onRowsChange(next);
                 }}
+                minMm={1}
+                placeholder="2100"
                 className="w-full sm:w-28 rounded border border-gray-300 px-2 py-1 text-xs"
               />
             </label>

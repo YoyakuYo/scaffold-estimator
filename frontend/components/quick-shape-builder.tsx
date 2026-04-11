@@ -33,7 +33,8 @@ import {
   SCAFFOLD_WIDTH_CATALOG_MM,
   SCAFFOLD_WIDTH_NARROW_MM,
 } from '@/lib/scaffold-width-catalog';
-import { formatMmAsMetersLabel, formatMmLabel, mToMm, mmToM } from '@/lib/dimension-meters';
+import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
+import { MeterTextInput } from '@/components/inputs/meter-text-input';
 /** End station 1..10 → X1–Xn / Y1–Yn on drawings */
 const QUICK_SHAPE_STATION_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
 
@@ -652,6 +653,75 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
               className="w-full h-full min-h-[260px]"
             />
           </div>
+          {sidesList.length >= 1 && (
+            <div className="mt-3 rounded-lg border border-blue-200 bg-white p-3 space-y-2 shadow-sm">
+              <p className="text-xs font-semibold text-gray-800">{t('quickBuilder', 'edgePlanPreviewOnly')}</p>
+              <p className="text-[11px] text-gray-500">{t('quickBuilder', 'edgePlanPreviewHint')}</p>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {sidesList.map((side, i) => {
+                  const closed = previewFootprintMm.length >= 3;
+                  const inferred = inferEdgePlanAxisFromVertices(previewFootprintMm, i, closed);
+                  const plan =
+                    edgePlanByLabel[side.label] ?? inferred ?? { axis: 'X' as const, mm: 0 };
+                  const hr = hashiraByLabel[side.label];
+                  const stationParsed =
+                    hr?.countStr?.trim() === '' || hr?.countStr == null
+                      ? Number.NaN
+                      : parseInt(hr.countStr, 10);
+                  const stationEnd =
+                    Number.isFinite(stationParsed) && stationParsed >= 1 && stationParsed <= 10
+                      ? stationParsed
+                      : null;
+                  return (
+                    <div
+                      key={`preview-${side.label}-${i}`}
+                      className="flex flex-wrap items-center gap-2 text-xs border-b border-gray-100 pb-2 last:border-0 last:pb-0"
+                    >
+                      <span className="font-mono font-medium text-gray-800 w-14 shrink-0">{side.label}</span>
+                      <label className="flex items-center gap-1">
+                        <span className="text-gray-500">{t('quickBuilder', 'planAxisColumn')}</span>
+                        <select
+                          value={plan.axis}
+                          onChange={(e) =>
+                            updateEdgePlanAxisForRow(side.label, i, e.target.value as 'X' | 'Y')
+                          }
+                          className="w-[4.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
+                        >
+                          <option value="X">X</option>
+                          <option value="Y">Y</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1 min-w-0">
+                        <span className="text-gray-500 shrink-0">{t('quickBuilder', 'planGridStations')}</span>
+                        <select
+                          value={stationEnd != null ? String(stationEnd) : ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setHashiraByLabel((prev) => ({
+                              ...prev,
+                              [side.label]: {
+                                axis: plan.axis,
+                                countStr: v === '' ? '' : v,
+                              },
+                            }));
+                          }}
+                          className="min-w-[7rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white font-mono"
+                        >
+                          <option value="">{t('quickBuilder', 'planGridStationsPlaceholder')}</option>
+                          {QUICK_SHAPE_STATION_OPTIONS.map((n) => (
+                            <option key={n} value={n}>
+                              {plan.axis}1–{plan.axis}
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="w-full lg:min-w-[320px] lg:max-w-xl lg:flex-1 border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto max-h-[88vh]">
@@ -699,13 +769,11 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
           )}
 
           <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[520px] text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-medium text-gray-600">
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeSideColumn')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'edgeLengthMm')}</th>
-                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planAxisColumn')}</th>
-                  <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'planGridStations')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">CF</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'scaffoldWidth')}</th>
                   <th className="py-2 px-2 whitespace-nowrap">{t('quickBuilder', 'stairAccess')}</th>
@@ -714,84 +782,19 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
               </thead>
               <tbody>
                 {sidesList.map((side, i) => {
-                  const closed = previewFootprintMm.length >= 3;
-                  const inferred = inferEdgePlanAxisFromVertices(previewFootprintMm, i, closed);
-                  const plan =
-                    edgePlanByLabel[side.label] ??
-                    inferred ?? { axis: 'X' as const, mm: 0 };
-                  const hr = hashiraByLabel[side.label];
-                  const stationParsed =
-                    hr?.countStr?.trim() === '' || hr?.countStr == null
-                      ? Number.NaN
-                      : parseInt(hr.countStr, 10);
-                  const stationEnd =
-                    Number.isFinite(stationParsed) && stationParsed >= 1 && stationParsed <= 10
-                      ? stationParsed
-                      : null;
                   const cfVal = normalizeScaffoldWallCfKey(cfNoteByLabel[side.label]);
                   return (
                     <tr key={`${side.label}-${i}`} className="border-b border-gray-100 last:border-0 align-middle">
                       <td className="py-2 px-2 font-medium text-gray-800 whitespace-nowrap">{side.label}</td>
                       <td className="py-2 px-2">
                         <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={side.lengthMm > 0 ? Math.round(mmToM(side.lengthMm) * 10000) / 10000 : ''}
-                            onChange={(e) => {
-                              const m = parseFloat(e.target.value);
-                              updateEdgeLengthAtIndex(i, Number.isFinite(m) ? mToMm(m) : 0);
-                            }}
+                          <MeterTextInput
+                            valueMm={side.lengthMm}
+                            onCommitMm={(mm) => updateEdgeLengthAtIndex(i, mm)}
+                            minMm={600}
                             className="w-24 rounded border border-gray-300 px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500"
-                            min={0.6}
-                            step={0.01}
                           />
                           <span className="text-xs text-gray-500">{mUnit}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-2">
-                        <select
-                          value={plan.axis}
-                          onChange={(e) =>
-                            updateEdgePlanAxisForRow(side.label, i, e.target.value as 'X' | 'Y')
-                          }
-                          className="w-[4.5rem] rounded border border-gray-300 px-1.5 py-1 text-xs bg-white"
-                        >
-                          <option value="X">X</option>
-                          <option value="Y">Y</option>
-                        </select>
-                      </td>
-                      <td className="py-2 px-2 align-top">
-                        <div className="flex flex-col gap-0.5 min-w-[5.5rem]">
-                          <select
-                            value={stationEnd != null ? String(stationEnd) : ''}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setHashiraByLabel((prev) => ({
-                                ...prev,
-                                [side.label]: {
-                                  axis: plan.axis,
-                                  countStr: v === '' ? '' : v,
-                                },
-                              }));
-                            }}
-                            title={(t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''}
-                            className="w-full rounded border border-gray-300 px-1.5 py-1 text-xs bg-white font-mono"
-                          >
-                            <option value="">
-                              {t('quickBuilder', 'planGridStationsPlaceholder')}
-                            </option>
-                            {QUICK_SHAPE_STATION_OPTIONS.map((n) => (
-                              <option key={n} value={n}>
-                                {plan.axis}1–{plan.axis}
-                                {n}
-                              </option>
-                            ))}
-                          </select>
-                          {stationEnd != null ? (
-                            <span className="text-[10px] font-mono text-blue-800 font-semibold">
-                              {`${plan.axis}1\u2013${plan.axis}${stationEnd}`}
-                            </span>
-                          ) : null}
                         </div>
                       </td>
                       <td className="py-2 px-2">
@@ -913,17 +916,12 @@ export function QuickShapeBuilder({ onSubmit, isCalculating, initialDraft, onDra
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('quickBuilder', 'buildingHeight')}</label>
             <div className="flex items-center gap-2 max-w-xs">
-              <input
-                type="number"
-                value={buildingHeightMm >= 1000 ? Math.round(mmToM(buildingHeightMm) * 10000) / 10000 : ''}
-                onChange={(e) => {
-                  const m = parseFloat(e.target.value);
-                  setBuildingHeightMm(Number.isFinite(m) ? Math.max(1000, mToMm(m)) : 1000);
-                }}
+              <MeterTextInput
+                valueMm={buildingHeightMm}
+                onCommitMm={(mm) => setBuildingHeightMm(mm)}
+                minMm={1000}
                 className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                min={1}
-                step={0.01}
-                placeholder={t('scaffoldExtra', 'heightPlaceholderM') || '9.9'}
+                aria-label={t('quickBuilder', 'buildingHeight')}
               />
               <span className="text-sm text-gray-500 shrink-0">{mUnit}</span>
             </div>

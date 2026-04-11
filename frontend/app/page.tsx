@@ -197,6 +197,7 @@ export default function LandingPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [contactMessage, setContactMessage] = useState('');
   const [contactHp, setContactHp] = useState('');
+  const [contactFile, setContactFile] = useState<File | null>(null);
   const [contactSent, setContactSent] = useState(false);
   const [contactDelivery, setContactDelivery] = useState<{
     inApp: boolean;
@@ -211,6 +212,7 @@ export default function LandingPage() {
         email: contactEmail.trim(),
         message: contactMessage.trim(),
         hp: contactHp.trim() || undefined,
+        file: contactFile,
       }),
     onSuccess: (data) => {
       setContactSent(true);
@@ -222,6 +224,7 @@ export default function LandingPage() {
       setContactEmail('');
       setContactMessage('');
       setContactHp('');
+      setContactFile(null);
     },
   });
 
@@ -787,6 +790,15 @@ export default function LandingPage() {
                   {(
                     [
                       {
+                        title: t('billing', 'planTierMonthly'),
+                        prices: [
+                          t('billing', 'planCardMonthlyPrice'),
+                          t('billing', 'planCardMonthlySeats'),
+                          t('billing', 'planCardMonthlyRenewal'),
+                        ],
+                        bullets: [t('billing', 'planCardMonthlyLandingF1')],
+                      },
+                      {
                         title: t('billing', 'planTierBasic'),
                         prices: [
                           t('billing', 'planCardBasicLicense'),
@@ -809,15 +821,6 @@ export default function LandingPage() {
                         ],
                       },
                       {
-                        title: t('billing', 'planTierMonthly'),
-                        prices: [
-                          t('billing', 'planCardMonthlyPrice'),
-                          t('billing', 'planCardMonthlySeats'),
-                          t('billing', 'planCardMonthlyRenewal'),
-                        ],
-                        bullets: [t('billing', 'planCardMonthlyLandingF1')],
-                      },
-                      {
                         title: t('billing', 'planTierPremium'),
                         prices: [
                           t('billing', 'planCardPremiumLicense'),
@@ -834,7 +837,9 @@ export default function LandingPage() {
                   ).map((plan, cardIdx) => (
                     <div
                       key={cardIdx}
-                      className="flex flex-col rounded-2xl border border-gray-200/90 bg-white p-6 shadow-sm ring-1 ring-gray-900/5"
+                      className={`flex flex-col rounded-2xl border border-gray-200/90 bg-white p-6 shadow-sm ring-1 ring-gray-900/5 ${
+                        cardIdx === 0 ? 'ring-2 ring-blue-300/80 border-blue-200' : ''
+                      }`}
                     >
                       <h3 className="text-lg font-bold text-gray-900">{plan.title}</h3>
                       <ul className="mt-3 list-none space-y-1.5 border-b border-gray-100 pb-4 p-0 text-sm font-medium text-gray-800">
@@ -944,6 +949,20 @@ export default function LandingPage() {
                   onChange={(e) => setContactMessage(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
                 />
+              </div>
+              <div>
+                <label htmlFor="landing-contact-file" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('landing', 'contactPlanUpload')}
+                </label>
+                <input
+                  id="landing-contact-file"
+                  name="file"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.dxf,.dwg,.ifc,application/pdf,image/*"
+                  className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border file:border-gray-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-800 hover:file:bg-gray-50"
+                  onChange={(e) => setContactFile(e.target.files?.[0] ?? null)}
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('landing', 'contactPlanUploadHint')}</p>
               </div>
               <div className="absolute -left-[9999px] h-px w-px overflow-hidden" aria-hidden>
                 <label htmlFor="landing-contact-hp">{t('landing', 'contactHpLabel')}</label>

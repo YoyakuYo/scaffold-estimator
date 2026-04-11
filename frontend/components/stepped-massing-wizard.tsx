@@ -13,6 +13,7 @@ import {
 import { visionBimApi, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { normalizeMassingTiersForPreview } from '@/lib/massing-tiers-preview-normalize';
 import { Building3DPreview } from '@/components/scaffold/building-massing-3d-preview';
+import { MmIntegerTextInput } from '@/components/inputs/meter-text-input';
 
 const STEPPED_AI_FILE_ACCEPT =
   'image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp,.dxf,.ifc,application/dxf,model/ifc,application/octet-stream';
@@ -162,12 +163,10 @@ export function SteppedMassingTierPlanSettings({
       ) : (
         <label className="block text-sm font-medium text-gray-700">
           {t('scaffold', 'steppedMassingDepthMm')}
-          <input
-            type="number"
-            min={600}
-            step={100}
-            value={depthMm}
-            onChange={(e) => onDepthMmChange(Math.max(600, Number(e.target.value) || 0))}
+          <MmIntegerTextInput
+            valueMm={depthMm}
+            onCommitMm={(mm) => onDepthMmChange(mm)}
+            minMm={600}
             className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
           />
         </label>
@@ -254,34 +253,28 @@ export function SteppedMassingTierTable({
             <tr key={idx} className="border-t border-gray-100 bg-white">
               <td className="px-3 py-2 text-gray-600">{idx + 1}</td>
               <td className="px-3 py-2">
-                <input
-                  type="number"
-                  min={600}
-                  step={100}
-                  value={len}
-                  onChange={(e) => onTierLengthChange(idx, Number(e.target.value))}
+                <MmIntegerTextInput
+                  valueMm={len}
+                  onCommitMm={(mm) => onTierLengthChange(idx, mm)}
+                  minMm={600}
                   className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
                 />
               </td>
               {dual && (
                 <td className="px-3 py-2">
-                  <input
-                    type="number"
-                    min={600}
-                    step={100}
-                    value={tierDepthsMm?.[idx] ?? 600}
-                    onChange={(e) => onTierDepthChange?.(idx, Number(e.target.value))}
+                  <MmIntegerTextInput
+                    valueMm={tierDepthsMm?.[idx] ?? 600}
+                    onCommitMm={(mm) => onTierDepthChange?.(idx, mm)}
+                    minMm={600}
                     className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
                   />
                 </td>
               )}
               <td className="px-3 py-2">
-                <input
-                  type="number"
-                  min={1000}
-                  step={100}
-                  value={tierHeightsMm[idx] ?? 3000}
-                  onChange={(e) => onTierHeightChange(idx, Number(e.target.value))}
+                <MmIntegerTextInput
+                  valueMm={tierHeightsMm[idx] ?? 3000}
+                  onCommitMm={(mm) => onTierHeightChange(idx, mm)}
+                  minMm={1000}
                   className="w-full max-w-[140px] rounded border border-gray-300 px-2 py-1 text-xs"
                 />
               </td>
@@ -325,9 +318,10 @@ export function SteppedMassingWizard({
   const { t } = useI18n();
   const [depthMm, setDepthMm] = useState(14_000);
   const [taperAxis, setTaperAxis] = useState<TaperAxis>('x');
-  const [tierLengthsMm, setTierLengthsMm] = useState<number[]>([20_000, 20_000]);
-  const [tierHeightsMm, setTierHeightsMm] = useState<number[]>([3000, 3000]);
-  const [tierDepthsMm, setTierDepthsMm] = useState<number[]>(() => [14_000, 14_000]);
+  /** Default: single rectangular tier (no wedding-cake stack); add tiers only when needed. */
+  const [tierLengthsMm, setTierLengthsMm] = useState<number[]>([20_000]);
+  const [tierHeightsMm, setTierHeightsMm] = useState<number[]>([9000]);
+  const [tierDepthsMm, setTierDepthsMm] = useState<number[]>(() => [14_000]);
   const [viewZoom, setViewZoom] = useState(1);
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
   const [steppedAiLoading, setSteppedAiLoading] = useState(false);

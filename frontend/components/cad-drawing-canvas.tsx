@@ -34,8 +34,8 @@ import {
   edgePlanRunDirectionLabel,
   edgePlanRunMagnitudeMm,
   edgePlanRunSign,
-  parsePositiveMetersToMm,
 } from '@/lib/edge-plan-run-ui';
+import { MeterTextInput, OptionalMeterTextInput } from '@/components/inputs/meter-text-input';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -75,12 +75,6 @@ const HASHIRA_STATION_OPTIONS = Array.from(
   { length: EDGE_HASHIRA_STATION_SELECT_MAX },
   (_, i) => i + 1,
 );
-
-function parseMetersInputToMm(s: string): number | null {
-  const v = parseFloat(String(s).trim().replace(',', '.'));
-  if (!Number.isFinite(v) || v <= 0) return null;
-  return mToMm(v);
-}
 
 type Tool = 'select' | 'polyline' | 'rectangle' | 'pan';
 
@@ -145,9 +139,8 @@ export function CadDrawingCanvas({
   pointsRef.current = points;
   mmPerPixelRef.current = mmPerPixel;
 
-  // Dimension editing
-  const [editingEdge, setEditingEdge] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState('');
+  /** Plan axis / station (XY) controls live under the canvas preview only; this selects which edge they edit. */
+  const [planPreviewEdgeIndex, setPlanPreviewEdgeIndex] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -239,6 +232,18 @@ export function CadDrawingCanvas({
       return next;
     });
   }, [edgeCountForDims, isClosed]);
+
+  useEffect(() => {
+    const n = edgeCountForDims;
+    if (n === 0) {
+      setPlanPreviewEdgeIndex(null);
+      return;
+    }
+    setPlanPreviewEdgeIndex((prev) => {
+      if (prev == null) return 0;
+      return Math.min(prev, n - 1);
+    });
+  }, [edgeCountForDims]);
 
   const snapPoint = useCallback(
     (p: CadPoint): CadPoint => {
@@ -418,8 +423,8 @@ export function CadDrawingCanvas({
       const offsetX = -Math.sin(angle) * 16;
       const offsetY = Math.cos(angle) * 16;
 
-      ctx.fillStyle = editingEdge === i ? '#ffd700' : '#e0e0e0';
-      ctx.font = editingEdge === i ? 'bold 13px monospace' : '11px monospace';
+      ctx.fillStyle = planPreviewEdgeIndex === i ? '#ffd700' : '#e0e0e0';
+      ctx.font = planPreviewEdgeIndex === i ? 'bold 13px monospace' : '11px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(
         `${(len / 1000).toFixed(3)}m`,
@@ -495,7 +500,7 @@ export function CadDrawingCanvas({
     pan,
     tool,
     mmPerPixel,
-    editingEdge,
+    planPreviewEdgeIndex,
     calibrationMode,
     calibrationPoints,
     worldToScreen,
@@ -628,7 +633,7 @@ export function CadDrawingCanvas({
   const handleClear = useCallback(() => {
     setPoints([]);
     setIsClosed(false);
-    setEditingEdge(null);
+    setPlanPreviewEdgeIndex(null);
   }, []);
 
   const handleCalibrate = useCallback(() => {
@@ -646,44 +651,37 @@ export function CadDrawingCanvas({
     setCalibrationPoints([]);
   }, [calibrationPoints, calibrationMm]);
 
-  const handleEdgeClick = useCallback(
-    (edgeIndex: number) => {
-      setEditingEdge(edgeIndex);
-      const lenMm = edgeLengthMm(points[edgeIndex], points[(edgeIndex + 1) % points.length]);
-      setEditValue(String(Math.round(mmToM(lenMm) * 10000) / 10000));
+  const handleEdgeRowActivate = useCallback((edgeIndex: number) => {
+    setPlanPreviewEdgeIndex(edgeIndex);
+  }, []);
+
+  const applyEdgeLengthMm = useCallback(
+    (edgeIndex: number, newLenMm: number) => {
+      const newLen = Math.max(600, newLenMm);
+      const i = edgeIndex;
+      const j = (i + 1) % points.length;
+      const a = points[i];
+      const b = points[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const currentPx = Math.hypot(dx, dy);
+      if (currentPx < 0.001) return;
+
+      const targetPx = newLen / mmPerPixel;
+      const scale = targetPx / currentPx;
+      const newB: CadPoint = {
+        x: a.x + dx * scale,
+        y: a.y + dy * scale,
+      };
+
+      setPoints((prev) => {
+        const next = [...prev];
+        next[j] = newB;
+        return next;
+      });
     },
-    [points, edgeLengthMm],
+    [points, mmPerPixel],
   );
-
-  const applyEdgeLength = useCallback(() => {
-    if (editingEdge === null) return;
-    const newLenM = parseFloat(editValue);
-    if (isNaN(newLenM) || newLenM < 0.6) return;
-    const newLen = mToMm(newLenM);
-
-    const i = editingEdge;
-    const j = (i + 1) % points.length;
-    const a = points[i];
-    const b = points[j];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const currentPx = Math.hypot(dx, dy);
-    if (currentPx < 0.001) return;
-
-    const targetPx = newLen / mmPerPixel;
-    const scale = targetPx / currentPx;
-    const newB: CadPoint = {
-      x: a.x + dx * scale,
-      y: a.y + dy * scale,
-    };
-
-    setPoints((prev) => {
-      const next = [...prev];
-      next[j] = newB;
-      return next;
-    });
-    setEditingEdge(null);
-  }, [editingEdge, editValue, points, mmPerPixel]);
 
   const handleComplete = useCallback(() => {
     if (!isClosed || points.length < 3) return;
@@ -778,18 +776,12 @@ export function CadDrawingCanvas({
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-sm text-amber-800">{t('viewer', 'cadRealDimension')}</span>
-              <input
-                type="number"
-                value={calibrationMm != null && calibrationMm > 0 ? Math.round(mmToM(calibrationMm) * 100000) / 100000 : ''}
-                onChange={(e) => {
-                  const m = parseFloat(e.target.value);
-                  setCalibrationMm(Number.isFinite(m) && m > 0 ? mToMm(m) : null);
-                }}
-                placeholder={mUnit}
-                min={0.001}
-                step={0.001}
+              <OptionalMeterTextInput
+                valueMm={calibrationMm}
+                onCommitMm={(mm) => setCalibrationMm(mm)}
+                minMm={1}
                 className="w-28 px-2 py-1 rounded border border-amber-300 text-sm"
-                autoFocus
+                aria-label={t('viewer', 'cadRealDimension')}
               />
               <span className="text-xs text-amber-600">{mUnit}</span>
               <button
@@ -926,6 +918,146 @@ export function CadDrawingCanvas({
                   .replace('{v}', mmToM(mmPerPixel).toFixed(4))}
               </span>
             </div>
+
+            {planPreviewEdgeIndex != null && edgeList[planPreviewEdgeIndex] ? (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-slate-50/90 p-3 space-y-2">
+                {(() => {
+                  const i = planPreviewEdgeIndex;
+                  const lA = String.fromCharCode(65 + (i % 26));
+                  const jv = (i + 1) % points.length;
+                  const lB = String.fromCharCode(65 + (jv % 26));
+                  const planAxis = edgePlanAxesLocal[i] ?? 'X';
+                  const planAxisMm = edgePlanAxisMmLocal[i] ?? 0;
+                  const v0 = vertsMm[i];
+                  const v1 = vertsMm[jv];
+                  const dxM = v0 && v1 ? (v1.x - v0.x) / 1000 : null;
+                  const dyM = v0 && v1 ? (v1.y - v0.y) / 1000 : null;
+                  const hr = hashiraRowsLocal[i] ?? { axis: '' as const, countStr: '' };
+                  const hashiraAxis = hr.axis === 'X' || hr.axis === 'Y' ? hr.axis : null;
+                  const effectiveAxis: 'X' | 'Y' = hashiraAxis ?? planAxis;
+                  const rawStation = hr.countStr.trim();
+                  const stationParsed = rawStation === '' ? Number.NaN : parseInt(rawStation, 10);
+                  const stationEnd =
+                    Number.isFinite(stationParsed) && stationParsed > 0
+                      ? Math.min(500, Math.floor(stationParsed))
+                      : null;
+                  const fieldBox = 'rounded-md border border-gray-200 bg-white p-2 shadow-sm';
+                  return (
+                    <>
+                      <p className="text-[11px] font-semibold text-blue-900">
+                        {(t('scaffoldExtra', 'edgeXYRun') as string) || 'XY'} — {lA}→{lB}
+                      </p>
+                      <div className={fieldBox}>
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          <select
+                            value={effectiveAxis}
+                            onChange={(e) => {
+                              const axis = e.target.value as 'X' | 'Y';
+                              const mmAxis =
+                                axis === 'X' && dxM != null
+                                  ? Math.round(dxM * 1000)
+                                  : axis === 'Y' && dyM != null
+                                    ? Math.round(dyM * 1000)
+                                    : planAxisMm;
+                              setEdgePlanAxesLocal((prev) => {
+                                const n = [...prev];
+                                n[i] = axis;
+                                return n;
+                              });
+                              setEdgePlanAxisMmLocal((prev) => {
+                                const n = [...prev];
+                                n[i] = mmAxis;
+                                return n;
+                              });
+                              setHashiraRowsLocal((prev) => {
+                                const n = [...prev];
+                                const cur = n[i] ?? { axis: '' as const, countStr: '' };
+                                n[i] = { ...cur, axis };
+                                return n;
+                              });
+                            }}
+                            className="w-11 shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-semibold bg-gray-50"
+                          >
+                            <option value="X">X</option>
+                            <option value="Y">Y</option>
+                          </select>
+                          <select
+                            value={stationEnd != null ? String(stationEnd) : ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setHashiraRowsLocal((prev) => {
+                                const n = [...prev];
+                                const cur = n[i] ?? { axis: '' as const, countStr: '' };
+                                n[i] = { ...cur, axis: effectiveAxis, countStr: v === '' ? '' : v };
+                                return n;
+                              });
+                            }}
+                            title={(t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''}
+                            className="min-w-[3.25rem] shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-mono bg-white"
+                          >
+                            <option value="">{t('scaffoldExtra', 'edgePlanStationEnd') || 'To #'}</option>
+                            {HASHIRA_STATION_OPTIONS.map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                          <MeterTextInput
+                            valueMm={edgePlanRunMagnitudeMm(planAxisMm)}
+                            onCommitMm={(magMm) => {
+                              const sign = edgePlanRunSign(planAxisMm);
+                              setEdgePlanAxisMmLocal((prev) => {
+                                const n = [...prev];
+                                n[i] = composeEdgePlanAxisMm(magMm, sign);
+                                return n;
+                              });
+                            }}
+                            minMm={0}
+                            className="min-w-0 w-14 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
+                            aria-label={(t('scaffoldExtra', 'edgePlanRunPositiveHint') as string) || ''}
+                          />
+                          <select
+                            value={edgePlanRunSign(planAxisMm) === 1 ? 'plus' : 'minus'}
+                            onChange={(e) => {
+                              const sign = e.target.value === 'plus' ? 1 : -1;
+                              const mag = edgePlanRunMagnitudeMm(planAxisMm);
+                              setEdgePlanAxisMmLocal((prev) => {
+                                const n = [...prev];
+                                n[i] = composeEdgePlanAxisMm(mag || 0, sign);
+                                return n;
+                              });
+                            }}
+                            title={(t('scaffoldExtra', 'edgePlanRunDirection') as string) || ''}
+                            className="w-[2.85rem] shrink-0 rounded border border-gray-200 px-0.5 py-0.5 text-[10px] font-mono font-semibold bg-white"
+                          >
+                            <option value="plus">
+                              {edgePlanRunDirectionLabel(effectiveAxis, 1)}
+                            </option>
+                            <option value="minus">
+                              {edgePlanRunDirectionLabel(effectiveAxis, -1)}
+                            </option>
+                          </select>
+                          <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
+                        </div>
+                        {stationEnd != null ? (
+                          <p className="text-[10px] font-mono text-blue-900 mt-1 font-semibold">
+                            {`${effectiveAxis}1\u2013${effectiveAxis}${stationEnd}`}
+                          </p>
+                        ) : null}
+                        {dxM != null && dyM != null ? (
+                          <p
+                            className="text-[9px] text-gray-400 mt-0.5 font-mono truncate"
+                            title={(t('scaffoldExtra', 'edgePlanCoordDeltaHint') as string) || ''}
+                          >
+                            ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}
+                          </p>
+                        ) : null}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -936,16 +1068,12 @@ export function CadDrawingCanvas({
               {t('viewer', 'buildingHeight')}
             </label>
             <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                step={0.01}
-                value={buildingHeightMm >= 1000 ? Math.round((buildingHeightMm / 1000) * 1000) / 1000 : ''}
-                onChange={(e) => {
-                  const mm = parseMetersInputToMm(e.target.value);
-                  if (mm != null) onBuildingHeightChange(Math.max(1000, mm));
-                }}
+              <MeterTextInput
+                valueMm={buildingHeightMm}
+                onCommitMm={(mm) => onBuildingHeightChange(mm)}
+                minMm={1000}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                aria-label={t('viewer', 'buildingHeight')}
               />
               <span className="text-sm text-gray-500 w-8">{mUnit}</span>
             </div>
@@ -975,27 +1103,18 @@ export function CadDrawingCanvas({
                   const lB = String.fromCharCode(65 + (jv % 26));
                   const len = edge.lengthMm;
                   const hMm = wallHeightsMmLocal[i] ?? buildingHeightMm;
-                  const planAxis = edgePlanAxesLocal[i] ?? 'X';
-                  const planAxisMm = edgePlanAxisMmLocal[i] ?? 0;
-                  const v0 = vertsMm[i];
-                  const v1 = vertsMm[jv];
-                  const dxM = v0 && v1 ? (v1.x - v0.x) / 1000 : null;
-                  const dyM = v0 && v1 ? (v1.y - v0.y) / 1000 : null;
-                  const hr = hashiraRowsLocal[i] ?? { axis: '' as const, countStr: '' };
-                  const hashiraAxis = hr.axis === 'X' || hr.axis === 'Y' ? hr.axis : null;
-                  const effectiveAxis: 'X' | 'Y' = hashiraAxis ?? planAxis;
-                  const rawStation = hr.countStr.trim();
-                  const stationParsed = rawStation === '' ? Number.NaN : parseInt(rawStation, 10);
-                  const stationEnd =
-                    Number.isFinite(stationParsed) && stationParsed > 0
-                      ? Math.min(500, Math.floor(stationParsed))
-                      : null;
                   const fieldBox = 'rounded-md border border-gray-200 bg-white/90 p-1.5 shadow-sm';
                   return (
                     <div
                       key={i}
-                      className={`rounded-lg border px-2 py-2 transition-colors ${
-                        editingEdge === i
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleEdgeRowActivate(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') handleEdgeRowActivate(i);
+                      }}
+                      className={`rounded-lg border px-2 py-2 transition-colors cursor-pointer ${
+                        planPreviewEdgeIndex === i
                           ? 'bg-blue-50 ring-2 ring-blue-300 border-blue-200'
                           : 'bg-gray-50 border-gray-200'
                       }`}
@@ -1005,173 +1124,36 @@ export function CadDrawingCanvas({
                           {lA}→{lB}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div
+                        className="grid grid-cols-2 lg:grid-cols-3 gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
                         <div className={fieldBox}>
                           <span className="text-[10px] text-gray-500 block mb-0.5">L ({mUnit})</span>
-                          {editingEdge === i ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && applyEdgeLength()}
-                                className="w-full px-1.5 py-0.5 border border-blue-300 rounded text-[11px] font-mono"
-                                autoFocus
-                                min={0.6}
-                                step={0.001}
-                              />
-                              <button type="button" onClick={applyEdgeLength} className="text-green-600 shrink-0">
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleEdgeClick(i)}
-                              className="w-full text-left px-1.5 py-0.5 text-[11px] font-mono text-gray-800 hover:bg-gray-50 rounded"
-                            >
-                              {(len / 1000).toFixed(3)}
-                            </button>
-                          )}
-                        </div>
-                        <div className={fieldBox}>
-                          <span className="text-[10px] text-gray-500 block mb-0.5">H ({mUnit})</span>
-                          <input
-                            type="number"
-                            min={1}
-                            step={0.01}
-                            value={hMm >= 1000 ? Math.round((hMm / 1000) * 1000) / 1000 : ''}
-                            onChange={(e) => {
-                              const mm = parseMetersInputToMm(e.target.value);
-                              if (mm != null && mm >= 1000) {
-                                setWallHeightsMmLocal((prev) => {
-                                  const n = [...prev];
-                                  n[i] = mm;
-                                  return n;
-                                });
-                              }
-                            }}
+                          <MeterTextInput
+                            valueMm={len}
+                            onCommitMm={(mm) => applyEdgeLengthMm(i, mm)}
+                            minMm={600}
                             className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
+                            aria-label={`L ${lA}→${lB}`}
                           />
                         </div>
                         <div className={fieldBox}>
-                          <span className="text-[10px] text-gray-500 block mb-0.5">
-                            {t('scaffoldExtra', 'edgeXYRun') || 'XY'}
-                          </span>
-                          <div className="flex flex-wrap gap-1.5 items-center">
-                            <select
-                              value={effectiveAxis}
-                              onChange={(e) => {
-                                const axis = e.target.value as 'X' | 'Y';
-                                const mmAxis =
-                                  axis === 'X' && dxM != null
-                                    ? Math.round(dxM * 1000)
-                                    : axis === 'Y' && dyM != null
-                                      ? Math.round(dyM * 1000)
-                                      : planAxisMm;
-                                setEdgePlanAxesLocal((prev) => {
-                                  const n = [...prev];
-                                  n[i] = axis;
-                                  return n;
-                                });
-                                setEdgePlanAxisMmLocal((prev) => {
-                                  const n = [...prev];
-                                  n[i] = mmAxis;
-                                  return n;
-                                });
-                                setHashiraRowsLocal((prev) => {
-                                  const n = [...prev];
-                                  const cur = n[i] ?? { axis: '' as const, countStr: '' };
-                                  n[i] = { ...cur, axis };
-                                  return n;
-                                });
-                              }}
-                              className="w-11 shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-semibold bg-gray-50"
-                            >
-                              <option value="X">X</option>
-                              <option value="Y">Y</option>
-                            </select>
-                            <select
-                              value={stationEnd != null ? String(stationEnd) : ''}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setHashiraRowsLocal((prev) => {
-                                  const n = [...prev];
-                                  const cur = n[i] ?? { axis: '' as const, countStr: '' };
-                                  n[i] = { ...cur, axis: effectiveAxis, countStr: v === '' ? '' : v };
-                                  return n;
-                                });
-                              }}
-                              title={(t('scaffoldExtra', 'edgePlanStationEndHint') as string) || ''}
-                              className="min-w-[3.25rem] shrink-0 rounded border border-gray-200 px-1 py-0.5 text-[11px] font-mono bg-white"
-                            >
-                              <option value="">{t('scaffoldExtra', 'edgePlanStationEnd') || 'To #'}</option>
-                              {HASHIRA_STATION_OPTIONS.map((n) => (
-                                <option key={n} value={n}>
-                                  {n}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="number"
-                              step="any"
-                              min={0}
-                              value={
-                                edgePlanRunMagnitudeMm(planAxisMm) > 0
-                                  ? Math.round(
-                                      (edgePlanRunMagnitudeMm(planAxisMm) / 1000) * 10000,
-                                    ) / 10000
-                                  : ''
-                              }
-                              onChange={(e) => {
-                                const magMm = parsePositiveMetersToMm(e.target.value);
-                                if (magMm == null) return;
-                                const sign = edgePlanRunSign(planAxisMm);
-                                setEdgePlanAxisMmLocal((prev) => {
-                                  const n = [...prev];
-                                  n[i] = composeEdgePlanAxisMm(magMm, sign);
-                                  return n;
-                                });
-                              }}
-                              className="min-w-0 w-14 flex-1 px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
-                              title={(t('scaffoldExtra', 'edgePlanRunPositiveHint') as string) || ''}
-                            />
-                            <select
-                              value={edgePlanRunSign(planAxisMm) === 1 ? 'plus' : 'minus'}
-                              onChange={(e) => {
-                                const sign = e.target.value === 'plus' ? 1 : -1;
-                                const mag = edgePlanRunMagnitudeMm(planAxisMm);
-                                setEdgePlanAxisMmLocal((prev) => {
-                                  const n = [...prev];
-                                  n[i] = composeEdgePlanAxisMm(mag || 0, sign);
-                                  return n;
-                                });
-                              }}
-                              title={(t('scaffoldExtra', 'edgePlanRunDirection') as string) || ''}
-                              className="w-[2.85rem] shrink-0 rounded border border-gray-200 px-0.5 py-0.5 text-[10px] font-mono font-semibold bg-white"
-                            >
-                              <option value="plus">
-                                {edgePlanRunDirectionLabel(effectiveAxis, 1)}
-                              </option>
-                              <option value="minus">
-                                {edgePlanRunDirectionLabel(effectiveAxis, -1)}
-                              </option>
-                            </select>
-                            <span className="text-[10px] text-gray-400 shrink-0">{mUnit}</span>
-                          </div>
-                          {stationEnd != null ? (
-                            <p className="text-[10px] font-mono text-blue-900 mt-0.5 font-semibold">
-                              {`${effectiveAxis}1\u2013${effectiveAxis}${stationEnd}`}
-                            </p>
-                          ) : null}
-                          {dxM != null && dyM != null ? (
-                            <p
-                              className="text-[9px] text-gray-400 mt-0.5 font-mono truncate"
-                              title={(t('scaffoldExtra', 'edgePlanCoordDeltaHint') as string) || ''}
-                            >
-                              ΔX {dxM.toFixed(2)} · ΔY {dyM.toFixed(2)} {mUnit}
-                            </p>
-                          ) : null}
+                          <span className="text-[10px] text-gray-500 block mb-0.5">H ({mUnit})</span>
+                          <MeterTextInput
+                            valueMm={hMm}
+                            onCommitMm={(mm) => {
+                              setWallHeightsMmLocal((prev) => {
+                                const n = [...prev];
+                                n[i] = mm;
+                                return n;
+                              });
+                            }}
+                            minMm={1000}
+                            className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-[11px] font-mono"
+                            aria-label={`H ${lA}→${lB}`}
+                          />
                         </div>
                         <div className={fieldBox}>
                           <span className="text-[10px] text-gray-500 block mb-0.5">CF</span>

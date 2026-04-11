@@ -111,6 +111,11 @@ import {
 } from '@/lib/scaffold-width-catalog';
 import { normalizeMassingTiersForPreview } from '@/lib/massing-tiers-preview-normalize';
 import { Building3DPreview } from '@/components/scaffold/building-massing-3d-preview';
+import {
+  MeterTextInput,
+  MmIntegerTextInput,
+  OptionalMmIntegerTextInput,
+} from '@/components/inputs/meter-text-input';
 
 /** Legacy full-plan AI extraction tab. Hidden by default; set `NEXT_PUBLIC_SHOW_LEGACY_AI_EXTRACT_TAB=true` to show. */
 const SHOW_LEGACY_AI_EXTRACT_TAB = process.env.NEXT_PUBLIC_SHOW_LEGACY_AI_EXTRACT_TAB === 'true';
@@ -2389,16 +2394,10 @@ function ScaffoldPageContent() {
                       </div>
                     ) : (
                     <div className="flex items-center gap-2 max-w-[220px]">
-                      <input
-                        type="number"
-                        value={
-                          aiBimPreview.buildingHeightMm >= 1000
-                            ? Math.round(mmToM(aiBimPreview.buildingHeightMm) * 10000) / 10000
-                            : ''
-                        }
-                        onChange={(e) => {
-                          const m = parseFloat(e.target.value);
-                          const h = Math.max(1000, Number.isFinite(m) ? mToMm(m) : 1000);
+                      <MeterTextInput
+                        valueMm={Math.max(1000, aiBimPreview.buildingHeightMm)}
+                        onCommitMm={(mm) => {
+                          const h = Math.max(1000, mm);
                           const newWalls = aiBimPreview.isStepped
                             ? aiBimPreview.walls.map((w) => w)
                             : aiBimPreview.walls.map((w) => ({ ...w, wallHeightMm: h }));
@@ -2409,8 +2408,7 @@ function ScaffoldPageContent() {
                             dto: { ...aiBimPreview.dto, walls: newWalls },
                           });
                         }}
-                        min={1}
-                        step={0.01}
+                        minMm={1000}
                         className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-violet-500"
                       />
                       <span className="text-xs text-gray-500 shrink-0">m</span>
@@ -2469,14 +2467,12 @@ function ScaffoldPageContent() {
                                 {edgeChordName(i, aiBimPreview.walls.length, aiBimPreview.walls.length >= 3)}
                               </td>
                               <td className="py-2 px-3 text-right">
-                                <input
-                                  type="number"
-                                  value={w.wallLengthMm > 0 ? Math.round(mmToM(w.wallLengthMm) * 10000) / 10000 : ''}
-                                  onChange={(e) => {
-                                    const m = parseFloat(e.target.value);
-                                    const len = Math.max(600, Number.isFinite(m) ? mToMm(m) : 600);
+                                <MeterTextInput
+                                  valueMm={w.wallLengthMm}
+                                  onCommitMm={(len) => {
+                                    const mm = Math.max(600, len);
                                     const newWalls = aiBimPreview.walls.map((wall, j) =>
-                                      j === i ? { ...wall, wallLengthMm: len } : wall,
+                                      j === i ? { ...wall, wallLengthMm: mm } : wall,
                                     );
                                     setAiBimPreview({
                                       ...aiBimPreview,
@@ -2484,21 +2480,15 @@ function ScaffoldPageContent() {
                                       dto: { ...aiBimPreview.dto, walls: newWalls },
                                     });
                                   }}
-                                  min={0.6}
-                                  step={0.01}
+                                  minMm={600}
                                   className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right font-mono focus:ring-2 focus:ring-violet-500"
                                 />
                               </td>
                               <td className="py-2 px-3 text-right">
-                                <input
-                                  type="number"
-                                  value={(() => {
-                                    const hMm = w.wallHeightMm ?? aiBimPreview.buildingHeightMm;
-                                    return hMm >= 1000 ? Math.round(mmToM(hMm) * 10000) / 10000 : '';
-                                  })()}
-                                  onChange={(e) => {
-                                    const m = parseFloat(e.target.value);
-                                    const h = Math.max(1000, Number.isFinite(m) ? mToMm(m) : 1000);
+                                <MeterTextInput
+                                  valueMm={w.wallHeightMm ?? aiBimPreview.buildingHeightMm}
+                                  onCommitMm={(mm) => {
+                                    const h = Math.max(1000, mm);
                                     const newWalls = aiBimPreview.walls.map((wall, j) =>
                                       j === i ? { ...wall, wallHeightMm: h } : wall,
                                     );
@@ -2512,8 +2502,7 @@ function ScaffoldPageContent() {
                                       dto: { ...aiBimPreview.dto, walls: newWalls },
                                     });
                                   }}
-                                  min={1}
-                                  step={0.01}
+                                  minMm={1000}
                                   className="w-20 rounded border border-gray-300 px-2 py-1 text-xs text-right font-mono focus:ring-2 focus:ring-violet-500"
                                 />
                               </td>
@@ -2931,31 +2920,27 @@ function ScaffoldPageContent() {
                           </label>
                           <label className="flex flex-col gap-0.5">
                             <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorPositionMm')}</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={Number.isFinite(row.positionMm) ? row.positionMm : ''}
-                              onChange={(e) => {
-                                const v = Number(e.target.value);
+                            <MmIntegerTextInput
+                              valueMm={Number.isFinite(row.positionMm) ? row.positionMm : 0}
+                              onCommitMm={(mm) => {
                                 const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
-                                next[idx] = { ...next[idx], positionMm: Number.isFinite(v) ? v : 0 };
+                                next[idx] = { ...next[idx], positionMm: mm };
                                 setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
                               }}
+                              minMm={0}
                               className="w-full sm:w-24 rounded border border-gray-300 px-2 py-1 text-xs"
                             />
                           </label>
                           <label className="flex flex-col gap-0.5">
                             <span className="text-[10px] text-gray-600 sm:hidden">{t('scaffold', 'manualDoorWidthMm')}</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={Number.isFinite(row.widthMm) ? row.widthMm : ''}
-                              onChange={(e) => {
-                                const v = Number(e.target.value);
+                            <MmIntegerTextInput
+                              valueMm={Number.isFinite(row.widthMm) ? row.widthMm : 1800}
+                              onCommitMm={(mm) => {
                                 const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
-                                next[idx] = { ...next[idx], widthMm: Number.isFinite(v) ? v : 1800 };
+                                next[idx] = { ...next[idx], widthMm: Math.max(1, mm) };
                                 setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
                               }}
+                              minMm={1}
                               className="w-full sm:w-24 rounded border border-gray-300 px-2 py-1 text-xs"
                             />
                           </label>
@@ -2963,32 +2948,20 @@ function ScaffoldPageContent() {
                             <span className="text-[10px] text-gray-600 sm:hidden">
                               {t('scaffold', 'manualDoorTopHeightMmFromGround')}
                             </span>
-                            <input
-                              type="number"
-                              min={1}
-                              placeholder="2100"
-                              value={
-                                row.doorTopHeightMmFromGround != null &&
-                                Number.isFinite(row.doorTopHeightMmFromGround)
-                                  ? row.doorTopHeightMmFromGround
-                                  : ''
-                              }
-                              onChange={(e) => {
-                                const raw = e.target.value.trim();
+                            <OptionalMmIntegerTextInput
+                              valueMm={row.doorTopHeightMmFromGround}
+                              onCommitMm={(mm) => {
                                 const next = [...(aiBimPreview.manualDoorOpenings ?? [])];
-                                if (raw === '') {
+                                if (mm === undefined) {
                                   const { doorTopHeightMmFromGround: _omit, ...rest } = next[idx];
                                   next[idx] = rest;
                                 } else {
-                                  const v = Number(raw);
-                                  next[idx] = {
-                                    ...next[idx],
-                                    doorTopHeightMmFromGround:
-                                      Number.isFinite(v) && v > 0 ? Math.round(v) : undefined,
-                                  };
+                                  next[idx] = { ...next[idx], doorTopHeightMmFromGround: mm };
                                 }
                                 setAiBimPreview({ ...aiBimPreview, manualDoorOpenings: next });
                               }}
+                              minMm={1}
+                              placeholder="2100"
                               className="w-full sm:w-28 rounded border border-gray-300 px-2 py-1 text-xs"
                             />
                           </label>
@@ -3414,29 +3387,22 @@ function ScaffoldPageContent() {
                   </div>
                   <div className="flex items-center gap-1">
                     <label className="text-xs text-gray-500 whitespace-nowrap">{t('scaffold', 'wallLength')}</label>
-                    <input
-                      type="number"
-                      min={0.6}
-                      step={0.01}
-                      value={(() => {
-                        const mm =
-                          wall.isMultiSegment && wall.segments.length > 0
-                            ? calcTotalFromSegments(wall.segments)
-                            : wall.lengthMm;
-                        return mm > 0 ? Math.round(mm) / 1000 : '';
-                      })()}
-                      onChange={(e) => {
+                    <MeterTextInput
+                      valueMm={
+                        wall.isMultiSegment && wall.segments.length > 0
+                          ? calcTotalFromSegments(wall.segments)
+                          : wall.lengthMm
+                      }
+                      onCommitMm={(mm) => {
                         if (wall.isMultiSegment) return;
-                        const v = parseFloat(e.target.value);
-                        if (!Number.isFinite(v) || v <= 0) return;
-                        updateWall(i, { lengthMm: Math.round(v * 1000) });
+                        updateWall(i, { lengthMm: mm });
                       }}
+                      minMm={600}
                       disabled={!wall.enabled || wall.isMultiSegment}
-                      readOnly={wall.isMultiSegment}
                       className={`w-[4.25rem] rounded border px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${
                         wall.isMultiSegment ? 'border-orange-300 bg-orange-50 text-orange-800' : 'border-gray-300'
                       }`}
-                      onClick={(e) => e.stopPropagation()}
+                      aria-label={t('scaffold', 'wallLength')}
                     />
                     <span className="text-xs text-gray-400">m</span>
                     {wall.isMultiSegment && (
@@ -3445,19 +3411,13 @@ function ScaffoldPageContent() {
                   </div>
                   <div className="flex items-center gap-1">
                     <label className="text-xs text-gray-500 whitespace-nowrap">{t('scaffold', 'wallHeight')}</label>
-                    <input
-                      type="number"
-                      min={1}
-                      step={0.01}
-                      value={wall.heightMm > 0 ? Math.round(wall.heightMm) / 1000 : ''}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value);
-                        if (!Number.isFinite(v) || v <= 0) return;
-                        updateWall(i, { heightMm: Math.round(v * 1000) });
-                      }}
+                    <MeterTextInput
+                      valueMm={wall.heightMm}
+                      onCommitMm={(mm) => updateWall(i, { heightMm: mm })}
+                      minMm={1000}
                       disabled={!wall.enabled}
                       className="w-[4.25rem] rounded border border-gray-300 px-1.5 py-1 text-xs focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                      onClick={(e) => e.stopPropagation()}
+                      aria-label={t('scaffold', 'wallHeight')}
                     />
                     <span className="text-xs text-gray-400">m</span>
                   </div>
@@ -3694,39 +3654,30 @@ function ScaffoldPageContent() {
                               <span className="text-xs font-medium text-orange-700 w-6">{segIdx + 1}.</span>
                             <div className="flex items-center gap-1">
                               <label className="text-xs text-gray-600">L (m):</label>
-                              <input
-                                type="number"
-                                value={seg.lengthMm > 0 ? Math.round(mmToM(seg.lengthMm) * 10000) / 10000 : ''}
-                                onChange={(e) => {
-                                  const m = parseFloat(e.target.value);
-                                  const lenMm = Number.isFinite(m) ? mToMm(m) : 0;
+                              <MeterTextInput
+                                valueMm={seg.lengthMm}
+                                onCommitMm={(lenMm) => {
                                   const newSegs = [...wall.segments];
                                   newSegs[segIdx] = { ...newSegs[segIdx], lengthMm: lenMm };
                                   const total = calcTotalFromSegments(newSegs);
                                   updateWall(i, { segments: newSegs, lengthMm: total });
                                 }}
-                                placeholder="5"
+                                minMm={600}
                                 className="w-24 rounded border border-orange-300 px-2 py-1 text-xs focus:ring-1 focus:ring-orange-500"
-                                min={0.6}
-                                step={0.01}
                               />
                             </div>
                             <div className="flex items-center gap-1">
                               <label className="text-xs text-gray-600">Offset (m):</label>
-                              <input
-                                type="number"
-                                value={Math.round(mmToM(seg.offsetMm) * 10000) / 10000}
-                                onChange={(e) => {
-                                  const m = parseFloat(e.target.value);
-                                  const offMm = Number.isFinite(m) ? mToMm(m) : 0;
+                              <MeterTextInput
+                                valueMm={seg.offsetMm}
+                                onCommitMm={(offMm) => {
                                   const newSegs = [...wall.segments];
                                   newSegs[segIdx] = { ...newSegs[segIdx], offsetMm: offMm };
                                   const total = calcTotalFromSegments(newSegs);
                                   updateWall(i, { segments: newSegs, lengthMm: total });
                                 }}
-                                placeholder="0"
+                                minMm={0}
                                 className="w-20 rounded border border-orange-300 px-2 py-1 text-xs focus:ring-1 focus:ring-orange-500"
-                                step={0.01}
                               />
                             </div>
                             <button

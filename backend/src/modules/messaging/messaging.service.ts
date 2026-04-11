@@ -6,6 +6,9 @@ import {
   InternalServerErrorException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import { Conversation } from './conversation.entity';
 import { Message } from './message.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -222,6 +225,7 @@ export class MessagingService {
     email: string,
     message: string,
     honeypot?: string,
+    file?: Express.Multer.File,
   ): Promise<{ ok: boolean; inAppDelivered: boolean; emailSent: boolean }> {
     if (honeypot?.trim()) {
       this.logger.warn(
@@ -232,6 +236,27 @@ export class MessagingService {
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
     const trimmedMessage = message.trim();
+
+    let mailAttachment: { filename: string; content: Buffer } | undefined;
+    let inboxMessageBody = trimmedMessage;
+    if (file?.buffer?.length) {
+      const ext = path.extname(file.originalname || '').slice(0, 12) || '.bin';
+      const safe = `${randomUUID()}${ext}`;
+      const dir = path.join(process.cwd(), 'uploads', 'landing-contact');
+      await fs.mkdir(dir, { recursive: true });
+      const fullPath = path.join(dir, safe);
+      await fs.writeFile(fullPath, file.buffer);
+      mailAttachment = {
+        filename: (file.originalname || safe).slice(0, 200),
+        content: file.buffer,
+      };
+      inboxMessageBody = [
+        trimmedMessage,
+        '',
+        `[Uploaded plan file: ${file.originalname || safe}]`,
+        `[File ID: ${safe} — superadmin download: GET /api/v1/messages/admin/landing-contact-files/${safe}]`,
+      ].join('\n');
+    }
     const client = this.supabase.getClient();
     const { data: admins, error } = await client.from('users').select('id, email').eq('role', 'superadmin');
     if (error) {
@@ -246,7 +271,7 @@ export class MessagingService {
         'Contact is temporarily unavailable. Please try again later or reach us by email.',
       );
     }
-    const preview = trimmedMessage.slice(0, 200) + (trimmedMessage.length > 200 ? '…' : '');
+    const preview = inboxMessageBody.slice(0, 200) + (inboxMessageBody.length > 200 ? '…' : '');
     const emailed = new Set<string>();
     let inAppDelivered = 0;
     let emailSent = false;
@@ -260,7 +285,7 @@ export class MessagingService {
           `Name: ${trimmedName}`,
           `Email: ${trimmedEmail}`,
           '',
-          trimmedMessage,
+          inboxMessageBody,
         ].join('\n');
         await this.sendMessage(conv.id, landingUserId, inboxBody);
         inAppDelivered = 1;
@@ -297,6 +322,7 @@ export class MessagingService {
           trimmedName,
           trimmedEmail,
           trimmedMessage,
+          mailAttachment,
         );
         if (sent) emailSent = true;
       }

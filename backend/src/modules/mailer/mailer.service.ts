@@ -135,7 +135,13 @@ export class MailerService implements OnModuleInit {
     return { email: raw.trim() };
   }
 
-  private async sendWithBrevo(to: string, subject: string, text: string, html?: string): Promise<void> {
+  private async sendWithBrevo(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+    attachment?: { filename: string; content: Buffer },
+  ): Promise<void> {
     const apiKey = this.getBrevoApiKey();
     if (!apiKey) throw new Error('Brevo API key missing');
     const from = this.parseFrom();
@@ -154,6 +160,16 @@ export class MailerService implements OnModuleInit {
         subject,
         textContent: text,
         ...(html ? { htmlContent: html } : {}),
+        ...(attachment
+          ? {
+              attachment: [
+                {
+                  name: attachment.filename.slice(0, 200),
+                  content: attachment.content.toString('base64'),
+                },
+              ],
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(45_000),
     });
@@ -164,7 +180,13 @@ export class MailerService implements OnModuleInit {
     }
   }
 
-  private async sendWithSendGrid(to: string, subject: string, text: string, html?: string): Promise<void> {
+  private async sendWithSendGrid(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+    attachment?: { filename: string; content: Buffer },
+  ): Promise<void> {
     const apiKey = this.getSendGridApiKey();
     if (!apiKey) throw new Error('SendGrid API key missing');
     const from = this.parseFrom();
@@ -184,6 +206,18 @@ export class MailerService implements OnModuleInit {
           { type: 'text/plain', value: text },
           ...(html ? [{ type: 'text/html', value: html }] : []),
         ],
+        ...(attachment
+          ? {
+              attachments: [
+                {
+                  content: attachment.content.toString('base64'),
+                  filename: attachment.filename.slice(0, 200),
+                  type: 'application/octet-stream',
+                  disposition: 'attachment',
+                },
+              ],
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(45_000),
     });
@@ -194,21 +228,43 @@ export class MailerService implements OnModuleInit {
     }
   }
 
-  async send(to: string, subject: string, text: string, html?: string): Promise<void> {
+  async send(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+    attachment?: { filename: string; content: Buffer },
+  ): Promise<void> {
     if (!this.mailConfigured()) return;
     if (this.getBrevoApiKey()) {
-      await this.sendWithBrevo(to, subject, text, html);
+      await this.sendWithBrevo(to, subject, text, html, attachment);
       return;
     }
     if (this.getSendGridApiKey()) {
-      await this.sendWithSendGrid(to, subject, text, html);
+      await this.sendWithSendGrid(to, subject, text, html, attachment);
       return;
     }
     if (!this.transport) return;
     const from = this.resolveFromHeader();
     const smtpHost = this.configService.get<string>('SMTP_HOST')?.trim() || '';
     try {
-      await this.transport.sendMail({ from, to, subject, text, html: html || text });
+      await this.transport.sendMail({
+        from,
+        to,
+        subject,
+        text,
+        html: html || text,
+        ...(attachment
+          ? {
+              attachments: [
+                {
+                  filename: attachment.filename.slice(0, 200),
+                  content: attachment.content,
+                },
+              ],
+            }
+          : {}),
+      });
     } catch (e) {
       const msg = (e as Error)?.message || String(e);
       const isTimeout = /timeout|ETIMEDOUT|ECONNRESET|Connection timeout/i.test(msg);
@@ -305,7 +361,13 @@ ${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
    * Landing page contact form — sent to each superadmin inbox.
    * @returns true if an email was sent; false if mail is not configured; throws on transport/API failure.
    */
-  async sendLandingContactEmail(to: string, name: string, fromEmail: string, message: string): Promise<boolean> {
+  async sendLandingContactEmail(
+    to: string,
+    name: string,
+    fromEmail: string,
+    message: string,
+    attachment?: { filename: string; content: Buffer },
+  ): Promise<boolean> {
     if (!this.mailConfigured()) {
       this.logger.warn(
         'Landing contact email skipped: set BREVO_API_KEY or SENDGRID_API_KEY with SMTP_FROM, or SMTP_HOST+SMTP_USER+SMTP_PASS (see ENV_SETUP.md).',
@@ -322,13 +384,16 @@ ${branchName ? `<p>Branch: <strong>${escapeHtml(branchName)}</strong></p>` : ''}
       'Message:',
       message.trim(),
       '',
+      attachment ? `Attached: ${attachment.filename}` : '',
+      '',
       'Reply directly to the visitor by email.',
     ].join('\n');
     const html = `<p><strong>Landing page contact</strong></p>
 <p>Name: ${escapeHtml(name)}<br/>Email: <a href="mailto:${escapeHtml(fromEmail)}">${escapeHtml(fromEmail)}</a></p>
-<p style="white-space:pre-wrap;">${escapeHtml(message.trim())}</p>`;
+<p style="white-space:pre-wrap;">${escapeHtml(message.trim())}</p>
+${attachment ? `<p><em>Attachment: ${escapeHtml(attachment.filename)}</em></p>` : ''}`;
     try {
-      await this.send(to, subject, text, html);
+      await this.send(to, subject, text, html, attachment);
       return true;
     } catch (e) {
       const msg = (e as Error)?.message || String(e);
