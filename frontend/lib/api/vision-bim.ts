@@ -151,7 +151,7 @@ export const visionBimApi = {
   },
 
   /**
-   * Stepped massing: upload elevation / 3D render (PNG, JPEG, WebP, GIF, BMP).
+   * AI stepped massing: raster elevation/render (vision) or DXF/IFC (deterministic tiers/footprint).
    * Returns suggested depth, taper axis, and per-tier lengths/heights for the wizard.
    */
   analyzeSteppedMassing: async (file: File): Promise<SteppedMassingAiResult> => {

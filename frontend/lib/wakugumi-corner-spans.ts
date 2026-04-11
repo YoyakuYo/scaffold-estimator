@@ -40,54 +40,6 @@ function exactSumWithStandardSpans(target: number, spanSizesMm: readonly number[
   return raw.sort((a, b) => b - a);
 }
 
-function splitOneMiddleSpanInPlace(spans: number[], spanSizes: readonly number[]): boolean {
-  const set = new Set(spanSizes);
-  const positives = [...set].filter((n) => Number.isFinite(n) && n > 0);
-  if (positives.length === 0) return false;
-  const minSpan = Math.min(...positives);
-  let bestI = -1;
-  let bestA = 0;
-  let bestB = 0;
-  let bestSpan = -1;
-  for (let i = 0; i < spans.length; i++) {
-    const s = spans[i];
-    if (s === undefined || s <= minSpan) continue;
-    for (const a of spanSizes) {
-      const b = s - a;
-      if (b > 0 && set.has(b)) {
-        if (s > bestSpan) {
-          bestSpan = s;
-          bestI = i;
-          bestA = a;
-          bestB = b;
-        }
-      }
-    }
-  }
-  if (bestI < 0) return false;
-  const hi = Math.max(bestA, bestB);
-  const lo = Math.min(bestA, bestB);
-  spans.splice(bestI, 1, hi, lo);
-  return true;
-}
-
-function expandMiddleSpansToTargetCount(
-  middleSpans: number[],
-  middleMm: number,
-  spanSizes: readonly number[],
-  cornerStartMm: number,
-): number[] {
-  const spans = [...middleSpans];
-  const sum = spans.reduce((a, b) => a + b, 0);
-  if (sum !== middleMm || middleMm <= 0) return spans;
-  const target = Math.ceil(middleMm / cornerStartMm) + 1;
-  let guard = 0;
-  while (spans.length < target && guard++ < 40) {
-    if (!splitOneMiddleSpanInPlace(spans, spanSizes)) break;
-  }
-  return spans;
-}
-
 function fitSpansToWallLengthWithOverrun(
   wallLengthMm: number,
   spanSizesMm: number[],
@@ -259,13 +211,7 @@ export function fitSpansToWallLengthWithCornerWakugumi(
   if (middleMmNew === 0) {
     return [WAKUGUMI_CORNER_START_SPAN_MM, terminal];
   }
-  let middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, WAKUGUMI_SPAN_SIZES, 0);
-  middleSpans = expandMiddleSpansToTargetCount(
-    middleSpans,
-    middleMmNew,
-    WAKUGUMI_SPAN_SIZES,
-    WAKUGUMI_CORNER_START_SPAN_MM,
-  );
+  const middleSpans = fitSpansToWallLengthWithOverrun(middleMmNew, WAKUGUMI_SPAN_SIZES, 0);
   return [
     WAKUGUMI_CORNER_START_SPAN_MM,
     ...finalizeStandardSpanRowWithNominal(middleSpans),

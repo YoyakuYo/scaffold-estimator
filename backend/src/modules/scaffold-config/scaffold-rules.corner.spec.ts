@@ -234,7 +234,7 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
     const sum = spans.reduce((a, b) => a + b, 0);
     const runT = wallMm + WAKUGUMI_CORNER_OVERRUN_MM + term;
     expect(sum).toBeGreaterThanOrEqual(runT);
-    // Middle packing / expandMiddleSpansToTargetCount may add small slack over exact runTarget.
+    // Middle packing may exceed runTarget slightly when no exact catalog sum exists.
     expect(sum).toBeLessThanOrEqual(runT + 200);
   });
 

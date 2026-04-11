@@ -14,7 +14,6 @@ import {
   SizeOption,
   AnchiLayout,
   cornerTerminalSpanMmKusabi,
-  expandMiddleSpansToTargetCount,
   exactSumWithStandardSpans,
   finalizeStandardSpanRowWithNominal,
   normalizeScaffoldWidthMmToCatalog,
@@ -289,16 +288,10 @@ export function fitSpansToWallLengthWithCornerWakugumi(
   if (middleMmNew === 0) {
     return [WAKUGUMI_CORNER_START_SPAN_MM, terminal];
   }
-  let middleSpans = fitSpansToWallLengthWithOverrun(
+  const middleSpans = fitSpansToWallLengthWithOverrun(
     middleMmNew,
     WAKUGUMI_SPAN_SIZES,
     0,
-  );
-  middleSpans = expandMiddleSpansToTargetCount(
-    middleSpans,
-    middleMmNew,
-    WAKUGUMI_SPAN_SIZES,
-    WAKUGUMI_CORNER_START_SPAN_MM,
   );
   return [
     WAKUGUMI_CORNER_START_SPAN_MM,

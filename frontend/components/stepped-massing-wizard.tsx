@@ -14,7 +14,8 @@ import { visionBimApi, type VisionMassingTier } from '@/lib/api/vision-bim';
 import { normalizeMassingTiersForPreview } from '@/lib/massing-tiers-preview-normalize';
 import { Building3DPreview } from '@/components/scaffold/building-massing-3d-preview';
 
-const STEPPED_AI_IMAGE_ACCEPT = 'image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp';
+const STEPPED_AI_FILE_ACCEPT =
+  'image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp,.dxf,.ifc,application/dxf,model/ifc,application/octet-stream';
 
 function applySteppedMassingAiToState(
   result: Awaited<ReturnType<typeof visionBimApi.analyzeSteppedMassing>>,
@@ -324,11 +325,9 @@ export function SteppedMassingWizard({
   const { t } = useI18n();
   const [depthMm, setDepthMm] = useState(14_000);
   const [taperAxis, setTaperAxis] = useState<TaperAxis>('x');
-  const [tierLengthsMm, setTierLengthsMm] = useState<number[]>([
-    20_000, 19_000, 18_000, 17_000, 16_000, 15_000, 14_000, 13_000, 12_000, 11_000,
-  ]);
-  const [tierHeightsMm, setTierHeightsMm] = useState<number[]>(Array(10).fill(3_000));
-  const [tierDepthsMm, setTierDepthsMm] = useState<number[]>(() => Array(10).fill(14_000));
+  const [tierLengthsMm, setTierLengthsMm] = useState<number[]>([20_000, 20_000]);
+  const [tierHeightsMm, setTierHeightsMm] = useState<number[]>([3000, 3000]);
+  const [tierDepthsMm, setTierDepthsMm] = useState<number[]>(() => [14_000, 14_000]);
   const [viewZoom, setViewZoom] = useState(1);
   const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
   const [steppedAiLoading, setSteppedAiLoading] = useState(false);
@@ -452,7 +451,7 @@ export function SteppedMassingWizard({
               <input
                 type="file"
                 className="hidden"
-                accept={STEPPED_AI_IMAGE_ACCEPT}
+                accept={STEPPED_AI_FILE_ACCEPT}
                 disabled={steppedAiLoading}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];

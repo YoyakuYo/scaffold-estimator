@@ -543,6 +543,104 @@ export class VisionBimService {
    * Returns rectangular tier parameters for the scaffold stepped-massing wizard (not a full plan footprint).
    * Images only (PNG/JPEG/WebP/GIF/BMP).
    */
+  /**
+   * Convert deterministic plan/BIM extraction (IFC/DXF) into rectangular stepped-wizard parameters.
+   * Uses footprint bounding boxes per massing tier when available — avoids raster “wedding cake” guesses.
+   */
+  private visionFootprintResultToSteppedMassingAi(
+    vision: VisionFootprintResult,
+    source: 'ifc' | 'dxf',
+  ): SteppedMassingAiResult {
+    const warnings: string[] = [`Geometry from ${source.toUpperCase()} — tiers follow footprint bounding boxes.`];
+
+    const vertsMm = (vision.vertices ?? []).map((v) => {
+      const any = v as { x?: number; y?: number; xFrac?: number; yFrac?: number };
+      if (typeof any.x === 'number' && typeof any.y === 'number') {
+        return { x: any.x, y: any.y };
+      }
+      const ref = 50_000;
+      return { x: (any.xFrac ?? 0) * ref, y: (any.yFrac ?? 0) * ref };
+    });
+
+    const bbox = (pts: Array<{ x: number; y: number }>) => {
+      if (pts.length === 0) return { minX: 0, minY: 0, maxX: 1, maxY: 1, sx: 1, sy: 1 };
+      const xs = pts.map((p) => p.x);
+      const ys = pts.map((p) => p.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const sx = Math.max(1, Math.round(maxX - minX));
+      const sy = Math.max(1, Math.round(maxY - minY));
+      return { minX, minY, maxX, maxY, sx, sy };
+    };
+
+    const rawTiers = vision.massingTiers?.filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3) ?? [];
+    const sortedTiers = [...rawTiers].sort((a, b) => (a.baseHeightMm ?? 0) - (b.baseHeightMm ?? 0));
+
+    if (sortedTiers.length >= 1) {
+      const boxes = sortedTiers.map((t) => {
+        const pts = (t.vertices as Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>).map(
+          (v) => {
+            if (typeof v.x === 'number' && typeof v.y === 'number') return { x: v.x, y: v.y };
+            const ref = 50_000;
+            return { x: (v.xFrac ?? 0) * ref, y: (v.yFrac ?? 0) * ref };
+          },
+        );
+        return bbox(pts);
+      });
+      const taperAxis: 'both' = 'both';
+      let tierLengthsMm = boxes.map((b) => b.sx);
+      let tierDepthsMm = boxes.map((b) => b.sy);
+      for (let i = 1; i < tierLengthsMm.length; i++) {
+        if (tierLengthsMm[i]! > tierLengthsMm[i - 1]!) tierLengthsMm[i] = tierLengthsMm[i - 1]!;
+      }
+      for (let i = 1; i < tierDepthsMm.length; i++) {
+        if (tierDepthsMm[i]! > tierDepthsMm[i - 1]!) tierDepthsMm[i] = tierDepthsMm[i - 1]!;
+      }
+      const tierHeightsMm = sortedTiers.map((t, i) => {
+        const baseH =
+          i === 0
+            ? t.baseHeightMm ?? 0
+            : sortedTiers[i - 1]!.topHeightMm ?? t.baseHeightMm ?? 0;
+        const topH = t.topHeightMm ?? vision.buildingHeightMm;
+        return Math.max(1000, Math.round(topH - baseH));
+      });
+      const depthMm = Math.max(600, tierDepthsMm[0] ?? 14_000);
+      const sumH = tierHeightsMm.reduce((s, h) => s + h, 0);
+      const buildingHeightMm = Math.max(vision.buildingHeightMm ?? sumH, sumH);
+      return {
+        depthMm,
+        taperAxis,
+        tierLengthsMm,
+        tierHeightsMm,
+        buildingHeightMm,
+        tierDepthsMm,
+        confidence: 0.85,
+        footprintComplexity: 'multi_volume',
+        analysisWarnings: warnings,
+      };
+    }
+
+    const g = bbox(vertsMm);
+    const depthMm = Math.max(600, g.sy);
+    const spanL = Math.max(600, g.sx);
+    const h = Math.max(3000, Math.round(vision.buildingHeightMm / 2));
+    return {
+      depthMm,
+      taperAxis: 'x',
+      tierLengthsMm: [spanL, spanL],
+      tierHeightsMm: [h, Math.max(1000, Math.round(vision.buildingHeightMm - h))],
+      buildingHeightMm: vision.buildingHeightMm,
+      confidence: 0.6,
+      footprintComplexity: 'simple_rectangle',
+      analysisWarnings: [
+        ...warnings,
+        'No stacked massing tiers in file — using a simple two-band split of total height.',
+      ],
+    };
+  }
+
   async processSteppedMassingImage(
     buffer: Buffer,
     filename?: string,
@@ -550,11 +648,19 @@ export class VisionBimService {
     const ext = filename?.includes('.')
       ? '.' + filename.split('.').pop()!.toLowerCase()
       : '';
+    if (IFC_EXTENSIONS.includes(ext)) {
+      const vision = await this.processIfc(buffer);
+      return this.visionFootprintResultToSteppedMassingAi(vision, 'ifc');
+    }
+    if (CAD_EXTENSIONS.includes(ext)) {
+      const vision = await this.processDxf(buffer);
+      return this.visionFootprintResultToSteppedMassingAi(vision, 'dxf');
+    }
     const isImageExt = IMAGE_EXTENSIONS.includes(ext);
     const isRaster = isImageExt || this.looksLikeImage(buffer);
     if (!isRaster) {
       throw new Error(
-        'Stepped massing AI accepts raster images only (PNG, JPEG, WebP, GIF, BMP). Use the main upload for DXF/IFC/PDF.',
+        'Stepped massing AI accepts raster images (PNG, JPEG, WebP, GIF, BMP) or DXF/IFC. For PDF, export a page to PNG or use the main AI extraction flow.',
       );
     }
 
@@ -708,7 +814,7 @@ Use the SHAPE_RULES_REFERENCE below to classify visible plan/massing type (recta
       : [];
 
     if (tierLengthsMm.length === 0) {
-      tierLengthsMm = [20_000, 18_000];
+      tierLengthsMm = [20_000, 20_000];
     }
     if (tierHeightsMm.length === 0) {
       tierHeightsMm = tierLengthsMm.map(() => 3000);

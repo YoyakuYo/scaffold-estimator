@@ -100,7 +100,7 @@ export class VisionBimController {
 
   /**
    * POST /vision-bim/analyze-stepped-massing
-   * Raster images only: AI suggests depth, taper axis, per-tier lengths/heights for the stepped wizard.
+   * Raster images (AI) or DXF/IFC (deterministic footprint / tiers) → stepped wizard parameters.
    */
   @Post('analyze-stepped-massing')
   @Throttle({ default: { limit: 24, ttl: 60000 } })

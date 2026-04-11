@@ -609,8 +609,15 @@ function bootstrapWizardFromSession(editConfigId: string | null): WizardSessionB
         : 'drawing';
     let mtab: WizardSessionBootstrap['manualSubTab'] =
       parsed.manualSubTab === 'quick' ? 'quick' : 'drawing';
-    if (mtab === 'quick') mode = 'quick';
-    if (mode === 'quick') mtab = 'quick';
+    /** Do not map `manualSubTab: quick` onto `cad_draw` / stepped / AI — that hid CAD behind Quick Shape. */
+    const isNonManualMode =
+      mode === 'cad_draw' || mode === 'stepped_massing' || mode === 'ai_extract';
+    if (!isNonManualMode) {
+      if (mtab === 'quick') mode = 'quick';
+      if (mode === 'quick') mtab = 'quick';
+    } else {
+      mtab = 'drawing';
+    }
     if (mode === 'ai_extract' && !SHOW_LEGACY_AI_EXTRACT_TAB) {
       mode = 'stepped_massing';
     }
@@ -924,9 +931,17 @@ function ScaffoldPageContent() {
     if (uiPath === 'quick') {
       setManualSubTab('quick');
       setInputMode('quick');
+    } else if (uiPath === 'cad_draw') {
+      setManualSubTab('drawing');
+      setInputMode('cad_draw');
+    } else if (uiPath === 'stepped_massing') {
+      setManualSubTab('drawing');
+      setInputMode('stepped_massing');
+    } else if (uiPath === 'ai_extract') {
+      setManualSubTab('drawing');
+      setInputMode(SHOW_LEGACY_AI_EXTRACT_TAB ? 'ai_extract' : 'stepped_massing');
     } else {
       setManualSubTab('drawing');
-      // CAD / AI edits use the shared manual panel + wall table (no full CAD/AI wizard rehydrate here).
       setInputMode('drawing');
     }
   }, [editConfigId, editConfig]);
@@ -1718,7 +1733,10 @@ function ScaffoldPageContent() {
               {canAi && SHOW_LEGACY_AI_EXTRACT_TAB && (
                 <button
                   type="button"
-                  onClick={() => setInputMode('ai_extract')}
+                  onClick={() => {
+                    setManualSubTab('drawing');
+                    setInputMode('ai_extract');
+                  }}
                   className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                     inputMode === 'ai_extract'
                       ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
@@ -1764,7 +1782,10 @@ function ScaffoldPageContent() {
               {canCad && (
                 <button
                   type="button"
-                  onClick={() => setInputMode('cad_draw')}
+                  onClick={() => {
+                    setManualSubTab('drawing');
+                    setInputMode('cad_draw');
+                  }}
                   className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                     inputMode === 'cad_draw'
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
@@ -3165,6 +3186,7 @@ function ScaffoldPageContent() {
               onBuildingHeightChange={(h) => setBuildingHeightMm(h)}
               onLiveFootprintMmChange={handleCadLiveFootprintMmChange}
               onComplete={(result) => {
+                setManualSubTab('drawing');
                 setCadLiveFootprintMm(null);
                 setCadLiveFootprintClosed(false);
                 const verts = result.vertices.map((v) => ({ x: v.xFrac, y: v.yFrac }));
@@ -3217,7 +3239,7 @@ function ScaffoldPageContent() {
         (canFile || canQuick || !!editConfigId) && (<>
 
       {/* Quick Shape Builder */}
-      {manualSubTab === 'quick' && !editConfigId && canQuick && (
+      {inputMode === 'quick' && manualSubTab === 'quick' && !editConfigId && canQuick && (
         <div className="max-w-[1200px] mx-auto px-4 pb-8">
           <QuickShapeBuilder
             onSubmit={handleQuickShapeSubmit}
