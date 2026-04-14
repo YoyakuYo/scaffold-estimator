@@ -275,7 +275,7 @@ function ScaffoldResultPage() {
       scaffoldType: st,
       frameSizeMm: result.frameSizeMm ?? config.frameSizeMm,
       habakiCountPerSpan: result.habakiCountPerSpan ?? config.habakiCountPerSpan,
-      endStopperType: 'nuno',
+      endStopperType: (result as { endStopperType?: string }).endStopperType ?? config.endStopperType ?? 'nuno',
       includePattanko: (result as { includePattanko?: boolean }).includePattanko ?? config.includePattanko ?? true,
     };
   }, [result, config, rawResult]);
