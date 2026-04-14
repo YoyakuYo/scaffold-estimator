@@ -164,8 +164,8 @@ export interface ScaffoldCalculationResult {
   // Wakugumi-specific (optional)
   frameSizeMm?: number;
   habakiCountPerSpan?: number;
-  /** Wakugumi: always bar-type 端部 (stored as `nuno` for API compatibility). */
-  endStopperType?: 'nuno';
+  /** Wakugumi 端部 — `nuno` (布材) or `frame` (枠). */
+  endStopperType?: 'nuno' | 'frame';
   /** Wakugumi frame product line (FT-617 / FT-917 / FT-1217). */
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   /** Echoed from input; when false, 3D skips corner pattanko meshes. */
