@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Scaffold2DView from './scaffold-2d-view';
+import Scaffold2DAllWallsOnePage from './scaffold-2d-all-walls-one-page';
 import ScaffoldPlanView from './scaffold-plan-view';
 import { correctLegacyMassingTiersIfNeeded } from '@/lib/correct-legacy-massing-tiers';
 import { normalizeScaffoldResultForQuotation } from '@/lib/scaffold-quotation-normalize';
@@ -769,6 +770,7 @@ function ScaffoldResultPage() {
             {t('result', 'tab2d')}
           </h2>
           <Scaffold2DView result={resultForViz ?? resultMergedForViz ?? result} />
+          <Scaffold2DAllWallsOnePage result={resultForViz ?? resultMergedForViz ?? result} />
         </div>
 
         <div className={`${activeTab === 'plan' ? 'block' : 'hidden'} print:overflow-visible`}>

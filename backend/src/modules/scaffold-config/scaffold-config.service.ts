@@ -153,8 +153,7 @@ export class ScaffoldConfigService {
 
   /**
    * When the client omits `pattankoCornerCount` (e.g. wall count ≠ vertex count), derive it from
-   * the closed footprint so Excel/BOM includes PATTANKO for non-90° corners. If the client sends an
-   * explicit number, use it (must be finite).
+   * the closed footprint (all non-180° vertices). If the client sends an explicit number, use it (must be finite).
    */
   private resolvePattankoCornerCount(
     dto: CreateScaffoldConfigDto,
@@ -327,7 +326,7 @@ export class ScaffoldConfigService {
         ? { wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries }
         : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan || 2,
-      endStopperType: 'nuno',
+      endStopperType: dto.endStopperType === 'frame' ? 'frame' : 'nuno',
       includePattanko: dto.includePattanko !== false,
       rentalType: dto.rentalType || null,
       rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
@@ -376,6 +375,7 @@ export class ScaffoldConfigService {
         frameSizeMm: dtoForCalc.frameSizeMm || 1700,
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
+        endStopperType: dto.endStopperType === 'frame' ? 'frame' : 'nuno',
         pattankoCornerCount: this.resolvePattankoCornerCount(dto, dto.buildingOutline),
         includePattanko: dto.includePattanko !== false,
       });
@@ -590,7 +590,7 @@ export class ScaffoldConfigService {
         ? { wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries }
         : {}),
       habakiCountPerSpan: dto.habakiCountPerSpan ?? 2,
-      endStopperType: 'nuno',
+      endStopperType: dto.endStopperType === 'frame' ? 'frame' : 'nuno',
       includePattanko: dto.includePattanko !== false,
       rentalType: dto.rentalType ?? null,
       rentalStartDate: dto.rentalStartDate ? new Date(dto.rentalStartDate) : null,
@@ -607,6 +607,7 @@ export class ScaffoldConfigService {
         frameSizeMm: dtoForCalc.frameSizeMm || 1700,
         wakugumiFrameSeries: dtoForCalc.wakugumiFrameSeries,
         habakiCountPerSpan: dto.habakiCountPerSpan || 2,
+        endStopperType: dto.endStopperType === 'frame' ? 'frame' : 'nuno',
         pattankoCornerCount: this.resolvePattankoCornerCount(dto, outlineForCorners),
         includePattanko: dto.includePattanko !== false,
       });

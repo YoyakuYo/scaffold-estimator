@@ -209,6 +209,11 @@ export class CreateScaffoldConfigDto {
   @Max(2)
   habakiCountPerSpan?: number;
 
+  /** Wakugumi 端部 — `nuno` (布材) or `frame` (枠). */
+  @IsOptional()
+  @IsIn(['nuno', 'frame'])
+  endStopperType?: 'nuno' | 'frame';
+
   /** Optional: Rental period type */
   @IsOptional()
   @IsEnum(['weekly', 'monthly', 'custom'])

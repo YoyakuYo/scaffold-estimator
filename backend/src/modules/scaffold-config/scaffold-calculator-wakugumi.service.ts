@@ -9,11 +9,9 @@ import {
   WAKUGUMI_SHITASAN_SIZES,
   findNearestSizeWakugumi,
   WakugumiLevelCalcResult,
-  cornerTerminalSpanMmWakugumi,
   type WakugumiFrameSeriesCode,
 } from './scaffold-rules-wakugumi';
 import {
-  freeScaffoldEndCountForWall,
   reflexCornerInsetTotalMm,
   meshSheetVerticalRowsForHeightMm,
   MESH_SHEET_VERTICAL_LENGTH_MM,
@@ -63,6 +61,8 @@ export interface WakugumiCalculationInput {
   pattankoCornerCount?: number;
   /** When false, no PATTANKO line (ignores pattankoCornerCount and reflex-derived corners). */
   includePattanko?: boolean;
+  /** 端部タイプ — `nuno` (布材) or `frame` (枠). */
+  endStopperType?: 'nuno' | 'frame';
 }
 
 function getSideLabel(side: string): string {
@@ -107,26 +107,7 @@ export class ScaffoldCalculatorWakugumiService {
 
     const pattankoOn = input.includePattanko !== false;
 
-    let reflexReentrantPattankoCorners = 0;
-    if (pattankoOn && input.walls.length >= 2) {
-      const n = input.walls.length;
-      const term = cornerTerminalSpanMmWakugumi(input.scaffoldWidthMm);
-      for (let k = 0; k < n; k++) {
-        const prev = (k - 1 + n) % n;
-        if (
-          input.walls[prev]!.endCornerKind === 'reflex' &&
-          input.walls[k]!.startCornerKind === 'reflex'
-        ) {
-          const sp = wallResults[prev]!.spans;
-          const last = sp.length > 0 ? sp[sp.length - 1] : -1;
-          if (last !== term) reflexReentrantPattankoCorners++;
-        }
-      }
-    }
-
-    const pattankoCornerCount = pattankoOn
-      ? (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners
-      : 0;
+    const pattankoCornerCount = pattankoOn ? (input.pattankoCornerCount ?? 0) : 0;
     const perCornerPerLevel = pattankoPiecesPerCornerPerLevel(input.scaffoldWidthMm);
     const pattankoQty = pattankoCornerCount * perCornerPerLevel * maxLevels;
     if (pattankoQty > 0) {
@@ -156,7 +137,7 @@ export class ScaffoldCalculatorWakugumiService {
       topGuardHeightMm: input.frameSizeMm,
       frameSizeMm: input.frameSizeMm,
       habakiCountPerSpan: input.habakiCountPerSpan,
-      endStopperType: 'nuno',
+      endStopperType: input.endStopperType === 'frame' ? 'frame' : 'nuno',
       totalLevels: maxLevels,
       wakugumiFrameSeries: input.wakugumiFrameSeries,
       includePattanko: pattankoOn,
@@ -337,24 +318,23 @@ export class ScaffoldCalculatorWakugumiService {
       });
     }
 
-    // ─── 6. 端部 (End Stopper) — free dead ends only (not 90° turns to next wall) ──
-    const freeEnds = freeScaffoldEndCountForWall(wallIndex, input.walls.length);
-    if (freeEnds > 0) {
-      const stopperSize = findNearestSizeWakugumi(widthMm, WAKUGUMI_SHITASAN_SIZES);
-      sortOrder++;
-      components.push({
-        type: 'end_stopper_nuno',
-        category: CAT.stopper.jp,
-        categoryEn: CAT.stopper.en,
-        name: 'End stopper',
-        nameJp: `端部`,
-        sizeSpec: `${stopperSize}`,
-        unit: '本',
-        quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel * freeEnds * Ltot,
-        sortOrder,
-        materialCode: `WAKU-STOPPER-${widthMm}`,
-      });
-    }
+    // ─── 6. 端部 (End Stopper) — both ends of each wall run (枠組 BOM / 2D / 3D; includes closed perimeters)
+    const endsPerWall = 2;
+    const stopperSize = findNearestSizeWakugumi(widthMm, WAKUGUMI_SHITASAN_SIZES);
+    const esType = input.endStopperType === 'frame' ? 'frame' : 'nuno';
+    sortOrder++;
+    components.push({
+      type: esType === 'frame' ? 'end_stopper_frame' : 'end_stopper_nuno',
+      category: CAT.stopper.jp,
+      categoryEn: CAT.stopper.en,
+      name: 'End stopper',
+      nameJp: `端部`,
+      sizeSpec: `${stopperSize}`,
+      unit: '本',
+      quantity: WAKUGUMI_CALC_RULES.stoppersPerEndPerLevel * endsPerWall * Ltot,
+      sortOrder,
+      materialCode: esType === 'frame' ? `WAKU-STOPPER-FRAME-${widthMm}` : `WAKU-STOPPER-${widthMm}`,
+    });
 
     // ─── 7. 踏板 / アンチ ────────────────────────────────
     const anchiLayout = WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[widthMm] || WAKUGUMI_ANCHI_LAYOUT_BY_WIDTH[610];

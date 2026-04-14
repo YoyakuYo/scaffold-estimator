@@ -267,31 +267,31 @@ describe('fitSpansToWallLengthWithCornerWakugumi', () => {
 });
 
 describe('pattankoPiecesPerCornerPerLevel', () => {
-  it('610 → 2 (1 anchi module × 2 rows)', () => {
-    expect(pattankoPiecesPerCornerPerLevel(610)).toBe(2);
-    expect(pattankoPiecesPerCornerPerLevel(600)).toBe(2);
+  it('610 → 1 plank module across width', () => {
+    expect(pattankoPiecesPerCornerPerLevel(610)).toBe(1);
+    expect(pattankoPiecesPerCornerPerLevel(600)).toBe(1);
   });
-  it('914 → 4 (1 full + 1 half × 2 rows)', () => {
-    expect(pattankoPiecesPerCornerPerLevel(914)).toBe(4);
-    expect(pattankoPiecesPerCornerPerLevel(900)).toBe(4);
+  it('914 → 1.5 (1 full + 1 half)', () => {
+    expect(pattankoPiecesPerCornerPerLevel(914)).toBe(1.5);
+    expect(pattankoPiecesPerCornerPerLevel(900)).toBe(1.5);
   });
-  it('1219 → 4 (2 full × 2 rows)', () => {
-    expect(pattankoPiecesPerCornerPerLevel(1219)).toBe(4);
-    expect(pattankoPiecesPerCornerPerLevel(1200)).toBe(4);
+  it('1219 → 2 full modules', () => {
+    expect(pattankoPiecesPerCornerPerLevel(1219)).toBe(2);
+    expect(pattankoPiecesPerCornerPerLevel(1200)).toBe(2);
   });
 });
 
 describe('countPattankoCornersFromOutline', () => {
-  it('axis-aligned rectangle: 90° only → 0 PATTANKO corners (L-deck in 3D)', () => {
+  it('axis-aligned rectangle: four 90° corners → 4', () => {
     const rect = [
       { x: 0, y: 0 },
       { x: 100, y: 0 },
       { x: 100, y: 50 },
       { x: 0, y: 50 },
     ];
-    expect(countPattankoCornersFromOutline(rect)).toBe(0);
+    expect(countPattankoCornersFromOutline(rect)).toBe(4);
   });
-  it('regular hexagon: 120° at each vertex → 6 (|cos| = 0.5 ≥ 0.35)', () => {
+  it('regular hexagon: 120° at each vertex → 6', () => {
     const r = 100;
     const verts = [0, 1, 2, 3, 4, 5].map((k) => {
       const a = (k * 2 * Math.PI) / 6 - Math.PI / 2;

@@ -248,28 +248,8 @@ export class ScaffoldCalculatorService {
 
     const pattankoOn = input.includePattanko !== false;
 
-    /** Reflex (re-entrant) joint without a width-module last span → filler planks between bays (Rule 2). */
-    let reflexReentrantPattankoCorners = 0;
-    if (pattankoOn && input.walls.length >= 2) {
-      const n = input.walls.length;
-      const term = cornerTerminalSpanMmKusabi(input.scaffoldWidthMm);
-      for (let k = 0; k < n; k++) {
-        const prev = (k - 1 + n) % n;
-        if (
-          input.walls[prev]!.endCornerKind === 'reflex' &&
-          input.walls[k]!.startCornerKind === 'reflex'
-        ) {
-          const sp = wallResults[prev]!.spans;
-          const last = sp.length > 0 ? sp[sp.length - 1] : -1;
-          if (last !== term) reflexReentrantPattankoCorners++;
-        }
-      }
-    }
-
-    // PATTANKO (パッタンコ): corners × levels × (anchi modules across width × 2 rows).
-    const pattankoCornerCount = pattankoOn
-      ? (input.pattankoCornerCount ?? 0) + reflexReentrantPattankoCorners
-      : 0;
+    // PATTANKO (パッタンコ): polygon corners × levels × plank-module count across width (per corner per level).
+    const pattankoCornerCount = pattankoOn ? (input.pattankoCornerCount ?? 0) : 0;
     const perCornerPerLevel = pattankoPiecesPerCornerPerLevel(input.scaffoldWidthMm);
     const pattankoQty = pattankoCornerCount * perCornerPerLevel * maxLevels;
     if (pattankoQty > 0) {

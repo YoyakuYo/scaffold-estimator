@@ -58,11 +58,13 @@ export interface CreateScaffoldConfigDto {
   /** FT-617 / FT-917 / FT-1217 walk-through frame line (sets layout width) */
   wakugumiFrameSeries?: 'FT617' | 'FT917' | 'FT1217';
   habakiCountPerSpan?: number;
+  /** Wakugumi 端部 — `nuno` or `frame` (default nuno). */
+  endStopperType?: 'nuno' | 'frame';
   // Common optional
   rentalType?: 'weekly' | 'monthly' | 'custom';
   rentalStartDate?: string;
   rentalEndDate?: string;
-  /** Optional: Number of corners that need pattanko (non-L-shaped). When omitted, PATTANKO is not counted. */
+  /** Optional: override corner count for PATTANKO; when omitted, server derives from building outline. */
   pattankoCornerCount?: number;
   /** When false, omit PATTANKO from BOM and 3D corner fillers (default true). */
   includePattanko?: boolean;

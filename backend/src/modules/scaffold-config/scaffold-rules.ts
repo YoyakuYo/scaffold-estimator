@@ -180,28 +180,24 @@ export const ANCHI_LAYOUT_BY_WIDTH: Record<number, AnchiLayout> = {
 };
 
 /**
- * PATTANKO (corner filler) width matches 踏板 module widths: count per corner per level
- * = same number of anchi pieces across the scaffold width (500mm full ± 240mm half), on each of the 2 rows.
- * 610 → 1/module × 2 rows = 2; 914 → (1 full + 1 half) × 2 rows = 4; 1219 → 2 × 2 = 4.
+ * PATTANKO (corner filler) per corner per level matches **plank modules across scaffold width**
+ * (same as 踏板 layout): 600/610 → 1; 900/914 → 1.5 (1 full + ½); 1200/1219 → 2. Not doubled for front/back rows.
  */
 export function pattankoPiecesPerCornerPerLevel(scaffoldWidthMm: number): number {
   const w = normalizeScaffoldWidthMmToCatalog(scaffoldWidthMm);
   const layout = ANCHI_LAYOUT_BY_WIDTH[w] ?? ANCHI_LAYOUT_BY_WIDTH[610];
-  const modulesAcrossWidth = layout.fullAnchiPerSpan + layout.halfAnchiPerSpan;
-  return modulesAcrossWidth * 2;
+  return layout.fullAnchiPerSpan + 0.5 * layout.halfAnchiPerSpan;
 }
 
 /**
- * Corners that use small PATTANKO filler planks (BOM line) — matches 3D: non-90° joints only.
- * ~90° corners (|cos| below 0.35) use L-deck, not the PATTANKO SKU. Straight (180°) skipped.
- * Same thresholds as frontend `countPattankoCorners` / tierPolyData `isLShaped`.
+ * Polygon corners that count toward PATTANKO when enabled: every non-straight vertex (convex, reflex, ~90°).
+ * Collinear (≈180°) vertices are skipped. Matches “all corners” on a closed footprint for BOM when outline is used.
  */
 export function countPattankoCornersFromOutline(
   vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>,
 ): number {
   const n = vertices.length;
   if (n < 3) return 0;
-  const COS_L_SHAPED_MAX = 0.35;
   const COS_STRAIGHT_MIN = 0.98;
   let count = 0;
   for (let j = 0; j < n; j++) {
@@ -225,7 +221,7 @@ export function countPattankoCornersFromOutline(
     if (lenPrev < 1e-9 || lenNext < 1e-9) continue;
     const cosAngle = (dxPrev * dxNext + dyPrev * dyNext) / (lenPrev * lenNext);
     if (Math.abs(cosAngle) >= COS_STRAIGHT_MIN) continue;
-    if (Math.abs(cosAngle) >= COS_L_SHAPED_MAX) count++;
+    count++;
   }
   return count;
 }

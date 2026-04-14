@@ -207,11 +207,10 @@ function wakugumiSeriesFromScaffoldWidthMm(w: number): WakugumiFrameSeriesId {
   return 'FT1217';
 }
 
-/** Count corners that need pattanko (non-L-shaped, i.e. angle not ~90°). Same threshold as 3D view: |cos| >= 0.35. */
+/** Count polygon corners for PATTANKO (all non-straight vertices; matches backend `countPattankoCornersFromOutline`). */
 function countPattankoCorners(vertices: Array<{ x?: number; y?: number; xFrac?: number; yFrac?: number }>): number {
   const n = vertices.length;
   if (n < 3) return 0;
-  const COS_L_SHAPED_MAX = 0.35;
   const COS_STRAIGHT_MIN = 0.98;
   let count = 0;
   for (let j = 0; j < n; j++) {
@@ -235,7 +234,7 @@ function countPattankoCorners(vertices: Array<{ x?: number; y?: number; xFrac?: 
     if (lenPrev < 1e-9 || lenNext < 1e-9) continue;
     const cosAngle = (dxPrev * dxNext + dyPrev * dyNext) / (lenPrev * lenNext);
     if (Math.abs(cosAngle) >= COS_STRAIGHT_MIN) continue;
-    if (Math.abs(cosAngle) >= COS_L_SHAPED_MAX) count++;
+    count++;
   }
   return count;
 }

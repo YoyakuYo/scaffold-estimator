@@ -11,40 +11,16 @@ import {
 } from '@/lib/edge-hashira-labels';
 import { Printer, ZoomIn, ZoomOut, FileText, FileCode, ChevronLeft, ChevronRight, Layers, Camera } from 'lucide-react';
 import {
-  normalizeScaffoldWidthMmToCatalog,
-  SCAFFOLD_WIDTH_MEDIUM_MM,
-  SCAFFOLD_WIDTH_NARROW_MM,
-} from '@/lib/scaffold-width-catalog';
+  COL,
+  computeWallElevationData,
+  LEVEL_H_KUSABI,
+  MAX_2D_SPANS,
+  renderWallElevationContent,
+  type WallElevationComputed,
+} from './scaffold-2d-elevation-draw';
+import { SCAFFOLD_WIDTH_MEDIUM_MM } from '@/lib/scaffold-width-catalog';
 
-// ─── Constants ──────────────────────────────────────────────────
-const LEVEL_H_KUSABI = 1800; // mm between levels (kusabi fixed)
-const JACK_BASE_H = 300; // mm visual height for jack base
 const SCALE_DEFAULT = 0.065; // px per mm — fits most screens
-const POST_STROKE = 4;
-const BRACE_STROKE = 2.8;
-const TESURI_STROKE = 2.5;
-const PLANK_H_PX = 8;
-const HABAKI_H_PX = 6;
-const DIMENSION_OFFSET = 28;
-// ─── Colors (clean technical drawing for estimation/quotation) ────
-const COL = {
-  post: '#0f172a',      // 支柱 — dark, primary structure
-  brace: '#b91c1c',     // ブレス — distinct red
-  tesuri: '#1d4ed8',    // 手摺 — blue
-  shitasan: '#0e7490',  // 下桟 — cyan (wakugumi)
-  plank: '#b45309',     // 踏板 — amber
-  habaki: '#44403c',    // 巾木 — dark brown
-  jackBase: '#334155',  // ジャッキ — slate
-  yokoji: '#15803d',    // 根がらみ — green
-  stair: '#047857',     // 階段 — teal
-  endStopper: '#7c3aed', // 端部 — purple (wakugumi)
-  dim: '#64748b',
-  dimText: '#1e293b',
-  bg: '#ffffff',
-  grid: '#f1f5f9',
-  topGuard: '#6d28d9',  // 上部手摺 — violet
-  frame: '#0f172a',     // 建枠 — same as post (remove emphasis)
-};
 
 // Per-wall accent colors (cycle for many walls)
 const WALL_ACCENT = [
@@ -122,68 +98,15 @@ export default function Scaffold2DView({ result }: Props) {
   const primaryWallLabel = (wi: number, side: string) =>
     closedFootprint ? edgeChordName(wi, walls.length, true) : getDirectionLabel(side);
 
-  const MAX_2D_SPANS = 200;
   const isSimplified2D = !showAllWalls && wall.spans.length > MAX_2D_SPANS;
 
-  // ─── Shared wall data computation ─────────────────────────
-  const computeWallData = (w: WallCalculationResult) => {
-    const rawSpans = w.spans;
-    const spans = rawSpans.length > MAX_2D_SPANS ? rawSpans.slice(0, MAX_2D_SPANS) : rawSpans;
-    const levels = w.levelCalc.fullLevels;
-    const wakExtraFrame = isWakugumi;
-    const levelsDraw = levels + (wakExtraFrame ? 1 : 0);
-    const totalLengthMm = spans.reduce((a: number, b: number) => a + b, 0);
-    const totalHeightMm = isWakugumi
-      ? levelsDraw * LEVEL_H + JACK_BASE_H
-      : levels * LEVEL_H + topGuardMm + JACK_BASE_H;
-
-    const postXPositions: number[] = [0];
-    let accum = 0;
-    for (const span of spans) {
-      accum += span;
-      postXPositions.push(accum);
-    }
-
-    let stairPositions: number[] = [];
-    if (w.kaidanSpanIndices && w.kaidanSpanIndices.length > 0) {
-      stairPositions = w.kaidanSpanIndices;
-    } else {
-      const count = w.stairAccessCount || 0;
-      if (count > 0 && spans.length > 0) {
-        if (count === 1) {
-          stairPositions = [Math.floor(spans.length / 2)];
-        } else {
-          const totalPositionsNeeded = 2 * count - 1;
-          const startPos = Math.floor((spans.length - totalPositionsNeeded) / 2);
-          const pos: number[] = [];
-          for (let i = 0; i < count; i++) {
-            const idx = startPos + i * 2;
-            const clamped = Math.max(0, Math.min(spans.length - 1, idx));
-            if (!pos.includes(clamped)) pos.push(clamped);
-          }
-          stairPositions = pos.sort((a, b) => a - b);
-        }
-      }
-    }
-
-    const widthMm = normalizeScaffoldWidthMmToCatalog(
-      w.scaffoldWidthMm ?? result?.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM,
-    );
-    const needsExtendedBay =
-      w.needsExtendedBay ?? (widthMm <= SCAFFOLD_WIDTH_NARROW_MM && stairPositions.length > 0);
-
-    return {
-      wall: w,
-      spans,
-      levels,
-      levelsDraw,
-      totalLengthMm,
-      totalHeightMm,
-      postXPositions,
-      stairPositions,
-      needsExtendedBay,
-    };
-  };
+  const computeWallData = (w: WallCalculationResult): WallElevationComputed =>
+    computeWallElevationData(w, {
+      isWakugumi,
+      levelH: LEVEL_H,
+      topGuardMm,
+      resultScaffoldWidthMm: result?.scaffoldWidthMm ?? SCAFFOLD_WIDTH_MEDIUM_MM,
+    });
 
   /** One-line X/Y caption for titles (cross · along range), with post-count fallback along the elevation. */
   const buildHashiraCaption = (wi: number): string | null => {
@@ -213,7 +136,7 @@ export default function Scaffold2DView({ result }: Props) {
   };
 
   /** Labels under each post (X1… or Y1…) aligned with hashira axis / saved numbering. */
-  const postFootLabelsForWall = (wi: number, wd: ReturnType<typeof computeWallData>): string[] | null => {
+  const postFootLabelsForWall = (wi: number, wd: WallElevationComputed): string[] | null => {
     const w = wd.wall;
     const n = wd.postXPositions.length;
     if (n < 1) return null;
@@ -239,12 +162,12 @@ export default function Scaffold2DView({ result }: Props) {
     return Array.from({ length: n }, (_, i) => `${axis}${i + 1}`);
   };
 
-  const wallData = useMemo(() => computeWallData(wall), [wall, topGuardMm, result]);
+  const wallData = useMemo(() => computeWallData(wall), [wall, topGuardMm, result, isWakugumi, LEVEL_H]);
 
   const allWallsData = useMemo(() => {
     if (!showAllWalls) return [];
     return walls.map(w => computeWallData(w));
-  }, [walls, showAllWalls, topGuardMm, result]);
+  }, [walls, showAllWalls, topGuardMm, result, isWakugumi, LEVEL_H]);
 
   // ─── SVG dimensions ─────────────────────────────────────
   const PAD_LEFT = 100;
@@ -271,401 +194,26 @@ export default function Scaffold2DView({ result }: Props) {
   const x = (mm: number) => PAD_LEFT + mm * scale;
   const y = (mm: number) => PAD_TOP + (wallData.totalHeightMm - mm) * scale;
 
-  // ─── Render wall (parameterized for single and all-walls modes) ───
+  const drawOptsBase = {
+    isWakugumi,
+    levelH: LEVEL_H,
+    topGuardMm,
+    numberLocale,
+    scale,
+  };
+
   const renderWallContent = (
-    wd: ReturnType<typeof computeWallData>,
+    wd: WallElevationComputed,
     xFn: (mm: number) => number,
     yFn: (mm: number) => number,
     keyPrefix = '',
     postFootLabels: string[] | null = null,
-  ) => {
-    const { spans, levels, levelsDraw, totalLengthMm, postXPositions, stairPositions, needsExtendedBay } = wd;
-    const x = xFn;
-    const y = yFn;
-    const elements: JSX.Element[] = [];
-
-    // Grid (subtle, for technical clarity)
-    const gridStep = 1000;
-    for (let gx = 0; gx <= totalLengthMm; gx += gridStep) {
-      elements.push(
-        <line key={`gv-${gx}`} x1={x(gx)} y1={y(0)} x2={x(gx)} y2={y(wd.totalHeightMm)}
-          stroke={COL.grid} strokeWidth={0.5} />
-      );
-    }
-    for (let gy = 0; gy <= wd.totalHeightMm; gy += gridStep) {
-      elements.push(
-        <line key={`gh-${gy}`} x1={x(0)} y1={y(gy)} x2={x(totalLengthMm)} y2={y(gy)}
-          stroke={COL.grid} strokeWidth={0.5} />
-      );
-    }
-
-    // Ground line
-    elements.push(
-      <line key="ground" x1={x(0) - 10} y1={y(0)} x2={x(totalLengthMm) + 10} y2={y(0)}
-        stroke="#94a3b8" strokeWidth={2} strokeDasharray="6,3" />
-    );
-
-    // Jack Bases
-    postXPositions.forEach((px, i) => {
-      elements.push(
-        <g key={`jb-${i}`}>
-          <polygon
-            points={`${x(px)},${y(0)} ${x(px) - 8},${y(0) + 12} ${x(px) + 8},${y(0) + 12}`}
-            fill={COL.jackBase} stroke={COL.jackBase} strokeWidth={1}
-          />
-          <line x1={x(px)} y1={y(0)} x2={x(px)} y2={y(JACK_BASE_H)}
-            stroke={COL.jackBase} strokeWidth={2} strokeDasharray="4,2" />
-        </g>
-      );
+  ) =>
+    renderWallElevationContent(wd, xFn, yFn, {
+      ...drawOptsBase,
+      keyPrefix,
+      postFootLabels,
     });
-
-    // Hashira station ids (X1… / Y1…) under posts, above span dimensions
-    if (postFootLabels && postFootLabels.length === postXPositions.length) {
-      postXPositions.forEach((px, pi) => {
-        elements.push(
-          <text
-            key={`${keyPrefix}pfl-${pi}`}
-            x={x(px)}
-            y={y(0) + 12}
-            textAnchor="middle"
-            fontSize={9}
-            fontWeight={600}
-            fill={COL.dimText}
-            style={{ fontFamily: 'ui-monospace, monospace' }}
-          >
-            {postFootLabels[pi]}
-          </text>
-        );
-      });
-    }
-
-    // Base Yokoji (kusabi negarami — not used for wakugumi)
-    if (!isWakugumi) {
-      spans.forEach((span, si) => {
-        const xStart = postXPositions[si];
-        elements.push(
-          <line key={`by-${si}`} x1={x(xStart)} y1={y(JACK_BASE_H)} x2={x(xStart + span)} y2={y(JACK_BASE_H)}
-            stroke={COL.yokoji} strokeWidth={TESURI_STROKE} strokeDasharray="6,2" />
-        );
-      });
-    }
-
-    // Per-Level Content (枠組+上部: もう一段の建枠を levelsDraw で表現)
-    Array.from({ length: levelsDraw }).forEach((_, lvl) => {
-      const baseY = JACK_BASE_H + lvl * LEVEL_H;
-      const topY = baseY + LEVEL_H;
-
-      // Level label
-      elements.push(
-        <text key={`lvl-${lvl}`} x={x(0) - 15} y={y(topY) + 4}
-          textAnchor="end" fontSize={10} fill={COL.dimText}>
-          L{lvl + 1}
-        </text>
-      );
-
-      // Posts — 枠組: simple post line only (same symbol as くさび支柱); くさび unchanged.
-      postXPositions.forEach((px, pi) => {
-        elements.push(
-          <line
-            key={`post-${lvl}-${pi}`}
-            x1={x(px)}
-            y1={y(baseY)}
-            x2={x(px)}
-            y2={y(topY)}
-            stroke={isWakugumi ? COL.frame : COL.post}
-            strokeWidth={POST_STROKE}
-          />
-        );
-      });
-
-      // Per span
-      spans.forEach((span, si) => {
-        const sx = postXPositions[si];
-        const ex = postXPositions[si + 1];
-        const isStairSpan = stairPositions.includes(si);
-
-        if (isStairSpan && needsExtendedBay) {
-          // 600mm extended bay: plank + brace + tesuri stay normal; stair is in a separate bay (shown as overlay indicator)
-          // Normal brace
-          elements.push(
-            <line key={`brace-1-${lvl}-${si}`}
-              x1={x(sx)} y1={y(baseY)} x2={x(ex)} y2={y(topY)}
-              stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
-            <line key={`brace-2-${lvl}-${si}`}
-              x1={x(sx)} y1={y(topY)} x2={x(ex)} y2={y(baseY)}
-              stroke={COL.brace} strokeWidth={BRACE_STROKE} />
-          );
-          // Normal tesuri / shitasan
-          if (!isWakugumi) {
-            elements.push(
-              <line key={`tesuri-1-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
-                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.45)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
-              <line key={`tesuri-2-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
-                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
-            );
-          } else {
-            elements.push(
-              <line key={`shitasan-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + 50)}
-                x2={x(ex)} y2={y(baseY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
-            );
-          }
-          // Normal plank (stays for extended bay)
-          elements.push(
-            <rect key={`plank-${lvl}-${si}`}
-              x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
-              width={(ex - sx) * scale - 4} height={PLANK_H_PX}
-              fill={COL.plank} opacity={0.7} rx={1} />
-          );
-          elements.push(
-            <line key={`habaki-${lvl}-${si}`}
-              x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
-              x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
-              stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
-          );
-          // Extended bay stair indicator: dashed box with stair glyph overlaid
-          const ebX = x(sx) + 1;
-          const ebW = (ex - sx) * scale - 2;
-          const ebY = y(topY) - 2;
-          const ebH = (topY - baseY) * scale + 4;
-          elements.push(
-            <rect key={`ext-bay-${lvl}-${si}`}
-              x={ebX} y={ebY}
-              width={ebW} height={ebH}
-              fill="none" stroke={COL.stair} strokeWidth={1.5}
-              strokeDasharray="4,3" rx={2} />
-          );
-          // Small stair diagonal inside the dashed box
-          elements.push(
-            <line key={`ext-stair-${lvl}-${si}`}
-              x1={ebX + ebW * 0.15} y1={ebY + ebH * 0.85}
-              x2={ebX + ebW * 0.85} y2={ebY + ebH * 0.15}
-              stroke={COL.stair} strokeWidth={2} opacity={0.6} />
-          );
-          // "EXT" label
-          elements.push(
-            <text key={`ext-label-${lvl}-${si}`}
-              x={ebX + ebW / 2} y={ebY + ebH / 2 + 3}
-              textAnchor="middle" fontSize={7} fontWeight="bold"
-              fill={COL.stair} opacity={0.8}>EXT</text>
-          );
-          // Extra post ticks at 3 positions (O, P, Q): left, center, right
-          const midXmm = (sx + ex) / 2;
-          for (const epx of [sx, midXmm, ex]) {
-            elements.push(
-              <line key={`ext-post-${lvl}-${si}-${epx}`}
-                x1={x(epx)} y1={ebY} x2={x(epx)} y2={ebY + ebH}
-                stroke={COL.stair} strokeWidth={1} strokeDasharray="2,2" opacity={0.5} />
-            );
-          }
-        } else if (isStairSpan) {
-          // Normal stair (900/1200mm): stair replaces plank
-          elements.push(
-            <line key={`stair-${lvl}-${si}`}
-              x1={x(sx + span * 0.04)} y1={y(baseY)}
-              x2={x(ex - span * 0.04)} y2={y(topY)}
-              stroke={COL.stair} strokeWidth={2.5} />
-          );
-          Array.from({ length: 8 }).forEach((_, st) => {
-            const t = (st + 1) / 9;
-            const stepXmm = sx + span * 0.04 + (span * 0.92) * t;
-            const stepYmm = baseY + LEVEL_H * t;
-            const treadHalf = span * 0.07;
-            elements.push(
-              <line key={`step-${lvl}-${si}-${st}`}
-                x1={x(stepXmm - treadHalf)} y1={y(stepYmm)}
-                x2={x(stepXmm + treadHalf)} y2={y(stepYmm)}
-                stroke={COL.stair} strokeWidth={1.8} />
-            );
-          });
-          if (!isWakugumi) {
-            elements.push(
-              <line key={`tesuri-s1-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
-                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.45)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
-              <line key={`tesuri-s2-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
-                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
-            );
-          } else {
-            elements.push(
-              <line key={`shitasan-s-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + 50)}
-                x2={x(ex)} y2={y(baseY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
-            );
-          }
-        } else {
-          // Brace (X pattern)
-          elements.push(
-            <line key={`brace-1-${lvl}-${si}`}
-              x1={x(sx)} y1={y(baseY)} x2={x(ex)} y2={y(topY)}
-              stroke={COL.brace} strokeWidth={BRACE_STROKE} />,
-            <line key={`brace-2-${lvl}-${si}`}
-              x1={x(sx)} y1={y(topY)} x2={x(ex)} y2={y(baseY)}
-              stroke={COL.brace} strokeWidth={BRACE_STROKE} />
-          );
-
-          if (isWakugumi) {
-            // Wakugumi: 下桟 (Shitasan) — bottom horizontal only, no tesuri
-            elements.push(
-              <line key={`shitasan-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + 50)}
-                x2={x(ex)} y2={y(baseY + 50)}
-                stroke={COL.shitasan} strokeWidth={TESURI_STROKE} />
-            );
-          } else {
-            // Kusabi: Tesuri (inner face horizontal bars)
-            elements.push(
-              <line key={`tesuri-1-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.45)}
-                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.45)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />,
-              <line key={`tesuri-2-${lvl}-${si}`}
-                x1={x(sx)} y1={y(baseY + LEVEL_H * 0.9)}
-                x2={x(ex)} y2={y(baseY + LEVEL_H * 0.9)}
-                stroke={COL.tesuri} strokeWidth={TESURI_STROKE} />
-            );
-          }
-
-          // Plank
-          elements.push(
-            <rect key={`plank-${lvl}-${si}`}
-              x={x(sx) + 2} y={y(topY) - PLANK_H_PX / 2}
-              width={(ex - sx) * scale - 4} height={PLANK_H_PX}
-              fill={COL.plank} opacity={0.7} rx={1} />
-          );
-          // Habaki
-          elements.push(
-            <line key={`habaki-${lvl}-${si}`}
-              x1={x(sx) + 2} y1={y(topY) + PLANK_H_PX / 2 + 2}
-              x2={x(ex) - 2} y2={y(topY) + PLANK_H_PX / 2 + 2}
-              stroke={COL.habaki} strokeWidth={HABAKI_H_PX} opacity={0.5} />
-          );
-        }
-      });
-
-      // Width yokoji (kusabi — not for wakugumi)
-      if (!isWakugumi) {
-        postXPositions.forEach((px, pi) => {
-          elements.push(
-            <line key={`wyk-${lvl}-${pi}`}
-              x1={x(px) - 4} y1={y(topY)} x2={x(px) + 4} y2={y(topY)}
-              stroke={COL.yokoji} strokeWidth={2.5} />
-          );
-        });
-      }
-    });
-
-    // Top Guard Posts / band（くさびのみ。枠組は上で +1 段の建枠として描画済み）
-    if (!isWakugumi) {
-      postXPositions.forEach((px, pi) => {
-        const guardBase = JACK_BASE_H + levels * LEVEL_H;
-        const guardTop = guardBase + topGuardMm;
-        elements.push(
-          <line key={`${keyPrefix}tg-${pi}`}
-            x1={x(px)} y1={y(guardBase)} x2={x(px)} y2={y(guardTop)}
-            stroke={COL.topGuard} strokeWidth={POST_STROKE} strokeDasharray="5,3" />
-        );
-      });
-
-      spans.forEach((span, si) => {
-        const guardTop = JACK_BASE_H + levels * LEVEL_H + topGuardMm;
-        const sx = postXPositions[si];
-        const ex = postXPositions[si + 1];
-        elements.push(
-          <line key={`${keyPrefix}tgr-${si}`}
-            x1={x(sx)} y1={y(guardTop)} x2={x(ex)} y2={y(guardTop)}
-            stroke={COL.topGuard} strokeWidth={TESURI_STROKE} />
-        );
-      });
-    }
-
-    // End stopper — wakugumi: vertical marker at ends; kusabi: 端部手摺 (2 rails) at each end
-    if (isWakugumi) {
-      Array.from({ length: levelsDraw }).forEach((_, lvl) => {
-        const baseY = JACK_BASE_H + lvl * LEVEL_H;
-        const topY = baseY + LEVEL_H;
-        [0, totalLengthMm].forEach((px, ei) => {
-          elements.push(
-            <line key={`endstopper-${lvl}-${ei}`}
-              x1={x(px)} y1={y(baseY)} x2={x(px)} y2={y(topY)}
-              stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="4,3" />
-          );
-        });
-      });
-    } else {
-      const tickMm = 55;
-      Array.from({ length: levels }).forEach((_, lvl) => {
-        const baseY = JACK_BASE_H + lvl * LEVEL_H;
-        [0, totalLengthMm].forEach((px, ei) => {
-          [0.45, 0.9].forEach((frac, ti) => {
-            const ymm = baseY + LEVEL_H * frac;
-            elements.push(
-              <line key={`kusabi-endstop-${lvl}-${ei}-${ti}`}
-                x1={x(Math.max(0, px - tickMm))} y1={y(ymm)}
-                x2={x(px + tickMm)} y2={y(ymm)}
-                stroke={COL.endStopper} strokeWidth={TESURI_STROKE} strokeDasharray="3,2" />
-            );
-          });
-        });
-      });
-    }
-
-    // Span dimension lines
-    spans.forEach((span, si) => {
-      const sx = postXPositions[si];
-      const ex = postXPositions[si + 1];
-      const dy = y(0) + DIMENSION_OFFSET + 12;
-      elements.push(
-        <g key={`dim-${si}`}>
-          <line x1={x(sx)} y1={dy} x2={x(ex)} y2={dy} stroke={COL.dim} strokeWidth={0.8} />
-          <line x1={x(sx)} y1={dy - 4} x2={x(sx)} y2={dy + 4} stroke={COL.dim} strokeWidth={0.8} />
-          <line x1={x(ex)} y1={dy - 4} x2={x(ex)} y2={dy + 4} stroke={COL.dim} strokeWidth={0.8} />
-          <text x={(x(sx) + x(ex)) / 2} y={dy - 5} textAnchor="middle" fontSize={9} fill={COL.dimText}>
-            {span}
-          </text>
-        </g>
-      );
-    });
-
-    // Total wall length dimension
-    const dy = y(0) + DIMENSION_OFFSET + 32;
-    elements.push(
-      <g key="dim-total">
-        <line x1={x(0)} y1={dy} x2={x(totalLengthMm)} y2={dy} stroke={COL.dim} strokeWidth={1} />
-        <line x1={x(0)} y1={dy - 5} x2={x(0)} y2={dy + 5} stroke={COL.dim} strokeWidth={1} />
-        <line x1={x(totalLengthMm)} y1={dy - 5} x2={x(totalLengthMm)} y2={dy + 5} stroke={COL.dim} strokeWidth={1} />
-        <text x={(x(0) + x(totalLengthMm)) / 2} y={dy - 6} textAnchor="middle" fontSize={11} fontWeight="bold" fill={COL.dimText}>
-            {totalLengthMm.toLocaleString(numberLocale)}mm
-        </text>
-      </g>
-    );
-
-    // Height dimension (left side)
-    const hDx = PAD_LEFT - 45;
-    elements.push(
-      <g key="dim-height">
-        <line x1={hDx} y1={y(0)} x2={hDx} y2={y(wd.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
-        <line x1={hDx - 5} y1={y(0)} x2={hDx + 5} y2={y(0)} stroke={COL.dim} strokeWidth={1} />
-        <line x1={hDx - 5} y1={y(wd.totalHeightMm)} x2={hDx + 5} y2={y(wd.totalHeightMm)} stroke={COL.dim} strokeWidth={1} />
-        <text x={hDx - 6} y={(y(0) + y(wd.totalHeightMm)) / 2}
-          textAnchor="middle" fontSize={10} fontWeight="bold" fill={COL.dimText}
-          transform={`rotate(-90, ${hDx - 6}, ${(y(0) + y(wd.totalHeightMm)) / 2})`}>
-          {wd.totalHeightMm.toLocaleString(numberLocale)}mm
-        </text>
-      </g>
-    );
-
-    return elements;
-  };
 
   // ─── Print handler ─────────────────────────────────────
   const handlePrint = () => {

@@ -1469,39 +1469,41 @@ export default function Scaffold3DView({
         // Terminal bay (610/914/1219): 端部 sits at the **outer post** of that real span (+ slight façade outset).
         if (postX.length >= 2) {
           const exWallEnd = postX[postX.length - 1];
+          const sxWallStart = postX[0] ?? 0;
           const zEndStopper = widthM;
           const swMm = widthMm;
           const lastSpanMm = spans[spans.length - 1] ?? 0;
+          const firstSpanMm = spans[0] ?? 0;
           const isEndTerminalBay =
             !isBracket &&
             spans.length >= 1 &&
             Math.abs(lastSpanMm - swMm) <= 55;
-          const xPlane = isEndTerminalBay ? exWallEnd + END_STOPPER_FACADE_OUTSET_M : exWallEnd;
+          const isStartTerminalBay =
+            !isBracket &&
+            spans.length >= 1 &&
+            Math.abs(firstSpanMm - swMm) <= 55;
+          const xPlaneEnd = isEndTerminalBay ? exWallEnd + END_STOPPER_FACADE_OUTSET_M : exWallEnd;
+          const xPlaneStart = isStartTerminalBay ? sxWallStart - END_STOPPER_FACADE_OUTSET_M : sxWallStart;
 
-          if (isWakugumi) {
+          const addWakugumiTwoRedStopperBars = (xPlane: number) => {
+            if (zEndStopper < 0.08) return;
+            const barThick = 0.022;
+            const barH = 0.018;
+            const zMid = zEndStopper / 2;
+            const zLen = Math.max(0.06, zEndStopper - 0.04);
             for (let lv = 1; lv <= levelLoopMax; lv++) {
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
-              const barY1 = y + 0.05;
-              const barY2 = y + 0.45;
-              if (isEndTerminalBay && zEndStopper >= 0.08) {
-                const kickT = 0.038;
-                addBox(
-                  group,
-                  xPlane - kickT * 0.5,
-                  y - 0.05,
-                  zEndStopper * 0.5,
-                  kickT,
-                  0.14,
-                  zEndStopper,
-                  endStopperKickMat,
-                );
-                addRealisticNunoBar(THREE, group, xPlane, barY1, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.05);
-                addRealisticNunoBar(THREE, group, xPlane, barY2, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.0);
-              } else {
-                addPipe(group, exWallEnd, barY1, 0, exWallEnd, barY1, zEndStopper, endStopperMat, PIPE_R * 0.75);
-                addPipe(group, exWallEnd, barY2, 0, exWallEnd, barY2, zEndStopper, endStopperMat, PIPE_R * 0.72);
+              const barY1 = y + 0.08;
+              const barY2 = y + 0.42;
+              for (const yy of [barY1, barY2]) {
+                addBox(group, xPlane, yy, zMid, barThick, barH, zLen, endStopperMat);
               }
             }
+          };
+
+          if (isWakugumi) {
+            addWakugumiTwoRedStopperBars(xPlaneStart);
+            addWakugumiTwoRedStopperBars(xPlaneEnd);
           } else if (!isBracket) {
             for (let lv = 1; lv <= levelLoopMax; lv++) {
               const y = GROUND_Y + JACK_H + lv * LEVEL_H;
@@ -1511,7 +1513,7 @@ export default function Scaffold3DView({
                 const kickT = 0.038;
                 addBox(
                   group,
-                  xPlane - kickT * 0.5,
+                  xPlaneEnd - kickT * 0.5,
                   y - 0.05,
                   zEndStopper * 0.5,
                   kickT,
@@ -1519,8 +1521,8 @@ export default function Scaffold3DView({
                   zEndStopper,
                   endStopperKickMat,
                 );
-                addRealisticNunoBar(THREE, group, xPlane, railMid, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.05);
-                addRealisticNunoBar(THREE, group, xPlane, railTop, 0, xPlane, zEndStopper, endStopperMat, PIPE_R * 1.0);
+                addRealisticNunoBar(THREE, group, xPlaneEnd, railMid, 0, xPlaneEnd, zEndStopper, endStopperMat, PIPE_R * 1.05);
+                addRealisticNunoBar(THREE, group, xPlaneEnd, railTop, 0, xPlaneEnd, zEndStopper, endStopperMat, PIPE_R * 1.0);
               } else {
                 addPipe(group, exWallEnd, railTop, 0, exWallEnd, railTop, zEndStopper, endStopperMat, PIPE_R * 0.72);
                 addPipe(group, exWallEnd, railMid, 0, exWallEnd, railMid, zEndStopper, endStopperMat, PIPE_R * 0.68);

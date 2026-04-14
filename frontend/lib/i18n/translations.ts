@@ -1018,6 +1018,22 @@ export const translations = {
     view2dSvgSubtitleTpl: { ja: '{{type}} — 壁{{i}}/{{n}}', en: '{{type}} — Wall {{i}}/{{n}}', fr: '{{type}} — Mur {{i}}/{{n}}' },
     view2dDxfSingleWallTitle: { ja: 'DXFは1面ずつのみエクスポートできます', en: 'DXF export: single wall only', fr: 'Export DXF : un mur à la fois' },
     view2dScreenshotTitle: { ja: 'スクリーンショット — 高解像度PNG', en: 'Screenshot — high-resolution PNG', fr: 'Capture — PNG haute résolution' },
+    view2dOnePageTitle: {
+      ja: '全壁面ワンページ立面',
+      en: 'All walls — single-page elevations',
+      fr: 'Tous les murs — élévations sur une page',
+    },
+    view2dOnePageHint: {
+      ja: '各壁を黒線で区切り、横幅に合わせて縮尺表示します。スライダーで幅を調整できます。',
+      en: 'Walls are separated by black rules and scaled to fit the width. Use the slider to change the strip width.',
+      fr: 'Murs séparés par des traits noirs, mis à l’échelle sur la largeur. Réglez la largeur avec le curseur.',
+    },
+    view2dOnePageWidth: { ja: '表示幅', en: 'Strip width', fr: 'Largeur' },
+    view2dOnePageSvgTitle: {
+      ja: '全壁面立面（スパン寸法付き）',
+      en: 'All wall elevations (with span dimensions)',
+      fr: 'Élévations de tous les murs (cotes des travées)',
+    },
     legendKusabiEndHandrail: { ja: '端部手摺', en: 'End handrails', fr: "Garde-corps d'extrémité" },
     specWidth: { ja: '幅', en: 'Width', fr: 'Largeur' },
     specFrame: { ja: '建枠', en: 'Frame', fr: 'Cadre' },
@@ -1880,9 +1896,9 @@ export const translations = {
     tabOverall: { ja: '全体数量', en: 'Overall Totals', fr: 'Totaux généraux' },
     tabMaterials: { ja: '材料写真', en: 'Material Pictures', fr: 'Photos des matériaux' },
     materialsGalleryHint: {
-      ja: '計算結果の部材を種類ごとに写真と合計数量で表示します（規格が複数ある場合は規格を併記）。枠組の端部は「開いた端」がある場合のみ全体集計に計上されるため、その場合だけここにも表示されます（閉じた矩形の周回では数量0のため行がありません）。',
-      en: 'Photos with total quantities per material group from this calculation (multiple specs are listed when needed). Frame end stoppers (端部) only appear when the BOM includes them—open-ended runs (e.g. U-shape), not closed rectangular perimeters where the count is zero.',
-      fr: 'Photos et quantités totales par groupe de matériaux pour ce calcul (plusieurs spécifications listées si besoin). Les arrêts d’extrémité (cadres) n’apparaissent que si le métré les compte — extrémités libres (ex. U), pas pour un périmètre fermé où la quantité est nulle.',
+      ja: '計算結果の部材を種類ごとに写真と合計数量で表示します（規格が複数ある場合は規格を併記）。枠組の端部は各壁面の両端を計上するため、閉じた周回でも写真一覧に表示されます（数量0の行は出ません）。',
+      en: 'Photos with total quantities per material group from this calculation (multiple specs are listed when needed). Wakugumi end stoppers (端部) are counted at both ends of every wall, so they appear here for closed perimeters too when quantity is greater than zero.',
+      fr: 'Photos et quantités totales par groupe de matériaux pour ce calcul (plusieurs spécifications listées si besoin). Les arrêts d’extrémité wakugumi comptent les deux extrémités de chaque mur et apparaissent aussi sur périmètre fermé lorsque la quantité est positive.',
     },
     materialsGalleryPrintPdf: {
       ja: '印刷 / PDF 保存',
@@ -2099,11 +2115,11 @@ export const translations = {
     },
     pattankoIncludeHint: {
       ja:
-        'ON時は非90°角のパッタンコを見積・3Dに反映（直角はLデッキ側）。数量0ならExcel行は出ません。枠組の端部は常に自動計上',
+        'ON時は各角（直線以外の頂点）にパッタンコを計上。幅は踏板と同じ（600→1、900→1.5、1200→2/角/段）。数量0ならExcel行は出ません。枠組の端部は各壁両端を計上',
       en:
-        'When on, BOM and 3D include PATTANKO at non-90° corners only; ~90° corners use L-deck (no PATTANKO line). Excel lists a row only when quantity is greater than zero. Wakugumi end stoppers are always included.',
+        'When on, BOM counts PATTANKO at every polygon corner (non-180°), same width modules as planks per corner per level (600→1, 900→1.5, 1200→2). Excel omits the row when quantity is zero. Wakugumi end stoppers count both ends of each wall.',
       fr:
-        'Si activé, le BOM et la 3D n’incluent des PATTANKO qu’aux angles autres que 90°; les angles droits utilisent le plateau en L (pas de ligne PATTANKO). Excel n’affiche une ligne que si la quantité est supérieure à zéro.',
+        'Si activé, le BOM compte les PATTANKO à chaque sommet non plat, comme les modules de plateau par coin et par niveau (600→1, 900→1,5, 1200→2). Excel n’affiche la ligne que si la quantité est positive. Les arrêts d’extrémité wakugumi comptent les deux bouts de chaque mur.',
     },
     endStopper: { ja: '端部タイプ', en: 'End Stopper', fr: 'End Stopper' },
     multiSegmentWall: { ja: '多段壁', en: 'Multi-Segment Wall', fr: 'Multi-Segment Wall' },
