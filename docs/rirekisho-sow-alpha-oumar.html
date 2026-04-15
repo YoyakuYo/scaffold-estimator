@@ -75,18 +75,29 @@
     }
     .ym { text-align: center; font-size: 8.6pt; font-variant-numeric: tabular-nums; }
     .photo-box {
-      width: 30mm;
-      height: 40mm;
+      width: 34mm;
       padding: 0;
       text-align: center;
-      vertical-align: middle;
+      vertical-align: top;
     }
-    .photo-box img {
+    /* 30×40mm 証明写真枠 — wide table column was stretching the cell; cover then cropped face to eyes/lips only */
+    .photo-slot {
+      width: 30mm;
+      height: 40mm;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+    }
+    .photo-slot img {
       display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center top;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      object-position: center center;
     }
     .photo-caption {
       font-size: 6.2pt;
@@ -175,8 +186,8 @@
   <div class="sheet">
     <table class="tbl" style="margin-bottom: 0;">
       <colgroup>
-        <col style="width: 72%;" />
-        <col style="width: 28%;" />
+        <col />
+        <col style="width: 34mm;" />
       </colgroup>
       <tr>
         <td class="cell" colspan="2" style="padding: 1mm 2mm 1.5mm;">
@@ -221,14 +232,16 @@
             </tr>
           </table>
         </td>
-        <td class="photo-box top" style="padding: 0; width: 32mm;">
-          <table class="tbl" style="height: 100%; border: 1px solid var(--ink);">
+        <td class="photo-box top" style="padding: 0;">
+          <table class="tbl" style="width: 100%; border: 1px solid var(--ink);">
             <tr>
               <td class="cell center lbl" style="padding: 0.5mm;">写真</td>
             </tr>
             <tr>
-              <td style="padding: 0; height: 40mm; vertical-align: middle;">
-                <img src="rirekisho-profile-sow-alpha-oumar.png" width="120" height="160" alt="証明写真" />
+              <td style="padding: 1mm; vertical-align: middle;">
+                <div class="photo-slot">
+                  <img src="rirekisho-profile-sow-alpha-oumar.png" alt="証明写真" />
+                </div>
               </td>
             </tr>
             <tr>
