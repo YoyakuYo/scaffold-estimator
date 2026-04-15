@@ -111,8 +111,55 @@
     .join-history thead th {
       border-top: 0;
     }
+    .join-license thead th {
+      border-top: 0;
+    }
+    .join-motivate > tbody > tr:first-child > td,
+    .join-motivate > tbody > tr:first-child > th {
+      border-top: 0;
+    }
+    .join-wish > tbody > tr:first-child > td {
+      border-top: 0;
+    }
     .muted { font-size: 7.2pt; }
-    .sheet { page-break-inside: avoid; }
+    .page2 {
+      page-break-before: always;
+      break-before: page;
+    }
+    .motive-head {
+      font-size: 7pt;
+      font-weight: 500;
+      line-height: 1.2;
+      padding: 0.6mm 1.2mm;
+      border-bottom: 1px solid var(--ink);
+    }
+    .motive-body {
+      font-size: 8.2pt;
+      line-height: 1.35;
+      padding: 1.2mm 1.6mm;
+      vertical-align: top;
+    }
+    .motive-block {
+      min-height: 36mm;
+      vertical-align: top;
+    }
+    .side-meta .cell {
+      font-size: 7.6pt;
+      padding: 1mm 1.2mm;
+    }
+    .wish-head {
+      font-size: 7pt;
+      line-height: 1.25;
+      padding: 0.6mm 1.2mm;
+    }
+    .wish-body {
+      font-size: 8.3pt;
+      min-height: 10mm;
+      padding: 1mm 1.4mm;
+    }
+    @media screen {
+      .page2 { margin-top: 10mm; padding-top: 4mm; border-top: 1px dashed #ccc; }
+    }
     @media print {
       html, body { background: #fff; }
       .sheet {
@@ -120,6 +167,7 @@
         min-height: auto;
         margin: 0;
       }
+      .page2 { margin: 0; padding: 0; border: 0; }
     }
   </style>
 </head>
@@ -285,6 +333,86 @@
         </tr>
       </tbody>
     </table>
+
+    <div class="page2">
+      <table class="tbl join-license">
+        <colgroup>
+          <col style="width: 14mm;" />
+          <col style="width: 10mm;" />
+          <col />
+        </colgroup>
+        <thead>
+          <tr class="history-head">
+            <th>年</th>
+            <th>月</th>
+            <th>免許・資格</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ym cell-tight">2017</td>
+            <td class="ym cell-tight">4</td>
+            <td class="cell left">日本語コース　しゅうりょう</td>
+          </tr>
+          <tr>
+            <td class="ym cell-tight">2016</td>
+            <td class="ym cell-tight">9</td>
+            <td class="cell left">東京平田日本語学院　しゅうりょう</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="tbl join-motivate">
+        <colgroup>
+          <col style="width: 64%;" />
+          <col style="width: 18%;" />
+          <col style="width: 18%;" />
+        </colgroup>
+        <tbody>
+          <tr>
+            <td class="top motive-block" rowspan="4" style="padding: 0;">
+              <table class="tbl" style="width: 100%; border: 0;">
+                <tr>
+                  <td class="motive-head left">志望の動機、特技、好きな学科、アピールポイントなど</td>
+                </tr>
+                <tr>
+                  <td class="motive-body left top">
+                    web アプリを2つ作りました。（AIをかつよう）<br />
+                    よやくシステムと、足場せきさんシステムです。<br />
+                    www.yoyakuyo.jp　／　www.kasetsu-sekisan.com<br />
+                    じぶんでかいはつ・デプロイしました。<br />
+                    チームでも、ひとりでもしごとができます。
+                  </td>
+                </tr>
+              </table>
+            </td>
+            <td class="cell lbl left side-meta">通勤時間</td>
+            <td class="cell left side-meta">（　　　　　）分</td>
+          </tr>
+          <tr>
+            <td class="cell lbl left side-meta">扶養家族数</td>
+            <td class="cell left side-meta">（　　　　　）人</td>
+          </tr>
+          <tr>
+            <td class="cell left side-meta" colspan="2">配偶者（有・無）　有（　）　無（○）</td>
+          </tr>
+          <tr>
+            <td class="cell left side-meta" colspan="2">配偶者の扶養義務（有・無）　有（　）　無（○）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="tbl join-wish">
+        <tr>
+          <td class="wish-head left" colspan="2">
+            本人希望記入欄（特に待遇・職種・勤務時間・勤務地・その他についての希望などがあれば記入）
+          </td>
+        </tr>
+        <tr>
+          <td class="wish-body left top" colspan="2">とくになし</td>
+        </tr>
+      </table>
+    </div>
   </div>
 </body>
 </html>
