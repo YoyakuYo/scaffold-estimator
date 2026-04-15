@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
-import { getApiBaseUrl } from '@/lib/api/client';
+import { axiosErrorToLoginFlowKey, type LoginFlowErrorKey } from '@/lib/api/safe-auth-flow-error';
 import { useMutation } from '@tanstack/react-query';
 import { Globe } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const { locale, setLocale, t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errorKey, setErrorKey] = useState<LoginFlowErrorKey | null>(null);
   const [localeMenuOpen, setLocaleMenuOpen] = useState(false);
   const localeMenuRef = useRef<HTMLDivElement>(null);
 
@@ -40,26 +40,17 @@ export default function LoginPage() {
       }
       router.push('/dashboard');
     },
-    onError: (err: any) => {
-      // No response = network error (wrong URL, CORS, or backend unreachable)
-      const msg = err.response?.data?.message;
-      if (!err.response) {
-        const base = getApiBaseUrl();
-        const detail = t('login', 'networkErrorAttempted').replace('{url}', base);
-        setError(`${t('login', 'networkError')}\n\n${detail}`);
-        return;
-      }
-      setError(msg || t('login', 'failed'));
+    onError: (err: unknown) => {
+      setErrorKey(axiosErrorToLoginFlowKey(err));
     },
   });
 
   const isSuperAdminError =
-    typeof error === 'string' &&
-    (error.includes('Super admin') || error.includes('/superadmin'));
+    errorKey === 'superAdminUseSuperPage' || errorKey === 'useNormalLoginForSuper';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setErrorKey(null);
     loginMutation.mutate({ email, password });
   };
 
@@ -118,9 +109,9 @@ export default function LoginPage() {
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit} suppressHydrationWarning>
-          {error && (
+          {errorKey && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded space-y-2" suppressHydrationWarning>
-              <p className="whitespace-pre-wrap break-words">{error}</p>
+              <p className="whitespace-pre-wrap break-words">{t('login', errorKey)}</p>
               {isSuperAdminError && (
                 <p className="text-sm">
                   <a href="/superadmin" className="font-medium underline hover:text-red-800">

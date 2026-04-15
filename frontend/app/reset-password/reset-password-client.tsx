@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@/lib/api/auth';
+import { safeResetPasswordErrorLine } from '@/lib/api/safe-auth-flow-error';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { Globe, Loader2, AlertTriangle, Check } from 'lucide-react';
 
@@ -76,8 +77,12 @@ export function ResetPasswordClient() {
         <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
           <AlertTriangle className="h-5 w-5 flex-shrink-0" />
           <span>
-            {(mutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-              t('passwordReset', 'resetInvalid')}
+            {(() => {
+              const line = safeResetPasswordErrorLine(mutation.error);
+              if (line && line.toLowerCase().includes('reset link')) return t('passwordReset', 'resetInvalid');
+              if (line) return line;
+              return t('passwordReset', 'forgotError');
+            })()}
           </span>
         </div>
       )}

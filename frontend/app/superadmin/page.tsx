@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
+import { axiosErrorToLoginFlowKey, type LoginFlowErrorKey } from '@/lib/api/safe-auth-flow-error';
 import { usersApi } from '@/lib/api/users';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Shield, LogIn, Loader2, AlertCircle } from 'lucide-react';
@@ -11,10 +12,12 @@ import { useI18n } from '@/lib/i18n';
 
 export default function SuperAdminPage() {
   const router = useRouter();
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errorKey, setErrorKey] = useState<LoginFlowErrorKey | null>(null);
+  /** Logged in successfully but JWT user is not superadmin (wrong entry point). */
+  const [postLoginDenied, setPostLoginDenied] = useState(false);
 
   const hasToken = !!authApi.getToken();
   const { data: profile } = useQuery({
@@ -32,22 +35,25 @@ export default function SuperAdminPage() {
         router.push('/superadmin/dashboard');
         return;
       }
-      setError(t('superadminLogin', 'deniedAccount'));
+      setErrorKey(null);
+      setPostLoginDenied(true);
     },
-    onError: (err: any) => {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          t('superadminLogin', 'fallbackError'),
-      );
+    onError: (err: unknown) => {
+      setPostLoginDenied(false);
+      setErrorKey(axiosErrorToLoginFlowKey(err));
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setErrorKey(null);
+    setPostLoginDenied(false);
     loginMutation.mutate({ email, password });
   };
+
+  const errorBody =
+    postLoginDenied ? t('superadminLogin', 'deniedAccount') : errorKey ? t('login', errorKey) : null;
+  const showNormalLoginCta = postLoginDenied || errorKey === 'useNormalLoginForSuper';
 
   useEffect(() => {
     if (profile?.role === 'superadmin') {
@@ -67,13 +73,13 @@ export default function SuperAdminPage() {
             <p className="mt-1 text-sm text-gray-500">{t('superadminLogin', 'subtitle')}</p>
           </div>
 
-          {error && (
+          {errorBody && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2 text-sm">
               <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
               <div className="min-w-0">
                 <p className="font-medium">{t('superadminLogin', 'loginFailed')}</p>
-                <p className="mt-1 text-red-600">{error}</p>
-                {error.includes('normal login') && (
+                <p className="mt-1 text-red-600">{errorBody}</p>
+                {showNormalLoginCta && (
                   <p className="mt-2">
                     <a href="/login" className="font-medium underline hover:text-red-800">
                       {t('superadminLogin', 'normalLogin')}

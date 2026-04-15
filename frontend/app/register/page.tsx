@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi, RegisterPayload } from '@/lib/api/auth';
+import { isAuthTransportOrGatewayFailure, safeRegisterErrorLines } from '@/lib/api/safe-auth-flow-error';
 import { useMutation } from '@tanstack/react-query';
 import { Globe, UserPlus, Building2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -135,11 +136,10 @@ export default function RegisterPage() {
               <div className="min-w-0">
                 <p className="font-medium">
                   {(() => {
-                    const err = registerMutation.error as any;
-                    const msg = err?.response?.data?.message;
-                    if (Array.isArray(msg)) return msg.join(' / ');
-                    if (msg && typeof msg === 'string') return msg;
-                    if (!err?.response) return t('register', 'networkError');
+                    const err = registerMutation.error;
+                    if (isAuthTransportOrGatewayFailure(err)) return t('register', 'networkError');
+                    const lines = safeRegisterErrorLines(err);
+                    if (lines?.length) return lines.join(' / ');
                     return t('register', 'failed');
                   })()}
                 </p>

@@ -26,6 +26,11 @@ export const translations = {
     confirm: { ja: '確認', en: 'Confirm', fr: 'Confirmer' },
     yes: { ja: 'はい', en: 'Yes', fr: 'Oui' },
     no: { ja: 'いいえ', en: 'No', fr: 'Non' },
+    tryAgainLater: {
+      ja: 'しばらくしてからもう一度お試しください。',
+      en: 'Please try again later.',
+      fr: 'Veuillez réessayer plus tard.',
+    },
   },
 
   // ─── Settings redirect (global price master removed) ────────────
@@ -73,12 +78,40 @@ export const translations = {
     password: { ja: 'パスワード', en: 'Password', fr: 'Mot de passe' },
     loginButton: { ja: 'ログイン', en: 'Sign In', fr: 'Connexion' },
     loggingIn: { ja: 'ログイン中...', en: 'Signing in...', fr: 'Connexion...' },
-    failed: { ja: 'ログインに失敗しました。バックエンドが起動していない可能性があります。', en: 'Login failed. The backend server may not be running.', fr: "Échec de la connexion. Le serveur backend n'est peut-être pas démarré." },
-    networkError: { ja: 'サーバーに接続できません。バックエンドが Render 等で動いている場合は、フロントの環境変数 NEXT_PUBLIC_BACKEND_URL をバックエンドのURL（例: https://xxx.onrender.com/api/v1）に設定して再ビルドしてください。', en: 'Cannot reach the server. If the backend is running on Render etc., set the frontend env NEXT_PUBLIC_BACKEND_URL to the backend URL (e.g. https://xxx.onrender.com/api/v1) and rebuild.', fr: "Impossible de joindre le serveur. Si le backend tourne sur Render etc., définissez NEXT_PUBLIC_BACKEND_URL sur l'URL du backend (ex. https://xxx.onrender.com/api/v1) et recompilez." },
-    networkErrorAttempted: {
-      ja: '接続に使った API のベース: {url}',
-      en: 'API base used for this request: {url}',
-      fr: "Base API utilisée pour cette requête : {url}",
+    tryLater: {
+      ja: 'サーバーに接続できません。しばらくしてからもう一度お試しください。',
+      en: 'Cannot reach the service right now. Please try again later.',
+      fr: 'Le service est momentanément indisponible. Veuillez réessayer plus tard.',
+    },
+    invalidCredentials: {
+      ja: 'メールアドレスまたはパスワードが正しくありません。',
+      en: 'Invalid email or password.',
+      fr: 'E-mail ou mot de passe invalide.',
+    },
+    accountPendingApproval: {
+      ja: '管理者の承認待ちです。承認後にログインできます。',
+      en: 'Your account is pending approval. You can sign in once an administrator approves it.',
+      fr: 'Votre compte est en attente d’approbation. Vous pourrez vous connecter après validation.',
+    },
+    accountRejected: {
+      ja: 'このアカウントは承認されませんでした。サポートにお問い合わせください。',
+      en: 'This account was not approved. Please contact support.',
+      fr: 'Ce compte n’a pas été approuvé. Contactez le support.',
+    },
+    accountDeactivated: {
+      ja: 'このアカウントは無効化されています。サポートにお問い合わせください。',
+      en: 'This account has been deactivated. Please contact support.',
+      fr: 'Ce compte a été désactivé. Contactez le support.',
+    },
+    superAdminUseSuperPage: {
+      ja: 'スーパー管理者の方は専用のログインページをご利用ください。',
+      en: 'Super Admin accounts must use the Super Admin sign-in page.',
+      fr: 'Les comptes Super Admin doivent utiliser la page de connexion dédiée.',
+    },
+    useNormalLoginForSuper: {
+      ja: 'このアカウントは通常のログインページからログインしてください。',
+      en: 'Please use the standard sign-in page for this account.',
+      fr: 'Utilisez la page de connexion standard pour ce compte.',
     },
     devMode: { ja: '🔧 開発モードで入る（バックエンド不要）', en: '🔧 Enter Dev Mode (no backend needed)', fr: '🔧 Mode développement (sans backend)' },
     devModeHint: { ja: 'バックエンド未接続時に画面を確認できます', en: 'Preview the UI without a backend connection', fr: "Aperçu de l'interface sans connexion au backend" },
@@ -104,16 +137,6 @@ export const translations = {
       ja: '送信に失敗しました。しばらくしてから再度お試しください。',
       en: 'Something went wrong. Please try again later.',
       fr: 'Une erreur s’est produite. Réessayez plus tard.',
-    },
-    forgotNetworkError: {
-      ja: 'サーバーに接続できません。ホスティングの環境変数 NEXT_PUBLIC_BACKEND_URL にバックエンドのURL（例: https://xxx.onrender.com/api/v1）を設定してフロントを再デプロイしてください。',
-      en: 'Cannot reach the API. Set NEXT_PUBLIC_BACKEND_URL on your frontend host to your backend URL (e.g. https://your-api.onrender.com/api/v1) and redeploy.',
-      fr: 'Impossible de joindre l’API. Définissez NEXT_PUBLIC_BACKEND_URL sur l’URL du backend (ex. https://votre-api.onrender.com/api/v1) et redéployez le frontend.',
-    },
-    forgotNetworkErrorBuildHint: {
-      ja: 'Next.js はビルド時に NEXT_PUBLIC_* を埋め込みます。変数を変えたらフロントを必ず再ビルド・再デプロイしてください。下の URL が実際に使われているベースです。',
-      en: 'Next.js bakes NEXT_PUBLIC_* into the JS at build time—redeploy the frontend after changing env vars. The line below is the API base this page is actually using.',
-      fr: 'Next.js intègre NEXT_PUBLIC_* au moment du build : redéployez le frontend après modification. La ligne ci-dessous est la base API réellement utilisée.',
     },
     backToLogin: { ja: 'ログインに戻る', en: 'Back to sign in', fr: 'Retour à la connexion' },
     resetTitle: { ja: '新しいパスワードを設定', en: 'Choose a new password', fr: 'Choisissez un nouveau mot de passe' },
@@ -160,7 +183,11 @@ export const translations = {
     registerButton: { ja: '登録', en: 'Register', fr: "S'inscrire" },
     registering: { ja: '登録中...', en: 'Registering...', fr: 'Inscription...' },
     failed: { ja: '登録に失敗しました', en: 'Registration failed', fr: "Échec de l'inscription" },
-    networkError: { ja: '接続できません。バックエンドが起動しているか確認してください。', en: 'Could not connect. Check that the backend is running.', fr: "Impossible de se connecter. Vérifiez que le backend est démarré." },
+    networkError: {
+      ja: 'サーバーに接続できません。しばらくしてからもう一度お試しください。',
+      en: 'Cannot reach the service right now. Please try again later.',
+      fr: 'Le service est momentanément indisponible. Veuillez réessayer plus tard.',
+    },
     successTitle: { ja: '登録完了', en: 'Registration Successful', fr: 'Inscription réussie' },
     successMessage: { ja: '登録が完了しました。管理者の承認をお待ちください。承認され次第、ログインできるようになります。', en: 'Your registration is complete. Please wait for admin approval. You will be able to log in once approved.', fr: "Votre inscription est terminée. Veuillez attendre l'approbation d'un administrateur. Vous pourrez vous connecter une fois approuvé." },
     goToLogin: { ja: 'ログインページへ', en: 'Go to Login', fr: 'Aller à la connexion' },
@@ -2854,7 +2881,11 @@ export const translations = {
     helperLink: { ja: '通常のログイン', en: 'normal login', fr: 'la connexion standard' },
     helperSuffix: { ja: 'をご利用ください。', en: '.', fr: '.' },
     deniedAccount: { ja: 'このアカウントではスーパー管理者にアクセスできません。', en: 'This account is not allowed to access Super Admin.', fr: 'Ce compte ne peut pas accéder au mode Super Admin.' },
-    fallbackError: { ja: 'ログインに失敗しました。バックエンドが起動しており、スーパー管理者ユーザーがデータベースに作成されていることを確認してください。', en: 'Login failed. Make sure the backend is running and the super admin user has been created in the database.', fr: "Échec de la connexion. Vérifiez que le backend est actif et que l'utilisateur Super Admin existe dans la base de données." },
+    fallbackError: {
+      ja: 'ログインに失敗しました。しばらくしてからもう一度お試しください。',
+      en: 'Sign-in failed. Please try again later.',
+      fr: 'Échec de la connexion. Veuillez réessayer plus tard.',
+    },
     forgotPasswordLink: { ja: 'パスワードをお忘れですか？', en: 'Forgot password?', fr: 'Mot de passe oublié ?' },
   },
 
