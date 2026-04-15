@@ -19,7 +19,6 @@ import {
   UserPlus,
   Ruler,
   Download,
-  ChevronDown,
   Mail,
   Loader2,
 } from 'lucide-react';
@@ -192,7 +191,6 @@ export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
-  const [plansOpen, setPlansOpen] = useState(false);
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactMessage, setContactMessage] = useState('');
@@ -282,12 +280,6 @@ export default function LandingPage() {
               {t('landing', 'appName')}
             </Link>
             <div className="flex items-center gap-2">
-              <a
-                href="#landing-plans"
-                className="hidden md:inline-flex px-2 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              >
-                {t('landing', 'plansEyebrow')}
-              </a>
               <a
                 href="#landing-contact"
                 className="hidden md:inline-flex px-2 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -749,118 +741,6 @@ export default function LandingPage() {
                 </ul>
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* ─── Plans (collapsed until opened) + Contact ─ */}
-        <section
-          id="landing-plans"
-          className="border-b border-gray-200 bg-slate-100 py-12 md:py-16"
-          aria-labelledby="landing-plans-heading"
-        >
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-700">
-                  {t('landing', 'plansEyebrow')}
-                </p>
-                <h2 id="landing-plans-heading" className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
-                  {t('landing', 'plansTitle')}
-                </h2>
-                <p className="mt-3 max-w-3xl text-gray-600 leading-relaxed">{t('landing', 'plansIntro')}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPlansOpen((o) => !o)}
-                aria-expanded={plansOpen}
-                aria-controls="landing-plans-panel"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-900/5 transition hover:bg-gray-50"
-              >
-                {plansOpen ? t('landing', 'plansToggleHide') : t('landing', 'plansToggleShow')}
-                <ChevronDown
-                  className={`h-4 w-4 text-gray-500 transition-transform ${plansOpen ? 'rotate-180' : ''}`}
-                  aria-hidden
-                />
-              </button>
-            </div>
-
-            {plansOpen && (
-              <div id="landing-plans-panel" className="mt-10 space-y-8" role="region" aria-labelledby="landing-plans-heading">
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                  {(
-                    [
-                      {
-                        title: t('billing', 'planTierMonthly'),
-                        prices: [
-                          t('billing', 'planCardMonthlyPrice'),
-                          t('billing', 'planCardMonthlySeats'),
-                          t('billing', 'planCardMonthlyRenewal'),
-                        ],
-                        bullets: [t('billing', 'planCardMonthlyLandingF1')],
-                      },
-                      {
-                        title: t('billing', 'planTierBasic'),
-                        prices: [
-                          t('billing', 'planCardBasicLicense'),
-                          t('billing', 'planCardBasicYearly'),
-                          t('billing', 'planCardBasicSeats'),
-                        ],
-                        bullets: [t('billing', 'planCardBasicF1'), t('billing', 'planCardBasicF2')],
-                      },
-                      {
-                        title: t('billing', 'planTierMedium'),
-                        prices: [
-                          t('billing', 'planCardMediumLicense'),
-                          t('billing', 'planCardMediumYearly'),
-                          t('billing', 'planCardMediumSeats'),
-                        ],
-                        bullets: [
-                          t('billing', 'planCardMediumF1'),
-                          t('billing', 'planCardMediumF2'),
-                          t('billing', 'planCardMediumF3'),
-                        ],
-                      },
-                      {
-                        title: t('billing', 'planTierPremium'),
-                        prices: [
-                          t('billing', 'planCardPremiumLicense'),
-                          t('billing', 'planCardPremiumYearly'),
-                          t('billing', 'planCardPremiumSeats'),
-                        ],
-                        bullets: [
-                          t('billing', 'planCardPremiumF1'),
-                          t('billing', 'planCardPremiumF2'),
-                          t('billing', 'planCardPremiumF3'),
-                        ],
-                      },
-                    ] as const
-                  ).map((plan, cardIdx) => (
-                    <div
-                      key={cardIdx}
-                      className={`flex flex-col rounded-2xl border border-gray-200/90 bg-white p-6 shadow-sm ring-1 ring-gray-900/5 ${
-                        cardIdx === 0 ? 'ring-2 ring-blue-300/80 border-blue-200' : ''
-                      }`}
-                    >
-                      <h3 className="text-lg font-bold text-gray-900">{plan.title}</h3>
-                      <ul className="mt-3 list-none space-y-1.5 border-b border-gray-100 pb-4 p-0 text-sm font-medium text-gray-800">
-                        {plan.prices.map((line) => (
-                          <li key={line}>{line}</li>
-                        ))}
-                      </ul>
-                      <ul className="mt-4 flex flex-1 list-none flex-col gap-2.5 p-0 text-sm leading-relaxed text-gray-600">
-                        {plan.bullets.map((line) => (
-                          <li key={line} className="flex gap-2.5">
-                            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
-                            <span>{line}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm text-gray-500 max-w-3xl leading-relaxed">{t('landing', 'plansFootnote')}</p>
-              </div>
-            )}
           </div>
         </section>
 
