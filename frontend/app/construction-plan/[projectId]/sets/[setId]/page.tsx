@@ -432,7 +432,10 @@ export default function ConstructionPlanSetReviewPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {files.map((f) => (
+                {files.map((f) => {
+                  const lowerName = (f.filename || '').toLowerCase();
+                  const isBinaryCad = lowerName.endsWith('.dwg') || lowerName.endsWith('.jww');
+                  return (
                   <tr key={f.id}>
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
@@ -522,9 +525,16 @@ export default function ConstructionPlanSetReviewPage() {
                             </button>
                             <button
                               onClick={() => reclassifyAi.mutate(f.id)}
-                              disabled={reclassifyAi.isPending && reclassifyAi.variables === f.id}
+                              disabled={
+                                isBinaryCad ||
+                                (reclassifyAi.isPending && reclassifyAi.variables === f.id)
+                              }
                               className="p-1.5 text-violet-600 hover:bg-violet-50 rounded disabled:opacity-50"
-                              title={t('constructionPlanReview', 'aiReclassify')}
+                              title={
+                                isBinaryCad
+                                  ? t('constructionPlanReview', 'binaryCadAiBlocked')
+                                  : t('constructionPlanReview', 'aiReclassify')
+                              }
                             >
                               {reclassifyAi.isPending && reclassifyAi.variables === f.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -534,9 +544,16 @@ export default function ConstructionPlanSetReviewPage() {
                             </button>
                             <button
                               onClick={() => extractElementsAi.mutate(f.id)}
-                              disabled={extractElementsAi.isPending && extractElementsAi.variables === f.id}
+                              disabled={
+                                isBinaryCad ||
+                                (extractElementsAi.isPending && extractElementsAi.variables === f.id)
+                              }
                               className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded disabled:opacity-50"
-                              title={t('constructionPlanReview', 'aiExtractElements')}
+                              title={
+                                isBinaryCad
+                                  ? t('constructionPlanReview', 'binaryCadAiBlocked')
+                                  : t('constructionPlanReview', 'aiExtractElements')
+                              }
                             >
                               {extractElementsAi.isPending && extractElementsAi.variables === f.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -556,7 +573,8 @@ export default function ConstructionPlanSetReviewPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -1484,6 +1484,73 @@ export const translations = {
     logIn: { ja: 'ログイン', en: 'Log in', fr: 'Connexion' },
     register: { ja: '新規登録', en: 'Create account', fr: 'Créer un compte' },
     forConstruction: { ja: '足場積算ツール', en: 'Scaffold takeoff', fr: 'Métré échafaudage' },
+
+    productsEyebrow: { ja: '3 つのプロダクト', en: 'Three products', fr: 'Trois produits' },
+    productsTitle: {
+      ja: '足場・BIM・建方計画 — 1 つのプラットフォーム',
+      en: 'Scaffold, BIM and Construction Plan — one platform',
+      fr: 'Échafaudage, BIM et Plan de construction — une seule plateforme',
+    },
+    productsSubtitle: {
+      ja: '案件・現場・ユーザーを横断して使えます。サブスクリプションはプロダクト単位で個別に購入できます。',
+      en: 'Shared identity, audit log and admin cockpit — but each product is sold and unlocked separately.',
+      fr: 'Identité, audit et cockpit admin partagés — mais chaque produit s’abonne séparément.',
+    },
+
+    productScaffoldF1: {
+      ja: 'くさび式・枠組式の数量を Excel まで自動算出',
+      en: 'Kusabi & wakugumi quantities to Excel in one click',
+      fr: 'Quantités kusabi & wakugumi exportées en Excel',
+    },
+    productScaffoldF2: {
+      ja: '建物立面 (2D) と 3D プレビュー、コーナー処理込み',
+      en: '2D elevations + 3D preview with corner detailing',
+      fr: 'Élévations 2D + aperçu 3D avec détails de coin',
+    },
+    productScaffoldF3: {
+      ja: 'AI で図面・写真から外壁ポリゴンを抽出（任意）',
+      en: 'Optional AI extraction from drawings & photos',
+      fr: 'Extraction IA optionnelle depuis plans & photos',
+    },
+    productScaffoldCta: { ja: '足場へ', en: 'Open Scaffold', fr: 'Ouvrir Échafaudage' },
+
+    productBimF1: {
+      ja: 'IFC を web-ifc でブラウザ内 3D 表示（フルジオメトリ）',
+      en: 'In-browser IFC 3D rendering via web-ifc',
+      fr: 'Rendu 3D IFC dans le navigateur via web-ifc',
+    },
+    productBimF2: {
+      ja: 'DXF からレイヤーで壁・柱・スラブ・屋根を手続き押出',
+      en: 'Procedural walls/columns/slabs/roof from DXF layers',
+      fr: 'Murs/poteaux/dalles/toits extrudés depuis les calques DXF',
+    },
+    productBimF3: {
+      ja: 'PDF を 3D シーンの敷布として配置（DWG は要 DXF 変換）',
+      en: 'PDF as a 3D reference plane (DWG must be converted to DXF)',
+      fr: 'PDF comme plan de référence 3D (DWG → conversion en DXF)',
+    },
+    productBimCta: { ja: 'BIM へ', en: 'Open BIM', fr: 'Ouvrir BIM' },
+
+    productCpF1: {
+      ja: '柱 / 大梁 / 小梁 / 耐風梁 / 階段 / EV を階・工区別に集計',
+      en: 'Columns / beams / wind-girts / stairs / EV per floor & block',
+      fr: 'Poteaux / poutres / contreventements / escaliers / EV par étage et zone',
+    },
+    productCpF2: {
+      ja: 'CPM-light で工程を自動生成（土日祝・働き方カレンダー対応）',
+      en: 'CPM-light schedule with JP holidays + work-Saturday rules',
+      fr: 'Planning CPM allégé (jours fériés JP + samedi travaillé)',
+    },
+    productCpF3: {
+      ja: '4t / 10t / 25t トレーラへの 1D ビンパック搬入計画',
+      en: '1D bin-pack of trucks (4t / 10t / 25t trailer)',
+      fr: 'Bin-pack des camions 4t / 10t / 25t',
+    },
+    productCpCta: {
+      ja: '建方計画へ',
+      en: 'Open Construction Plan',
+      fr: 'Ouvrir Plan de construction',
+    },
     heroImageAlt: {
       ja: '高層ビルと建設現場の写真',
       en: 'High-rise building under construction',
@@ -3061,6 +3128,56 @@ export const translations = {
       en: 'Create one from "New project" above.',
       fr: 'Créez-en un depuis « Nouveau chantier » ci-dessus.',
     },
+
+    kpiProjects: { ja: '案件数', en: 'Projects', fr: 'Chantiers' },
+    kpiUploads: { ja: '図面合計', en: 'Drawings uploaded', fr: 'Plans téléversés' },
+    kpiDxfDwgSub: {
+      ja: 'DXF はそのまま、DWG は要変換',
+      en: 'DXF parsed; DWG must be converted',
+      fr: 'DXF lu directement ; DWG à convertir',
+    },
+    kpiPdfImgSub: {
+      ja: 'AIで分類・部材抽出',
+      en: 'AI classification + element extraction',
+      fr: 'Classement IA + extraction d’éléments',
+    },
+
+    featureExtractTitle: {
+      ja: '図面取込・自動分類',
+      en: 'Drawing intake & auto-classification',
+      fr: 'Import de plans & classement auto',
+    },
+    featureExtractBody: {
+      ja: 'PDF / DXF / DWG / 画像をまとめて取り込み、ファイル名と AI で 階・工区・図面種別を自動分類。',
+      en: 'Bulk-upload PDF / DXF / DWG / images. Filenames + AI title-block OCR auto-tag floor, block and drawing kind.',
+      fr: 'Téléversez en masse PDF / DXF / DWG / images. Le nom du fichier et l’OCR du cartouche taguent étage, zone et type.',
+    },
+    featureScheduleTitle: {
+      ja: '工程組立て（CPM-light）',
+      en: 'Schedule (CPM-light)',
+      fr: 'Planning (CPM allégé)',
+    },
+    featureScheduleBody: {
+      ja: '階・工区別に建方・床版・耐火被覆・階段の連鎖を自動生成。土日祝・働き方カレンダーを反映。',
+      en: 'Per-floor / per-block erection chain (frame → deck → fireproofing → stairs), JP holidays + work-Saturday rules.',
+      fr: 'Enchaînement par étage / zone (charpente → planchers → ignifugation → escaliers), avec jours fériés JP.',
+    },
+    featureDeliveryTitle: {
+      ja: '搬入便（トラック割付）',
+      en: 'Truck delivery plan',
+      fr: 'Plan de livraisons (camions)',
+    },
+    featureDeliveryBody: {
+      ja: '長尺・中尺・短尺別に 4t / 10t / 25t トレーラを 1D ビンパックで自動割付け。現場で上書き保存可能。',
+      en: 'Greedy 1D bin-packing of long / medium / short pieces onto 4t / 10t / 25t trucks. Editable + persisted overrides.',
+      fr: 'Bin-packing 1D des pièces longues/moyennes/courtes sur camions 4t/10t/25t, avec overrides persistants.',
+    },
+
+    recentActivityTitle: {
+      ja: '最近のアップロード',
+      en: 'Recent uploads',
+      fr: 'Téléversements récents',
+    },
   },
 
   constructionPlanProject: {
@@ -3121,6 +3238,11 @@ export const translations = {
       ja: 'AIで部材を抽出',
       en: 'AI: extract structural elements',
       fr: 'IA : extraire les éléments',
+    },
+    binaryCadAiBlocked: {
+      ja: 'DWG / JWW はバイナリCADのため AI で読み取れません。AutoCAD などで DXF か PDF に変換してから再アップロードしてください。',
+      en: 'AI cannot read DWG / JWW directly (binary CAD). Please convert to DXF or PDF first, then re-upload.',
+      fr: 'L’IA ne peut pas lire DWG / JWW (CAO binaire). Convertissez d’abord en DXF ou PDF, puis téléversez à nouveau.',
     },
     aiExtractedToast: {
       ja: 'AIが {count} 件を抽出しました。',
@@ -3285,22 +3407,79 @@ export const translations = {
     },
     openViewerCta: { ja: 'ビューアを開く', en: 'Open viewer', fr: 'Ouvrir la visionneuse' },
     privacyNote: {
-      ja: 'IFC は web-ifc によりブラウザ内で解析されます。ファイル本体はサーバーへ送信されません（アップロード履歴のみ記録）。',
-      en: 'IFC parsing runs locally in the browser via web-ifc. The raw file is not uploaded — only an audit-log entry is recorded.',
-      fr: "L'IFC est analysé localement par web-ifc. Le fichier brut n'est pas envoyé au serveur (seul un enregistrement d'audit est conservé).",
+      ja: 'IFC / DXF / PDF はブラウザ内で解析されます。ファイル本体はサーバーへ送信されません（アップロード履歴のみ記録）。',
+      en: 'IFC, DXF and PDF parsing all run locally in the browser. The raw file is not uploaded — only an audit-log entry is recorded.',
+      fr: "Les IFC, DXF et PDF sont analysés localement dans le navigateur. Le fichier brut n'est pas envoyé (seul un enregistrement d'audit est conservé).",
     },
+    manageSubscription: { ja: '契約管理', en: 'Manage subscription', fr: 'Gérer l’abonnement' },
+
+    kpiTotalUploads: { ja: '読み込み合計', en: 'Total loads', fr: 'Total chargements' },
+    kpiLastUpload: { ja: '最終', en: 'Last', fr: 'Dernier' },
+    kpiTotalSize: { ja: '累計サイズ', en: 'Total size', fr: 'Taille totale' },
+    kpiTotalSizeSub: { ja: '監査ログ計', en: 'Audit-log total', fr: 'Total journal d’audit' },
+
+    supportedFormatsTitle: {
+      ja: '対応フォーマット',
+      en: 'Supported formats',
+      fr: 'Formats pris en charge',
+    },
+    fmtIfc: {
+      ja: 'IfcOpenShell 互換。フルジオメトリ + 要素分類で読み込み。',
+      en: 'IfcOpenShell-compatible. Full geometry + element classes.',
+      fr: 'Compatible IfcOpenShell : géométrie complète + classification.',
+    },
+    fmtDxf: {
+      ja: 'AutoCAD DXF。レイヤー名から壁・柱・スラブ・屋根を手続き的に押出。',
+      en: 'AutoCAD DXF. Walls, columns, slabs and roofs procedurally extruded from layer names.',
+      fr: 'DXF AutoCAD. Murs, poteaux, dalles, toits extrudés depuis les noms de calques.',
+    },
+    fmtPdf: {
+      ja: 'PDF を 3D シーンに敷布として配置。BIM の上に重ねて図面リファレンスとして使用。',
+      en: 'PDF rendered as a 3D reference plane. Overlay any IFC/DXF on top as a blueprint underlay.',
+      fr: 'PDF projeté comme plan de référence 3D. Superposez tout IFC/DXF par dessus.',
+    },
+    fmtDwg: {
+      ja: 'DWG はバイナリ CAD のためブラウザ内では解析できません。AutoCAD などで DXF に変換してから再アップロードしてください。',
+      en: 'DWG is a binary CAD format and cannot be parsed in-browser. Please convert to DXF in AutoCAD first.',
+      fr: 'DWG est un format CAO binaire et ne peut être lu en navigateur. Convertissez-le en DXF (AutoCAD) au préalable.',
+    },
+
+    recentTitle: { ja: '最近のアップロード', en: 'Recent uploads', fr: 'Téléversements récents' },
+    recentEmpty: {
+      ja: 'まだ BIM ファイルを開いていません。ビューアからドラッグ＆ドロップしてください。',
+      en: 'No BIM files yet — drag & drop one in the viewer to start.',
+      fr: 'Aucun fichier BIM. Ouvrez la visionneuse et glissez-déposez un fichier.',
+    },
+    colFile: { ja: 'ファイル', en: 'File', fr: 'Fichier' },
+    colKind: { ja: '種類', en: 'Kind', fr: 'Type' },
+    colSize: { ja: 'サイズ', en: 'Size', fr: 'Taille' },
+    colWhen: { ja: '日時', en: 'When', fr: 'Quand' },
   },
 
   bimViewer: {
     back: { ja: 'BIM ホームへ', en: 'Back to BIM home', fr: 'Retour à l’accueil BIM' },
     title: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
     openIfc: { ja: 'IFC を開く', en: 'Open IFC', fr: 'Ouvrir IFC' },
-    openFile: { ja: 'IFC / DXF を開く', en: 'Open IFC / DXF', fr: 'Ouvrir IFC / DXF' },
+    openFile: {
+      ja: 'IFC / DXF / PDF を開く',
+      en: 'Open IFC / DXF / PDF',
+      fr: 'Ouvrir IFC / DXF / PDF',
+    },
     clear: { ja: 'クリア', en: 'Clear', fr: 'Effacer' },
     unsupportedFormat: {
-      ja: 'IFC または DXF のみ対応しています（.ifc / .dxf）。',
-      en: 'Only IFC and DXF files are supported (.ifc / .dxf).',
-      fr: 'Seuls les fichiers IFC et DXF sont pris en charge (.ifc / .dxf).',
+      ja: '対応フォーマットは .ifc / .dxf / .pdf / .dwg のみです。',
+      en: 'Supported formats: .ifc / .dxf / .pdf / .dwg.',
+      fr: 'Formats pris en charge : .ifc / .dxf / .pdf / .dwg.',
+    },
+    dwgNotSupported: {
+      ja: 'DWG はバイナリ CAD 形式のため、ブラウザでは解析できません。AutoCAD などで DXF に変換してから再度アップロードしてください。アップロードログには記録されています。',
+      en: 'DWG is a binary CAD format and cannot be parsed in the browser. Please convert it to DXF in AutoCAD first, then re-upload. (The upload was logged in the audit feed.)',
+      fr: 'DWG est un format CAO binaire et ne peut pas être lu dans le navigateur. Convertissez-le en DXF (AutoCAD) puis téléversez à nouveau. (Le téléversement est enregistré dans le journal d’audit.)',
+    },
+    pdfReferenceHint: {
+      ja: 'PDF は 3D シーンの「敷布（リファレンスプレーン）」として表示しています。続けて IFC や DXF をドロップすると、その上に重ねて表示できます。',
+      en: 'The PDF is shown as a textured "reference plane" beneath the model. Drop an IFC or DXF on top to overlay your BIM.',
+      fr: 'Le PDF est projeté comme « plan de référence » sous le modèle. Glissez un IFC ou DXF par-dessus pour superposer votre BIM.',
     },
     parseFailed: {
       ja: 'ファイルの解析に失敗しました。',

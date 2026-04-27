@@ -15,12 +15,15 @@ import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 import { parseIfcToMeshes, type IfcMeshData } from '@/lib/ifc-loader';
 import { createBimMaterialSet, getMaterialForElement } from '@/lib/ifc-bim-materials';
 import { buildBimFromDxf } from '@/lib/bim/dxf-procedural-bim';
+import { renderPdfFirstPageToPlane } from '@/lib/bim/pdf-reference-plane';
 import { bimApi } from '@/lib/api/bim';
 
 interface SceneStats {
   meshCount: number;
   byType: Record<string, number>;
   durationMs: number;
+  /** True for PDF: this isn't a real BIM model, just a textured reference floor. */
+  referenceOnly?: boolean;
 }
 
 export default function BimViewerPage() {
@@ -33,8 +36,16 @@ export default function BimViewerPage() {
   const sceneStateRef = useRef<{
     dispose: (() => void) | null;
     addMeshes: ((meshes: IfcMeshData[]) => void) | null;
+    addReferencePlane:
+      | ((canvas: HTMLCanvasElement, worldWidth: number, worldDepth: number) => void)
+      | null;
     clearMeshes: (() => void) | null;
-  }>({ dispose: null, addMeshes: null, clearMeshes: null });
+  }>({
+    dispose: null,
+    addMeshes: null,
+    addReferencePlane: null,
+    clearMeshes: null,
+  });
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,11 +165,42 @@ export default function BimViewerPage() {
         }
       };
 
+      sceneStateRef.current.addReferencePlane = (
+        canvas: HTMLCanvasElement,
+        worldWidth: number,
+        worldDepth: number,
+      ) => {
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 8;
+        const mat = new THREE.MeshBasicMaterial({
+          map: tex,
+          side: THREE.DoubleSide,
+          transparent: false,
+        });
+        const geo = new THREE.PlaneGeometry(worldWidth, worldDepth);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.y = 0.01;
+        // Tag with a recognisable userData so disposal can clean the texture.
+        (mesh as any).userData = { kind: 'pdf-reference-plane' };
+        meshGroup.add(mesh);
+
+        // Frame the camera around the plane.
+        const radius = Math.max(worldWidth, worldDepth) * 0.6;
+        camera.position.set(radius * 1.1, radius * 0.7, radius * 1.1);
+        controls.target.set(0, 0, 0);
+        controls.update();
+      };
+
       sceneStateRef.current.clearMeshes = () => {
         while (meshGroup.children.length > 0) {
           const child = meshGroup.children[0];
           meshGroup.remove(child);
           if ((child as any).geometry) (child as any).geometry.dispose();
+          const mat = (child as any).material;
+          if (mat?.map?.dispose) mat.map.dispose();
+          if (mat?.dispose) mat.dispose();
         }
       };
 
@@ -190,15 +232,74 @@ export default function BimViewerPage() {
   const handleFile = useCallback(
     async (file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext !== 'ifc' && ext !== 'dxf') {
+      const supported = new Set(['ifc', 'dxf', 'pdf', 'dwg']);
+      if (!ext || !supported.has(ext)) {
         setError(t('bimViewer', 'unsupportedFormat'));
         return;
       }
+
+      // DWG has no in-browser parser. Track the upload so superadmin sees it,
+      // then surface a clear actionable message to the user.
+      if (ext === 'dwg') {
+        bimApi
+          .trackUpload({
+            filename: file.name,
+            mimeType: file.type || 'application/acad',
+            sizeBytes: file.size,
+            metadata: { kind: 'dwg', deferred: true },
+          })
+          .catch(() => undefined);
+        presenceActions.recordAction(
+          `Uploaded DWG "${file.name}" — conversion required`,
+        );
+        setError(t('bimViewer', 'dwgNotSupported'));
+        return;
+      }
+
       setError(null);
       setBusy(true);
       const start = performance.now();
       try {
         const buffer = await file.arrayBuffer();
+
+        // PDF — render page 1 to a textured ground plane (reference-only mode).
+        if (ext === 'pdf') {
+          const result = await renderPdfFirstPageToPlane(buffer);
+          sceneStateRef.current.clearMeshes?.();
+          sceneStateRef.current.addReferencePlane?.(
+            result.canvas,
+            result.worldWidth,
+            result.worldDepth,
+          );
+          const durationMs = Math.round(performance.now() - start);
+          setStats({
+            meshCount: 1,
+            byType: { PdfReferencePlane: 1 },
+            durationMs,
+            referenceOnly: true,
+          });
+          setFilename(file.name);
+          setError(t('bimViewer', 'pdfReferenceHint'));
+          bimApi
+            .trackUpload({
+              filename: file.name,
+              mimeType: file.type || 'application/pdf',
+              sizeBytes: file.size,
+              metadata: {
+                kind: 'pdf',
+                referenceOnly: true,
+                pageWidthPt: result.pageWidthPt,
+                pageHeightPt: result.pageHeightPt,
+                durationMs,
+              },
+            })
+            .catch(() => undefined);
+          presenceActions.recordAction(
+            `Loaded PDF "${file.name}" as reference plane`,
+          );
+          return;
+        }
+
         let meshes: IfcMeshData[];
         let warnings: string[] = [];
         if (ext === 'dxf') {
@@ -258,7 +359,7 @@ export default function BimViewerPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".ifc,.dxf"
+              accept=".ifc,.dxf,.pdf,.dwg"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];

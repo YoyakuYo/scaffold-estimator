@@ -63,6 +63,24 @@ export class PresenceController {
     });
   }
 
+  // ─── User-scoped: my recent uploads (per product, for product dashboards) ─
+
+  @UseGuards(JwtAuthGuard)
+  @Get('uploads/mine')
+  async getMyUploads(
+    @CurrentUser() user: any,
+    @Query('limit') limit?: string,
+    @Query('productCode') productCode?: UploadProductCode,
+  ) {
+    const parsed = limit ? Number.parseInt(limit, 10) : undefined;
+    return this.presence.getMyRecentUploads({
+      userId: user.id,
+      companyId: user.companyId ?? null,
+      productCode,
+      limit: Number.isFinite(parsed as number) ? (parsed as number) : undefined,
+    });
+  }
+
   // ─── Superadmin cockpit ────────────────────────────────────────
 
   @UseGuards(JwtAuthGuard, RolesGuard)

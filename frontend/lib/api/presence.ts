@@ -77,4 +77,15 @@ export const presenceApi = {
     });
     return res.data;
   },
+
+  /** Per-product activity feed for the current user (used by /bim and /construction-plan dashboards). */
+  getMyRecentUploads: async (params?: {
+    limit?: number;
+    productCode?: string;
+  }): Promise<UploadEventRow[]> => {
+    const res = await apiClient.get<UploadEventRow[]>('/uploads/mine', {
+      params: { limit: params?.limit, productCode: params?.productCode },
+    });
+    return res.data;
+  },
 };

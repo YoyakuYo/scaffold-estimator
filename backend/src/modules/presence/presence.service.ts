@@ -316,4 +316,73 @@ export class PresenceService {
   async getCompanyUploadEvents(companyId: string, limit = 20): Promise<UploadEventRow[]> {
     return this.getRecentUploadEvents({ companyId, limit });
   }
+
+  /**
+   * "My recent uploads" for a given user, optionally scoped to a product.
+   * Used by the per-product home dashboards (BIM / Construction Plan) so a
+   * user can see their own activity without needing superadmin rights.
+   */
+  async getMyRecentUploads(opts: {
+    userId: string;
+    companyId?: string | null;
+    productCode?: UploadProductCode;
+    limit?: number;
+  }): Promise<UploadEventRow[]> {
+    const limit = Math.max(1, Math.min(opts.limit ?? 20, 200));
+    let query = this.supabase
+      .getClient()
+      .from('upload_events')
+      .select(
+        `
+          id, user_id, company_id, product_code, kind, filename, mime_type,
+          size_bytes, ref_id, metadata, created_at,
+          users:users ( email, first_name, last_name ),
+          companies:companies ( name )
+        `,
+      )
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (opts.companyId) {
+      query = query.eq('company_id', opts.companyId);
+    } else {
+      query = query.eq('user_id', opts.userId);
+    }
+    if (opts.productCode) query = query.eq('product_code', opts.productCode);
+
+    const { data, error } = await query;
+    if (error) {
+      this.logger.warn(`getMyRecentUploads failed: ${error.message}`);
+      return [];
+    }
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    return rows.map((row) => {
+      const user = (row.users as Record<string, unknown> | null) || null;
+      const company = (row.companies as Record<string, unknown> | null) || null;
+      const sizeRaw = row.size_bytes;
+      const sizeBytes =
+        typeof sizeRaw === 'number'
+          ? sizeRaw
+          : typeof sizeRaw === 'string' && sizeRaw
+            ? Number(sizeRaw)
+            : null;
+      return {
+        id: String(row.id ?? ''),
+        userId: String(row.user_id ?? ''),
+        userEmail: (user?.email as string) ?? null,
+        userFirstName: (user?.first_name as string) ?? null,
+        userLastName: (user?.last_name as string) ?? null,
+        companyId: (row.company_id as string) ?? null,
+        companyName: (company?.name as string) ?? null,
+        productCode: String(row.product_code ?? 'scaffold'),
+        kind: String(row.kind ?? ''),
+        filename: (row.filename as string) ?? null,
+        mimeType: (row.mime_type as string) ?? null,
+        sizeBytes: Number.isFinite(sizeBytes) ? (sizeBytes as number) : null,
+        refId: (row.ref_id as string) ?? null,
+        metadata: (row.metadata as Record<string, unknown>) ?? null,
+        createdAt: (row.created_at as string) ?? '',
+      };
+    });
+  }
 }

@@ -501,6 +501,77 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ─── 3-product showcase: Scaffold / BIM / Construction Plan ─ */}
+        <section
+          className="relative border-b border-slate-800 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 py-16 md:py-20 text-white"
+          aria-labelledby="landing-products-heading"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={{
+              backgroundImage:
+                'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(56,189,248,0.18), transparent 60%), radial-gradient(ellipse 60% 40% at 50% 100%, rgba(139,92,246,0.16), transparent 60%)',
+            }}
+            aria-hidden
+          />
+          <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-300/90">
+                {t('landing', 'productsEyebrow')}
+              </p>
+              <h2
+                id="landing-products-heading"
+                className="mt-3 text-3xl md:text-4xl font-bold leading-tight tracking-tight"
+              >
+                {t('landing', 'productsTitle')}
+              </h2>
+              <p className="mt-3 text-slate-300">{t('landing', 'productsSubtitle')}</p>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-5">
+              <LandingProductCard
+                tone="cyan"
+                title={t('products', 'productScaffold')}
+                tagline={t('products', 'productScaffoldTagline')}
+                features={[
+                  t('landing', 'productScaffoldF1'),
+                  t('landing', 'productScaffoldF2'),
+                  t('landing', 'productScaffoldF3'),
+                ]}
+                formats="IFC · DXF · PDF · 画像"
+                ctaLabel={t('landing', 'productScaffoldCta')}
+                ctaHref="/scaffold"
+              />
+              <LandingProductCard
+                tone="violet"
+                title={t('products', 'productBim')}
+                tagline={t('products', 'productBimTagline')}
+                features={[
+                  t('landing', 'productBimF1'),
+                  t('landing', 'productBimF2'),
+                  t('landing', 'productBimF3'),
+                ]}
+                formats="IFC · DXF · PDF · DWG"
+                ctaLabel={t('landing', 'productBimCta')}
+                ctaHref="/bim"
+              />
+              <LandingProductCard
+                tone="amber"
+                title={t('products', 'productConstructionPlan')}
+                tagline={t('products', 'productConstructionPlanTagline')}
+                features={[
+                  t('landing', 'productCpF1'),
+                  t('landing', 'productCpF2'),
+                  t('landing', 'productCpF3'),
+                ]}
+                formats="PDF · DXF · DWG · 画像 · Excel/CSV"
+                ctaLabel={t('landing', 'productCpCta')}
+                ctaHref="/construction-plan"
+              />
+            </div>
+          </div>
+        </section>
+
         {/* ─── Value props: stacked high-contrast panels (Input → Features → Why) ─ */}
         <section
           className="relative border-b border-zinc-800/20 bg-[#b8b4ac] py-14 md:py-20"
@@ -985,6 +1056,91 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+const PRODUCT_TONES: Record<
+  'cyan' | 'violet' | 'amber',
+  { ring: string; chip: string; cta: string; ctaHover: string; iconBg: string }
+> = {
+  cyan: {
+    ring: 'ring-cyan-400/30 hover:ring-cyan-300/60',
+    chip: 'bg-cyan-500/10 text-cyan-200 border-cyan-400/30',
+    cta: 'bg-cyan-500 text-slate-950',
+    ctaHover: 'hover:bg-cyan-400',
+    iconBg: 'bg-cyan-500/15 text-cyan-200',
+  },
+  violet: {
+    ring: 'ring-violet-400/30 hover:ring-violet-300/60',
+    chip: 'bg-violet-500/10 text-violet-200 border-violet-400/30',
+    cta: 'bg-violet-500 text-white',
+    ctaHover: 'hover:bg-violet-400',
+    iconBg: 'bg-violet-500/15 text-violet-200',
+  },
+  amber: {
+    ring: 'ring-amber-400/30 hover:ring-amber-300/60',
+    chip: 'bg-amber-500/10 text-amber-200 border-amber-400/30',
+    cta: 'bg-amber-500 text-slate-950',
+    ctaHover: 'hover:bg-amber-400',
+    iconBg: 'bg-amber-500/15 text-amber-200',
+  },
+};
+
+function LandingProductCard({
+  tone,
+  title,
+  tagline,
+  features,
+  formats,
+  ctaLabel,
+  ctaHref,
+}: {
+  tone: 'cyan' | 'violet' | 'amber';
+  title: string;
+  tagline: string;
+  features: string[];
+  formats: string;
+  ctaLabel: string;
+  ctaHref: string;
+}) {
+  const tones = PRODUCT_TONES[tone];
+  const Icon = tone === 'cyan' ? Calculator : tone === 'violet' ? Box : Ruler;
+  return (
+    <div
+      className={`group relative flex flex-col rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-sm p-6 ring-1 transition ${tones.ring}`}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${tones.iconBg}`}
+        >
+          <Icon className="h-5 w-5" aria-hidden />
+        </div>
+        <h3 className="text-lg font-semibold tracking-tight text-white">{title}</h3>
+      </div>
+      <p className="mt-3 text-sm text-slate-300 leading-relaxed">{tagline}</p>
+      <ul className="mt-4 space-y-1.5 text-sm text-slate-300">
+        {features.map((line) => (
+          <li key={line} className="flex gap-2 items-start">
+            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400/80" aria-hidden />
+            <span>{line}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-5">
+        <span
+          className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${tones.chip}`}
+        >
+          {formats}
+        </span>
+      </div>
+      <Link
+        href={ctaHref}
+        className={`mt-6 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${tones.cta} ${tones.ctaHover}`}
+      >
+        {ctaLabel}
+        <span aria-hidden>→</span>
+      </Link>
     </div>
   );
 }

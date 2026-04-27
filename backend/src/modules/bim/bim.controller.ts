@@ -43,7 +43,11 @@ export class BimController {
       ? 'ifc'
       : lower.endsWith('.dxf')
         ? 'dxf'
-        : 'bim_other';
+        : lower.endsWith('.pdf')
+          ? 'pdf'
+          : lower.endsWith('.dwg')
+            ? 'dwg'
+            : 'bim_other';
     await this.presence.recordUpload({
       userId: user.id,
       companyId: user.companyId ?? null,

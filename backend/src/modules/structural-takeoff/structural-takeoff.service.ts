@@ -574,6 +574,13 @@ export class StructuralTakeoffService {
     const arrayBuf = await bin.arrayBuffer();
     let imageBuffer: Buffer = Buffer.from(arrayBuf);
     const lower = (fileRow.filename ?? '').toLowerCase();
+    // DWG is a binary CAD format; vision models can't read it. Tell the
+    // caller plainly that they need to convert to DXF/PDF first.
+    if (lower.endsWith('.dwg') || lower.endsWith('.jww')) {
+      throw new BadRequestException(
+        'AI cannot read DWG/JWW directly. Please re-upload as DXF or PDF for AI classification.',
+      );
+    }
     if (lower.endsWith('.pdf')) {
       try {
         const sharp = (await import('sharp')).default;
@@ -669,6 +676,11 @@ export class StructuralTakeoffService {
     const arrayBuf = await bin.arrayBuffer();
     let imageBuffer: Buffer = Buffer.from(arrayBuf);
     const lower = (fileRow.filename ?? '').toLowerCase();
+    if (lower.endsWith('.dwg') || lower.endsWith('.jww')) {
+      throw new BadRequestException(
+        'AI cannot extract elements from DWG/JWW directly. Please re-upload as DXF or PDF for AI extraction.',
+      );
+    }
     if (lower.endsWith('.pdf')) {
       try {
         const sharp = (await import('sharp')).default;

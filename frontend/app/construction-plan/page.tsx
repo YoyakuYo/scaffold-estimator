@@ -14,11 +14,16 @@ import {
   Building2,
   AlertTriangle,
   Sparkles,
+  Layers,
+  Activity,
+  FileText,
+  Truck,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence } from '@/lib/page-presence-context';
 import { accessApi } from '@/lib/api/access';
 import { structuralTakeoffApi } from '@/lib/api/structural-takeoff';
+import { presenceApi } from '@/lib/api/presence';
 
 const DEFAULT_BLOCKS = ['A', 'B'];
 const DEFAULT_LEVELS = ['1F', '2F', '3F', 'RF'];
@@ -47,6 +52,14 @@ export default function ConstructionPlanHomePage() {
     queryKey: ['structural-takeoff', 'projects'],
     queryFn: structuralTakeoffApi.listProjects,
     enabled,
+  });
+
+  const recentUploadsQuery = useQuery({
+    queryKey: ['my-uploads', 'construction_plan'],
+    queryFn: () => presenceApi.getMyRecentUploads({ productCode: 'construction_plan', limit: 30 }),
+    enabled,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 
   const createProject = useMutation({
@@ -229,6 +242,102 @@ export default function ConstructionPlanHomePage() {
           </div>
         )}
 
+        {/* KPI strip — projects, drawings uploaded, levels covered, last activity. */}
+        {(() => {
+          const uploads = recentUploadsQuery.data ?? [];
+          const dxfDwg = uploads.filter((u) =>
+            ['dxf', 'dwg'].includes((u.kind || '').toLowerCase()),
+          ).length;
+          const pdfImg = uploads.filter((u) =>
+            ['pdf', 'image', 'image_pdf', 'drawing', 'cp_drawing'].includes(
+              (u.kind || '').toLowerCase(),
+            ),
+          ).length;
+          const lastUpload = uploads[0]?.createdAt;
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              <CpKpi
+                icon={<Building2 className="h-5 w-5 text-amber-600" />}
+                label={t('constructionPlanLanding', 'kpiProjects')}
+                value={String(projects?.length ?? 0)}
+              />
+              <CpKpi
+                icon={<Layers className="h-5 w-5 text-violet-600" />}
+                label={t('constructionPlanLanding', 'kpiUploads')}
+                value={String(uploads.length)}
+                sub={lastUpload ? `${formatRelativeShort(lastUpload)} ago` : '—'}
+              />
+              <CpKpi
+                icon={<FileText className="h-5 w-5 text-rose-600" />}
+                label="DXF / DWG"
+                value={String(dxfDwg)}
+                sub={t('constructionPlanLanding', 'kpiDxfDwgSub')}
+              />
+              <CpKpi
+                icon={<Activity className="h-5 w-5 text-blue-600" />}
+                label="PDF / IMG"
+                value={String(pdfImg)}
+                sub={t('constructionPlanLanding', 'kpiPdfImgSub')}
+              />
+            </div>
+          );
+        })()}
+
+        {/* Quick links to deeper product surfaces. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <FeatureLink
+            href="#"
+            icon={<FileText className="h-5 w-5 text-amber-600" />}
+            title={t('constructionPlanLanding', 'featureExtractTitle')}
+            body={t('constructionPlanLanding', 'featureExtractBody')}
+            disabled
+          />
+          <FeatureLink
+            href="#"
+            icon={<Calendar className="h-5 w-5 text-blue-600" />}
+            title={t('constructionPlanLanding', 'featureScheduleTitle')}
+            body={t('constructionPlanLanding', 'featureScheduleBody')}
+            disabled
+          />
+          <FeatureLink
+            href="#"
+            icon={<Truck className="h-5 w-5 text-emerald-600" />}
+            title={t('constructionPlanLanding', 'featureDeliveryTitle')}
+            body={t('constructionPlanLanding', 'featureDeliveryBody')}
+            disabled
+          />
+        </div>
+
+        {/* Recent activity (uploads from any of this user's projects/sets). */}
+        {(recentUploadsQuery.data ?? []).length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {t('constructionPlanLanding', 'recentActivityTitle')}
+              </h2>
+              {recentUploadsQuery.isFetching && (
+                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+              )}
+            </div>
+            <ul className="divide-y divide-gray-100 text-sm">
+              {(recentUploadsQuery.data ?? []).slice(0, 8).map((u) => (
+                <li key={u.id} className="px-6 py-3 flex items-center gap-3">
+                  <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <span className="font-mono text-xs text-gray-800 truncate flex-1" title={u.filename ?? ''}>
+                    {u.filename || '—'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] border border-gray-200 bg-gray-50 uppercase text-gray-600">
+                    {(u.kind || '').replace(/_/g, ' ') || '—'}
+                  </span>
+                  <span className="text-xs text-gray-400 tabular-nums" title={u.createdAt}>
+                    {formatRelativeShort(u.createdAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-10 flex justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -284,4 +393,72 @@ function parseCsvList(text: string): string[] {
     .split(/[,、\s]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+function formatRelativeShort(iso: string): string {
+  const t = new Date(iso).getTime();
+  const diff = Math.max(0, Date.now() - t);
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
+  return `${Math.floor(diff / 86_400_000)}d`;
+}
+
+function CpKpi({
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          {label}
+        </span>
+        {icon}
+      </div>
+      <div className="mt-2 text-2xl font-bold text-gray-900 tabular-nums">{value}</div>
+      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function FeatureLink({
+  href,
+  icon,
+  title,
+  body,
+  disabled,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  disabled?: boolean;
+}) {
+  const inner = (
+    <div
+      className={`bg-white rounded-2xl border border-gray-200 p-4 h-full ${
+        disabled ? '' : 'hover:shadow-md hover:border-gray-300 transition'
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        {icon}
+        <span className="font-semibold text-gray-900 text-sm">{title}</span>
+      </div>
+      <p className="text-xs text-gray-600 leading-relaxed">{body}</p>
+    </div>
+  );
+  if (disabled) return inner;
+  return (
+    <Link href={href} className="block">
+      {inner}
+    </Link>
+  );
 }
