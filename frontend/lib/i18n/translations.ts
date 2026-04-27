@@ -3283,6 +3283,36 @@ export const translations = {
       en: 'AI element extraction failed.',
       fr: "L'extraction IA a échoué.",
     },
+    aiReclassifyFailed: {
+      ja: 'AIによる再分類に失敗しました。',
+      en: 'AI re-classification failed.',
+      fr: 'La reclassification IA a échoué.',
+    },
+    aiExtractPremiumBanner: {
+      ja: '図面からのAI部材抽出は Premium（aiExtract）プランで利用できます。契約をご確認ください。',
+      en: 'AI extraction from drawings requires a Premium plan with AI extraction. Upgrade Billing to enable it, or use Excel / DXF layers / manual entry.',
+      fr: "L'extraction IA sur les plans nécessite une offre Premium avec extraction IA. Passez par Facturation, ou utilisez Excel / calques DXF / saisie manuelle.",
+    },
+    aiExtractPremiumHint: {
+      ja: 'Premium（AI抽出）が必要です',
+      en: 'Premium (AI extraction) required',
+      fr: 'Offre Premium (extraction IA) requise',
+    },
+    aiExtractCheckingAccess: {
+      ja: '契約情報を確認中…',
+      en: 'Checking subscription…',
+      fr: 'Vérification de l’abonnement…',
+    },
+    aiExtractAccessError: {
+      ja: '契約情報を取得できませんでした',
+      en: 'Could not load subscription status',
+      fr: 'Impossible de charger l’abonnement',
+    },
+    aiExtractEmpty: {
+      ja: 'AIは0件でした。図種・画質・題名欄の情報を確認するか、ExcelやDXFで取り込んでください。',
+      en: 'AI returned 0 elements. Check drawing kind (e.g. framing plan vs level table), image clarity, or import via Excel / DXF layers.',
+      fr: "L'IA n'a renvoyé aucune ligne. Vérifiez le type de plan, la qualité de l'image, ou importez via Excel / DXF.",
+    },
     elementsTitle: {
       ja: '部材集計（手動・一括・レビュー）',
       en: 'Takeoff (manual, bulk import, review)',

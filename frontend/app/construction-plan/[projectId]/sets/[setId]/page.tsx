@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
+import { accessApi } from '@/lib/api/access';
+import { authApi } from '@/lib/api/auth';
 import { SteelRulePreviewButton } from '@/components/steel-extraction/SteelRulePreviewButton';
 import {
   ELEMENT_LINE_KINDS,
@@ -36,6 +38,15 @@ import {
   type SetReviewPayload,
   type StructuralElementType,
 } from '@/lib/api/structural-takeoff';
+
+function extractAxiosMessage(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const r = err as { response?: { data?: { message?: unknown } }; message?: string };
+  const m = r.response?.data?.message;
+  if (typeof m === 'string' && m.trim()) return m.trim();
+  if (Array.isArray(m) && m.length) return String(m[0]);
+  return typeof r.message === 'string' ? r.message : null;
+}
 
 const ACCEPTED_EXT = [
   'pdf',
@@ -148,6 +159,19 @@ export default function ConstructionPlanSetReviewPage() {
     enabled: !!setId,
   });
 
+  const accessQuery = useQuery({
+    queryKey: ['effective-access'],
+    queryFn: accessApi.getEffectiveAccess,
+    enabled: !!authApi.getToken(),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const canAiExtract = accessQuery.data?.construction_plan?.caps?.aiExtract === true;
+  /** Wait for access; block AI if load failed or plan lacks `aiExtract` (Premium). */
+  const aiExtractBlocked =
+    accessQuery.isLoading || accessQuery.isError || (accessQuery.isSuccess && !canAiExtract);
+  const showAiPremiumBanner = accessQuery.isSuccess && !canAiExtract;
+
   // Lazy-init draft from server data the first time it loads.
   if (data && !draftLoaded) {
     setDraft(data.elements.map(rowFromExisting));
@@ -238,6 +262,9 @@ export default function ConstructionPlanSetReviewPage() {
       queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
       presenceActions.recordAction(`AI re-classified file in set ${setId.slice(0, 8)}`);
     },
+    onError: (err) => {
+      setImportMessage(extractAxiosMessage(err) || t('constructionPlanReview', 'aiReclassifyFailed'));
+    },
   });
 
   const extractElementsAi = useMutation({
@@ -245,15 +272,26 @@ export default function ConstructionPlanSetReviewPage() {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
       setDraftLoaded(false);
-      const warn = res.warnings.length > 0 ? ` (${res.warnings.length} warnings)` : '';
-      setImportMessage(
-        t('constructionPlanReview', 'aiExtractedToast').replace('{count}', String(res.saved.length)) + warn,
-      );
+      if (res.saved.length === 0) {
+        const w = res.warnings.filter(Boolean).join(' · ');
+        setImportMessage(
+          w
+            ? `${t('constructionPlanReview', 'aiExtractEmpty')}: ${w.slice(0, 600)}${w.length > 600 ? '…' : ''}`
+            : t('constructionPlanReview', 'aiExtractEmpty'),
+        );
+      } else {
+        const warn = res.warnings.length > 0 ? ` (${res.warnings.length} warnings)` : '';
+        setImportMessage(
+          t('constructionPlanReview', 'aiExtractedToast').replace('{count}', String(res.saved.length)) + warn,
+        );
+      }
       presenceActions.recordAction(
         `AI extracted ${res.saved.length} elements in set ${setId.slice(0, 8)}`,
       );
     },
-    onError: () => setImportMessage(t('constructionPlanReview', 'aiExtractFailed')),
+    onError: (err) => {
+      setImportMessage(extractAxiosMessage(err) || t('constructionPlanReview', 'aiExtractFailed'));
+    },
   });
 
   const saveElements = useMutation({
@@ -407,6 +445,19 @@ export default function ConstructionPlanSetReviewPage() {
             </Link>
           </div>
         </div>
+
+        {showAiPremiumBanner && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex flex-wrap items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-700" aria-hidden />
+            <span>{t('constructionPlanReview', 'aiExtractPremiumBanner')}</span>
+            <Link
+              href="/billing"
+              className="font-medium text-amber-900 underline hover:no-underline"
+            >
+              {t('products', 'subscribeCta')}
+            </Link>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-gray-700">
@@ -648,13 +699,20 @@ export default function ConstructionPlanSetReviewPage() {
                               onClick={() => reclassifyAi.mutate(f.id)}
                               disabled={
                                 isBinaryCad ||
+                                aiExtractBlocked ||
                                 (reclassifyAi.isPending && reclassifyAi.variables === f.id)
                               }
                               className="p-1.5 text-violet-600 hover:bg-violet-50 rounded disabled:opacity-50"
                               title={
                                 isBinaryCad
                                   ? t('constructionPlanReview', 'binaryCadAiBlocked')
-                                  : t('constructionPlanReview', 'aiReclassify')
+                                  : accessQuery.isLoading
+                                    ? t('constructionPlanReview', 'aiExtractCheckingAccess')
+                                    : accessQuery.isError
+                                      ? t('constructionPlanReview', 'aiExtractAccessError')
+                                      : !canAiExtract
+                                        ? t('constructionPlanReview', 'aiExtractPremiumHint')
+                                        : t('constructionPlanReview', 'aiReclassify')
                               }
                             >
                               {reclassifyAi.isPending && reclassifyAi.variables === f.id ? (
@@ -667,13 +725,20 @@ export default function ConstructionPlanSetReviewPage() {
                               onClick={() => extractElementsAi.mutate(f.id)}
                               disabled={
                                 isBinaryCad ||
+                                aiExtractBlocked ||
                                 (extractElementsAi.isPending && extractElementsAi.variables === f.id)
                               }
                               className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded disabled:opacity-50"
                               title={
                                 isBinaryCad
                                   ? t('constructionPlanReview', 'binaryCadAiBlocked')
-                                  : t('constructionPlanReview', 'aiExtractElements')
+                                  : accessQuery.isLoading
+                                    ? t('constructionPlanReview', 'aiExtractCheckingAccess')
+                                    : accessQuery.isError
+                                      ? t('constructionPlanReview', 'aiExtractAccessError')
+                                      : !canAiExtract
+                                        ? t('constructionPlanReview', 'aiExtractPremiumHint')
+                                        : t('constructionPlanReview', 'aiExtractElements')
                               }
                             >
                               {extractElementsAi.isPending && extractElementsAi.variables === f.id ? (
