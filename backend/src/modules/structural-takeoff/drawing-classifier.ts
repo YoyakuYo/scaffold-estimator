@@ -26,13 +26,15 @@ function cleanBasename(filename: string): string {
 }
 
 const FLOOR_PATTERNS: Array<[RegExp, string]> = [
-  // Latin "1F", "2FL", "B1F", "RF", "PH"
-  [/(?:^|[^A-Z0-9])(B[1-9])\s*F/i, 'B$1'],
+  // Latin "1F", "2FL", "B1F", "RF", "PH". Capture group already contains
+  // the leading prefix (B / R / PH / digits), so the replacement template
+  // is just "$1[F]" — no extra characters that would otherwise duplicate.
+  [/(?:^|[^A-Z0-9])(B[1-9])\s*F/i, '$1'],
   [/(?:^|[^A-Z0-9])(R)\s*F/i, 'R'],
   [/(?:^|[^A-Z0-9])(PH|P\.?H\.?)\b/i, 'PH'],
   [/(?:^|[^A-Z0-9])([1-9][0-9]?)\s*F(?:L)?/i, '$1F'],
   // Japanese 階 patterns: 1階, 2階, R階, B1階, 屋階
-  [/(B[1-9])階/, 'B$1'],
+  [/(B[1-9])階/, '$1'],
   [/([1-9][0-9]?)階/, '$1F'],
   [/(屋階|R階|RF階)/, 'R'],
 ];
@@ -79,7 +81,9 @@ function matchKind(text: string): { kind: DrawingKind; confidence: number } {
   if (/階段/.test(lower)) {
     return { kind: 'stair_detail', confidence: 0.7 };
   }
-  if (/エレベーター|エレベータ|elevator|ev[\s_-]?shaft|ev詳細/.test(lower)) {
+  if (
+    /エレベーター|エレベータ|elevator|ev[\s_-]?shaft|ev詳細|ev[\s_-]?シャフト/.test(lower)
+  ) {
     return { kind: 'elevator_shaft', confidence: 0.85 };
   }
   if (/階高表|level[\s_-]?diagram|level[\s_-]?list/.test(lower)) {

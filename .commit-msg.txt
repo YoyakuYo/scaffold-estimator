@@ -1,31 +1,53 @@
-feat(bim): gap #10 - procedural facades and roof for DXF BIM extrusion
+test(construction-plan): gap #11 - jest unit tests for the deterministic core
 
-Builds on gap #5 to make DXF buildings actually look like buildings.
-Walls, slabs, roof + procedural windows + explicit window/door openings.
+Adds 42 passing Jest tests covering the modules that drive the
+Construction Plan output. They run in ~45 s and don't need any external
+services (no DB, no Anthropic, no Supabase storage).
 
-Changes
-- Procedural window panes (blue glass via the existing PBR material):
-  * Walked edge-by-edge over every wall polygon.
-  * Edges longer than 4 m get one window every 3.5 m, ~1.8 m × 1.5 m,
-    sill at 0.9 m, 50 mm pane thickness oriented along the wall normal.
-  * Picks up the curtain-wall blue tint from getMaterialForElement.
-- Explicit opening layers ("window"/"窓"/"door"/"扉"/"opening") are now
-  honoured: each closed polyline on those layers becomes a glass pane of
-  its own bounding box, sitting at sill height.
-- Roof: when no roof-tagged polygon exists, falls back to extruding the
-  outermost slab outline as a roof — the building always has a top,
-  picked up by the slate roof material.
+Specs added (all under backend/src/modules/structural-takeoff/)
+- drawing-classifier.spec.ts
+  * Detects framing_plan / column_list / beam_list / stair_detail /
+    elevator_shaft / level_diagram from Japanese + English filenames.
+  * Covers 1F/2F/RF/B1/PH floor labels.
+  * Detects 工区 (Japanese) and BlockA (English) variants.
+  * Confidence stays bounded at 1.
+- schedule/jis-sections.spec.ts
+  * Exact catalog hits, case + spacing + × variants normalize.
+  * Family-fallback for unknown sizes.
+  * pieceWeightKg() matches catalog × default piece length.
+- schedule/calendar.spec.ts
+  * Saturday/Sunday rules.
+  * JP holiday list (May Golden Week 2026).
+  * next() / add() / range() arithmetic.
+  * extraHolidaysIso passthrough.
+- schedule/erection-sequencer.spec.ts
+  * Activities only emitted for non-zero qty.
+  * Cycle order (hashira → oobari → kobari) with no overlap.
+  * Block B starts after Block A reaches the configured floor lag.
+  * Per-day demand sums to total pieces.
+- schedule/truck-bin-pack.spec.ts
+  * Single-truck pack when capacity + bed length both allow.
+  * Multi-truck split when payload exceeds one truck.
+  * 25t trailer + road_permit_required note for >12 m pieces.
+  * Per-element-type separation between trucks.
+- extractors/excel-import.service.spec.ts
+  * Japanese-header CSV (階, 工区, 部材, 符号, 断面, 数量, 通り芯, 備考).
+  * English-header CSV.
+  * Unknown element-type rows surface as warnings (not silently dropped).
+  * Level normalization (bare digit → 1F; R → R).
+  * Missing required header columns produce warnings + zero rows.
+- extractors/dxf-layer-extractor.service.spec.ts
+  * Counts entities per known structural layer (柱 → hashira etc.).
+  * Infers level from layer name when present.
+  * Returns warnings when no layers match.
 
-These run entirely client-side; no new backend code, no extra deps.
+Bug fixes uncovered by the tests
+- drawing-classifier.ts: B-floor regex template was prepending an extra B
+  ("B1F" → "BB"). Capture group already contains the prefix, so the
+  template is now $1 not B$1. Same fix applied to the 階 patterns.
+- drawing-classifier.ts: elevator pattern now also matches 'evシャフト'
+  (kana mix), so PH-EVシャフト.pdf classifies correctly.
 
 Quality
-- Frontend tsc --noEmit passes.
-
-Honest scope:
-- Walls don't get holes punched in them where windows go — windows sit
-  on the outside face. That's the standard "extrusion + applique"
-  approach used by quick-look BIM tools; it reads correctly at building
-  scale but looks slightly toy-like up close. Real cut-outs would need
-  CSG (three-bvh-csg or similar), which we can add later.
-- Roofs are still flat; hipped/gabled inference from outline is its own
-  multi-day job.
+- Backend tsc --noEmit passes.
+- All 42 tests pass: `npx jest src/modules/structural-takeoff`.
