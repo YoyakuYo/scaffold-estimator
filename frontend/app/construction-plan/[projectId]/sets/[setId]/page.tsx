@@ -20,6 +20,7 @@ import {
   Layers,
   Truck,
   Download,
+  Sparkles,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
@@ -147,6 +148,14 @@ export default function ConstructionPlanSetReviewPage() {
     mutationFn: (fileId: string) => structuralTakeoffApi.deleteFile(setId, fileId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+    },
+  });
+
+  const reclassifyAi = useMutation({
+    mutationFn: (fileId: string) => structuralTakeoffApi.reclassifyFromContent(setId, fileId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+      presenceActions.recordAction(`AI re-classified file in set ${setId.slice(0, 8)}`);
     },
   });
 
@@ -480,20 +489,34 @@ export default function ConstructionPlanSetReviewPage() {
                     <td className="px-4 py-2 text-right">
                       <div className="inline-flex items-center gap-1">
                         {f.storagePath ? (
-                          <button
-                            onClick={async () => {
-                              try {
-                                const link = await structuralTakeoffApi.getFileSignedUrl(setId, f.id);
-                                window.open(link.url, '_blank', 'noopener,noreferrer');
-                              } catch {
-                                /* signed URL failures are silent — UI stays usable */
-                              }
-                            }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                            title={t('constructionPlanReview', 'download')}
-                          >
-                            <Download className="h-4 w-4" />
-                          </button>
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const link = await structuralTakeoffApi.getFileSignedUrl(setId, f.id);
+                                  window.open(link.url, '_blank', 'noopener,noreferrer');
+                                } catch {
+                                  /* signed URL failures are silent — UI stays usable */
+                                }
+                              }}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                              title={t('constructionPlanReview', 'download')}
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => reclassifyAi.mutate(f.id)}
+                              disabled={reclassifyAi.isPending && reclassifyAi.variables === f.id}
+                              className="p-1.5 text-violet-600 hover:bg-violet-50 rounded disabled:opacity-50"
+                              title={t('constructionPlanReview', 'aiReclassify')}
+                            >
+                              {reclassifyAi.isPending && reclassifyAi.variables === f.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-4 w-4" />
+                              )}
+                            </button>
+                          </>
                         ) : null}
                         <button
                           onClick={() => deleteFile.mutate(f.id)}

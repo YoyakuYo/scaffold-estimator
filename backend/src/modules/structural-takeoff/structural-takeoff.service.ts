@@ -24,6 +24,7 @@ import {
   UpsertElementsDto,
 } from './dto/construction-plan.dto';
 import { buildSampleFixture } from './sample-fixtures';
+import { TitleBlockVisionService } from './extractors/title-block-vision.service';
 
 const DEFAULT_LEVELS = ['1F', '2F', '3F', 'RF'];
 const DEFAULT_BLOCKS: string[] = [];
@@ -55,7 +56,10 @@ const SIGNED_URL_TTL_SECONDS = 60 * 5;
 export class StructuralTakeoffService {
   private readonly logger = new Logger(StructuralTakeoffService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly titleBlockVision: TitleBlockVisionService,
+  ) {}
 
   // ─── Projects ───────────────────────────────────────────────
 
@@ -521,6 +525,97 @@ export class StructuralTakeoffService {
       this.listElementsForSet(ctx, setId),
     ]);
     return { project, set, files, elements };
+  }
+
+  /**
+   * Phase 3 — gap #6. Re-classify a stored file from its title-block content
+   * (not just its filename) using Claude Vision. PDFs are rasterized via
+   * Sharp before sending. The returned suggestion is applied to the row
+   * with classification_source='manual' so it is sticky and never gets
+   * overwritten by a re-run of the filename heuristic.
+   */
+  async reclassifyFileFromContent(
+    ctx: CallerContext,
+    setId: string,
+    fileId: string,
+  ): Promise<{
+    file: DrawingSetFile;
+    suggestion: { kind: string | null; level: string | null; block: string | null; confidence: number };
+  }> {
+    if (!this.titleBlockVision.isConfigured()) {
+      throw new BadRequestException(
+        'Title-block vision is not configured. Set ANTHROPIC_API_KEY on the API.',
+      );
+    }
+    await this.getSet(ctx, setId);
+    const client = this.supabase.getClient();
+    const { data: row, error } = await client
+      .from('drawing_set_files')
+      .select('*')
+      .eq('id', fileId)
+      .eq('set_id', setId)
+      .maybeSingle();
+    if (error || !row) throw new NotFoundException('File not found.');
+    const fileRow = mapRowToCamel<DrawingSetFile>(row as Record<string, unknown>)!;
+    const path = fileRow.storagePath;
+    if (!path) {
+      throw new BadRequestException('File has no stored bytes (metadata-only).');
+    }
+    const { data: bin, error: dlErr } = await client.storage
+      .from(CONSTRUCTION_PLAN_BUCKET)
+      .download(path);
+    if (dlErr || !bin) {
+      this.logger.warn(`reclassifyFileFromContent download failed: ${dlErr?.message}`);
+      throw new BadRequestException('Could not read stored file.');
+    }
+    const arrayBuf = await bin.arrayBuffer();
+    let imageBuffer: Buffer = Buffer.from(arrayBuf);
+    const lower = (fileRow.filename ?? '').toLowerCase();
+    if (lower.endsWith('.pdf')) {
+      try {
+        const sharp = (await import('sharp')).default;
+        imageBuffer = await sharp(imageBuffer, { density: 200 })
+          .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+          .png({ compressionLevel: 7 })
+          .toBuffer();
+      } catch (sharpErr) {
+        this.logger.warn(
+          `reclassifyFileFromContent PDF→image failed: ${(sharpErr as Error).message}; sending raw buffer`,
+        );
+      }
+    }
+
+    const suggestion = await this.titleBlockVision.classifyImage(imageBuffer, fileRow.filename);
+
+    const updates: Record<string, unknown> = { classificationSource: 'manual' };
+    if (suggestion.kind) updates.kind = suggestion.kind;
+    if (suggestion.level) updates.level = suggestion.level;
+    if (suggestion.block) updates.block = suggestion.block;
+    if (typeof suggestion.confidence === 'number') {
+      updates.classificationConfidence = suggestion.confidence;
+    }
+
+    const { data: saved, error: patchErr } = await client
+      .from('drawing_set_files')
+      .update(mapPayloadToSnake(updates))
+      .eq('id', fileId)
+      .eq('set_id', setId)
+      .select()
+      .single();
+    if (patchErr || !saved) {
+      this.logger.warn(`reclassifyFileFromContent patch failed: ${patchErr?.message}`);
+      throw new BadRequestException('Could not save AI classification.');
+    }
+
+    return {
+      file: mapRowToCamel<DrawingSetFile>(saved as Record<string, unknown>)!,
+      suggestion: {
+        kind: suggestion.kind ?? null,
+        level: suggestion.level ?? null,
+        block: suggestion.block ?? null,
+        confidence: suggestion.confidence,
+      },
+    };
   }
 
   /**

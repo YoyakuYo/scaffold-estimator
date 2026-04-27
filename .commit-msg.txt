@@ -1,42 +1,45 @@
-feat(bim): gap #5 - BIM Viewer accepts DXF and extrudes a procedural BIM
+feat(construction-plan): gap #6 - title-block OCR re-classification
 
-The viewer now opens .dxf alongside .ifc. DXF parsing is fully
-client-side (no server round-trip, no AI), so customers with DXF-only
-sources can preview their building immediately.
+Beyond the deterministic filename heuristic, files can now be
+re-classified by reading the title block of the actual drawing. This
+unlocks classification for files with bad/generic names (a real-world
+problem on construction sites where filenames are often "S001.pdf").
+
+Backend
+- New TitleBlockVisionService (extractors/title-block-vision.service.ts)
+  built on the existing Anthropic SDK already wired in vision-bim.
+  Single-shot Claude Vision call with a tight Japanese-aware system prompt:
+  reads 伏図 / 柱リスト / 大梁リスト / 階段詳細 / EVシャフト / 階高表 from
+  the title block; normalizes floor labels to 1F / RF / B1 / PH; returns
+  block (A/B/C/D) and a confidence number. Defensive JSON parsing.
+- StructuralTakeoffService.reclassifyFileFromContent():
+  * Loads the file from the construction-plan-files bucket (gap #1
+    enables this — required because vision needs the bytes, not just
+    metadata).
+  * For PDFs, rasterizes page 1 through Sharp at 200 DPI / max 2048 px
+    (same recipe vision-bim already uses).
+  * Sends to Claude, parses, patches the row with classification_source
+    set to 'manual' so the result is sticky and can never be clobbered
+    by a re-run of the filename classifier.
+- New endpoint POST /structural-takeoff/sets/:setId/files/:fileId/reclassify-from-content
+  (gated by @RequiresProduct('construction_plan'), throttled at 12/min).
 
 Frontend
-- New lib/bim/dxf-procedural-bim.ts (pure function, test-friendly):
-  * Parses DXF buffer with dxf-parser.
-  * Groups LWPOLYLINE / POLYLINE / LINE entities by layer.
-  * Auto-detects mm vs metres from bounding-box span.
-  * Emits 3 m walls (extrudes wall-layer closed polylines, falls back to
-    every closed polyline when no wall layer matched).
-  * Emits a 200 mm slab from the outermost closed polygon (largest area
-    on slab/floor layer or fallback).
-  * Emits short column extrusions for column-layer polygons.
-  * Emits a roof slab from roof-layer polygons.
-  * Each output mesh is shaped exactly like the existing IfcMeshData
-    (interleaved x,y,z,nx,ny,nz vertices + indices), so it rides through
-    the existing createBimMaterialSet / getMaterialForElement pipeline
-    and gets the same brick / concrete / slate textures as IFC walls.
-  * Fan triangulation from polygon centroid for caps (good enough for
-    convex + simple non-convex polygons typical of building outlines).
-- /bim/viewer page now accepts .ifc OR .dxf:
-  * File input + drag-and-drop accept .dxf.
-  * handleFile dispatches to buildBimFromDxf for DXF, parseIfcToMeshes for
-    IFC.
-  * Stats card shows the same per-element-type breakdown for both formats.
-  * Warnings from DXF parsing surface as a soft red banner.
-- Translation key swap: bimViewer.openIfc → bimViewer.openFile (also kept
-  the old key untouched for backward references); unsupportedFormat now
-  mentions both formats.
+- structuralTakeoffApi.reclassifyFromContent().
+- Set-review page: each file row that has a stored file now shows a
+  violet Sparkles button next to Download and Delete. Click triggers
+  the AI re-classification, the row's kind/level/block update inline
+  on success.
+- ja/en/fr key for the button.
 
 Quality
+- Backend tsc --noEmit passes.
 - Frontend tsc --noEmit passes.
 
-Limitations (honest scope):
-- No window/door grids generated (gap #10 covers the procedural facade
-  generation work).
-- Slab / wall heights are hard-coded defaults (3 m / 200 mm). When DXFs
-  carry storey heights in the title block we'll lift those.
-- Non-convex polygons with holes (e.g. an atrium) render as solid blobs.
+Operational notes
+- Requires ANTHROPIC_API_KEY on the backend (already used by vision-bim).
+- Optional ANTHROPIC_TITLE_BLOCK_MODEL env override; defaults to
+  claude-3-5-haiku-20241022 since the prompt is tiny and we want this
+  cheap.
+- Files must have storage_path (i.e. uploaded after gap #1's storage
+  migration). Pre-storage files just don't show the AI button.

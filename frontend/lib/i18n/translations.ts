@@ -3112,6 +3112,11 @@ export const translations = {
     colSource: { ja: '判定', en: 'Source', fr: 'Source' },
     delete: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
     download: { ja: 'ダウンロード', en: 'Download', fr: 'Télécharger' },
+    aiReclassify: {
+      ja: 'AIで題名欄から再分類',
+      en: 'AI: classify from title block',
+      fr: "IA : classer depuis le cartouche",
+    },
     elementsTitle: {
       ja: '部材集計（手動入力）',
       en: 'Element takeoff (manual entry)',

@@ -239,6 +239,26 @@ export class StructuralTakeoffController {
     );
   }
 
+  /**
+   * Phase 3 — gap #6. AI-driven re-classification of a stored file from its
+   * title-block contents. Uses Claude Vision via the existing Anthropic SDK.
+   * Sticky: writes classification_source='manual' so re-running the
+   * filename classifier doesn't clobber the user's reviewed result.
+   */
+  @Post('sets/:setId/files/:fileId/reclassify-from-content')
+  @Throttle({ default: { limit: 12, ttl: 60000 } })
+  async reclassifyFromContent(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Param('fileId') fileId: string,
+  ) {
+    return this.service.reclassifyFileFromContent(
+      { userId: user.id, companyId: user.companyId ?? null, role: user.role },
+      setId,
+      fileId,
+    );
+  }
+
   // ─── Manual element entry ────────────────────────────────
 
   @Get('sets/:setId/elements')

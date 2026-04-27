@@ -235,6 +235,19 @@ export const structuralTakeoffApi = {
     );
     return res.data;
   },
+  reclassifyFromContent: async (
+    setId: string,
+    fileId: string,
+  ): Promise<{
+    file: DrawingSetFile;
+    suggestion: { kind: string | null; level: string | null; block: string | null; confidence: number };
+  }> => {
+    const res = await apiClient.post<{
+      file: DrawingSetFile;
+      suggestion: { kind: string | null; level: string | null; block: string | null; confidence: number };
+    }>(`/structural-takeoff/sets/${setId}/files/${fileId}/reclassify-from-content`);
+    return res.data;
+  },
 
   // Elements
   upsertElements: async (
