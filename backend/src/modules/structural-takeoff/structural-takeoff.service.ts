@@ -482,7 +482,9 @@ export class StructuralTakeoffService {
         const n = Math.floor(Number(row.pieceLengthMm));
         if (n > 0) pieceLengthMm = Math.min(120_000, Math.max(1, n));
       }
-      return mapPayloadToSnake({
+      // Omit null piece_length_mm so PostgREST does not require the column
+      // (older DBs before migration 142). Non-null values still need the column.
+      const payload: Record<string, unknown> = {
         id: row.id ?? undefined,
         setId,
         level: row.level,
@@ -491,11 +493,12 @@ export class StructuralTakeoffService {
         label: row.label ?? null,
         section: row.section ?? null,
         qty,
-        pieceLengthMm,
         grid: row.grid ?? null,
         notes: row.notes ?? null,
         source,
-      });
+      };
+      if (pieceLengthMm != null) payload.pieceLengthMm = pieceLengthMm;
+      return mapPayloadToSnake(payload);
     });
     const { data, error } = await this.supabase
       .getClient()

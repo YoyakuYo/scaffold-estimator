@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS public.extracted_elements (
   label text,
   section text,
   qty integer NOT NULL DEFAULT 0,
+  piece_length_mm integer NULL,
   grid text,
   source text NOT NULL DEFAULT 'manual',
   notes text,
@@ -183,6 +184,9 @@ CREATE TABLE IF NOT EXISTS public.extracted_elements (
 
 CREATE INDEX IF NOT EXISTS extracted_elements_set_idx
   ON public.extracted_elements (set_id, level, block, element_type);
+
+ALTER TABLE public.extracted_elements
+  ADD COLUMN IF NOT EXISTS piece_length_mm integer NULL;
 
 ALTER TABLE public.construction_plan_projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.drawing_sets ENABLE ROW LEVEL SECURITY;

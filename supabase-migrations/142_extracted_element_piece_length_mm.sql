@@ -6,3 +6,6 @@ ALTER TABLE public.extracted_elements
 
 COMMENT ON COLUMN public.extracted_elements.piece_length_mm IS
   'Single-member length in mm for weight/length rollups; null = type default.';
+
+-- Refresh PostgREST schema cache so API sees the new column immediately.
+NOTIFY pgrst, 'reload schema';
