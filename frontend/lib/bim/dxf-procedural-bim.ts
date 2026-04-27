@@ -156,24 +156,23 @@ export function buildBimFromDxf(input: ArrayBuffer | string): DxfBimBuildResult 
   }
 
   // 2) Walls — closed polylines whose layer matches a wall pattern,
-  //    OR (fallback) all closed polylines that aren't the slab.
+  //    OR (fallback) all closed polylines that aren't the slab. Walls now
+  //    use a ribbon-with-real-holes extrusion so windows are actual cut-outs
+  //    (gap #10b) — see extrudeWallRibbonWithWindows() below.
   const wallPolys = polylines.filter(
     (p) => p.closed && p.vertices.length >= 3 && matchesAny(p.layer, WALL_LAYER_PATTERNS),
   );
   const wallSource = wallPolys.length > 0 ? wallPolys : polylines.filter((p) => p.closed && p !== slabPoly);
 
   for (const poly of wallSource) {
-    const m = extrudePolygonToMesh(
+    extrudeWallRibbonWithWindows(
       poly.vertices,
       DEFAULT_SLAB_THICKNESS_MM,
       DEFAULT_WALL_HEIGHT_MM,
-      'wall',
       scale,
+      meshes,
+      byType,
     );
-    if (m) {
-      meshes.push(m);
-      byType.wall += 1;
-    }
   }
 
   // 3) Columns — short stubs at column points; closed polylines on column layers.
@@ -212,14 +211,8 @@ export function buildBimFromDxf(input: ArrayBuffer | string): DxfBimBuildResult 
     }
   }
 
-  // 5) Procedural windows (gap #10). Stamp 1.8 m × 1.5 m blue glass panes
-  //    every 3.5 m along each wall edge longer than 4 m. This gives the
-  //    extruded box a recognizable façade without needing window callouts
-  //    in the DXF.
-  for (const wall of wallSource) {
-    addProceduralWindows(wall.vertices, scale, meshes, byType);
-  }
-
+  // 5) (Procedural windows are now baked into the wall ribbon above as real
+  //    cut-outs; the old applique-on-outside-face helper is gone.)
   // 6) Explicit openings on a "window" / "door" layer, when the DXF carries
   //    them as small rectangles. Treat each closed polyline as a window pane
   //    of its own bounding box.
@@ -250,53 +243,178 @@ export function buildBimFromDxf(input: ArrayBuffer | string): DxfBimBuildResult 
 }
 
 /**
- * Walk a wall polygon edge by edge and stamp procedural window panes every
- * `PROCEDURAL_WINDOW_SPACING_MM` along edges longer than 4 m. Each window is
- * a thin extruded rectangle perpendicular to the wall edge so the existing
- * `getMaterialForElement` glass material picks up the blue tint.
+ * Gap #10 follow-up — real window holes.
+ *
+ * Walls are emitted as zero-thickness ribbons running along each polygon
+ * edge. For every window position along an edge we split the ribbon into
+ * three solid rectangles (left wall, sill below, lintel above) and emit a
+ * separate glass pane for the aperture. The result is real cut-outs that
+ * read correctly from inside or outside, with no CSG dependency and no
+ * applique-on-outside-face artefacts.
+ *
+ * Layout per edge (mm coordinates along the edge, height coordinates in
+ * scene metres):
+ *
+ *   |solid|sill|gl| sill | gl |sill|solid|
+ *   |solid|----|gl|------| gl |----|solid|
+ *   |solid|----|gl|------| gl |----|solid|
+ *
+ * — except sill/lintel only appear at window positions, with full-height
+ * solid wall everywhere else.
+ *
+ * Windows are skipped on edges shorter than 4 m, and pulled 200 mm in from
+ * each corner so frames don't overlap mullions.
  */
-function addProceduralWindows(
+function extrudeWallRibbonWithWindows(
   verts: RawVertex[],
+  baseMm: number,
+  heightMm: number,
   scale: number,
   meshes: IfcMeshData[],
   byType: Record<IfcElementType, number>,
 ): void {
+  const M = (mm: number) => (mm * scale) / 1000;
+  const baseY = M(baseMm);
+  const topY = M(baseMm + heightMm);
+  const sillY = M(baseMm + PROCEDURAL_WINDOW_SILL_MM);
+  const headY = M(baseMm + PROCEDURAL_WINDOW_SILL_MM + PROCEDURAL_WINDOW_HEIGHT_MM);
+
   for (let i = 0; i < verts.length; i++) {
     const a = verts[i];
     const b = verts[(i + 1) % verts.length];
     const dx = b.x - a.x;
     const dy = b.y - a.y;
-    const lenMm = Math.hypot(dx, dy) * scale;
-    if (lenMm < 4000) continue;
-    const ux = dx / Math.hypot(dx, dy);
-    const uy = dy / Math.hypot(dx, dy);
-    // Outward normal (right-hand of edge direction).
-    const nx = uy;
-    const ny = -ux;
-    const winsPerEdge = Math.max(1, Math.floor(lenMm / PROCEDURAL_WINDOW_SPACING_MM));
-    for (let w = 0; w < winsPerEdge; w++) {
-      const t = (w + 0.5) / winsPerEdge;
-      const cx = a.x + dx * t;
-      const cy = a.y + dy * t;
-      const halfWidthDxf = (PROCEDURAL_WINDOW_WIDTH_MM / scale) / 2;
-      const thicknessDxf = 50 / scale; // 50 mm pane thickness for glass tile
-      const p1: RawVertex = { x: cx - ux * halfWidthDxf - nx * thicknessDxf * 0.5, y: cy - uy * halfWidthDxf - ny * thicknessDxf * 0.5 };
-      const p2: RawVertex = { x: cx + ux * halfWidthDxf - nx * thicknessDxf * 0.5, y: cy + uy * halfWidthDxf - ny * thicknessDxf * 0.5 };
-      const p3: RawVertex = { x: cx + ux * halfWidthDxf + nx * thicknessDxf * 0.5, y: cy + uy * halfWidthDxf + ny * thicknessDxf * 0.5 };
-      const p4: RawVertex = { x: cx - ux * halfWidthDxf + nx * thicknessDxf * 0.5, y: cy - uy * halfWidthDxf + ny * thicknessDxf * 0.5 };
-      const m = extrudePolygonToMesh(
-        [p1, p2, p3, p4],
-        PROCEDURAL_WINDOW_SILL_MM,
-        PROCEDURAL_WINDOW_HEIGHT_MM,
-        'window',
-        scale,
-      );
-      if (m) {
-        meshes.push(m);
-        byType.window += 1;
+    const lenDxf = Math.hypot(dx, dy);
+    if (lenDxf <= 0) continue;
+    const ux = dx / lenDxf;
+    const uy = dy / lenDxf;
+    const lenMm = lenDxf * scale;
+    // Outward normal (right-hand of the edge direction in plan).
+    const nxOut = uy;
+    const nzOut = -ux;
+
+    // Compute window apertures along this edge in mm-from-edge-start.
+    const windows: Array<{ startMm: number; endMm: number }> = [];
+    if (lenMm >= 4000) {
+      const count = Math.max(1, Math.floor(lenMm / PROCEDURAL_WINDOW_SPACING_MM));
+      const cornerMargin = 200; // mm
+      const half = PROCEDURAL_WINDOW_WIDTH_MM / 2;
+      for (let w = 0; w < count; w++) {
+        const center = ((w + 0.5) / count) * lenMm;
+        const start = Math.max(cornerMargin, center - half);
+        const end = Math.min(lenMm - cornerMargin, center + half);
+        if (end > start) windows.push({ startMm: start, endMm: end });
       }
     }
+
+    let cursor = 0;
+    for (const win of windows) {
+      // Solid wall section before the window (full height).
+      pushWallQuad(
+        a, ux, uy, nxOut, nzOut, scale,
+        cursor, win.startMm, baseY, topY,
+        meshes, byType, 'wall',
+      );
+      // Sill (below the aperture).
+      pushWallQuad(
+        a, ux, uy, nxOut, nzOut, scale,
+        win.startMm, win.endMm, baseY, sillY,
+        meshes, byType, 'wall',
+      );
+      // Lintel (above the aperture).
+      pushWallQuad(
+        a, ux, uy, nxOut, nzOut, scale,
+        win.startMm, win.endMm, headY, topY,
+        meshes, byType, 'wall',
+      );
+      // Glass pane in the aperture — same plane as the wall, glass material.
+      pushWallQuad(
+        a, ux, uy, nxOut, nzOut, scale,
+        win.startMm, win.endMm, sillY, headY,
+        meshes, byType, 'window',
+      );
+      cursor = win.endMm;
+    }
+    // Trailing solid wall section to the edge end (full height).
+    pushWallQuad(
+      a, ux, uy, nxOut, nzOut, scale,
+      cursor, lenMm, baseY, topY,
+      meshes, byType, 'wall',
+    );
   }
+}
+
+/**
+ * Emit a single zero-thickness rectangle (one quad, two triangles) along
+ * the given edge, bounded by [startMm, endMm] horizontally and [yLow, yHigh]
+ * vertically (already in scene metres for Y). The face uses the supplied
+ * outward normal, but the wall material set is DoubleSide so it renders
+ * correctly when viewed from inside too.
+ */
+function pushWallQuad(
+  edgeStart: RawVertex,
+  ux: number,
+  uy: number,
+  nxOut: number,
+  nzOut: number,
+  scale: number,
+  startMm: number,
+  endMm: number,
+  yLow: number,
+  yHigh: number,
+  meshes: IfcMeshData[],
+  byType: Record<IfcElementType, number>,
+  elementType: IfcElementType,
+): void {
+  if (endMm - startMm <= 1e-6) return;
+  if (yHigh - yLow <= 1e-6) return;
+
+  // Walk along the edge in DXF units. 1 mm = 1/scale DXF units.
+  const dxfPerMm = 1 / scale;
+  const sx = edgeStart.x + ux * startMm * dxfPerMm;
+  const sy = edgeStart.y + uy * startMm * dxfPerMm;
+  const ex = edgeStart.x + ux * endMm * dxfPerMm;
+  const ey = edgeStart.y + uy * endMm * dxfPerMm;
+
+  // Convert DXF coordinate to scene metres. scene_m = DXF * scale / 1000.
+  const dxfToM = (v: number) => (v * scale) / 1000;
+
+  const positions = [
+    dxfToM(sx), yLow, dxfToM(sy),
+    dxfToM(ex), yLow, dxfToM(ey),
+    dxfToM(ex), yHigh, dxfToM(ey),
+    dxfToM(sx), yHigh, dxfToM(sy),
+  ];
+  const normals = [
+    nxOut, 0, nzOut,
+    nxOut, 0, nzOut,
+    nxOut, 0, nzOut,
+    nxOut, 0, nzOut,
+  ];
+  const indices = [0, 1, 2, 0, 2, 3];
+
+  const count = positions.length / 3;
+  const interleaved = new Float32Array(count * 6);
+  for (let i = 0; i < count; i++) {
+    interleaved[i * 6] = positions[i * 3];
+    interleaved[i * 6 + 1] = positions[i * 3 + 1];
+    interleaved[i * 6 + 2] = positions[i * 3 + 2];
+    interleaved[i * 6 + 3] = normals[i * 3];
+    interleaved[i * 6 + 4] = normals[i * 3 + 1];
+    interleaved[i * 6 + 5] = normals[i * 3 + 2];
+  }
+
+  meshes.push({
+    vertices: interleaved,
+    indices: new Uint32Array(indices),
+    color: { r: 1, g: 1, b: 1, a: 1 },
+    elementType,
+    expressID: hashElementIdentity(elementType, [
+      { x: sx, y: sy },
+      { x: ex, y: ey },
+    ]),
+  });
+  byType[elementType] += 1;
 }
 
 function emptyByType(): Record<IfcElementType, number> {

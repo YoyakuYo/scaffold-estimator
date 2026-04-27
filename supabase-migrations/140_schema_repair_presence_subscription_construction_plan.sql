@@ -11,6 +11,27 @@
 ALTER TABLE public.subscriptions
   ADD COLUMN IF NOT EXISTS product_code text NOT NULL DEFAULT 'scaffold';
 
+ALTER TABLE public.subscriptions
+  ADD COLUMN IF NOT EXISTS company_id uuid;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'subscriptions_company_id_fkey'
+  ) THEN
+    RETURN;
+  END IF;
+  IF to_regclass('public.companies') IS NOT NULL THEN
+    ALTER TABLE public.subscriptions
+      ADD CONSTRAINT subscriptions_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE SET NULL;
+  ELSIF to_regclass('public.organizations') IS NOT NULL THEN
+    ALTER TABLE public.subscriptions
+      ADD CONSTRAINT subscriptions_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.organizations(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 UPDATE public.subscriptions
 SET product_code = 'scaffold'
 WHERE product_code IS NULL OR product_code = '';
@@ -34,8 +55,19 @@ DROP INDEX IF EXISTS subscriptions_user_id_key;
 DROP INDEX IF EXISTS public.subscriptions_user_id_idx;
 CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_user_product_idx
   ON public.subscriptions (user_id, product_code);
-CREATE INDEX IF NOT EXISTS subscriptions_company_product_idx
-  ON public.subscriptions (company_id, product_code);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'subscriptions'
+      AND column_name = 'company_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS subscriptions_company_product_idx
+      ON public.subscriptions (company_id, product_code);
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS subscriptions_product_idx
   ON public.subscriptions (product_code);
 

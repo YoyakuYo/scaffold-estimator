@@ -1,37 +1,45 @@
-feat(construction-plan): gap #3 - full JIS section catalog (~150 sizes)
+feat(bim): gap #10 follow-up - true window holes (no CSG)
 
-Tonnage estimates are now engineering-grade. The catalog was the
-single biggest source of error in Phase 4 — unmatched sections fell
-back to family averages and could be off by ±20-40 %. Expanded from
-~30 entries to ~155 covering every common size on Japanese steel-
-frame jobs.
+Replaces the gap #5/#10 "windows-as-applique" approach with real
+cut-outs in the wall geometry. Windows are now actual openings: looking
+through one shows the building interior / opposite wall, not the back
+of an applied glass tile. No CSG dependency added.
 
-Catalog additions
-- H-shape: 100 mm to 912 mm depth, narrow + wide flange + outside
-  dimension series (~40 entries).
-- I-beam (legacy form): 100-300 mm range.
-- RHS / 角形 STKR (square + rectangular): 50-600 mm with multiple wall
-  thicknesses, including the 6-mm / 9-mm / 12-mm / 16-mm / 19-mm / 22-mm
-  variants used on tall buildings (~45 entries).
-- CHS / 鋼管 STK (round): 48.6 mm to 711.2 mm OD across 3.2-16 mm wall
-  thicknesses (~35 entries).
-- Equal angle (L): 25-250 mm with 3-25 mm thicknesses (~30 entries).
-- Channel (C / [): 75-380 mm typical purlin / light-beam range
-  (~13 entries).
-- CT (T-shape from H): 75-400 mm (~10 entries).
-- New getCatalogEntries() public read for diagnostics / admin export.
-- FAMILY_FALLBACK gains entries for I, C, CT.
+Approach
+- Walls extrude as zero-thickness ribbons running along each polygon
+  edge (instead of the closed polygon-extrusion solid that gap #5 used).
+- For each polygon edge, compute window apertures along the edge in mm
+  (1.8 m wide, 3.5 m spacing, only on edges ≥ 4 m, pulled 200 mm in
+  from each corner).
+- For each aperture, emit FOUR rectangular wall pieces around the hole:
+  * Solid wall section before the aperture (full height, baseY..topY).
+  * Sill below the aperture (full width, baseY..sillY).
+  * Lintel above the aperture (full width, headY..topY).
+  * Glass pane in the aperture itself (sillY..headY) using the existing
+    blue-tinted curtain-wall material.
+- Final solid wall section after the last aperture finishes the edge.
+- Material set is DoubleSide so the ribbon renders correctly when
+  viewed from inside, even though each quad is single-faced.
 
-Tests
-- jis-sections.spec.ts now asserts:
-  * Exact catalog hits across H/RHS/CHS/L (4 families).
-  * Family-fallback paths for H/RHS/CHS unknowns.
-  * Each major family resolves something non-zero (I/C/CT).
-  * Catalog size > 150 entries.
-  * Diagnostic getCatalogEntries() exposes all 7 families.
-- All 42 existing tests still pass.
+Implementation
+- New extrudeWallRibbonWithWindows() and pushWallQuad() helpers in
+  lib/bim/dxf-procedural-bim.ts. The old polygon-extrude path for walls
+  is gone, along with the addProceduralWindows() applique helper.
+- Slabs and roof still use the original extrudePolygonToMesh() solid
+  block — they don't need cut-outs.
+- Explicit window/door layer polylines (e.g. the DXF carries window
+  rectangles) still get extruded as glass tiles via the existing path
+  on top of the new ribbon walls.
+- Pure unit-conversion fix in pushWallQuad: scene_m = DXF × scale ÷ 1000
+  (not the inverse of dxfPerMm path).
 
 Quality
-- Backend tsc --noEmit: passes.
-- jest src/modules/structural-takeoff/schedule/jis-sections.spec.ts: 9
-  passing.
+- Frontend tsc --noEmit passes.
+
+Honest scope:
+- Walls have zero physical thickness in this model — looking edge-on
+  shows a paper-thin band. For most building views (orbital, 3/4) this
+  is invisible. If we ever want thick walls with mitred corners, that's
+  a separate polygon-offsetting task.
+- Sill/lintel meet the wall ribbon edge cleanly because everything sits
+  on the same plane; there's no z-fighting.
