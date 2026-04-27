@@ -256,3 +256,13 @@ CREATE POLICY construction_plan_files_authenticated_read
   ON storage.objects
   FOR SELECT
   USING (bucket_id = 'construction-plan-files' AND auth.role() = 'authenticated');
+
+-- -------------------------------------------------------------------
+-- 5) Force PostgREST to reload its schema cache.
+-- Supabase normally listens for schema changes automatically, but DO blocks
+-- and CREATE-IF-NOT-EXISTS sequences sometimes slip past its trigger and
+-- the API keeps returning "Could not find the table … in the schema cache"
+-- until reload. Re-issuing this NOTIFY at the end of every schema-changing
+-- migration is the canonical fix.
+-- -------------------------------------------------------------------
+NOTIFY pgrst, 'reload schema';
