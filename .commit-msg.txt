@@ -1,0 +1,66 @@
+feat(billing): gap #2 - per-product bank-transfer activation end-to-end
+
+Closes the "you can't actually sell BIM or Construction Plan" gap.
+Subscription activation through the bank-transfer flow is now
+product-aware: superadmin can grant a specific product on registration
+approval, and existing users can self-subscribe to BIM or Construction
+Plan from /billing without affecting their scaffold subscription.
+
+Migration
+- 138_user_pending_product_code.sql adds two text columns to users:
+  pending_bank_product_code + bank_wire_intent_product_code (default
+  'scaffold'). Existing rows + flows are unchanged.
+
+Backend
+- User entity gains pendingBankProductCode + bankWireIntentProductCode.
+- ApproveUserDto + BankWireIntentDto accept optional productCode (default
+  'scaffold').
+- SubscriptionService.createBankWireIntent(userId, plan, productCode)
+  records which product the wire targets and re-allocates the wire
+  reference whenever (plan, productCode) differs from any existing
+  pending intent.
+- SubscriptionService.adminConfirmBankWirePayment(userId) reads the
+  product off the user row and activates the right subscription row;
+  bypasses the legacy scaffold-only company-seat sync when the product
+  isn't scaffold.
+- SubscriptionService.activateBankVerifiedPlan(userId, plan, productCode)
+  upserts the (user_id, product_code) subscription row (no longer
+  hard-coded to scaffold).
+- AuthService.approveUser threads productCode into
+  ensureInactiveSubscriptionForPendingBank + persists it on users.
+- AuthService.verifyBankActivation activates the correct product after
+  the user enters the activation code.
+- hasActiveAccess + resolveEffectiveCapabilities + resolveEffectiveAccess
+  now only block scaffold when pendingBankPlan && pendingBankProductCode
+  === 'scaffold'. A user paying for BIM keeps full scaffold access while
+  the BIM activation is pending — and vice versa.
+- getMySubscription exposes pendingBankProductCode + bankWireIntentProductCode
+  so the frontend can show product-aware banners.
+- subscription.controller passes productCode through.
+
+Frontend
+- subscriptionsApi.createBankWireIntent(plan, productCode) + new
+  pendingBankProductCode / bankWireIntentProductCode fields on
+  SubscriptionInfo.
+- usersApi.ApproveUserPayload accepts productCode.
+- BillingProductOverview rewritten: every locked product card now opens
+  an inline ProductSubscribeDialog with a tier picker + a "Issue wire
+  reference" button. On success the dialog flips to show the wire memo
+  code + bank details + bank info, and tells the user the superadmin
+  will activate the product once the wire arrives.
+- Superadmin dashboard pending-users panel gains a product-picker select
+  (Scaffold / BIM / Construction Plan) that appears only when the admin
+  picks a bank-transfer plan. The product flows into approveUser.
+- Confirmation copy now says "{product} / {tier}" instead of just
+  "{tier}".
+- ja/en/fr translations: productSubscribe.* + adminDashboard.approvalProductLabel.
+
+Quality
+- Backend tsc --noEmit: passes.
+- Frontend tsc --noEmit: passes.
+- No lint errors.
+
+Deployment
+- Apply supabase-migrations/138_user_pending_product_code.sql before
+  rollout. Existing pendingBankPlan rows automatically get
+  product_code='scaffold' via the column default.

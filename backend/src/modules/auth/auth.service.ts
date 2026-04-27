@@ -715,7 +715,11 @@ export class AuthService {
           'planTier is required when paymentActivation is bank_transfer (basic, medium, monthly, or premium).',
         );
       }
-      await this.subscriptionService.ensureInactiveSubscriptionForPendingBank(userId);
+      const productCode = (dto?.productCode ?? 'scaffold') as
+        | 'scaffold'
+        | 'bim'
+        | 'construction_plan';
+      await this.subscriptionService.ensureInactiveSubscriptionForPendingBank(userId, productCode);
       const code = this.generateBankActivationCode();
       const hash = this.hashBankActivationCode(userId, code);
       const ttlRaw = this.configService.get<string>('BANK_ACTIVATION_CODE_TTL_HOURS')?.trim() || '168';
@@ -724,6 +728,7 @@ export class AuthService {
       const snake = mapPayloadToSnake({
         approvalStatus: 'approved' as const,
         pendingBankPlan: dto.planTier,
+        pendingBankProductCode: productCode,
         bankActivationCodeHash: hash,
         bankActivationCodeExpiresAt: expiresAt.toISOString(),
       });
@@ -765,7 +770,10 @@ export class AuthService {
     return result;
   }
 
-  async verifyBankActivation(userId: string, code: string): Promise<{ ok: true; plan: string }> {
+  async verifyBankActivation(
+    userId: string,
+    code: string,
+  ): Promise<{ ok: true; plan: string; productCode: 'scaffold' | 'bim' | 'construction_plan' }> {
     const { data: row } = await this.supabase.getClient().from('users').select('*').eq('id', userId).maybeSingle();
     if (!row) throw new NotFoundException('User not found');
     const user = mapRowToCamel<User>(row as Record<string, unknown>);
@@ -780,19 +788,24 @@ export class AuthService {
       throw new BadRequestException('Invalid activation code.');
     }
     const planTier = user.pendingBankPlan;
+    const productCode = ((user as User).pendingBankProductCode ?? 'scaffold') as
+      | 'scaffold'
+      | 'bim'
+      | 'construction_plan';
     await this.supabase
       .getClient()
       .from('users')
       .update(
         mapPayloadToSnake({
           pendingBankPlan: null,
+          pendingBankProductCode: 'scaffold',
           bankActivationCodeHash: null,
           bankActivationCodeExpiresAt: null,
         }),
       )
       .eq('id', userId);
-    await this.subscriptionService.activateBankVerifiedPlan(userId, planTier);
-    return { ok: true, plan: planTier };
+    await this.subscriptionService.activateBankVerifiedPlan(userId, planTier, productCode);
+    return { ok: true, plan: planTier, productCode };
   }
 
   /**

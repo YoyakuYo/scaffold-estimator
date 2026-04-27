@@ -32,6 +32,8 @@ export interface UserProfile {
 export interface ApproveUserPayload {
   paymentActivation?: 'standard' | 'bank_transfer';
   planTier?: BankPendingPlanTier;
+  /** Phase 2 follow-up: product the bank activation grants. Defaults to 'scaffold'. */
+  productCode?: 'scaffold' | 'bim' | 'construction_plan';
 }
 
 export interface CreateUserPayload {

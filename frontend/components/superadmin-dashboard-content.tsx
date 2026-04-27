@@ -30,6 +30,11 @@ export function SuperAdminDashboardContent() {
   const queryClient = useQueryClient();
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approvalModeByUser, setApprovalModeByUser] = useState<Record<string, string>>({});
+  // Phase 2 follow-up: which product the bank-transfer approval grants.
+  // Keyed by user id; defaults to 'scaffold' so behaviour is unchanged.
+  const [approvalProductByUser, setApprovalProductByUser] = useState<
+    Record<string, 'scaffold' | 'bim' | 'construction_plan'>
+  >({});
 
   const { data: currentUser } = useQuery({
     queryKey: ['profile'],
@@ -101,10 +106,22 @@ export function SuperAdminDashboardContent() {
           : tier === 'monthly'
             ? t('billing', 'planTierMonthly')
             : t('billing', 'planTierPremium');
-    const msg = t('adminDashboard', 'confirmApproveBank').replace('{email}', u.email).replace('{plan}', planWord);
+    const productCode = approvalProductByUser[u.id] ?? 'scaffold';
+    const productWord =
+      productCode === 'bim'
+        ? t('products', 'productBim')
+        : productCode === 'construction_plan'
+          ? t('products', 'productConstructionPlan')
+          : t('products', 'productScaffold');
+    const msg = t('adminDashboard', 'confirmApproveBank')
+      .replace('{email}', u.email)
+      .replace('{plan}', `${productWord} / ${planWord}`);
     if (!window.confirm(msg)) return;
     setApprovingId(u.id);
-    approveMutation.mutate({ id: u.id, payload: { paymentActivation: 'bank_transfer', planTier: tier } });
+    approveMutation.mutate({
+      id: u.id,
+      payload: { paymentActivation: 'bank_transfer', planTier: tier, productCode },
+    });
   };
   const rejectMutation = useMutation({
     mutationFn: (id: string) => usersApi.rejectUser(id),
@@ -368,6 +385,29 @@ export function SuperAdminDashboardContent() {
                             <option value="bank_premium">{t('adminDashboard', 'approvalModeBankPremium')}</option>
                           </select>
                         </label>
+                        {(approvalModeByUser[u.id] ?? 'trial') !== 'trial' && (
+                          <label className="mt-1 flex items-center gap-2 text-xs text-gray-600">
+                            <span className="shrink-0">
+                              {t('adminDashboard', 'approvalProductLabel')}
+                            </span>
+                            <select
+                              value={approvalProductByUser[u.id] ?? 'scaffold'}
+                              onChange={(e) =>
+                                setApprovalProductByUser((m) => ({
+                                  ...m,
+                                  [u.id]: e.target.value as 'scaffold' | 'bim' | 'construction_plan',
+                                }))
+                              }
+                              className="border border-gray-200 rounded-md px-2 py-1 text-gray-800 max-w-[200px]"
+                            >
+                              <option value="scaffold">{t('products', 'productScaffold')}</option>
+                              <option value="bim">{t('products', 'productBim')}</option>
+                              <option value="construction_plan">
+                                {t('products', 'productConstructionPlan')}
+                              </option>
+                            </select>
+                          </label>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button

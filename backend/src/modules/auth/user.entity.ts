@@ -72,6 +72,14 @@ export class User {
   @Column({ name: 'pending_bank_plan', type: 'text', nullable: true })
   pendingBankPlan: 'basic' | 'medium' | 'monthly' | 'premium' | null;
 
+  /**
+   * Phase 2 follow-up: which product the pending bank activation is for.
+   * Defaults to 'scaffold' for backward compatibility; admins now pick the
+   * product when granting bank-transfer access.
+   */
+  @Column({ name: 'pending_bank_product_code', type: 'text', default: 'scaffold' })
+  pendingBankProductCode: 'scaffold' | 'bim' | 'construction_plan';
+
   @Column({ name: 'bank_activation_code_hash', type: 'text', nullable: true })
   bankActivationCodeHash: string | null;
 
@@ -85,6 +93,10 @@ export class User {
   /** Plan tier selected for the pending wire (see bank_wire_reference). */
   @Column({ name: 'bank_wire_intent_plan', type: 'text', nullable: true })
   bankWireIntentPlan: 'basic' | 'medium' | 'monthly' | 'premium' | null;
+
+  /** Phase 2 follow-up: product the pending wire is targeting. */
+  @Column({ name: 'bank_wire_intent_product_code', type: 'text', default: 'scaffold' })
+  bankWireIntentProductCode: 'scaffold' | 'bim' | 'construction_plan';
 
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
   lastActiveAt: Date | null;

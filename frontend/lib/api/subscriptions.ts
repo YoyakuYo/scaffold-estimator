@@ -75,11 +75,15 @@ export interface SubscriptionInfo {
   /** Unique wire memo code after POST .../me/bank-wire-intent (also in remittanceReference). */
   bankWireReference?: string | null;
   bankWireIntentPlan?: BankWirePlanTier | null;
+  /** Phase 2 follow-up: which product the open wire intent targets. */
+  bankWireIntentProductCode?: 'scaffold' | 'bim' | 'construction_plan';
   /** Company-wide feature gates from paid/trial plan (from API). */
   capabilities?: PlanCapabilities;
   seatUsage?: { used: number; limit: number };
   /** Set while waiting for bank-transfer activation code entry. */
   pendingBankPlan?: 'basic' | 'medium' | 'monthly' | 'premium' | null;
+  /** Phase 2 follow-up: which product the pending activation code targets. */
+  pendingBankProductCode?: 'scaffold' | 'bim' | 'construction_plan';
   bankActivationCodeExpiresAt?: string | null;
 }
 
@@ -123,12 +127,19 @@ export const subscriptionsApi = {
 
   createBankWireIntent: async (
     plan: BankWirePlanTier,
-  ): Promise<{ bankTransfer: BankTransferInstructions; wireReference: string; planTier: BankWirePlanTier }> => {
+    productCode: 'scaffold' | 'bim' | 'construction_plan' = 'scaffold',
+  ): Promise<{
+    bankTransfer: BankTransferInstructions;
+    wireReference: string;
+    planTier: BankWirePlanTier;
+    productCode: 'scaffold' | 'bim' | 'construction_plan';
+  }> => {
     const res = await apiClient.post<{
       bankTransfer: BankTransferInstructions;
       wireReference: string;
       planTier: BankWirePlanTier;
-    }>('/subscriptions/me/bank-wire-intent', { plan });
+      productCode: 'scaffold' | 'bim' | 'construction_plan';
+    }>('/subscriptions/me/bank-wire-intent', { plan, productCode });
     return res.data;
   },
 

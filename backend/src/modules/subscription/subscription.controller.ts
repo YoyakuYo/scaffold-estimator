@@ -48,7 +48,11 @@ export class SubscriptionController {
   @UseGuards(JwtAuthGuard)
   @Post('me/bank-wire-intent')
   async createBankWireIntent(@CurrentUser() user: any, @Body() body: BankWireIntentDto) {
-    return this.subscriptionService.createBankWireIntent(user.id, body.plan);
+    return this.subscriptionService.createBankWireIntent(
+      user.id,
+      body.plan,
+      body.productCode ?? 'scaffold',
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

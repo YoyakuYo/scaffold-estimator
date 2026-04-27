@@ -385,7 +385,14 @@ export class SubscriptionService {
     if (role === 'superadmin') return true;
     const user = await this.getUserOrFail(userId);
     if (user.subscriptionExempt) return true;
-    if (user.pendingBankPlan) return false;
+    // Pending bank activation only blocks the scaffold product (the legacy
+    // single-product flow). BIM / Construction Plan use the self-service wire
+    // intent on /billing, which never sets pendingBankPlan.
+    const pendingProduct = ((user as User).pendingBankProductCode ?? 'scaffold') as
+      | 'scaffold'
+      | 'bim'
+      | 'construction_plan';
+    if (user.pendingBankPlan && pendingProduct === 'scaffold') return false;
     const companyId = user.companyId;
     const now = new Date();
 
@@ -459,7 +466,11 @@ export class SubscriptionService {
     if (role === 'superadmin') return SUPERADMIN_CAPABILITIES;
     const user = await this.getUserOrFail(userId);
     if (user.subscriptionExempt) return SUPERADMIN_CAPABILITIES;
-    if (user.pendingBankPlan) return NO_ACCESS_CAPABILITIES;
+    const pendingProduct = ((user as User).pendingBankProductCode ?? 'scaffold') as
+      | 'scaffold'
+      | 'bim'
+      | 'construction_plan';
+    if (user.pendingBankPlan && pendingProduct === 'scaffold') return NO_ACCESS_CAPABILITIES;
     const companyId = user.companyId;
 
     if (companyId) {
@@ -735,8 +746,15 @@ export class SubscriptionService {
       bankTransfer: managesBilling ? this.getBankTransferInstructions(user.email, user.bankWireReference) : null,
       bankWireReference: managesBilling ? (user.bankWireReference ?? null) : null,
       bankWireIntentPlan: managesBilling ? (user.bankWireIntentPlan ?? null) : null,
+      bankWireIntentProductCode: managesBilling
+        ? ((user as User).bankWireIntentProductCode ?? 'scaffold')
+        : 'scaffold',
       capabilities,
       pendingBankPlan: user.pendingBankPlan ?? null,
+      pendingBankProductCode: ((user as User).pendingBankProductCode ?? 'scaffold') as
+        | 'scaffold'
+        | 'bim'
+        | 'construction_plan',
       bankActivationCodeExpiresAt: user.bankActivationCodeExpiresAt ?? null,
       seatUsage:
         user.role === 'superadmin' || exempt
@@ -748,7 +766,13 @@ export class SubscriptionService {
   async createBankWireIntent(
     userId: string,
     planTier: BankWirePlanTier,
-  ): Promise<{ bankTransfer: Record<string, unknown>; wireReference: string; planTier: BankWirePlanTier }> {
+    productCode: 'scaffold' | 'bim' | 'construction_plan' = 'scaffold',
+  ): Promise<{
+    bankTransfer: Record<string, unknown>;
+    wireReference: string;
+    planTier: BankWirePlanTier;
+    productCode: 'scaffold' | 'bim' | 'construction_plan';
+  }> {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') {
       throw new ForbiddenException('Superadmin account does not require a paid subscription checkout.');
@@ -756,11 +780,13 @@ export class SubscriptionService {
     if (user.subscriptionExempt) {
       throw new ForbiddenException('This account has full access without a paid subscription.');
     }
-    const billingState = await this.getMySubscription(userId);
-    if (!billingState.managesBilling) {
-      throw new ForbiddenException(
-        'Your seat is included in your organization’s subscription. Billing changes must be made by the teammate who manages payment.',
-      );
+    if (productCode === 'scaffold') {
+      const billingState = await this.getMySubscription(userId);
+      if (!billingState.managesBilling) {
+        throw new ForbiddenException(
+          'Your seat is included in your organization’s subscription. Billing changes must be made by the teammate who manages payment.',
+        );
+      }
     }
     if (!this.getBankWireCheckoutTiers().includes(planTier)) {
       throw new BadRequestException(
@@ -768,7 +794,10 @@ export class SubscriptionService {
       );
     }
     let wireRef = user.bankWireReference ?? null;
-    if (!wireRef || user.bankWireIntentPlan !== planTier) {
+    const samePending =
+      user.bankWireIntentPlan === planTier &&
+      ((user as User).bankWireIntentProductCode ?? 'scaffold') === productCode;
+    if (!wireRef || !samePending) {
       wireRef = await this.allocateUniqueWireReference();
     }
     const client = this.supabase.getClient();
@@ -778,12 +807,13 @@ export class SubscriptionService {
         mapPayloadToSnake({
           bankWireReference: wireRef,
           bankWireIntentPlan: planTier,
+          bankWireIntentProductCode: productCode,
         }),
       )
       .eq('id', userId);
     if (error) throw new BadRequestException('Could not save payment reference.');
     const bankTransfer = this.getBankTransferInstructions(user.email, wireRef)!;
-    return { bankTransfer, wireReference: wireRef, planTier };
+    return { bankTransfer, wireReference: wireRef, planTier, productCode };
   }
 
   private async allocateUniqueWireReference(): Promise<string> {
@@ -796,14 +826,20 @@ export class SubscriptionService {
     throw new BadRequestException('Could not allocate a unique payment reference.');
   }
 
-  async adminConfirmBankWirePayment(userId: string): Promise<{ ok: true; plan: string }> {
+  async adminConfirmBankWirePayment(
+    userId: string,
+  ): Promise<{ ok: true; plan: string; productCode: 'scaffold' | 'bim' | 'construction_plan' }> {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') throw new BadRequestException('Invalid target.');
     const tier = user.bankWireIntentPlan;
     if (!tier || !user.bankWireReference) {
       throw new BadRequestException('No pending bank transfer for this user.');
     }
-    await this.activateBankVerifiedPlan(userId, tier);
+    const productCode = ((user as User).bankWireIntentProductCode ?? 'scaffold') as
+      | 'scaffold'
+      | 'bim'
+      | 'construction_plan';
+    await this.activateBankVerifiedPlan(userId, tier, productCode);
     const { error } = await this.supabase
       .getClient()
       .from('users')
@@ -811,16 +847,19 @@ export class SubscriptionService {
         mapPayloadToSnake({
           bankWireReference: null,
           bankWireIntentPlan: null,
+          bankWireIntentProductCode: 'scaffold',
         }),
       )
       .eq('id', userId);
     if (error) this.logger.warn(`adminConfirmBankWirePayment user cleanup: ${error.message}`);
-    try {
-      await this.syncSubscriptionRowForCompanyMember(userId);
-    } catch (e) {
-      this.logger.warn(`sync after bank confirm: ${(e as Error).message}`);
+    if (productCode === 'scaffold') {
+      try {
+        await this.syncSubscriptionRowForCompanyMember(userId);
+      } catch (e) {
+        this.logger.warn(`sync after bank confirm: ${(e as Error).message}`);
+      }
     }
-    return { ok: true, plan: tier };
+    return { ok: true, plan: tier, productCode };
   }
 
   async listSubscribers(): Promise<any[]> {
@@ -945,10 +984,18 @@ export class SubscriptionService {
   /**
    * After superadmin bank-transfer approval: subscription must not grant access until code verification.
    */
-  async ensureInactiveSubscriptionForPendingBank(userId: string): Promise<void> {
+  async ensureInactiveSubscriptionForPendingBank(
+    userId: string,
+    productCode: 'scaffold' | 'bim' | 'construction_plan' = 'scaffold',
+  ): Promise<void> {
     const user = await this.getUserOrFail(userId);
     const client = this.supabase.getClient();
-    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
+    const { data: existing } = await client
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('product_code', productCode)
+      .maybeSingle();
     const inactive = mapPayloadToSnake({
       plan: 'free_trial' as PlanTier,
       status: 'expired' as SubscriptionStatus,
@@ -962,14 +1009,18 @@ export class SubscriptionService {
       stripePriceId: null,
     });
     if (existing) {
-      const { error } = await client.from('subscriptions').update(inactive).eq('user_id', userId).eq('product_code', 'scaffold');
+      const { error } = await client
+        .from('subscriptions')
+        .update(inactive)
+        .eq('user_id', userId)
+        .eq('product_code', productCode);
       if (error) throw new BadRequestException('Failed to prepare subscription for bank activation.');
       return;
     }
     const ins = mapPayloadToSnake({
       userId,
       companyId: user.companyId ?? null,
-      productCode: 'scaffold',
+      productCode,
       plan: 'free_trial' as PlanTier,
       status: 'expired' as SubscriptionStatus,
       trialStart: null,
@@ -989,6 +1040,7 @@ export class SubscriptionService {
   async activateBankVerifiedPlan(
     userId: string,
     planTier: 'basic' | 'medium' | 'premium' | 'monthly',
+    productCode: 'scaffold' | 'bim' | 'construction_plan' = 'scaffold',
   ): Promise<void> {
     const user = await this.getUserOrFail(userId);
     const raw =
@@ -1013,12 +1065,17 @@ export class SubscriptionService {
       stripeSubscriptionId: null,
       stripePriceId: null,
     });
-    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
+    const { data: existing } = await client
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('product_code', productCode)
+      .maybeSingle();
     if (!existing) {
       const ins = mapPayloadToSnake({
         userId,
         companyId: user.companyId ?? null,
-        productCode: 'scaffold',
+        productCode,
         plan: planTier as PlanTier,
         status: 'active' as SubscriptionStatus,
         trialStart: null,
@@ -1034,7 +1091,11 @@ export class SubscriptionService {
       if (insErr) throw new BadRequestException('Failed to activate subscription.');
       return;
     }
-    const { error } = await client.from('subscriptions').update(updates).eq('user_id', userId).eq('product_code', 'scaffold');
+    const { error } = await client
+      .from('subscriptions')
+      .update(updates)
+      .eq('user_id', userId)
+      .eq('product_code', productCode);
     if (error) throw new BadRequestException('Failed to activate subscription.');
   }
 
@@ -1055,13 +1116,19 @@ export class SubscriptionService {
     }
     const user = await this.getUserOrFail(userId);
     if (user.subscriptionExempt) return this.fullSuperadminAccess();
-    if (user.pendingBankPlan) return access;
+    const pendingProduct = ((user as User).pendingBankProductCode ?? 'scaffold') as
+      | 'scaffold'
+      | 'bim'
+      | 'construction_plan';
+    // Pending bank activation against scaffold blocks ONLY scaffold; the
+    // user can still pay for and use BIM / Construction Plan independently.
+    const scaffoldBlocked = !!user.pendingBankPlan && pendingProduct === 'scaffold';
 
-    // Scaffold reuses the existing legacy capability resolver so behaviour for
-    // current customers is unchanged.
-    const scaffoldCaps = await this.resolveEffectiveCapabilities(userId, role);
-    const scaffoldAccess = await this.buildScaffoldAccessSlot(userId, scaffoldCaps);
-    access.scaffold = scaffoldAccess;
+    if (!scaffoldBlocked) {
+      const scaffoldCaps = await this.resolveEffectiveCapabilities(userId, role);
+      const scaffoldAccess = await this.buildScaffoldAccessSlot(userId, scaffoldCaps);
+      access.scaffold = scaffoldAccess;
+    }
 
     // BIM and Construction Plan: look up rows directly, scoped to that product.
     access.bim = await this.resolveProductAccess(userId, user.companyId ?? null, 'bim');

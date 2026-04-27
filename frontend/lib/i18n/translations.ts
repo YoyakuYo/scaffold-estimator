@@ -2730,6 +2730,7 @@ export const translations = {
     totalCalculations: { ja: '総計算数', en: 'Total Calculations', fr: 'Nombre total de calculs' },
     approve: { ja: '承認', en: 'Approve', fr: 'Approuver' },
     approvalModeLabel: { ja: '承認の種類', en: 'Approval type', fr: "Type d'approbation" },
+    approvalProductLabel: { ja: '対象プロダクト', en: 'Product', fr: 'Produit' },
     approvalModeTrial: { ja: '無料トライアル', en: 'Free trial', fr: 'Essai gratuit' },
     approvalModeBankBasic: { ja: '銀行振込 — Basic', en: 'Bank transfer — Basic', fr: 'Virement — Basic' },
     approvalModeBankMedium: { ja: '銀行振込 — Medium', en: 'Bank transfer — Medium', fr: 'Virement — Medium' },
@@ -3185,6 +3186,51 @@ export const translations = {
     drawingKind_level_diagram: { ja: '階高表', en: 'Level diagram (階高表)', fr: 'Diagramme étages (階高表)' },
     drawingKind_general: { ja: '一般図', en: 'General drawing', fr: 'Plan général' },
     drawingKind_unknown: { ja: '未分類', en: 'Unknown', fr: 'Non classé' },
+  },
+
+  // ─── Phase 2 follow-up: per-product Subscribe dialog on /billing ─
+  productSubscribe: {
+    dialogTitle: {
+      ja: '{product} を契約する（銀行振込）',
+      en: 'Subscribe to {product} (bank transfer)',
+      fr: "S'abonner à {product} (virement bancaire)",
+    },
+    pickTier: { ja: 'プランを選択', en: 'Pick a tier', fr: 'Choisissez un forfait' },
+    createIntent: {
+      ja: '振込先と確認コードを発行',
+      en: 'Issue wire reference & bank info',
+      fr: 'Générer la référence de virement',
+    },
+    intentFailed: {
+      ja: '振込情報の発行に失敗しました。',
+      en: 'Could not issue the wire reference.',
+      fr: "Impossible de générer la référence de virement.",
+    },
+    wireRefLabel: { ja: '振込メモ', en: 'Wire reference', fr: 'Référence' },
+    wireRefHint: {
+      ja: '振込時のメモ欄にこのコードを入力してください。コード一致でスーパー管理者が確認します。',
+      en: 'Use this code in the wire memo field. The superadmin matches it to confirm payment.',
+      fr: "Utilisez ce code en référence du virement. Le super-admin l'utilise pour confirmer.",
+    },
+    bankName: { ja: '銀行名', en: 'Bank', fr: 'Banque' },
+    branch: { ja: '支店', en: 'Branch', fr: 'Agence' },
+    accountType: { ja: '種別', en: 'Account type', fr: 'Type de compte' },
+    accountNumber: { ja: '口座番号', en: 'Account #', fr: 'N° compte' },
+    accountHolder: { ja: '口座名義', en: 'Holder', fr: 'Titulaire' },
+    afterTransfer: {
+      ja: '振込が完了したらお待ちください。スーパー管理者が確認後、自動でプロダクトが有効化されます。',
+      en: 'Once the wire arrives, the superadmin confirms it and the product activates automatically.',
+      fr: "Une fois le virement reçu, le super-admin le confirme et le produit s'active automatiquement.",
+    },
+    manageBelow: {
+      ja: '契約済み — 詳細は下のセクションへ',
+      en: 'Active — manage in the section below',
+      fr: 'Actif — voir la section ci-dessous',
+    },
+    tier_basic: { ja: 'Basic', en: 'Basic', fr: 'Basic' },
+    tier_medium: { ja: 'Medium', en: 'Medium', fr: 'Medium' },
+    tier_monthly: { ja: 'プロジェクト単価', en: 'Per project', fr: 'Par projet' },
+    tier_premium: { ja: 'Premium', en: 'Premium', fr: 'Premium' },
   },
 
   // ─── Phase 5: BIM Viewer ──────────────────────────────────
