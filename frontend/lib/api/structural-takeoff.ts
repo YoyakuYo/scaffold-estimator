@@ -153,6 +153,18 @@ export const structuralTakeoffApi = {
     const res = await apiClient.post<ConstructionPlanProject>('/structural-takeoff/projects', payload);
     return res.data;
   },
+  loadSampleProject: async (): Promise<{
+    project: ConstructionPlanProject;
+    set: DrawingSet;
+    elementCount: number;
+  }> => {
+    const res = await apiClient.post<{
+      project: ConstructionPlanProject;
+      set: DrawingSet;
+      elementCount: number;
+    }>('/structural-takeoff/projects/load-sample', {});
+    return res.data;
+  },
   getProject: async (projectId: string): Promise<ConstructionPlanProject> => {
     const res = await apiClient.get<ConstructionPlanProject>(`/structural-takeoff/projects/${projectId}`);
     return res.data;

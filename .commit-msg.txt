@@ -1,0 +1,28 @@
+feat(construction-plan): gap #4 - sample-data validation harness
+
+Adds a one-click sample-project loader so the schedule, truck plan,
+and 8-sheet Excel exporter can be validated end to end against
+realistic data without typing 100 elements by hand.
+
+Backend
+- New sample-fixtures.ts: 5-floor / 2-block S-frame office (~210 t),
+  realistic JIS sections (H-400x400 columns, H-600x200 main beams,
+  H-450x200 small beams, H-500x200 wind beams, L-90 braces, deck plates,
+  pre-fab stairs and EV kits). 12 columns, 14 mains, 22 small beams,
+  4 wind beams, 6 braces, 2 stair flights, 30 deck plates per block per
+  floor; EV pieces on 1F/3F/5F.
+- StructuralTakeoffService.loadSampleProject(): creates a Project +
+  DrawingSet and inserts the fixture rows as manual elements.
+- New endpoint POST /structural-takeoff/projects/load-sample.
+
+Frontend
+- structuralTakeoffApi.loadSampleProject().
+- /construction-plan home page: new "Load sample project" button
+  next to "New project". On success, routes straight to the new set's
+  schedule page so you immediately see the master Gantt + delivery
+  table + monthly/weekly aggregates + Excel download for the fixture.
+- ja/en/fr keys for the button label + tooltip.
+
+Quality
+- Backend tsc --noEmit passes.
+- Frontend tsc --noEmit passes.

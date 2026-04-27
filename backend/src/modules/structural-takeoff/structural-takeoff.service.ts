@@ -23,6 +23,7 @@ import {
   UpdateProjectDto,
   UpsertElementsDto,
 } from './dto/construction-plan.dto';
+import { buildSampleFixture } from './sample-fixtures';
 
 const DEFAULT_LEVELS = ['1F', '2F', '3F', 'RF'];
 const DEFAULT_BLOCKS: string[] = [];
@@ -520,5 +521,38 @@ export class StructuralTakeoffService {
       this.listElementsForSet(ctx, setId),
     ]);
     return { project, set, files, elements };
+  }
+
+  /**
+   * Phase 4 — gap #4. Create a brand-new project + drawing set populated
+   * from the realistic sample fixture so the user (or QA) can validate the
+   * schedule + truck plan + Excel exporter end to end without typing 100
+   * elements by hand. Returns the new project + set for the frontend to
+   * route into.
+   */
+  async loadSampleProject(ctx: CallerContext): Promise<{
+    project: ConstructionPlanProject;
+    set: DrawingSet;
+    elementCount: number;
+  }> {
+    const fixture = buildSampleFixture();
+    const project = await this.createProject(ctx, {
+      name: fixture.name,
+      siteAddress: fixture.siteAddress,
+      blocks: fixture.blocks,
+      levels: fixture.levels,
+    });
+    const set = await this.createSet(ctx, project.id, 'サンプル抽出', 'fixture-loaded');
+    const rows = fixture.elements.map((e) => ({
+      level: e.level,
+      block: e.block ?? null,
+      elementType: e.elementType,
+      label: e.label,
+      section: e.section,
+      qty: e.qty,
+      grid: e.grid,
+    }));
+    await this.upsertElements(ctx, set.id, { rows }, 'manual');
+    return { project, set, elementCount: rows.length };
   }
 }

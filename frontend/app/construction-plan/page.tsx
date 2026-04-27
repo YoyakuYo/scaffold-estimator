@@ -13,6 +13,7 @@ import {
   Upload,
   Building2,
   AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence } from '@/lib/page-presence-context';
@@ -53,6 +54,14 @@ export default function ConstructionPlanHomePage() {
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'projects'] });
       router.push(`/construction-plan/${project.id}`);
+    },
+  });
+
+  const loadSample = useMutation({
+    mutationFn: structuralTakeoffApi.loadSampleProject,
+    onSuccess: ({ project, set }) => {
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'projects'] });
+      router.push(`/construction-plan/${project.id}/sets/${set.id}/schedule`);
     },
   });
 
@@ -106,13 +115,28 @@ export default function ConstructionPlanHomePage() {
               {t('constructionPlanLanding', 'subtitle')}
             </p>
           </div>
-          <button
-            onClick={() => setShowCreate((s) => !s)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-600 text-white font-medium hover:bg-amber-700"
-          >
-            <Plus className="h-4 w-4" />
-            {t('constructionPlanLanding', 'newProject')}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => loadSample.mutate()}
+              disabled={loadSample.isPending}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 text-white font-medium hover:bg-violet-700 disabled:opacity-50"
+              title={t('constructionPlanLanding', 'loadSampleHint')}
+            >
+              {loadSample.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {t('constructionPlanLanding', 'loadSample')}
+            </button>
+            <button
+              onClick={() => setShowCreate((s) => !s)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-600 text-white font-medium hover:bg-amber-700"
+            >
+              <Plus className="h-4 w-4" />
+              {t('constructionPlanLanding', 'newProject')}
+            </button>
+          </div>
         </div>
 
         {showCreate && (

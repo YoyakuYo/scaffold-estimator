@@ -3018,6 +3018,16 @@ export const translations = {
       fr: "Ce produit est vendu séparément. Abonnez-vous pour l'utiliser.",
     },
     newProject: { ja: '新しい案件', en: 'New project', fr: 'Nouveau chantier' },
+    loadSample: {
+      ja: 'サンプルを読み込む',
+      en: 'Load sample project',
+      fr: 'Charger un projet de démo',
+    },
+    loadSampleHint: {
+      ja: '5階建てS造（A/B工区）のサンプルデータで工程・搬入計画・Excelをすぐに確認できます。',
+      en: 'A 5-floor S-frame fixture (blocks A/B) you can use to validate the schedule, truck plan and Excel output.',
+      fr: 'Une maquette S-frame à 5 étages (zones A/B) pour valider le planning, le plan de livraisons et l’export Excel.',
+    },
     newProjectTitle: { ja: '案件を作成', en: 'Create project', fr: 'Créer un chantier' },
     projectName: { ja: '案件名', en: 'Project name', fr: 'Nom du chantier' },
     siteAddress: { ja: '現場住所', en: 'Site address', fr: 'Adresse du site' },

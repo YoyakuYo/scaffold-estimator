@@ -69,6 +69,21 @@ export class StructuralTakeoffController {
     );
   }
 
+  /**
+   * Phase 4 — gap #4. One-click sample loader so the user can verify the
+   * schedule + truck plan + Excel exporter end-to-end without typing 100
+   * elements. Creates a new project + set populated with a realistic
+   * 5-floor / 2-block S-frame fixture.
+   */
+  @Post('projects/load-sample')
+  async loadSample(@CurrentUser() user: any) {
+    return this.service.loadSampleProject({
+      userId: user.id,
+      companyId: user.companyId ?? null,
+      role: user.role,
+    });
+  }
+
   @Get('projects/:projectId')
   async getProject(@CurrentUser() user: any, @Param('projectId') projectId: string) {
     return this.service.getProject(
