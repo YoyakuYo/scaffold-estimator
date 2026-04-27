@@ -1,53 +1,37 @@
-test(construction-plan): gap #11 - jest unit tests for the deterministic core
+feat(construction-plan): gap #3 - full JIS section catalog (~150 sizes)
 
-Adds 42 passing Jest tests covering the modules that drive the
-Construction Plan output. They run in ~45 s and don't need any external
-services (no DB, no Anthropic, no Supabase storage).
+Tonnage estimates are now engineering-grade. The catalog was the
+single biggest source of error in Phase 4 — unmatched sections fell
+back to family averages and could be off by ±20-40 %. Expanded from
+~30 entries to ~155 covering every common size on Japanese steel-
+frame jobs.
 
-Specs added (all under backend/src/modules/structural-takeoff/)
-- drawing-classifier.spec.ts
-  * Detects framing_plan / column_list / beam_list / stair_detail /
-    elevator_shaft / level_diagram from Japanese + English filenames.
-  * Covers 1F/2F/RF/B1/PH floor labels.
-  * Detects 工区 (Japanese) and BlockA (English) variants.
-  * Confidence stays bounded at 1.
-- schedule/jis-sections.spec.ts
-  * Exact catalog hits, case + spacing + × variants normalize.
-  * Family-fallback for unknown sizes.
-  * pieceWeightKg() matches catalog × default piece length.
-- schedule/calendar.spec.ts
-  * Saturday/Sunday rules.
-  * JP holiday list (May Golden Week 2026).
-  * next() / add() / range() arithmetic.
-  * extraHolidaysIso passthrough.
-- schedule/erection-sequencer.spec.ts
-  * Activities only emitted for non-zero qty.
-  * Cycle order (hashira → oobari → kobari) with no overlap.
-  * Block B starts after Block A reaches the configured floor lag.
-  * Per-day demand sums to total pieces.
-- schedule/truck-bin-pack.spec.ts
-  * Single-truck pack when capacity + bed length both allow.
-  * Multi-truck split when payload exceeds one truck.
-  * 25t trailer + road_permit_required note for >12 m pieces.
-  * Per-element-type separation between trucks.
-- extractors/excel-import.service.spec.ts
-  * Japanese-header CSV (階, 工区, 部材, 符号, 断面, 数量, 通り芯, 備考).
-  * English-header CSV.
-  * Unknown element-type rows surface as warnings (not silently dropped).
-  * Level normalization (bare digit → 1F; R → R).
-  * Missing required header columns produce warnings + zero rows.
-- extractors/dxf-layer-extractor.service.spec.ts
-  * Counts entities per known structural layer (柱 → hashira etc.).
-  * Infers level from layer name when present.
-  * Returns warnings when no layers match.
+Catalog additions
+- H-shape: 100 mm to 912 mm depth, narrow + wide flange + outside
+  dimension series (~40 entries).
+- I-beam (legacy form): 100-300 mm range.
+- RHS / 角形 STKR (square + rectangular): 50-600 mm with multiple wall
+  thicknesses, including the 6-mm / 9-mm / 12-mm / 16-mm / 19-mm / 22-mm
+  variants used on tall buildings (~45 entries).
+- CHS / 鋼管 STK (round): 48.6 mm to 711.2 mm OD across 3.2-16 mm wall
+  thicknesses (~35 entries).
+- Equal angle (L): 25-250 mm with 3-25 mm thicknesses (~30 entries).
+- Channel (C / [): 75-380 mm typical purlin / light-beam range
+  (~13 entries).
+- CT (T-shape from H): 75-400 mm (~10 entries).
+- New getCatalogEntries() public read for diagnostics / admin export.
+- FAMILY_FALLBACK gains entries for I, C, CT.
 
-Bug fixes uncovered by the tests
-- drawing-classifier.ts: B-floor regex template was prepending an extra B
-  ("B1F" → "BB"). Capture group already contains the prefix, so the
-  template is now $1 not B$1. Same fix applied to the 階 patterns.
-- drawing-classifier.ts: elevator pattern now also matches 'evシャフト'
-  (kana mix), so PH-EVシャフト.pdf classifies correctly.
+Tests
+- jis-sections.spec.ts now asserts:
+  * Exact catalog hits across H/RHS/CHS/L (4 families).
+  * Family-fallback paths for H/RHS/CHS unknowns.
+  * Each major family resolves something non-zero (I/C/CT).
+  * Catalog size > 150 entries.
+  * Diagnostic getCatalogEntries() exposes all 7 families.
+- All 42 existing tests still pass.
 
 Quality
-- Backend tsc --noEmit passes.
-- All 42 tests pass: `npx jest src/modules/structural-takeoff`.
+- Backend tsc --noEmit: passes.
+- jest src/modules/structural-takeoff/schedule/jis-sections.spec.ts: 9
+  passing.
