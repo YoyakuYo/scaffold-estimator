@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from 'react';
+import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -702,6 +703,11 @@ function ScaffoldPageContent() {
   const searchParams = useSearchParams();
   const { t, locale } = useI18n();
   const editConfigId = searchParams.get('edit') ?? null;
+  usePresence({
+    pageKey: editConfigId ? `scaffold/edit/${editConfigId}` : 'scaffold/new',
+    label: editConfigId ? 'Scaffold: editing configuration' : 'Scaffold: configuring new project',
+  });
+  const presenceActions = usePresenceActions();
   const startFreshParam = searchParams.get('start');
   const initialWizard = useMemo(() => {
     const base = bootstrapWizardFromSession(editConfigId);
@@ -1440,6 +1446,7 @@ function ScaffoldPageContent() {
       alert(t('scaffold', 'closePolygonFirst'));
       return;
     }
+    presenceActions.recordAction('Calculated scaffold quantities');
     const enabledWalls: WallInput[] = [];
     const enabledOriginalIndices: number[] = [];
     for (let wi = 0; wi < walls.length; wi++) {

@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { quotationsApi } from '@/lib/api/quotations';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/formatters';
 import { useI18n } from '@/lib/i18n';
+import { usePresence } from '@/lib/page-presence-context';
 import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import {
   Loader2,
@@ -24,6 +25,10 @@ export default function QuotationDetailPage() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const quotationId = params.id as string;
+  usePresence({
+    pageKey: `quotations/${quotationId}`,
+    label: 'Quotation: editing details',
+  });
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<number>(0);

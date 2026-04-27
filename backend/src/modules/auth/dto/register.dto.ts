@@ -1,4 +1,11 @@
-import { IsEmail, IsString, MinLength, IsOptional, ValidateIf } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  IsNotEmpty,
+  MinLength,
+  IsOptional,
+  ValidateIf,
+} from 'class-validator';
 import { PASSWORD_POLICY_MIN_LENGTH } from '../password-policy';
 
 export class RegisterDto {
@@ -11,13 +18,17 @@ export class RegisterDto {
   password: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'firstName is required.' })
   firstName: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'lastName is required.' })
   lastName: string;
 
-  // Company info
+  // Company info — name + structured address are mandatory so the superadmin
+  // can verify each registered company before approval.
   @IsString()
+  @IsNotEmpty({ message: 'companyName is required.' })
   companyName: string;
 
   @IsOptional()
@@ -33,26 +44,26 @@ export class RegisterDto {
   @IsEmail()
   companyEmail?: string;
 
-  // Structured Japanese address fields
-  @IsOptional()
+  // Structured Japanese address fields — required for superadmin verification.
   @IsString()
-  companyPostalCode?: string;
+  @IsNotEmpty({ message: 'companyPostalCode is required.' })
+  companyPostalCode!: string;
 
-  @IsOptional()
   @IsString()
-  companyPrefecture?: string;
+  @IsNotEmpty({ message: 'companyPrefecture is required.' })
+  companyPrefecture!: string;
 
-  @IsOptional()
   @IsString()
-  companyCity?: string;
+  @IsNotEmpty({ message: 'companyCity is required.' })
+  companyCity!: string;
 
   @IsOptional()
   @IsString()
   companyTown?: string;
 
-  @IsOptional()
   @IsString()
-  companyAddressLine?: string;
+  @IsNotEmpty({ message: 'companyAddressLine is required.' })
+  companyAddressLine!: string;
 
   @IsOptional()
   @IsString()

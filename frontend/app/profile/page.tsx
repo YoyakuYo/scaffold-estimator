@@ -19,10 +19,12 @@ import {
   Users,
 } from 'lucide-react';
 import { ChangePasswordForm } from '@/components/change-password-form';
+import { usePresence } from '@/lib/page-presence-context';
 
 export default function ProfilePage() {
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
+  usePresence({ pageKey: 'profile', label: 'Profile settings' });
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({

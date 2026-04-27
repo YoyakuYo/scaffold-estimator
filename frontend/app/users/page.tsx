@@ -8,6 +8,7 @@ import { usersApi, UserProfile, UserRole } from '@/lib/api/users';
 import { companyApi } from '@/lib/api/company';
 import { teamInvitesApi } from '@/lib/api/team-invites';
 import { useI18n } from '@/lib/i18n';
+import { usePresence } from '@/lib/page-presence-context';
 import {
   Users,
   Shield,
@@ -54,6 +55,7 @@ function UsersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { locale, t } = useI18n();
+  usePresence({ pageKey: 'users', label: 'User management' });
   const queryClient = useQueryClient();
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null);

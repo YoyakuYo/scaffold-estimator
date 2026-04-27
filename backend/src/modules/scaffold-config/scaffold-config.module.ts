@@ -9,9 +9,10 @@ import { ScaffoldCadService } from './scaffold-cad.service';
 import { PolygonToWallsService } from './polygon-to-walls.service';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
+import { PresenceModule } from '../presence/presence.module';
 
 @Module({
-  imports: [SubscriptionModule],
+  imports: [SubscriptionModule, PresenceModule],
   controllers: [ScaffoldConfigController],
   providers: [
     ScaffoldConfigService,

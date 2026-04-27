@@ -21,6 +21,7 @@ import { localizedBankField } from '@/lib/billing/bank-transfer-display';
 import { effectiveSeatCap, isUnlimitedSeatCap } from '@/lib/billing/effective-seat-cap';
 import { usersApi } from '@/lib/api/users';
 import { Loader2, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark, Check } from 'lucide-react';
+import { usePresence } from '@/lib/page-presence-context';
 
 const BANK_TIER_ORDER: BankWirePlanTier[] = ['basic', 'medium', 'monthly', 'premium'];
 
@@ -188,6 +189,7 @@ export default function BillingPage() {
   const { locale, t } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
+  usePresence({ pageKey: 'billing', label: 'Billing & subscription' });
   const [isLocalhost, setIsLocalhost] = useState(false);
 
   useEffect(() => {

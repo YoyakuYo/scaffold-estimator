@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { companyApi, Branch, UpdateCompanyPayload, CreateBranchPayload } from '@/lib/api/company';
 import { AddressForm, AddressFields } from '@/components/address-form';
 import { useI18n } from '@/lib/i18n';
+import { usePresence } from '@/lib/page-presence-context';
 import {
   Building2,
   MapPin,
@@ -34,6 +35,7 @@ export default function CompanyPage() {
   const { locale } = useI18n();
   const ja = locale === 'ja';
   const queryClient = useQueryClient();
+  usePresence({ pageKey: 'company', label: 'Company info' });
 
   // ─── Company data ──────────────────────────────────────────
   const { data: company, isLoading: companyLoading } = useQuery({

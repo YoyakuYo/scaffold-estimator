@@ -23,13 +23,17 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DrawingService } from './drawing.service';
 import { DrawingFileFormat } from './drawing.entity';
+import { PresenceService } from '../presence/presence.service';
 
 @Controller('drawings')
 @UseGuards(JwtAuthGuard)
 export class DrawingController {
   private readonly logger = new Logger(DrawingController.name);
 
-  constructor(private readonly drawingService: DrawingService) {}
+  constructor(
+    private readonly drawingService: DrawingService,
+    private readonly presenceService: PresenceService,
+  ) {}
 
   @Post('upload')
   @Throttle({ default: { limit: 40, ttl: 60000 } })
@@ -99,8 +103,22 @@ export class DrawingController {
       this.logger.log(`Uploading file: ${file.originalname}, size: ${file.size}, format: ${extname(file.originalname)}`);
       
       const result = await this.drawingService.processDrawing(file, projectId, user.id);
-      
+
       this.logger.log(`File uploaded successfully: ${result.id}`);
+
+      const ext = extname(file.originalname).toLowerCase().replace('.', '');
+      await this.presenceService.recordUpload({
+        userId: user.id,
+        companyId: user.companyId ?? null,
+        productCode: 'scaffold',
+        kind: ext || 'drawing',
+        filename: file.originalname,
+        mimeType: file.mimetype || null,
+        sizeBytes: file.size ?? null,
+        refId: result.id,
+        metadata: { projectId },
+      });
+
       return result;
     } catch (error) {
       this.logger.error(`Upload failed: ${error.message}`, error.stack);

@@ -50,6 +50,7 @@ import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { formatMmAsMetersLabel, formatMmLabel } from '@/lib/dimension-meters';
 import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
 import { MaterialGalleryTab } from '@/components/scaffold/material-gallery-tab';
+import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 
 // Dynamic import — Three.js cannot run during SSR
 const Scaffold3DView = dynamic(() => import('./scaffold-3d-view'), {
@@ -192,6 +193,11 @@ function ScaffoldResultPage() {
   const queryClient = useQueryClient();
   const { t, locale } = useI18n();
   const configId = params.configId as string;
+  usePresence({
+    pageKey: `scaffold/result/${configId}`,
+    label: 'Scaffold: reviewing results',
+  });
+  const presenceActions = usePresenceActions();
   const isAiBimFromUrl = searchParams.get('aiBim') === '1';
   const [showScanModal, setShowScanModal] = useState(false);
   const [excelExporting, setExcelExporting] = useState(false);
@@ -482,12 +488,13 @@ function ScaffoldResultPage() {
       a.download = `${t('result', 'excelExportFilenamePrefix')}_${configId.slice(0, 8)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+      presenceActions.recordAction(`Exported scaffold Excel for config ${configId.slice(0, 8)}`);
     } catch (e) {
       alert(t('result', 'excelFailed'));
     } finally {
       setExcelExporting(false);
     }
-  }, [configId, locale, t, exportSite, queryClient]);
+  }, [configId, locale, t, exportSite, queryClient, presenceActions]);
 
   if (isLoading) {
     return (

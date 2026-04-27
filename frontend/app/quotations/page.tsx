@@ -7,6 +7,7 @@ import { quotationsApi } from '@/lib/api/quotations';
 import { formatDate, formatCurrency } from '@/lib/formatters';
 import { FileText, Loader2, Eye } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { usePresence } from '@/lib/page-presence-context';
 
 const scaffoldTypeLabels: Record<string, string> = {
   frame: '枠組足場',
@@ -18,6 +19,7 @@ export default function QuotationsListPage() {
   const router = useRouter();
   const { t } = useI18n();
   const [projectId] = useState('default-project');
+  usePresence({ pageKey: 'quotations/list', label: 'Quotations list' });
 
   const { data: quotations = [], isLoading } = useQuery({
     queryKey: ['quotations', projectId],

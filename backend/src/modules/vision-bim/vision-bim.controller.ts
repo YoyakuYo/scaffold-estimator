@@ -13,17 +13,32 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 import { SubscriptionAiGuard } from '../../common/guards/subscription-ai.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
   VisionBimService,
   VisionFootprintResult,
   type PremiumScheduleImportResult,
   type SteppedMassingAiResult,
 } from './vision-bim.service';
+import { PresenceService } from '../presence/presence.service';
+
+function visionUploadKind(filename: string | undefined): string {
+  if (!filename) return 'vision_analyze';
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.ifc')) return 'ifc';
+  if (lower.endsWith('.dxf')) return 'dxf';
+  if (lower.endsWith('.pdf')) return 'pdf';
+  if (/\.(png|jpe?g|webp|gif|bmp|tiff?)$/.test(lower)) return 'image';
+  return 'vision_analyze';
+}
 
 @Controller('vision-bim')
 @UseGuards(JwtAuthGuard, SubscriptionActiveGuard, SubscriptionAiGuard)
 export class VisionBimController {
-  constructor(private readonly visionBim: VisionBimService) {}
+  constructor(
+    private readonly visionBim: VisionBimService,
+    private readonly presenceService: PresenceService,
+  ) {}
 
   /**
    * POST /vision-bim/analyze
@@ -41,13 +56,25 @@ export class VisionBimController {
   )
   async analyze(
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
   ): Promise<VisionFootprintResult> {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
     const filename = file.originalname;
     try {
-      return await this.visionBim.processFile(buffer, filename);
+      const result = await this.visionBim.processFile(buffer, filename);
+      await this.presenceService.recordUpload({
+        userId: user.id,
+        companyId: user.companyId ?? null,
+        productCode: 'scaffold',
+        kind: visionUploadKind(filename),
+        filename,
+        mimeType: file.mimetype || null,
+        sizeBytes: file.size ?? null,
+        metadata: { endpoint: 'vision-bim/analyze' },
+      });
+      return result;
     } catch (err: any) {
       const msg = err?.message || 'File processing failed';
       if (
@@ -78,13 +105,25 @@ export class VisionBimController {
   )
   async extractDimensions(
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
   ): Promise<VisionFootprintResult> {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
     const filename = file.originalname;
     try {
-      return await this.visionBim.processFile(buffer, filename);
+      const result = await this.visionBim.processFile(buffer, filename);
+      await this.presenceService.recordUpload({
+        userId: user.id,
+        companyId: user.companyId ?? null,
+        productCode: 'scaffold',
+        kind: visionUploadKind(filename),
+        filename,
+        mimeType: file.mimetype || null,
+        sizeBytes: file.size ?? null,
+        metadata: { endpoint: 'vision-bim/extract-dimensions' },
+      });
+      return result;
     } catch (err: any) {
       const msg = err?.message || 'File processing failed';
       if (
@@ -112,13 +151,25 @@ export class VisionBimController {
   )
   async analyzeSteppedMassing(
     @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
   ): Promise<SteppedMassingAiResult> {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
     const filename = file.originalname;
     try {
-      return await this.visionBim.processSteppedMassingImage(buffer, filename);
+      const result = await this.visionBim.processSteppedMassingImage(buffer, filename);
+      await this.presenceService.recordUpload({
+        userId: user.id,
+        companyId: user.companyId ?? null,
+        productCode: 'scaffold',
+        kind: visionUploadKind(filename),
+        filename,
+        mimeType: file.mimetype || null,
+        sizeBytes: file.size ?? null,
+        metadata: { endpoint: 'vision-bim/analyze-stepped-massing' },
+      });
+      return result;
     } catch (err: any) {
       const msg = err?.message || 'Stepped massing analysis failed';
       if (
@@ -144,12 +195,26 @@ export class VisionBimController {
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  importPremiumSchedule(@UploadedFile() file: Express.Multer.File): PremiumScheduleImportResult {
+  async importPremiumSchedule(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ): Promise<PremiumScheduleImportResult> {
     if (!file) throw new BadRequestException('No file uploaded');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content');
     try {
-      return this.visionBim.importPremiumSchedule(buffer, file.originalname);
+      const result = this.visionBim.importPremiumSchedule(buffer, file.originalname);
+      await this.presenceService.recordUpload({
+        userId: user.id,
+        companyId: user.companyId ?? null,
+        productCode: 'scaffold',
+        kind: 'premium_schedule',
+        filename: file.originalname,
+        mimeType: file.mimetype || null,
+        sizeBytes: file.size ?? null,
+        metadata: { endpoint: 'vision-bim/import-premium-schedule' },
+      });
+      return result;
     } catch (err: any) {
       throw new BadRequestException(err?.message || 'Schedule import failed');
     }

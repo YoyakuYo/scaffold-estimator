@@ -21,6 +21,15 @@ import { CreateBranchDto, UpdateBranchDto } from './dto/create-branch.dto';
 export class CompanyController {
   constructor(private companyService: CompanyService) {}
 
+  // ─── Superadmin verify view (any company by ID) ───────────
+
+  @Get('admin/:id')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin')
+  async getCompanyForAdmin(@Param('id') id: string) {
+    return this.companyService.getCompanyVerifyDetail(id);
+  }
+
   // ─── Company Info ──────────────────────────────────────────
 
   @Get()

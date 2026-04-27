@@ -45,11 +45,13 @@ import {
   FolderOutput,
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { usePresence } from '@/lib/page-presence-context';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
+  usePresence({ pageKey: 'dashboard', label: 'Dashboard' });
 
   const { data: currentUser } = useQuery({
     queryKey: ['profile'],

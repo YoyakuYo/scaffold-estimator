@@ -5,10 +5,48 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CreateBranchDto, UpdateBranchDto } from './dto/create-branch.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
+import { PresenceService, type UploadEventRow } from '../presence/presence.service';
+
+const SYNTHETIC_USER_EMAILS = ['__landing_contact__@system.local'];
+
+export interface CompanyVerifyMember {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  approvalStatus: string | null;
+  isActive: boolean;
+  lastActiveAt: string | null;
+  createdAt: string | null;
+}
+
+export interface CompanyVerifySubscription {
+  id: string;
+  userId: string;
+  plan: string;
+  status: string;
+  trialStart: string | null;
+  trialEnd: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  canceledAt: string | null;
+}
+
+export interface CompanyVerifyDetail extends Company {
+  members: CompanyVerifyMember[];
+  membersCount: number;
+  branches: CompanyBranch[];
+  subscriptions: CompanyVerifySubscription[];
+  recentUploads: UploadEventRow[];
+}
 
 @Injectable()
 export class CompanyService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly presence: PresenceService,
+  ) {}
 
   async getCompany(companyId: string): Promise<Company & { branches?: CompanyBranch[] }> {
     const { data: companyRow, error: companyErr } = await this.supabase
@@ -103,5 +141,74 @@ export class CompanyService {
     }
     await this.supabase.getClient().from('company_branches').delete().eq('id', branchId).eq('company_id', companyId);
     return { success: true };
+  }
+
+  /**
+   * Superadmin verification view: full address + members + branches +
+   * subscription state + recent uploads from any of the company's users.
+   * Used by /superadmin/companies/[id] in the frontend.
+   */
+  async getCompanyVerifyDetail(companyId: string): Promise<CompanyVerifyDetail> {
+    const company = await this.getCompany(companyId);
+
+    const client = this.supabase.getClient();
+    const { data: userRows } = await client
+      .from('users')
+      .select('id, email, first_name, last_name, role, approval_status, is_active, last_active_at, created_at')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: true });
+
+    const filteredUsers = (userRows || []).filter(
+      (u: any) => !SYNTHETIC_USER_EMAILS.includes(String(u?.email || '').toLowerCase()),
+    );
+    const members: CompanyVerifyMember[] = filteredUsers.map((u: any) => ({
+      id: String(u.id),
+      email: String(u.email || ''),
+      firstName: (u.first_name as string) ?? null,
+      lastName: (u.last_name as string) ?? null,
+      role: String(u.role || 'viewer'),
+      approvalStatus: (u.approval_status as string) ?? null,
+      isActive: !!u.is_active,
+      lastActiveAt: (u.last_active_at as string) ?? null,
+      createdAt: (u.created_at as string) ?? null,
+    }));
+
+    const userIds = members.map((m) => m.id);
+
+    const subscriptions: CompanyVerifySubscription[] = [];
+    if (userIds.length > 0) {
+      const { data: subs } = await client
+        .from('subscriptions')
+        .select(
+          'id, user_id, plan, status, trial_start, trial_end, current_period_start, current_period_end, canceled_at',
+        )
+        .in('user_id', userIds)
+        .order('created_at', { ascending: false });
+      for (const s of subs || []) {
+        const r = s as any;
+        subscriptions.push({
+          id: String(r.id),
+          userId: String(r.user_id),
+          plan: String(r.plan || 'free_trial'),
+          status: String(r.status || 'trialing'),
+          trialStart: (r.trial_start as string) ?? null,
+          trialEnd: (r.trial_end as string) ?? null,
+          currentPeriodStart: (r.current_period_start as string) ?? null,
+          currentPeriodEnd: (r.current_period_end as string) ?? null,
+          canceledAt: (r.canceled_at as string) ?? null,
+        });
+      }
+    }
+
+    const recentUploads = await this.presence.getCompanyUploadEvents(companyId, 20);
+
+    return {
+      ...company,
+      members,
+      membersCount: members.length,
+      branches: company.branches ?? [],
+      subscriptions,
+      recentUploads,
+    };
   }
 }

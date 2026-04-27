@@ -37,6 +37,8 @@ export default function RegisterPage() {
     building: '',
   });
 
+  const [missingFieldError, setMissingFieldError] = useState<string | null>(null);
+
   const registerMutation = useMutation({
     mutationFn: authApi.register,
     onSuccess: () => {
@@ -44,8 +46,19 @@ export default function RegisterPage() {
     },
   });
 
+  const requiredCompanyAddressMissing =
+    !companyAddress.postalCode.trim() ||
+    !companyAddress.prefecture.trim() ||
+    !companyAddress.city.trim() ||
+    !companyAddress.addressLine.trim();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.companyName.trim() || requiredCompanyAddressMissing) {
+      setMissingFieldError(t('register', 'companyAddressRequired'));
+      return;
+    }
+    setMissingFieldError(null);
     registerMutation.mutate({
       ...formData,
       companyPostalCode: companyAddress.postalCode,
@@ -258,9 +271,13 @@ export default function RegisterPage() {
                 </div>
                 <div className="border-t border-gray-100 pt-4">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                    {t('register', 'companyAddress')}
+                    {t('register', 'companyAddress')} <span className="text-red-500">*</span>
                   </h4>
-                  <AddressForm value={companyAddress} onChange={setCompanyAddress} />
+                  <AddressForm
+                    value={companyAddress}
+                    onChange={setCompanyAddress}
+                    requiredFields={['postalCode', 'prefecture', 'city', 'addressLine']}
+                  />
                 </div>
               </div>
             </div>
@@ -271,10 +288,17 @@ export default function RegisterPage() {
               </p>
             </div>
 
+            {missingFieldError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 flex items-start gap-2 text-sm">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p>{missingFieldError}</p>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 type="submit"
-                disabled={registerMutation.isPending}
+                disabled={registerMutation.isPending || requiredCompanyAddressMissing || !formData.companyName.trim()}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
               >
                 {registerMutation.isPending ? (

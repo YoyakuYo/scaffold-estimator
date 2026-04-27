@@ -11,6 +11,7 @@ import { Heartbeat } from '@/components/heartbeat';
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 import { AppTitlebar } from '@/components/app-titlebar';
 import { PushNotificationSetup } from '@/components/push-notification-setup';
+import { PresenceTracker } from '@/lib/page-presence-context';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -65,6 +66,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
           <>
             {isSuperAdmin ? <SuperAdminNavigation /> : <Navigation />}
             <Heartbeat />
+            <PresenceTracker />
             <PushNotificationSetup enabled={!!profile?.id} />
           </>
         )}

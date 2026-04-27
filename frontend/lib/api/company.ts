@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { UploadEventRow } from './presence';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -50,6 +51,37 @@ export interface CreateBranchPayload extends CompanyAddress {
 
 export interface UpdateBranchPayload extends Partial<CreateBranchPayload> {}
 
+export interface CompanyVerifyMember {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string;
+  approvalStatus: string | null;
+  isActive: boolean;
+  lastActiveAt: string | null;
+  createdAt: string | null;
+}
+
+export interface CompanyVerifySubscription {
+  id: string;
+  userId: string;
+  plan: string;
+  status: string;
+  trialStart: string | null;
+  trialEnd: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  canceledAt: string | null;
+}
+
+export interface CompanyVerifyDetail extends CompanyInfo {
+  members: CompanyVerifyMember[];
+  membersCount: number;
+  subscriptions: CompanyVerifySubscription[];
+  recentUploads: UploadEventRow[];
+}
+
 // ─── API Client ─────────────────────────────────────────────
 
 export const companyApi = {
@@ -85,6 +117,12 @@ export const companyApi = {
 
   deleteBranch: async (branchId: string): Promise<{ success: boolean }> => {
     const res = await apiClient.delete<{ success: boolean }>(`/company/branches/${branchId}`);
+    return res.data;
+  },
+
+  /** Superadmin verification view (any company by ID). */
+  getCompanyForAdmin: async (companyId: string): Promise<CompanyVerifyDetail> => {
+    const res = await apiClient.get<CompanyVerifyDetail>(`/company/admin/${companyId}`);
     return res.data;
   },
 };

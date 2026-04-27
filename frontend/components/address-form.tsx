@@ -18,10 +18,20 @@ interface AddressFormProps {
   value: AddressFields;
   onChange: (fields: AddressFields) => void;
   disabled?: boolean;
+  /**
+   * Mark these fields as required in the rendered form (adds the `required`
+   * attribute on the input + a red asterisk in the label). Validation is the
+   * caller's responsibility — this only affects UI affordances.
+   */
+  requiredFields?: Array<keyof AddressFields>;
 }
 
-export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
+export function AddressForm({ value, onChange, disabled, requiredFields }: AddressFormProps) {
   const { locale, t } = useI18n();
+  const isRequired = (field: keyof AddressFields): boolean =>
+    Array.isArray(requiredFields) && requiredFields.includes(field);
+  const requiredMark = (field: keyof AddressFields) =>
+    isRequired(field) ? <span className="text-red-500 ml-0.5">*</span> : null;
   const [looking, setLooking] = useState(false);
   const [found, setFound] = useState(false);
 
@@ -86,6 +96,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('address', 'postalCode')}
+          {requiredMark('postalCode')}
         </label>
         <div className="flex gap-2">
           <div className="relative flex-1 max-w-[200px]">
@@ -97,6 +108,8 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
               value={value.postalCode}
               onChange={(e) => handlePostalCodeChange(e.target.value)}
               disabled={disabled}
+              required={isRequired('postalCode')}
+              aria-required={isRequired('postalCode') || undefined}
               className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
             />
           </div>
@@ -125,11 +138,14 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('address', 'prefecture')}
+          {requiredMark('prefecture')}
         </label>
         <select
           value={value.prefecture}
           onChange={(e) => set('prefecture', e.target.value)}
           disabled={disabled}
+          required={isRequired('prefecture')}
+          aria-required={isRequired('prefecture') || undefined}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
         >
           <option value="">{t('address', 'selectPrefecture')}</option>
@@ -145,12 +161,15 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('address', 'city')}
+          {requiredMark('city')}
         </label>
         <input
           type="text"
           value={value.city}
           onChange={(e) => set('city', e.target.value)}
           disabled={disabled}
+          required={isRequired('city')}
+          aria-required={isRequired('city') || undefined}
           placeholder={ja ? '例: 千代田区' : 'e.g. Chiyoda-ku'}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
         />
@@ -160,12 +179,15 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('address', 'town')}
+          {requiredMark('town')}
         </label>
         <input
           type="text"
           value={value.town}
           onChange={(e) => set('town', e.target.value)}
           disabled={disabled}
+          required={isRequired('town')}
+          aria-required={isRequired('town') || undefined}
           placeholder={ja ? '例: 千代田' : 'e.g. Chiyoda'}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
         />
@@ -175,12 +197,15 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('address', 'street')}
+          {requiredMark('addressLine')}
         </label>
         <input
           type="text"
           value={value.addressLine}
           onChange={(e) => set('addressLine', e.target.value)}
           disabled={disabled}
+          required={isRequired('addressLine')}
+          aria-required={isRequired('addressLine') || undefined}
           placeholder={ja ? '例: 1-1-1' : 'e.g. 1-1-1'}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
         />
@@ -190,12 +215,15 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {t('address', 'buildingRoom')}
+          {requiredMark('building')}
         </label>
         <input
           type="text"
           value={value.building}
           onChange={(e) => set('building', e.target.value)}
           disabled={disabled}
+          required={isRequired('building')}
+          aria-required={isRequired('building') || undefined}
           placeholder={ja ? '例: ○○ビル 3F' : 'e.g. ABC Bldg. 3F'}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
         />

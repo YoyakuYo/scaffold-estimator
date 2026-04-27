@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { I18nProvider } from '@/lib/i18n';
 import { PwaInstallProvider } from '@/lib/pwa-install-context';
+import { PagePresenceProvider } from '@/lib/page-presence-context';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -21,7 +22,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
-        <PwaInstallProvider>{children}</PwaInstallProvider>
+        <PwaInstallProvider>
+          <PagePresenceProvider>{children}</PagePresenceProvider>
+        </PwaInstallProvider>
       </I18nProvider>
     </QueryClientProvider>
   );

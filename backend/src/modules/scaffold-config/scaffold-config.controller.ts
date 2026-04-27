@@ -28,6 +28,7 @@ import { ScaffoldPdfService } from './scaffold-pdf.service';
 import { ScaffoldCadService } from './scaffold-cad.service';
 import { SubscriptionActiveGuard } from '../../common/guards/subscription-active.guard';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { PresenceService } from '../presence/presence.service';
 
 @Controller('scaffold-configs')
 @UseGuards(JwtAuthGuard, SubscriptionActiveGuard)
@@ -40,6 +41,7 @@ export class ScaffoldConfigController {
     private readonly pdfService: ScaffoldPdfService,
     private readonly cadService: ScaffoldCadService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly presenceService: PresenceService,
   ) {}
 
   /**
@@ -61,7 +63,27 @@ export class ScaffoldConfigController {
     @CurrentUser() user: any,
   ) {
     this.logger.log(`Creating scaffold config (mode: ${dto.mode})`);
-    return await this.configService.createAndCalculate(dto, user.id);
+    const result = await this.configService.createAndCalculate(dto, user.id);
+    const refId =
+      typeof (result as any)?.id === 'string'
+        ? (result as any).id
+        : typeof (result as any)?.configId === 'string'
+          ? (result as any).configId
+          : null;
+    await this.presenceService.recordUpload({
+      userId: user.id,
+      companyId: user.companyId ?? null,
+      productCode: 'scaffold',
+      kind: 'scaffold_config',
+      filename: (dto as any)?.siteName || `Scaffold config (${dto.mode})`,
+      refId,
+      metadata: {
+        mode: dto.mode,
+        scaffoldType: (dto as any)?.scaffoldType,
+        wallCount: Array.isArray((dto as any)?.walls) ? (dto as any).walls.length : null,
+      },
+    });
+    return result;
   }
 
   /**
