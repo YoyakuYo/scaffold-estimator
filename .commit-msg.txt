@@ -1,52 +1,54 @@
-feat(construction-plan): gap #7 - foreman truck-assignment overrides + persistence
+feat(construction-plan): gap #9 - AI vision element extraction (premium)
 
-Foremen can now reassign truck types per delivery and have those edits
-survive page reloads, schedule recomputes, and the Excel export. The
-generated bin-pack stays the starting point; the override is the
-contract.
-
-Migration
-- 139_delivery_plan_overrides.sql: new delivery_plan_overrides table
-  (set_id PK + edits JSONB + updated_by + updated_at). Service-role only
-  RLS.
+Adds the fourth and final extraction mode to the takeoff workflow:
+manual / Excel / DXF-layer / AI vision. Per-drawing-kind prompts +
+structured output, gated by the existing aiExtract subscription
+capability so only Premium users can call it.
 
 Backend
-- New schedule/delivery-plan-overrides.ts:
-  applyDeliveryPlanOverrides(plan, overrides) swaps truck.truckType /
-  truckLabel / payloadKg / bedLengthMm in-place per (date, binNo) edit
-  and rebuilds the flat plan.trucks list so subsequent consumers see
-  the override.
-- StructuralTakeoffService gains getDeliveryOverrides() and
-  saveDeliveryOverrides() — JSON-blob persistence with a 1000-truck cap
-  + minimal validation.
-- GET /sets/:setId/delivery-plan now applies overrides server-side and
-  returns the original `overrides` payload alongside the plan so the
-  UI can compute "dirty" state.
-- New endpoints:
-    GET /sets/:setId/delivery-plan/overrides
-    POST /sets/:setId/delivery-plan/overrides
-- Excel exporter accepts an `overrides` option; the controller passes
-  the saved overrides through, so the workbook always matches what the
-  foreman sees in the UI.
+- New AiElementVisionService (extractors/ai-element-vision.service.ts):
+  * Calls Claude (default claude-3-5-sonnet-20241022, override via
+    ANTHROPIC_ELEMENT_MODEL) with a strict JSON-schema system prompt.
+  * Per-kind hint blocks for framing_plan / column_list / beam_list /
+    stair_detail / elevator_shaft / level_diagram / general / unknown.
+  * Maps 柱/大梁/小梁/耐風梁/ブレース/階段/EV/デッキ to canonical
+    StructuralElementType values.
+  * Defensive JSON parsing + per-row validation (rejects unknown element
+    types, invalid qty); returns warnings array.
+  * Falls back to file-row-level level/block when the model returns null.
+- StructuralTakeoffService.extractElementsWithAi():
+  * Loads bytes from the construction-plan-files bucket (gap #1 enabled
+    this — required because Vision needs the bytes, not just metadata).
+  * For PDFs, rasterizes page 1 through Sharp at 200 DPI / max 2400 px.
+  * Sends to AiElementVisionService with the file row's classified
+    kind / level / block as hints.
+  * Upserts the parsed rows with source='ai' and a "AI extracted from
+    drawing" note.
+- Endpoint POST /sets/:setId/files/:fileId/extract-elements-ai:
+  * Gated by SubscriptionAiGuard (uses the existing aiExtract capability
+    on the user's effective plan; superadmin bypasses).
+  * Mirrors the call into upload_events with kind 'ai_element_vision' so
+    superadmin sees it in the cockpit.
+  * Throttled at 8/min/user.
 
 Frontend
-- structuralTakeoffApi.getDeliveryOverrides + saveDeliveryOverrides.
-- Schedule page truck-type column becomes a <select> bound to a local
-  `overridesDraft` keyed by `date|binNo`. Changing a truck type updates
-  the draft only — nothing hits the server until you click Save.
-- New header strip on the delivery panel:
-  * "unsaved changes" badge (only visible when draft != server).
-  * Discard button — resets draft to the server overrides snapshot.
-  * Save button — POSTs the draft, invalidates the query so the UI
-    re-renders with overrides applied.
-- ja/en/fr keys for the three new labels.
+- structuralTakeoffApi.extractElementsAi().
+- Set-review page file row gets a green "+ AI" button alongside Download,
+  AI re-classify, and Delete. Click triggers AI extraction; toast says
+  how many elements were saved + how many warnings the model returned;
+  the manual elements table refreshes to show the new rows tagged
+  source='ai'.
+- ja/en/fr keys for the button + toast + failure copy.
 
 Quality
 - Backend tsc --noEmit passes.
 - Frontend tsc --noEmit passes.
 
-Deployment
-- Apply supabase-migrations/139_delivery_plan_overrides.sql before
-  rollout. The column default of '{}' makes the table safe to leave
-  empty: any project that never overrides truck assignments gets the
-  generated plan as before.
+Operational notes
+- Requires ANTHROPIC_API_KEY (already used by vision-bim and gap #6).
+- Requires the user's plan tier to grant aiExtract (Premium /
+  Enterprise / superadmin). Other tiers see a 403 from
+  SubscriptionAiGuard.
+- Real-world accuracy depends heavily on drawing legibility; model output
+  is intentionally written into extracted_elements with source='ai' so
+  reviewers can spot AI rows vs manual rows.

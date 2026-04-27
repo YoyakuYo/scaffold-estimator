@@ -3117,6 +3117,21 @@ export const translations = {
       en: 'AI: classify from title block',
       fr: "IA : classer depuis le cartouche",
     },
+    aiExtractElements: {
+      ja: 'AIで部材を抽出',
+      en: 'AI: extract structural elements',
+      fr: 'IA : extraire les éléments',
+    },
+    aiExtractedToast: {
+      ja: 'AIが {count} 件を抽出しました。',
+      en: 'AI extracted {count} elements.',
+      fr: 'IA a extrait {count} éléments.',
+    },
+    aiExtractFailed: {
+      ja: 'AI抽出に失敗しました。',
+      en: 'AI element extraction failed.',
+      fr: "L'extraction IA a échoué.",
+    },
     elementsTitle: {
       ja: '部材集計（手動入力）',
       en: 'Element takeoff (manual entry)',

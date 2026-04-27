@@ -21,6 +21,7 @@ import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ProductAccessGuard } from '../../common/guards/product-access.guard';
+import { SubscriptionAiGuard } from '../../common/guards/subscription-ai.guard';
 import { RequiresProduct } from '../../common/decorators/requires-product.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StructuralTakeoffService } from './structural-takeoff.service';
@@ -247,6 +248,7 @@ export class StructuralTakeoffController {
    * filename classifier doesn't clobber the user's reviewed result.
    */
   @Post('sets/:setId/files/:fileId/reclassify-from-content')
+  @UseGuards(SubscriptionAiGuard)
   @Throttle({ default: { limit: 12, ttl: 60000 } })
   async reclassifyFromContent(
     @CurrentUser() user: any,
@@ -258,6 +260,34 @@ export class StructuralTakeoffController {
       setId,
       fileId,
     );
+  }
+
+  /**
+   * Phase 3 — gap #9. AI vision element extraction. Pulls bytes from
+   * storage, rasterizes PDF→image, sends to Claude with a kind-specific
+   * prompt, and upserts the parsed rows with source='ai'. Premium-gated.
+   */
+  @Post('sets/:setId/files/:fileId/extract-elements-ai')
+  @UseGuards(SubscriptionAiGuard)
+  @Throttle({ default: { limit: 8, ttl: 60000 } })
+  async extractElementsAi(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Param('fileId') fileId: string,
+  ) {
+    const ctx = { userId: user.id, companyId: user.companyId ?? null, role: user.role };
+    const result = await this.service.extractElementsWithAi(ctx, setId, fileId);
+    await this.presence.recordUpload({
+      userId: user.id,
+      companyId: user.companyId ?? null,
+      productCode: 'construction_plan',
+      kind: 'ai_element_vision',
+      filename: null,
+      sizeBytes: null,
+      refId: setId,
+      metadata: { fileId, proposalCount: result.proposalCount },
+    });
+    return result;
   }
 
   // ─── Manual element entry ────────────────────────────────

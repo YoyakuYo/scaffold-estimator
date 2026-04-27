@@ -25,6 +25,7 @@ import {
 } from './dto/construction-plan.dto';
 import { buildSampleFixture } from './sample-fixtures';
 import { TitleBlockVisionService } from './extractors/title-block-vision.service';
+import { AiElementVisionService } from './extractors/ai-element-vision.service';
 import type { DeliveryPlanOverridesPayload } from './schedule/delivery-plan-overrides';
 
 const DEFAULT_LEVELS = ['1F', '2F', '3F', 'RF'];
@@ -60,6 +61,7 @@ export class StructuralTakeoffService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly titleBlockVision: TitleBlockVisionService,
+    private readonly aiElementVision: AiElementVisionService,
   ) {}
 
   // ─── Projects ───────────────────────────────────────────────
@@ -617,6 +619,97 @@ export class StructuralTakeoffService {
         confidence: suggestion.confidence,
       },
     };
+  }
+
+  /**
+   * Phase 3 — gap #9. AI vision extraction of structural elements (柱/大梁/
+   * 小梁/耐風梁/ブレース/階段/EV/デッキ) from a stored drawing. Pulls the file
+   * from storage, rasterizes if PDF, sends to Claude with a kind-specific
+   * prompt, and upserts the resulting rows with source='ai'.
+   *
+   * Caller is responsible for `aiExtract` capability gating; the service
+   * itself only checks that the API key is configured.
+   */
+  async extractElementsWithAi(
+    ctx: CallerContext,
+    setId: string,
+    fileId: string,
+  ): Promise<{
+    saved: ExtractedElement[];
+    proposalCount: number;
+    warnings: string[];
+  }> {
+    if (!this.aiElementVision.isConfigured()) {
+      throw new BadRequestException(
+        'AI element vision is not configured. Set ANTHROPIC_API_KEY on the API.',
+      );
+    }
+    await this.getSet(ctx, setId);
+    const client = this.supabase.getClient();
+    const { data: row, error } = await client
+      .from('drawing_set_files')
+      .select('*')
+      .eq('id', fileId)
+      .eq('set_id', setId)
+      .maybeSingle();
+    if (error || !row) throw new NotFoundException('File not found.');
+    const fileRow = mapRowToCamel<DrawingSetFile>(row as Record<string, unknown>)!;
+    const path = fileRow.storagePath;
+    if (!path) {
+      throw new BadRequestException('File has no stored bytes (metadata-only).');
+    }
+
+    const { data: bin, error: dlErr } = await client.storage
+      .from(CONSTRUCTION_PLAN_BUCKET)
+      .download(path);
+    if (dlErr || !bin) {
+      this.logger.warn(`extractElementsWithAi download failed: ${dlErr?.message}`);
+      throw new BadRequestException('Could not read stored file.');
+    }
+    const arrayBuf = await bin.arrayBuffer();
+    let imageBuffer: Buffer = Buffer.from(arrayBuf);
+    const lower = (fileRow.filename ?? '').toLowerCase();
+    if (lower.endsWith('.pdf')) {
+      try {
+        const sharp = (await import('sharp')).default;
+        imageBuffer = await sharp(imageBuffer, { density: 200 })
+          .resize(2400, 2400, { fit: 'inside', withoutEnlargement: true })
+          .png({ compressionLevel: 7 })
+          .toBuffer();
+      } catch (sharpErr) {
+        this.logger.warn(
+          `extractElementsWithAi PDF→image failed: ${(sharpErr as Error).message}; sending raw buffer`,
+        );
+      }
+    }
+
+    const result = await this.aiElementVision.extract(imageBuffer, {
+      filename: fileRow.filename,
+      kind: fileRow.kind ?? null,
+      level: fileRow.level ?? null,
+      block: fileRow.block ?? null,
+    });
+    if (result.rows.length === 0) {
+      return { saved: [], proposalCount: 0, warnings: result.warnings };
+    }
+    const saved = await this.upsertElements(
+      ctx,
+      setId,
+      {
+        rows: result.rows.map((r) => ({
+          level: r.level,
+          block: r.block,
+          elementType: r.elementType,
+          label: r.label,
+          section: r.section,
+          qty: r.qty,
+          grid: r.grid,
+          notes: 'AI extracted from drawing',
+        })),
+      },
+      'ai',
+    );
+    return { saved, proposalCount: result.rows.length, warnings: result.warnings };
   }
 
   /**

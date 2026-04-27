@@ -159,6 +159,22 @@ export default function ConstructionPlanSetReviewPage() {
     },
   });
 
+  const extractElementsAi = useMutation({
+    mutationFn: (fileId: string) => structuralTakeoffApi.extractElementsAi(setId, fileId),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+      setDraftLoaded(false);
+      const warn = res.warnings.length > 0 ? ` (${res.warnings.length} warnings)` : '';
+      setImportMessage(
+        t('constructionPlanReview', 'aiExtractedToast').replace('{count}', String(res.saved.length)) + warn,
+      );
+      presenceActions.recordAction(
+        `AI extracted ${res.saved.length} elements in set ${setId.slice(0, 8)}`,
+      );
+    },
+    onError: () => setImportMessage(t('constructionPlanReview', 'aiExtractFailed')),
+  });
+
   const saveElements = useMutation({
     mutationFn: () =>
       structuralTakeoffApi.upsertElements(setId, {
@@ -514,6 +530,18 @@ export default function ConstructionPlanSetReviewPage() {
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <Sparkles className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => extractElementsAi.mutate(f.id)}
+                              disabled={extractElementsAi.isPending && extractElementsAi.variables === f.id}
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded disabled:opacity-50"
+                              title={t('constructionPlanReview', 'aiExtractElements')}
+                            >
+                              {extractElementsAi.isPending && extractElementsAi.variables === f.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Plus className="h-4 w-4" />
                               )}
                             </button>
                           </>

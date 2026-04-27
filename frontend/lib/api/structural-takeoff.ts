@@ -248,6 +248,17 @@ export const structuralTakeoffApi = {
     }>(`/structural-takeoff/sets/${setId}/files/${fileId}/reclassify-from-content`);
     return res.data;
   },
+  extractElementsAi: async (
+    setId: string,
+    fileId: string,
+  ): Promise<{ saved: ExtractedElement[]; proposalCount: number; warnings: string[] }> => {
+    const res = await apiClient.post<{
+      saved: ExtractedElement[];
+      proposalCount: number;
+      warnings: string[];
+    }>(`/structural-takeoff/sets/${setId}/files/${fileId}/extract-elements-ai`);
+    return res.data;
+  },
 
   // Elements
   upsertElements: async (
