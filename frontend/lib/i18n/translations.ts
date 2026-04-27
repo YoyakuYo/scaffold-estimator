@@ -33,6 +33,64 @@ export const translations = {
     },
   },
 
+  // ─── Phase 2: products portal (dashboard + billing overview) ───
+  products: {
+    sectionTitle: { ja: 'プロダクト', en: 'Products', fr: 'Produits' },
+    sectionSubtitle: {
+      ja: 'すべてのプロダクトを表示。利用するには契約が必要です。',
+      en: 'All products visible. Subscribe to unlock the ones you need.',
+      fr: 'Tous les produits sont visibles. Abonnez-vous pour activer ceux dont vous avez besoin.',
+    },
+    badgeActive: { ja: '有効', en: 'Active', fr: 'Actif' },
+    badgeTrial: { ja: 'トライアル中', en: 'Trial', fr: 'Essai' },
+    badgeLocked: { ja: '未契約', en: 'Locked', fr: 'Verrouillé' },
+    openProduct: { ja: '開く', en: 'Open', fr: 'Ouvrir' },
+    subscribeCta: { ja: '契約する', en: 'Subscribe', fr: "S'abonner" },
+    learnMore: { ja: '詳しくはこちら', en: 'Learn more', fr: 'En savoir plus' },
+    planLabel: { ja: 'プラン', en: 'Plan', fr: 'Forfait' },
+    billingOverviewTitle: {
+      ja: 'プロダクト別の状態',
+      en: 'Status by product',
+      fr: 'État par produit',
+    },
+
+    productScaffold: { ja: '足場積算', en: 'Scaffold Estimation', fr: 'Métré échafaudage' },
+    productScaffoldTagline: {
+      ja: 'くさび式・枠組足場の数量と見積',
+      en: 'Wedge & frame scaffold quantities and quotations',
+      fr: 'Quantités et devis échafaudage kusabi/cadres',
+    },
+    productScaffoldBody: {
+      ja: '図面から数量を自動算出し、見積・2D/3D図・Excel出力までワンストップ。',
+      en: 'Quantity takeoff from drawings, quotation, 2D/3D views and Excel export, end to end.',
+      fr: 'Quantitatif depuis les plans, devis, vues 2D/3D et export Excel, de bout en bout.',
+    },
+
+    productBim: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
+    productBimTagline: {
+      ja: 'IFC・DXF からカラー付き 3D モデル',
+      en: 'Colored 3D models from IFC and DXF',
+      fr: 'Modèles 3D colorés depuis IFC et DXF',
+    },
+    productBimBody: {
+      ja: 'IFC をそのまま、または DXF を 3D に押し出し、レンガ・コンクリート・ガラス等の素材で描画します。',
+      en: 'Render IFC directly, or extrude DXF into a 3D building with brick, concrete, glass, and roof materials.',
+      fr: 'Affichez un IFC tel quel, ou extrudez un DXF en 3D avec briques, béton, verre et toiture.',
+    },
+
+    productConstructionPlan: { ja: '建方・搬入計画', en: 'Construction Plan', fr: 'Plan de construction' },
+    productConstructionPlanTagline: {
+      ja: '柱・梁・階段の集計と工程・搬入計画',
+      en: 'Column / beam / stair takeoff + schedule & truck plan',
+      fr: 'Métré poteaux/poutres/escaliers + planning et livraisons',
+    },
+    productConstructionPlanBody: {
+      ja: '図面から階別・工区別に部材を抽出し、工程と日次搬入計画を Excel で出力します。',
+      en: 'Extract elements per floor and block, then output schedule + daily truck plan to Excel.',
+      fr: "Extrayez les éléments par étage et zone, puis exportez planning et plan de livraisons en Excel.",
+    },
+  },
+
   // ─── Settings redirect (global price master removed) ────────────
   settingsRedirect: {
     title: { ja: '単価は案件ごとに入力', en: 'Prices are entered per job', fr: 'Prix par chantier' },

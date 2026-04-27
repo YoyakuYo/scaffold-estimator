@@ -1,3 +1,5 @@
+import type { ProductCode } from './products';
+
 /**
  * Commercial tiers: Basic / Medium / Premium (plus legacy starter/professional).
  * Used for feature gating and seat limits at company level.
@@ -120,4 +122,126 @@ export function mergeCapabilitiesMax(
     view3d: a.view3d || b.view3d,
     perProjectWire: !!(a.perProjectWire || b.perProjectWire),
   };
+}
+
+// ─── Phase 2: per-product access ─────────────────────────────────────
+
+/**
+ * Per-product effective access. The dashboard renders one card per product;
+ * each card reads `hasAccess` to decide whether to show the unlocked product
+ * UI or a locked overlay with a Subscribe CTA.
+ *
+ * Capabilities are kept generic for now (`scaffold` keeps the rich legacy
+ * capability shape; `bim` and `construction_plan` start with a minimal seat
+ * shape that we extend as those products grow).
+ */
+export interface ProductAccess<Caps> {
+  hasAccess: boolean;
+  /** When false: trialing | inactive | canceled | no_subscription. */
+  reason: 'active' | 'trial' | 'no_subscription' | 'expired' | 'canceled' | 'unknown';
+  /** Plan label for display (e.g. 'premium', 'free_trial', '—'). */
+  plan: string;
+  /** ISO date when the trial ends, if any. */
+  trialEnd: string | null;
+  /** ISO date when the current paid period ends, if any. */
+  currentPeriodEnd: string | null;
+  caps: Caps;
+}
+
+export interface BimCaps {
+  maxSeats: number;
+  ifcUpload: boolean;
+  dxfImport: boolean;
+  view3d: boolean;
+  aiExtract: boolean;
+}
+
+export interface ConstructionPlanCaps {
+  maxSeats: number;
+  manualEntry: boolean;
+  excelImport: boolean;
+  dxfLayer: boolean;
+  aiExtract: boolean;
+  truckPlanner: boolean;
+  ganttExport: boolean;
+}
+
+export type EffectiveAccess = {
+  scaffold: ProductAccess<EffectivePlanCapabilities>;
+  bim: ProductAccess<BimCaps>;
+  construction_plan: ProductAccess<ConstructionPlanCaps>;
+};
+
+const NO_BIM_CAPS: BimCaps = {
+  maxSeats: 0,
+  ifcUpload: false,
+  dxfImport: false,
+  view3d: false,
+  aiExtract: false,
+};
+
+const NO_CONSTRUCTION_CAPS: ConstructionPlanCaps = {
+  maxSeats: 0,
+  manualEntry: false,
+  excelImport: false,
+  dxfLayer: false,
+  aiExtract: false,
+  truckPlanner: false,
+  ganttExport: false,
+};
+
+/** Locked / no-subscription product card (default for products the user has not paid for). */
+export function lockedProductAccess<Caps>(zeroCaps: Caps): ProductAccess<Caps> {
+  return {
+    hasAccess: false,
+    reason: 'no_subscription',
+    plan: 'free_trial',
+    trialEnd: null,
+    currentPeriodEnd: null,
+    caps: zeroCaps,
+  };
+}
+
+export function lockedAccessAllProducts(): EffectiveAccess {
+  return {
+    scaffold: lockedProductAccess(NO_ACCESS_CAPABILITIES),
+    bim: lockedProductAccess(NO_BIM_CAPS),
+    construction_plan: lockedProductAccess(NO_CONSTRUCTION_CAPS),
+  };
+}
+
+/**
+ * Map a Subscription row + tier to product caps. The scaffold product still
+ * uses the rich plan-capabilities table; bim and construction_plan use simple
+ * tier-based caps that mostly mirror Premium (full feature set per product).
+ */
+export function bimCapsForPlan(plan: string): BimCaps {
+  const base = capabilitiesForPlan(plan);
+  if (base.maxSeats <= 0) return NO_BIM_CAPS;
+  return {
+    maxSeats: base.maxSeats,
+    ifcUpload: true,
+    dxfImport: true,
+    view3d: true,
+    aiExtract: !!base.aiExtract,
+  };
+}
+
+export function constructionPlanCapsForPlan(plan: string): ConstructionPlanCaps {
+  const base = capabilitiesForPlan(plan);
+  if (base.maxSeats <= 0) return NO_CONSTRUCTION_CAPS;
+  return {
+    maxSeats: base.maxSeats,
+    manualEntry: true,
+    excelImport: true,
+    dxfLayer: true,
+    aiExtract: !!base.aiExtract,
+    truckPlanner: true,
+    ganttExport: true,
+  };
+}
+
+/** Convenience guard for Nest controllers. */
+export function hasProduct(access: EffectiveAccess, code: ProductCode): boolean {
+  return access[code]?.hasAccess === true;
 }

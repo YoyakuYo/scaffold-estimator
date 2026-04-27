@@ -18,8 +18,14 @@ export type PlanTier =
   | 'monthly'
   | 'premium';
 
+/**
+ * Phase 2 — multi-product subscriptions. Each row is scoped to one product.
+ * Existing rows default to 'scaffold' via migration 135.
+ */
+export type SubscriptionProductCode = 'scaffold' | 'bim' | 'construction_plan';
+
 @Entity('subscriptions')
-@Index(['userId'], { unique: true })
+@Index(['userId', 'productCode'], { unique: true })
 @Index(['stripeCustomerId'])
 @Index(['stripeSubscriptionId'])
 @Index(['status'])
@@ -41,6 +47,9 @@ export class Subscription {
 
   @Column({ name: 'stripe_price_id', type: 'text', nullable: true })
   stripePriceId: string | null;
+
+  @Column({ name: 'product_code', type: 'text', default: 'scaffold' })
+  productCode: SubscriptionProductCode;
 
   @Column({ type: 'text', default: 'free_trial' })
   plan: PlanTier;

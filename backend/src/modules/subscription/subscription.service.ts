@@ -19,7 +19,13 @@ import {
   capabilitiesForTrial,
   mergeCapabilitiesMax,
   inferDisplayPlanFromCapabilities,
+  bimCapsForPlan,
+  constructionPlanCapsForPlan,
+  lockedAccessAllProducts,
+  lockedProductAccess,
   type EffectivePlanCapabilities,
+  type EffectiveAccess,
+  type ProductAccess,
 } from './plan-capabilities';
 
 /** New trials: trial_end = now + TRIAL_DAYS */
@@ -166,7 +172,7 @@ export class SubscriptionService {
 
   async ensureSubscriptionForUser(userId: string): Promise<Subscription> {
     const user = await this.getUserOrFail(userId);
-    const { data: existingRow } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    const { data: existingRow } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     if (existingRow) {
       return mapRowToCamel<Subscription>(existingRow as Record<string, unknown>)!;
     }
@@ -175,6 +181,7 @@ export class SubscriptionService {
     const ins = mapPayloadToSnake<Record<string, unknown>>({
       userId: user.id,
       companyId: user.companyId ?? null,
+      productCode: 'scaffold',
       plan: user.role === 'superadmin' ? 'enterprise' : 'free_trial',
       status: user.role === 'superadmin' ? 'active' : 'trialing',
       trialStart: user.role === 'superadmin' ? null : now,
@@ -200,18 +207,34 @@ export class SubscriptionService {
    * by `user_id` of anyone in the company (covers payers whose row predates company_id backfill).
    */
   async getSubscriptionsForCompany(companyId: string): Promise<Subscription[]> {
+    return this.getCompanyProductSubscriptions(companyId, 'scaffold');
+  }
+
+  /**
+   * Phase 2 — multi-product. Resolve all subscription rows attached to a
+   * company (directly or via member users) for one product. Pass `null` to
+   * include every product (used by the admin verify page).
+   */
+  async getCompanyProductSubscriptions(
+    companyId: string,
+    productCode: 'scaffold' | 'bim' | 'construction_plan' | null,
+  ): Promise<Subscription[]> {
     const client = this.supabase.getClient();
     const { data: userRows } = await client.from('users').select('id').eq('company_id', companyId);
     const userIds = (userRows || []).map((r: { id: string }) => r.id);
     const byId = new Map<string, Subscription>();
 
-    const { data: rowsCo } = await client.from('subscriptions').select('*').eq('company_id', companyId);
+    let qCompany = client.from('subscriptions').select('*').eq('company_id', companyId);
+    if (productCode) qCompany = qCompany.eq('product_code', productCode);
+    const { data: rowsCo } = await qCompany;
     for (const row of rowsCo || []) {
       const s = mapRowToCamel<Subscription>(row as Record<string, unknown>);
       if (s) byId.set(s.id, s);
     }
     if (userIds.length > 0) {
-      const { data: rowsU } = await client.from('subscriptions').select('*').in('user_id', userIds);
+      let qUsers = client.from('subscriptions').select('*').in('user_id', userIds);
+      if (productCode) qUsers = qUsers.eq('product_code', productCode);
+      const { data: rowsU } = await qUsers;
       for (const row of rowsU || []) {
         const s = mapRowToCamel<Subscription>(row as Record<string, unknown>);
         if (s) byId.set(s.id, s);
@@ -274,7 +297,7 @@ export class SubscriptionService {
     const companySubs = await this.getSubscriptionsForCompany(user.companyId);
     const others = companySubs.filter((s) => s.userId !== userId);
     const snap = await this.bestCompanyPaidSeatSnapshot(others);
-    const { data: existingRow } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    const { data: existingRow } = await client.from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
 
     if (snap) {
       const seatPayload = {
@@ -292,17 +315,17 @@ export class SubscriptionService {
       };
       const patch = mapPayloadToSnake(seatPayload);
       if (existingRow) {
-        const { error } = await client.from('subscriptions').update(patch).eq('user_id', userId);
+        const { error } = await client.from('subscriptions').update(patch).eq('user_id', userId).eq('product_code', 'scaffold');
         if (error) this.logger.warn(`syncSubscriptionRowForCompanyMember update: ${error.message}`);
       } else {
-        const ins = mapPayloadToSnake({ userId, ...seatPayload });
+        const ins = mapPayloadToSnake({ userId, productCode: 'scaffold', ...seatPayload });
         const { error } = await client.from('subscriptions').insert(ins);
         if (error) {
           this.logger.warn(`syncSubscriptionRowForCompanyMember insert: ${error.message}`);
           return this.ensureSubscriptionForUser(userId);
         }
       }
-      const { data: out } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+      const { data: out } = await client.from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
       if (out) {
         await client
           .from('users')
@@ -318,8 +341,8 @@ export class SubscriptionService {
     if (!existingRow) {
       return this.ensureSubscriptionForUser(userId);
     }
-    await client.from('subscriptions').update(mapPayloadToSnake({ companyId: user.companyId })).eq('user_id', userId);
-    const { data: refreshed } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    await client.from('subscriptions').update(mapPayloadToSnake({ companyId: user.companyId })).eq('user_id', userId).eq('product_code', 'scaffold');
+    const { data: refreshed } = await client.from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     if (!refreshed) return this.ensureSubscriptionForUser(userId);
     return mapRowToCamel<Subscription>(refreshed as Record<string, unknown>)!;
   }
@@ -329,7 +352,7 @@ export class SubscriptionService {
     const user = await this.getUserOrFail(userId);
     if (!user.companyId || user.role === 'superadmin' || user.subscriptionExempt) return;
     const client = this.supabase.getClient();
-    const { data: row } = await client.from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    const { data: row } = await client.from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     if (!row) return;
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
     sub = await this.expireTrialIfNeeded(sub);
@@ -354,7 +377,7 @@ export class SubscriptionService {
           currentPeriodEnd: null,
         }),
       )
-      .eq('user_id', userId);
+      .eq('user_id', userId).eq('product_code', 'scaffold');
     await client.from('users').update(mapPayloadToSnake({ isCompanySeat: true })).eq('id', userId);
   }
 
@@ -539,7 +562,7 @@ export class SubscriptionService {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') return;
     if (user.subscriptionExempt) return;
-    const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     if (!row) return;
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
     sub = await this.expireTrialIfNeeded(sub);
@@ -558,7 +581,7 @@ export class SubscriptionService {
     const user = await this.getUserOrFail(userId);
     if (user.role === 'superadmin') return;
     if (user.subscriptionExempt) return;
-    const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+    const { data: row } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     if (!row) return;
     let sub = mapRowToCamel<Subscription>(row as Record<string, unknown>)!;
     sub = await this.expireTrialIfNeeded(sub);
@@ -582,7 +605,7 @@ export class SubscriptionService {
       } else {
         await this.reconcileSeatMemberTrialShadow(userId);
       }
-      const { data: rowAfter } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).maybeSingle();
+      const { data: rowAfter } = await this.supabase.getClient().from('subscriptions').select('*').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
       if (rowAfter) sub = mapRowToCamel<Subscription>(rowAfter as Record<string, unknown>)!;
     }
     user = await this.getUserOrFail(userId);
@@ -925,7 +948,7 @@ export class SubscriptionService {
   async ensureInactiveSubscriptionForPendingBank(userId: string): Promise<void> {
     const user = await this.getUserOrFail(userId);
     const client = this.supabase.getClient();
-    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).maybeSingle();
+    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     const inactive = mapPayloadToSnake({
       plan: 'free_trial' as PlanTier,
       status: 'expired' as SubscriptionStatus,
@@ -939,13 +962,14 @@ export class SubscriptionService {
       stripePriceId: null,
     });
     if (existing) {
-      const { error } = await client.from('subscriptions').update(inactive).eq('user_id', userId);
+      const { error } = await client.from('subscriptions').update(inactive).eq('user_id', userId).eq('product_code', 'scaffold');
       if (error) throw new BadRequestException('Failed to prepare subscription for bank activation.');
       return;
     }
     const ins = mapPayloadToSnake({
       userId,
       companyId: user.companyId ?? null,
+      productCode: 'scaffold',
       plan: 'free_trial' as PlanTier,
       status: 'expired' as SubscriptionStatus,
       trialStart: null,
@@ -989,11 +1013,12 @@ export class SubscriptionService {
       stripeSubscriptionId: null,
       stripePriceId: null,
     });
-    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).maybeSingle();
+    const { data: existing } = await client.from('subscriptions').select('id').eq('user_id', userId).eq('product_code', 'scaffold').maybeSingle();
     if (!existing) {
       const ins = mapPayloadToSnake({
         userId,
         companyId: user.companyId ?? null,
+        productCode: 'scaffold',
         plan: planTier as PlanTier,
         status: 'active' as SubscriptionStatus,
         trialStart: null,
@@ -1009,7 +1034,185 @@ export class SubscriptionService {
       if (insErr) throw new BadRequestException('Failed to activate subscription.');
       return;
     }
-    const { error } = await client.from('subscriptions').update(updates).eq('user_id', userId);
+    const { error } = await client.from('subscriptions').update(updates).eq('user_id', userId).eq('product_code', 'scaffold');
     if (error) throw new BadRequestException('Failed to activate subscription.');
+  }
+
+  // ─── Phase 2: per-product effective access ─────────────────────────
+
+  /**
+   * Multi-product entitlements. Returns one ProductAccess slot per product so
+   * the dashboard can render unlocked / locked cards per app.
+   * Superadmin / subscription-exempt users get full access on every product.
+   */
+  async resolveEffectiveAccess(
+    userId: string,
+    role?: string,
+  ): Promise<EffectiveAccess> {
+    const access: EffectiveAccess = lockedAccessAllProducts();
+    if (role === 'superadmin') {
+      return this.fullSuperadminAccess();
+    }
+    const user = await this.getUserOrFail(userId);
+    if (user.subscriptionExempt) return this.fullSuperadminAccess();
+    if (user.pendingBankPlan) return access;
+
+    // Scaffold reuses the existing legacy capability resolver so behaviour for
+    // current customers is unchanged.
+    const scaffoldCaps = await this.resolveEffectiveCapabilities(userId, role);
+    const scaffoldAccess = await this.buildScaffoldAccessSlot(userId, scaffoldCaps);
+    access.scaffold = scaffoldAccess;
+
+    // BIM and Construction Plan: look up rows directly, scoped to that product.
+    access.bim = await this.resolveProductAccess(userId, user.companyId ?? null, 'bim');
+    access.construction_plan = await this.resolveProductAccess(
+      userId,
+      user.companyId ?? null,
+      'construction_plan',
+    );
+
+    return access;
+  }
+
+  private fullSuperadminAccess(): EffectiveAccess {
+    const now = new Date().toISOString();
+    return {
+      scaffold: {
+        hasAccess: true,
+        reason: 'active',
+        plan: 'enterprise',
+        trialEnd: null,
+        currentPeriodEnd: now,
+        caps: { ...SUPERADMIN_CAPABILITIES },
+      },
+      bim: {
+        hasAccess: true,
+        reason: 'active',
+        plan: 'enterprise',
+        trialEnd: null,
+        currentPeriodEnd: now,
+        caps: bimCapsForPlan('enterprise'),
+      },
+      construction_plan: {
+        hasAccess: true,
+        reason: 'active',
+        plan: 'enterprise',
+        trialEnd: null,
+        currentPeriodEnd: now,
+        caps: constructionPlanCapsForPlan('enterprise'),
+      },
+    };
+  }
+
+  private async buildScaffoldAccessSlot(
+    userId: string,
+    caps: EffectivePlanCapabilities,
+  ): Promise<ProductAccess<EffectivePlanCapabilities>> {
+    const hasAccess = caps.maxSeats > 0;
+    const { data: row } = await this.supabase
+      .getClient()
+      .from('subscriptions')
+      .select('plan, status, trial_end, current_period_end, canceled_at')
+      .eq('user_id', userId)
+      .eq('product_code', 'scaffold')
+      .maybeSingle();
+    const plan = (row?.plan as string) || inferDisplayPlanFromCapabilities(caps);
+    const status = (row?.status as string) || (hasAccess ? 'active' : 'expired');
+    return {
+      hasAccess,
+      reason: status === 'active' ? 'active' : status === 'trialing' ? 'trial' : 'expired',
+      plan,
+      trialEnd: (row?.trial_end as string) ?? null,
+      currentPeriodEnd: (row?.current_period_end as string) ?? null,
+      caps,
+    };
+  }
+
+  private async resolveProductAccess<Caps>(
+    userId: string,
+    companyId: string | null,
+    productCode: 'bim' | 'construction_plan',
+  ): Promise<ProductAccess<Caps>> {
+    const candidateRows = await this.collectProductRows(userId, companyId, productCode);
+    if (candidateRows.length === 0) {
+      const zero = (productCode === 'bim'
+        ? bimCapsForPlan('') as unknown as Caps
+        : constructionPlanCapsForPlan('') as unknown as Caps);
+      return lockedProductAccess<Caps>(zero);
+    }
+    const now = new Date();
+    let best: { plan: string; status: string; trialEnd: string | null; currentPeriodEnd: string | null } | null = null;
+    let active = false;
+    for (const sub of candidateRows) {
+      const expired = await this.expireTrialIfNeeded(sub);
+      if (expired.status === 'active' && this.effectivePaidPlanFromRow(expired)) {
+        active = true;
+        best = {
+          plan: expired.plan,
+          status: 'active',
+          trialEnd: expired.trialEnd ? new Date(expired.trialEnd).toISOString() : null,
+          currentPeriodEnd: expired.currentPeriodEnd
+            ? new Date(expired.currentPeriodEnd).toISOString()
+            : null,
+        };
+        break;
+      }
+      if (
+        expired.status === 'trialing' &&
+        expired.trialEnd &&
+        new Date(expired.trialEnd) > now
+      ) {
+        active = true;
+        if (!best) {
+          best = {
+            plan: expired.plan,
+            status: 'trialing',
+            trialEnd: new Date(expired.trialEnd).toISOString(),
+            currentPeriodEnd: null,
+          };
+        }
+      }
+    }
+    if (!active || !best) {
+      const zero = (productCode === 'bim'
+        ? bimCapsForPlan('') as unknown as Caps
+        : constructionPlanCapsForPlan('') as unknown as Caps);
+      return lockedProductAccess<Caps>(zero);
+    }
+    const caps =
+      productCode === 'bim'
+        ? (bimCapsForPlan(best.plan) as unknown as Caps)
+        : (constructionPlanCapsForPlan(best.plan) as unknown as Caps);
+    return {
+      hasAccess: true,
+      reason: best.status === 'active' ? 'active' : 'trial',
+      plan: best.plan,
+      trialEnd: best.trialEnd,
+      currentPeriodEnd: best.currentPeriodEnd,
+      caps,
+    };
+  }
+
+  private async collectProductRows(
+    userId: string,
+    companyId: string | null,
+    productCode: 'bim' | 'construction_plan',
+  ): Promise<Subscription[]> {
+    const client = this.supabase.getClient();
+    const byId = new Map<string, Subscription>();
+    const { data: ownRows } = await client
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('product_code', productCode);
+    for (const row of ownRows || []) {
+      const s = mapRowToCamel<Subscription>(row as Record<string, unknown>);
+      if (s) byId.set(s.id, s);
+    }
+    if (companyId) {
+      const companyRows = await this.getCompanyProductSubscriptions(companyId, productCode);
+      for (const s of companyRows) byId.set(s.id, s);
+    }
+    return [...byId.values()];
   }
 }

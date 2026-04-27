@@ -22,6 +22,7 @@ import { effectiveSeatCap, isUnlimitedSeatCap } from '@/lib/billing/effective-se
 import { usersApi } from '@/lib/api/users';
 import { Loader2, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark, Check } from 'lucide-react';
 import { usePresence } from '@/lib/page-presence-context';
+import { BillingProductOverview } from '@/components/product-portal/billing-product-overview';
 
 const BANK_TIER_ORDER: BankWirePlanTier[] = ['basic', 'medium', 'monthly', 'premium'];
 
@@ -314,6 +315,8 @@ export default function BillingPage() {
           <p className="text-gray-500 mt-1">{t('billing', 'subtitle')}</p>
         </div>
 
+        <BillingProductOverview />
+
         {subscription.pendingBankPlan && (
           <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-amber-900">{t('bankActivation', 'billingBanner')}</p>
@@ -440,7 +443,7 @@ export default function BillingPage() {
         </div>
 
         {hasPaymentSection ? (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm p-6">
+          <div id="payment-options" className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm p-6 scroll-mt-24">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
               {t('billing', 'payWithTitle')}
             </h2>

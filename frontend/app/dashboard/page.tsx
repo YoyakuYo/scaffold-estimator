@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { usePresence } from '@/lib/page-presence-context';
+import { ProductPortal } from '@/components/product-portal/product-portal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -590,6 +591,9 @@ function UserDashboard() {
           <p className="mt-3 text-base text-slate-600 leading-relaxed">{t('dashboard', 'dashboardIntro')}</p>
           <p className="mt-2 text-sm text-slate-500">{t('dashboard', 'subtitle')}</p>
         </header>
+
+        {/* ── Phase 2: 3-card product portal ── */}
+        <ProductPortal />
 
         {/* ── End-to-end flow ── */}
         <section

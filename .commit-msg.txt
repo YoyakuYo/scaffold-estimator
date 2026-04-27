@@ -1,0 +1,40 @@
+feat(platform): phase 2 multi-product subscriptions + dashboard portal
+
+Subscriptions become per-product (scaffold / bim / construction_plan). Existing
+single-product flow stays scaffold-scoped; new products land cleanly without
+retrofitting later.
+
+Backend
+- Migration 135: subscriptions.product_code (default 'scaffold'), drop unique
+  on user_id alone, add unique (user_id, product_code).
+- Subscription entity gains productCode; all legacy queries scoped to
+  product_code='scaffold' to preserve existing behaviour.
+- New backend/src/modules/subscription/products.ts registry: ProductCode,
+  PRODUCTS, priceIdToProduct(), productForRoute(). Stripe price IDs read from
+  env (STRIPE_PRICE_SCAFFOLD_MONTHLY, STRIPE_PRICE_BIM_MONTHLY, etc.).
+- plan-capabilities.ts gains EffectiveAccess (keyed by product), per-product
+  Caps types, locked-access factories, bimCapsForPlan / constructionPlanCapsForPlan.
+- SubscriptionService.resolveEffectiveAccess(userId, role) returns one
+  ProductAccess slot per product. Superadmin / subscription-exempt users get
+  full access on every product. New helper getCompanyProductSubscriptions().
+- New @RequiresProduct decorator + ProductAccessGuard. 403 body embeds
+  productCode so the frontend can deep-link the user to /billing#<code>.
+- New endpoint GET /subscriptions/me/access feeds the dashboard portal.
+
+Frontend
+- lib/api/access.ts: typed accessApi.getEffectiveAccess() + ProductCode helpers
+  (productForRoute, isProductUnlocked).
+- New components/product-portal/{product-card,product-portal,billing-product-overview}.tsx.
+  ProductPortal renders three cards always; locked cards show a Subscribe CTA
+  (deep-linked to /billing#<code>); active/trial cards show a primary "Open"
+  action linking to the product UI.
+- Dashboard hero now hosts <ProductPortal /> right above the existing scaffold
+  workflow, so existing users see the new BIM / Construction Plan cards with
+  locked overlays from day one.
+- Billing page gains <BillingProductOverview /> at the top + scrollable
+  #payment-options anchor so deep-links from the dashboard land correctly.
+- ja/en/fr translations for the new products section.
+
+Quality
+- Backend tsc --noEmit: passes.
+- Frontend tsc --noEmit: passes.

@@ -25,6 +25,17 @@ export class SubscriptionController {
     return this.subscriptionService.getMySubscription(user.id);
   }
 
+  /**
+   * Phase 2 — multi-product. Returns ProductAccess slot per product so the
+   * dashboard can render unlocked / locked cards (Scaffold / BIM /
+   * Construction Plan) for the current user.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('me/access')
+  async getEffectiveAccess(@CurrentUser() user: any) {
+    return this.subscriptionService.resolveEffectiveAccess(user.id, user.role);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('me/restart-fresh-trial')
   async restartFreshTrialSelfService(
