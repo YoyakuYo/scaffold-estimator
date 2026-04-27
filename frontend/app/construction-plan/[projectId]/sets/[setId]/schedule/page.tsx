@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Calendar,
@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Truck,
+  Save,
+  RotateCcw,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
@@ -46,10 +48,17 @@ export default function ConstructionPlanSchedulePage() {
     label: 'Construction Plan: schedule + delivery',
   });
   const presenceActions = usePresenceActions();
+  const queryClient = useQueryClient();
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState<string>(todayIso);
   const [workSaturday, setWorkSaturday] = useState<boolean>(true);
+
+  // Foreman overrides on the generated truck plan. Keyed by `date|binNo`
+  // so the user can swap truck types without re-running the sequencer.
+  const [overridesDraft, setOverridesDraft] = useState<
+    Record<string, { date: string; binNo: number; truckType: string }>
+  >({});
 
   const sched = useQuery({
     queryKey: ['structural-takeoff', 'schedule', setId, startDate, workSaturday],
@@ -63,6 +72,54 @@ export default function ConstructionPlanSchedulePage() {
     queryFn: () =>
       structuralTakeoffApi.getDeliveryPlan(setId, { startDate, workSaturday }),
     enabled: !!setId,
+  });
+
+  // Seed the local override draft from server every time the plan reloads.
+  useEffect(() => {
+    const data = plan.data as unknown as
+      | { overrides?: { trucks?: Array<{ date: string; binNo: number; truckType?: string }> } }
+      | undefined;
+    const trucks = data?.overrides?.trucks ?? [];
+    const next: Record<string, { date: string; binNo: number; truckType: string }> = {};
+    for (const t of trucks) {
+      if (t?.date && typeof t.binNo === 'number' && t.truckType) {
+        next[`${t.date}|${t.binNo}`] = { date: t.date, binNo: t.binNo, truckType: t.truckType };
+      }
+    }
+    setOverridesDraft(next);
+  }, [plan.data]);
+
+  const overridesDirty = useMemo(() => {
+    const data = plan.data as unknown as
+      | { overrides?: { trucks?: Array<{ date: string; binNo: number; truckType?: string }> } }
+      | undefined;
+    const original = data?.overrides?.trucks ?? [];
+    const originalMap = new Map<string, string>();
+    for (const t of original) {
+      if (t?.date && typeof t.binNo === 'number' && t.truckType) {
+        originalMap.set(`${t.date}|${t.binNo}`, t.truckType);
+      }
+    }
+    const draftMap = new Map<string, string>();
+    for (const k of Object.keys(overridesDraft)) {
+      draftMap.set(k, overridesDraft[k].truckType);
+    }
+    if (originalMap.size !== draftMap.size) return true;
+    for (const [k, v] of originalMap) if (draftMap.get(k) !== v) return true;
+    return false;
+  }, [plan.data, overridesDraft]);
+
+  const saveOverrides = useMutation({
+    mutationFn: () =>
+      structuralTakeoffApi.saveDeliveryOverrides(setId, {
+        trucks: Object.values(overridesDraft),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['structural-takeoff', 'delivery-plan', setId],
+      });
+      presenceActions.recordAction(`Saved truck overrides for set ${setId.slice(0, 8)}`);
+    },
   });
 
   const dateColumns = useMemo(() => sched.data?.workingDays ?? [], [sched.data]);
@@ -231,14 +288,54 @@ export default function ConstructionPlanSchedulePage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Truck className="h-5 w-5 text-blue-500" />
               {t('constructionPlanSchedule', 'deliveryPlanTitle')}
             </h2>
-            <span className="text-sm text-gray-500">
-              {plan.data.trucks.length} {t('constructionPlanSchedule', 'trucks')}
-            </span>
+            <div className="flex items-center gap-2">
+              {overridesDirty && (
+                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                  {t('constructionPlanSchedule', 'unsavedOverrides')}
+                </span>
+              )}
+              {overridesDirty && (
+                <button
+                  onClick={() => {
+                    const data = plan.data as unknown as
+                      | { overrides?: { trucks?: Array<{ date: string; binNo: number; truckType?: string }> } }
+                      | undefined;
+                    const trucks = data?.overrides?.trucks ?? [];
+                    const next: Record<string, { date: string; binNo: number; truckType: string }> = {};
+                    for (const tr of trucks) {
+                      if (tr?.date && typeof tr.binNo === 'number' && tr.truckType) {
+                        next[`${tr.date}|${tr.binNo}`] = { date: tr.date, binNo: tr.binNo, truckType: tr.truckType };
+                      }
+                    }
+                    setOverridesDraft(next);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border border-gray-200 hover:bg-gray-50"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  {t('constructionPlanSchedule', 'discardOverrides')}
+                </button>
+              )}
+              <button
+                onClick={() => saveOverrides.mutate()}
+                disabled={!overridesDirty || saveOverrides.isPending}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
+              >
+                {saveOverrides.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Save className="h-3 w-3" />
+                )}
+                {t('constructionPlanSchedule', 'saveOverrides')}
+              </button>
+              <span className="text-sm text-gray-500">
+                {plan.data.trucks.length} {t('constructionPlanSchedule', 'trucks')}
+              </span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -266,7 +363,26 @@ export default function ConstructionPlanSchedulePage() {
                       <td className="px-3 py-2 whitespace-nowrap text-gray-700">{t.date}</td>
                       <td className="px-3 py-2 text-gray-700">{DOW_JP[(t.dow % 7 + 7) % 7]}</td>
                       <td className="px-3 py-2 text-gray-700">{t.binNo}</td>
-                      <td className="px-3 py-2 text-gray-900">{t.load.truckLabel}</td>
+                      <td className="px-3 py-2 text-gray-900">
+                        <select
+                          value={
+                            overridesDraft[`${t.date}|${t.binNo}`]?.truckType ?? t.load.truckType
+                          }
+                          onChange={(e) => {
+                            const k = `${t.date}|${t.binNo}`;
+                            setOverridesDraft((prev) => ({
+                              ...prev,
+                              [k]: { date: t.date, binNo: t.binNo, truckType: e.target.value },
+                            }));
+                          }}
+                          className="px-2 py-0.5 border border-gray-200 rounded-md text-xs"
+                        >
+                          <option value="4tunic">4tユニック</option>
+                          <option value="4t">4t平</option>
+                          <option value="10t">10t平</option>
+                          <option value="25t_trailer">25tトレーラー</option>
+                        </select>
+                      </td>
                       <td className="px-3 py-2 text-gray-700">{head?.block ?? '—'}</td>
                       <td className="px-3 py-2 text-gray-700">{head?.level ?? '—'}</td>
                       <td className="px-3 py-2 text-gray-700 text-xs">

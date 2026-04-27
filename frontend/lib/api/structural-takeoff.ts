@@ -365,6 +365,24 @@ export const structuralTakeoffApi = {
     return res.data as Blob;
   },
 
+  getDeliveryOverrides: async (
+    setId: string,
+  ): Promise<{ trucks?: Array<{ date: string; binNo: number; truckType?: string; note?: string }> }> => {
+    const res = await apiClient.get<{
+      trucks?: Array<{ date: string; binNo: number; truckType?: string; note?: string }>;
+    }>(`/structural-takeoff/sets/${setId}/delivery-plan/overrides`);
+    return res.data;
+  },
+  saveDeliveryOverrides: async (
+    setId: string,
+    payload: { trucks: Array<{ date: string; binNo: number; truckType?: string; note?: string }> },
+  ): Promise<{ trucks: Array<{ date: string; binNo: number; truckType?: string; note?: string }> }> => {
+    const res = await apiClient.post<{
+      trucks: Array<{ date: string; binNo: number; truckType?: string; note?: string }>;
+    }>(`/structural-takeoff/sets/${setId}/delivery-plan/overrides`, payload);
+    return res.data;
+  },
+
   // Phase 3 follow-ups: Excel/CSV + DXF layer imports
   importExcel: async (
     setId: string,

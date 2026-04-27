@@ -29,6 +29,7 @@ import { DxfLayerExtractorService } from './extractors/dxf-layer-extractor.servi
 import { ConstructionPlanExcelService } from './schedule/construction-plan-excel.service';
 import { runSequencer } from './schedule/erection-sequencer';
 import { buildDeliveryPlan } from './schedule/delivery-plan';
+import { applyDeliveryPlanOverrides, type DeliveryPlanOverridesPayload } from './schedule/delivery-plan-overrides';
 import { todayIso } from './schedule/calendar';
 import { PresenceService } from '../presence/presence.service';
 import {
@@ -470,12 +471,36 @@ export class StructuralTakeoffController {
       calendar: { startDateIso, workSaturday },
     });
     const plan = buildDeliveryPlan(seq.activities, seq.dailyDemand);
+    const overrides = await this.service.getDeliveryOverrides(ctx, setId);
+    applyDeliveryPlanOverrides(plan, overrides);
     return {
       project: review.project,
       set: review.set,
       startDateIso,
+      overrides,
       ...plan,
     };
+  }
+
+  @Get('sets/:setId/delivery-plan/overrides')
+  async getDeliveryOverrides(@CurrentUser() user: any, @Param('setId') setId: string) {
+    return this.service.getDeliveryOverrides(
+      { userId: user.id, companyId: user.companyId ?? null, role: user.role },
+      setId,
+    );
+  }
+
+  @Post('sets/:setId/delivery-plan/overrides')
+  async saveDeliveryOverrides(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Body() payload: DeliveryPlanOverridesPayload,
+  ) {
+    return this.service.saveDeliveryOverrides(
+      { userId: user.id, companyId: user.companyId ?? null, role: user.role },
+      setId,
+      payload ?? {},
+    );
   }
 
   @Get('sets/:setId/excel')
@@ -490,9 +515,11 @@ export class StructuralTakeoffController {
     const review = await this.service.getSetReview(ctx, setId);
     const startDateIso = startDate || todayIso();
     const workSaturday = workSaturdayQuery !== 'false';
+    const overrides = await this.service.getDeliveryOverrides(ctx, setId);
     const { buffer, filename } = await this.excelExport.build(review.project, review.set, review.elements, {
       startDateIso,
       workSaturday,
+      overrides,
     });
     res.setHeader(
       'Content-Type',

@@ -25,6 +25,7 @@ import {
 } from './dto/construction-plan.dto';
 import { buildSampleFixture } from './sample-fixtures';
 import { TitleBlockVisionService } from './extractors/title-block-vision.service';
+import type { DeliveryPlanOverridesPayload } from './schedule/delivery-plan-overrides';
 
 const DEFAULT_LEVELS = ['1F', '2F', '3F', 'RF'];
 const DEFAULT_BLOCKS: string[] = [];
@@ -625,6 +626,69 @@ export class StructuralTakeoffService {
    * elements by hand. Returns the new project + set for the frontend to
    * route into.
    */
+  /**
+   * Phase 4 — gap #7. Foreman overrides on the generated delivery plan.
+   * Stored as a single JSON blob per set; merged at read time.
+   */
+  async getDeliveryOverrides(
+    ctx: CallerContext,
+    setId: string,
+  ): Promise<DeliveryPlanOverridesPayload> {
+    await this.getSet(ctx, setId);
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('delivery_plan_overrides')
+      .select('edits')
+      .eq('set_id', setId)
+      .maybeSingle();
+    if (error) {
+      this.logger.warn(`getDeliveryOverrides: ${error.message}`);
+      return {};
+    }
+    const edits = (data as { edits?: DeliveryPlanOverridesPayload } | null)?.edits ?? {};
+    return edits;
+  }
+
+  async saveDeliveryOverrides(
+    ctx: CallerContext,
+    setId: string,
+    payload: DeliveryPlanOverridesPayload,
+  ): Promise<DeliveryPlanOverridesPayload> {
+    await this.getSet(ctx, setId);
+    const cleaned: DeliveryPlanOverridesPayload = {
+      trucks: Array.isArray(payload?.trucks)
+        ? payload.trucks
+            .filter(
+              (t) =>
+                t &&
+                typeof t.date === 'string' &&
+                typeof t.binNo === 'number' &&
+                t.binNo > 0,
+            )
+            .slice(0, 1000)
+        : [],
+    };
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('delivery_plan_overrides')
+      .upsert(
+        {
+          set_id: setId,
+          edits: cleaned,
+          updated_by: ctx.userId,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'set_id' },
+      )
+      .select()
+      .single();
+    if (error || !data) {
+      this.logger.warn(`saveDeliveryOverrides failed: ${error?.message}`);
+      throw new BadRequestException('Could not save delivery plan overrides.');
+    }
+    return cleaned;
+  }
+
   async loadSampleProject(ctx: CallerContext): Promise<{
     project: ConstructionPlanProject;
     set: DrawingSet;

@@ -3313,6 +3313,13 @@ export const translations = {
     masterGantt: { ja: '工程表', en: 'Master schedule', fr: 'Planning' },
     activities: { ja: '工程', en: 'activities', fr: 'tâches' },
     deliveryPlanTitle: { ja: '搬入計画（便単位）', en: 'Delivery plan (per truck)', fr: 'Plan de livraisons (par camion)' },
+    saveOverrides: { ja: '上書き保存', en: 'Save overrides', fr: 'Enregistrer' },
+    discardOverrides: { ja: '破棄', en: 'Discard', fr: 'Annuler' },
+    unsavedOverrides: {
+      ja: '未保存の変更',
+      en: 'unsaved changes',
+      fr: 'modifications non enregistrées',
+    },
     monthlyTitle: { ja: '月次集計', en: 'Monthly aggregate', fr: 'Total mensuel' },
     weeklyTitle: { ja: '週次集計', en: 'Weekly aggregate', fr: 'Total hebdomadaire' },
     block: { ja: '工区', en: 'Block', fr: 'Zone' },

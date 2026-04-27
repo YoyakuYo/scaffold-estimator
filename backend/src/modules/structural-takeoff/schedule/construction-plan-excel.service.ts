@@ -8,6 +8,10 @@ import { STRUCTURAL_ELEMENT_TYPES } from '../element-types';
 import type { ScheduleActivity } from './erection-sequencer';
 import { runSequencer } from './erection-sequencer';
 import { buildDeliveryPlan, type DeliveryPlanResult } from './delivery-plan';
+import {
+  applyDeliveryPlanOverrides,
+  type DeliveryPlanOverridesPayload,
+} from './delivery-plan-overrides';
 import { DEFAULT_DURATION_TEMPLATE, type DurationTemplate } from './duration-template';
 import { DEFAULT_TRUCKS } from './truck-bin-pack';
 import { todayIso } from './calendar';
@@ -65,6 +69,7 @@ export class ConstructionPlanExcelService {
       template?: DurationTemplate;
       startDateIso?: string;
       workSaturday?: boolean;
+      overrides?: DeliveryPlanOverridesPayload | null;
     },
   ): Promise<{ buffer: Buffer; filename: string }> {
     const tmpl = options?.template ?? DEFAULT_DURATION_TEMPLATE;
@@ -77,6 +82,9 @@ export class ConstructionPlanExcelService {
       calendar: { startDateIso, workSaturday: options?.workSaturday ?? true },
     });
     const delivery = buildDeliveryPlan(sequencer.activities, sequencer.dailyDemand);
+    if (options?.overrides) {
+      applyDeliveryPlanOverrides(delivery, options.overrides);
+    }
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Zoomen Reader';
