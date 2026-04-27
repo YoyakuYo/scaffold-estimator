@@ -1,54 +1,31 @@
-feat(construction-plan): gap #9 - AI vision element extraction (premium)
+feat(bim): gap #10 - procedural facades and roof for DXF BIM extrusion
 
-Adds the fourth and final extraction mode to the takeoff workflow:
-manual / Excel / DXF-layer / AI vision. Per-drawing-kind prompts +
-structured output, gated by the existing aiExtract subscription
-capability so only Premium users can call it.
+Builds on gap #5 to make DXF buildings actually look like buildings.
+Walls, slabs, roof + procedural windows + explicit window/door openings.
 
-Backend
-- New AiElementVisionService (extractors/ai-element-vision.service.ts):
-  * Calls Claude (default claude-3-5-sonnet-20241022, override via
-    ANTHROPIC_ELEMENT_MODEL) with a strict JSON-schema system prompt.
-  * Per-kind hint blocks for framing_plan / column_list / beam_list /
-    stair_detail / elevator_shaft / level_diagram / general / unknown.
-  * Maps 柱/大梁/小梁/耐風梁/ブレース/階段/EV/デッキ to canonical
-    StructuralElementType values.
-  * Defensive JSON parsing + per-row validation (rejects unknown element
-    types, invalid qty); returns warnings array.
-  * Falls back to file-row-level level/block when the model returns null.
-- StructuralTakeoffService.extractElementsWithAi():
-  * Loads bytes from the construction-plan-files bucket (gap #1 enabled
-    this — required because Vision needs the bytes, not just metadata).
-  * For PDFs, rasterizes page 1 through Sharp at 200 DPI / max 2400 px.
-  * Sends to AiElementVisionService with the file row's classified
-    kind / level / block as hints.
-  * Upserts the parsed rows with source='ai' and a "AI extracted from
-    drawing" note.
-- Endpoint POST /sets/:setId/files/:fileId/extract-elements-ai:
-  * Gated by SubscriptionAiGuard (uses the existing aiExtract capability
-    on the user's effective plan; superadmin bypasses).
-  * Mirrors the call into upload_events with kind 'ai_element_vision' so
-    superadmin sees it in the cockpit.
-  * Throttled at 8/min/user.
+Changes
+- Procedural window panes (blue glass via the existing PBR material):
+  * Walked edge-by-edge over every wall polygon.
+  * Edges longer than 4 m get one window every 3.5 m, ~1.8 m × 1.5 m,
+    sill at 0.9 m, 50 mm pane thickness oriented along the wall normal.
+  * Picks up the curtain-wall blue tint from getMaterialForElement.
+- Explicit opening layers ("window"/"窓"/"door"/"扉"/"opening") are now
+  honoured: each closed polyline on those layers becomes a glass pane of
+  its own bounding box, sitting at sill height.
+- Roof: when no roof-tagged polygon exists, falls back to extruding the
+  outermost slab outline as a roof — the building always has a top,
+  picked up by the slate roof material.
 
-Frontend
-- structuralTakeoffApi.extractElementsAi().
-- Set-review page file row gets a green "+ AI" button alongside Download,
-  AI re-classify, and Delete. Click triggers AI extraction; toast says
-  how many elements were saved + how many warnings the model returned;
-  the manual elements table refreshes to show the new rows tagged
-  source='ai'.
-- ja/en/fr keys for the button + toast + failure copy.
+These run entirely client-side; no new backend code, no extra deps.
 
 Quality
-- Backend tsc --noEmit passes.
 - Frontend tsc --noEmit passes.
 
-Operational notes
-- Requires ANTHROPIC_API_KEY (already used by vision-bim and gap #6).
-- Requires the user's plan tier to grant aiExtract (Premium /
-  Enterprise / superadmin). Other tiers see a 403 from
-  SubscriptionAiGuard.
-- Real-world accuracy depends heavily on drawing legibility; model output
-  is intentionally written into extracted_elements with source='ai' so
-  reviewers can spot AI rows vs manual rows.
+Honest scope:
+- Walls don't get holes punched in them where windows go — windows sit
+  on the outside face. That's the standard "extrusion + applique"
+  approach used by quick-look BIM tools; it reads correctly at building
+  scale but looks slightly toy-like up close. Real cut-outs would need
+  CSG (three-bvh-csg or similar), which we can add later.
+- Roofs are still flat; hipped/gabled inference from outline is its own
+  multi-day job.

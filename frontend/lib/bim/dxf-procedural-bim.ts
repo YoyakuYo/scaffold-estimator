@@ -28,6 +28,12 @@ import type { IfcElementType, IfcMeshData } from '@/lib/ifc-loader';
 const DEFAULT_WALL_HEIGHT_MM = 3000;
 const DEFAULT_SLAB_THICKNESS_MM = 200;
 
+/** Procedural windows on every wall longer than 4 m, every 3.5 m along the wall. */
+const PROCEDURAL_WINDOW_SPACING_MM = 3500;
+const PROCEDURAL_WINDOW_WIDTH_MM = 1800;
+const PROCEDURAL_WINDOW_HEIGHT_MM = 1500;
+const PROCEDURAL_WINDOW_SILL_MM = 900;
+
 const WALL_LAYER_PATTERNS: RegExp[] = [
   /(壁|wall|kabe)/i,
 ];
@@ -188,8 +194,10 @@ export function buildBimFromDxf(input: ArrayBuffer | string): DxfBimBuildResult 
     }
   }
 
-  // 4) Roof — same approach as slab but on roof layer.
-  const roofPoly = pickOutermostClosed(polylines, ROOF_LAYER_PATTERNS);
+  // 4) Roof — same approach as slab but on roof layer. Falls back to the
+  //    outermost slab polygon if no roof layer was tagged so the building
+  //    always has a "top" plane.
+  const roofPoly = pickOutermostClosed(polylines, ROOF_LAYER_PATTERNS) ?? slabPoly;
   if (roofPoly) {
     const m = extrudePolygonToMesh(
       roofPoly.vertices,
@@ -204,6 +212,34 @@ export function buildBimFromDxf(input: ArrayBuffer | string): DxfBimBuildResult 
     }
   }
 
+  // 5) Procedural windows (gap #10). Stamp 1.8 m × 1.5 m blue glass panes
+  //    every 3.5 m along each wall edge longer than 4 m. This gives the
+  //    extruded box a recognizable façade without needing window callouts
+  //    in the DXF.
+  for (const wall of wallSource) {
+    addProceduralWindows(wall.vertices, scale, meshes, byType);
+  }
+
+  // 6) Explicit openings on a "window" / "door" layer, when the DXF carries
+  //    them as small rectangles. Treat each closed polyline as a window pane
+  //    of its own bounding box.
+  const explicitOpenings = polylines.filter(
+    (p) => p.closed && p.vertices.length >= 3 && matchesAny(p.layer, OPENING_LAYER_PATTERNS),
+  );
+  for (const op of explicitOpenings) {
+    const m = extrudePolygonToMesh(
+      op.vertices,
+      PROCEDURAL_WINDOW_SILL_MM,
+      PROCEDURAL_WINDOW_HEIGHT_MM,
+      'window',
+      scale,
+    );
+    if (m) {
+      meshes.push(m);
+      byType.window += 1;
+    }
+  }
+
   if (meshes.length === 0) {
     warnings.push(
       'DXF contained no closed polylines we could extrude. Expected at least one wall/floor outline.',
@@ -211,6 +247,56 @@ export function buildBimFromDxf(input: ArrayBuffer | string): DxfBimBuildResult 
   }
 
   return { meshes, layers, byType, warnings };
+}
+
+/**
+ * Walk a wall polygon edge by edge and stamp procedural window panes every
+ * `PROCEDURAL_WINDOW_SPACING_MM` along edges longer than 4 m. Each window is
+ * a thin extruded rectangle perpendicular to the wall edge so the existing
+ * `getMaterialForElement` glass material picks up the blue tint.
+ */
+function addProceduralWindows(
+  verts: RawVertex[],
+  scale: number,
+  meshes: IfcMeshData[],
+  byType: Record<IfcElementType, number>,
+): void {
+  for (let i = 0; i < verts.length; i++) {
+    const a = verts[i];
+    const b = verts[(i + 1) % verts.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenMm = Math.hypot(dx, dy) * scale;
+    if (lenMm < 4000) continue;
+    const ux = dx / Math.hypot(dx, dy);
+    const uy = dy / Math.hypot(dx, dy);
+    // Outward normal (right-hand of edge direction).
+    const nx = uy;
+    const ny = -ux;
+    const winsPerEdge = Math.max(1, Math.floor(lenMm / PROCEDURAL_WINDOW_SPACING_MM));
+    for (let w = 0; w < winsPerEdge; w++) {
+      const t = (w + 0.5) / winsPerEdge;
+      const cx = a.x + dx * t;
+      const cy = a.y + dy * t;
+      const halfWidthDxf = (PROCEDURAL_WINDOW_WIDTH_MM / scale) / 2;
+      const thicknessDxf = 50 / scale; // 50 mm pane thickness for glass tile
+      const p1: RawVertex = { x: cx - ux * halfWidthDxf - nx * thicknessDxf * 0.5, y: cy - uy * halfWidthDxf - ny * thicknessDxf * 0.5 };
+      const p2: RawVertex = { x: cx + ux * halfWidthDxf - nx * thicknessDxf * 0.5, y: cy + uy * halfWidthDxf - ny * thicknessDxf * 0.5 };
+      const p3: RawVertex = { x: cx + ux * halfWidthDxf + nx * thicknessDxf * 0.5, y: cy + uy * halfWidthDxf + ny * thicknessDxf * 0.5 };
+      const p4: RawVertex = { x: cx - ux * halfWidthDxf + nx * thicknessDxf * 0.5, y: cy - uy * halfWidthDxf + ny * thicknessDxf * 0.5 };
+      const m = extrudePolygonToMesh(
+        [p1, p2, p3, p4],
+        PROCEDURAL_WINDOW_SILL_MM,
+        PROCEDURAL_WINDOW_HEIGHT_MM,
+        'window',
+        scale,
+      );
+      if (m) {
+        meshes.push(m);
+        byType.window += 1;
+      }
+    }
+  }
 }
 
 function emptyByType(): Record<IfcElementType, number> {
