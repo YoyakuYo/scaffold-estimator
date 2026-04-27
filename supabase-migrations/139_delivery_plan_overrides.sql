@@ -4,7 +4,8 @@
 -- the freshly-generated plan when the API responds.
 
 CREATE TABLE IF NOT EXISTS public.delivery_plan_overrides (
-  set_id uuid PRIMARY KEY REFERENCES public.drawing_sets(id) ON DELETE CASCADE,
+  -- FK to drawing_sets is added below when that table exists (migration 136).
+  set_id uuid PRIMARY KEY,
   /**
    * Shape:
    *   { trucks: [
@@ -16,6 +17,20 @@ CREATE TABLE IF NOT EXISTS public.delivery_plan_overrides (
   updated_by uuid REFERENCES public.users(id) ON DELETE SET NULL,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'delivery_plan_overrides_set_id_fkey'
+  ) THEN
+    RETURN;
+  END IF;
+  IF to_regclass('public.drawing_sets') IS NOT NULL THEN
+    ALTER TABLE public.delivery_plan_overrides
+      ADD CONSTRAINT delivery_plan_overrides_set_id_fkey
+      FOREIGN KEY (set_id) REFERENCES public.drawing_sets (id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 ALTER TABLE public.delivery_plan_overrides ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS delivery_plan_overrides_service_role ON public.delivery_plan_overrides;
