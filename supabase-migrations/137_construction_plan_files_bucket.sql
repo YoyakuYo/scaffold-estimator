@@ -3,6 +3,12 @@
 -- previewed by the user. The backend uses the service role key, which bypasses
 -- RLS — but we still set authenticated-only policies as defense in depth.
 
+-- Hosted Supabase rejects some storage DDL (e.g. DROP POLICY) unless delete
+-- protection GUCs are set for the transaction. See storage.protect_delete().
+BEGIN;
+SELECT set_config('storage.allow_delete_query', 'true', true);
+SELECT set_config('storage.can_delete', 'true', true);
+
 -- 1) Create the bucket if it does not exist. Private (no public listing/read).
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('construction-plan-files', 'construction-plan-files', false)
@@ -26,3 +32,5 @@ CREATE POLICY construction_plan_files_authenticated_read
   ON storage.objects
   FOR SELECT
   USING (bucket_id = 'construction-plan-files' AND auth.role() = 'authenticated');
+
+COMMIT;

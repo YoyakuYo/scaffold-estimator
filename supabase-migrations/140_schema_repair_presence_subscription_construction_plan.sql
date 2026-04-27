@@ -240,6 +240,12 @@ CREATE POLICY delivery_plan_overrides_service_role
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');
 
+-- Hosted Supabase installs BEFORE DELETE triggers on storage.* that reject
+-- direct deletes unless a maintenance GUC is set (DROP POLICY can hit this).
+BEGIN;
+SELECT set_config('storage.allow_delete_query', 'true', true);
+SELECT set_config('storage.can_delete', 'true', true);
+
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('construction-plan-files', 'construction-plan-files', false)
 ON CONFLICT (id) DO NOTHING;
@@ -256,6 +262,8 @@ CREATE POLICY construction_plan_files_authenticated_read
   ON storage.objects
   FOR SELECT
   USING (bucket_id = 'construction-plan-files' AND auth.role() = 'authenticated');
+
+COMMIT;
 
 -- -------------------------------------------------------------------
 -- 5) Force PostgREST to reload its schema cache.
