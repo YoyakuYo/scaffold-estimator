@@ -3186,6 +3186,54 @@ export const translations = {
     drawingKind_unknown: { ja: '未分類', en: 'Unknown', fr: 'Non classé' },
   },
 
+  // ─── Phase 5: BIM Viewer ──────────────────────────────────
+  bimLanding: {
+    title: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
+    subtitle: {
+      ja: 'IFC ファイルをブラウザ上で 3D 表示します。データはサーバーに保存されません。',
+      en: 'Render IFC files in 3D right in the browser. Files never leave your machine.',
+      fr: 'Affichez vos fichiers IFC en 3D dans le navigateur. Les fichiers ne quittent jamais votre poste.',
+    },
+    lockedTitle: { ja: 'BIM ビューアは未契約です', en: 'BIM Viewer is locked', fr: 'BIM Viewer verrouillé' },
+    lockedBody: {
+      ja: 'このプロダクトは個別契約が必要です。「契約する」を押して進めてください。',
+      en: 'This product is sold separately. Subscribe to start using it.',
+      fr: "Ce produit est vendu séparément. Abonnez-vous pour l'utiliser.",
+    },
+    openViewerTitle: { ja: 'IFC を開く', en: 'Open an IFC file', fr: 'Ouvrir un fichier IFC' },
+    openViewerBody: {
+      ja: 'IFC をドラッグ＆ドロップ、またはファイルを選択してブラウザ上でレンダリングします。',
+      en: 'Drop an IFC file or pick one to render it locally in the browser.',
+      fr: 'Glissez-déposez un IFC ou choisissez un fichier pour le rendre localement.',
+    },
+    openViewerCta: { ja: 'ビューアを開く', en: 'Open viewer', fr: 'Ouvrir la visionneuse' },
+    privacyNote: {
+      ja: 'IFC は web-ifc によりブラウザ内で解析されます。ファイル本体はサーバーへ送信されません（アップロード履歴のみ記録）。',
+      en: 'IFC parsing runs locally in the browser via web-ifc. The raw file is not uploaded — only an audit-log entry is recorded.',
+      fr: "L'IFC est analysé localement par web-ifc. Le fichier brut n'est pas envoyé au serveur (seul un enregistrement d'audit est conservé).",
+    },
+  },
+
+  bimViewer: {
+    back: { ja: 'BIM ホームへ', en: 'Back to BIM home', fr: 'Retour à l’accueil BIM' },
+    title: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
+    openIfc: { ja: 'IFC を開く', en: 'Open IFC', fr: 'Ouvrir IFC' },
+    clear: { ja: 'クリア', en: 'Clear', fr: 'Effacer' },
+    unsupportedFormat: {
+      ja: 'IFC ファイルのみ対応しています（.ifc）。',
+      en: 'Only IFC files are supported (.ifc).',
+      fr: 'Seuls les fichiers IFC sont pris en charge (.ifc).',
+    },
+    parseFailed: {
+      ja: 'IFC の解析に失敗しました。',
+      en: 'IFC parsing failed.',
+      fr: "L'analyse de l'IFC a échoué.",
+    },
+    statsTitle: { ja: '読み込み結果', en: 'Load result', fr: 'Résultat de chargement' },
+    meshCount: { ja: 'メッシュ数', en: 'Meshes', fr: 'Mailles' },
+    parseDuration: { ja: '解析時間', en: 'Parse time', fr: 'Temps de parsing' },
+  },
+
   // ─── Phase 4: Construction Plan schedule + delivery ────────
   constructionPlanSchedule: {
     title: { ja: '工程表・搬入計画', en: 'Schedule & delivery plan', fr: 'Planning et livraisons' },
