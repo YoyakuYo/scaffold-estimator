@@ -17,6 +17,10 @@ interface ProductCardProps {
   access: ProductAccess<unknown> | undefined;
   /** Where the primary CTA goes when the product is unlocked. */
   openHref: string;
+  /** Clicking the card (outside links) focuses this product on the dashboard. */
+  onActivate?: () => void;
+  /** Larger layout when the dashboard is in single-product focus mode. */
+  isFocusLayout?: boolean;
 }
 
 const PRODUCT_ICON: Record<ProductCode, React.ComponentType<{ className?: string }>> = {
@@ -31,7 +35,7 @@ const PRODUCT_ACCENT: Record<ProductCode, { from: string; to: string; ring: stri
   construction_plan: { from: 'from-amber-500/10', to: 'to-amber-50', ring: 'ring-amber-200' },
 };
 
-export function ProductCard({ product, access, openHref }: ProductCardProps) {
+export function ProductCard({ product, access, openHref, onActivate, isFocusLayout }: ProductCardProps) {
   const { t } = useI18n();
   const Icon = PRODUCT_ICON[product];
   const accent = PRODUCT_ACCENT[product];
@@ -58,19 +62,42 @@ export function ProductCard({ product, access, openHref }: ProductCardProps) {
   const unlocked = !!access?.hasAccess;
   const reason = access?.reason ?? 'no_subscription';
 
+  const activate = () => onActivate?.();
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('a')) return;
+    activate();
+  };
+
+  const handleCardKeyDown = (e: React.KeyboardEvent) => {
+    if (!onActivate) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if ((e.target as HTMLElement).closest('a')) return;
+    e.preventDefault();
+    activate();
+  };
+
   return (
     <div
-      className={`relative bg-gradient-to-br ${accent.from} ${accent.to} rounded-2xl border border-gray-200 ring-1 ${accent.ring} ring-opacity-50 overflow-hidden flex flex-col`}
+      role={onActivate ? 'button' : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onClick={onActivate ? handleCardClick : undefined}
+      onKeyDown={onActivate ? handleCardKeyDown : undefined}
+      className={`relative bg-gradient-to-br ${accent.from} ${accent.to} rounded-2xl border border-gray-200 ring-1 ${accent.ring} ring-opacity-50 overflow-hidden flex flex-col ${onActivate ? 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-gray-400' : ''} ${isFocusLayout ? 'shadow-md' : ''}`}
     >
-      <div className="p-6 flex-1 flex flex-col">
+      <div className={`${isFocusLayout ? 'p-8 sm:p-10' : 'p-6'} flex-1 flex flex-col`}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-xl bg-white shadow-sm flex items-center justify-center">
               <Icon className="h-6 w-6 text-gray-700" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">{t('products', titleKey)}</h3>
-              <p className="text-xs text-gray-500 max-w-[14rem]">{t('products', taglineKey)}</p>
+              <h3 className={`font-bold text-gray-900 ${isFocusLayout ? 'text-xl sm:text-2xl' : 'text-lg'}`}>
+                {t('products', titleKey)}
+              </h3>
+              <p className={`text-gray-500 max-w-[20rem] ${isFocusLayout ? 'text-sm mt-1' : 'text-xs max-w-[14rem]'}`}>
+                {t('products', taglineKey)}
+              </p>
             </div>
           </div>
           {unlocked ? (
@@ -86,7 +113,9 @@ export function ProductCard({ product, access, openHref }: ProductCardProps) {
           )}
         </div>
 
-        <p className="text-sm text-gray-700 mb-6 flex-1">{t('products', bodyKey)}</p>
+        <p className={`text-gray-700 mb-6 flex-1 ${isFocusLayout ? 'text-base leading-relaxed' : 'text-sm'}`}>
+          {t('products', bodyKey)}
+        </p>
 
         {unlocked ? (
           <Link

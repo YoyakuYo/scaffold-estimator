@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-configs';
+import type { ProductCode } from '@/lib/api/access';
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { messagesApi, ConversationWithUser } from '@/lib/api/messages';
 import { useI18n } from '@/lib/i18n';
@@ -37,7 +38,6 @@ import {
   Send,
   CheckCircle,
   XCircle,
-  HardHat,
   Sparkles,
   ClipboardList,
   Table2,
@@ -461,6 +461,7 @@ function UserDashboard() {
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [focusedProduct, setFocusedProduct] = useState<ProductCode | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -579,22 +580,32 @@ function UserDashboard() {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10 space-y-10">
-        {/* ── Hero ── */}
-        <header className="text-center sm:text-left max-w-3xl mx-auto sm:mx-0">
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
-            <HardHat className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
-            {t('dashboard', 'siteHubBadge')}
-          </span>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
-            {t('dashboard', 'title')}
-          </h1>
-          <p className="mt-3 text-base text-slate-600 leading-relaxed">{t('dashboard', 'dashboardIntro')}</p>
-          <p className="mt-2 text-sm text-slate-500">{t('dashboard', 'subtitle')}</p>
-        </header>
+        {!focusedProduct && (
+          <>
+            {/* ── Hero ── */}
+            <header className="text-center sm:text-left max-w-3xl mx-auto sm:mx-0">
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+                <Layers className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+                {t('dashboard', 'siteHubBadge')}
+              </span>
+              <h1 className="mt-4 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
+                {t('dashboard', 'title')}
+              </h1>
+              <p className="mt-3 text-base text-slate-600 leading-relaxed">{t('dashboard', 'dashboardIntro')}</p>
+              <p className="mt-2 text-sm text-slate-500">{t('dashboard', 'subtitle')}</p>
+            </header>
+          </>
+        )}
 
         {/* ── Phase 2: 3-card product portal ── */}
-        <ProductPortal />
+        <ProductPortal
+          focusedProduct={focusedProduct}
+          onFocusProduct={setFocusedProduct}
+          onClearFocus={() => setFocusedProduct(null)}
+        />
 
+        {!focusedProduct && (
+          <>
         {/* ── End-to-end flow ── */}
         <section
           className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
@@ -1003,6 +1014,8 @@ function UserDashboard() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

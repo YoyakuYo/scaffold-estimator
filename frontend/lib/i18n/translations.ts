@@ -37,10 +37,16 @@ export const translations = {
   products: {
     sectionTitle: { ja: 'プロダクト', en: 'Products', fr: 'Produits' },
     sectionSubtitle: {
-      ja: 'すべてのプロダクトを表示。利用するには契約が必要です。',
-      en: 'All products visible. Subscribe to unlock the ones you need.',
-      fr: 'Tous les produits sont visibles. Abonnez-vous pour activer ceux dont vous avez besoin.',
+      ja: 'カードをクリックするとそのプロダクトだけに集中表示され、他のダッシュボード領域は非表示になります。戻るで一覧に復帰します。',
+      en: 'Click a card to focus that product—the rest of the dashboard hides until you go back. Subscribe to unlock modules you need.',
+      fr: 'Cliquez une carte pour la mettre en avant — le reste du tableau de bord se masque jusqu’au retour. Abonnez-vous pour activer les modules.',
     },
+    sectionSubtitleFocused: {
+      ja: '「開く」で各プロダクトへ。一覧に戻るとワークフローや案件履歴も再表示されます。',
+      en: 'Use Open to enter the product. Back restores the full dashboard, workflow, and scaffold job history.',
+      fr: 'Ouvrez le module avec « Ouvrir ». Retour réaffiche le tableau de bord complet, le flux et l’historique des dossiers échafaudage.',
+    },
+    backToAll: { ja: 'すべてのプロダクトに戻る', en: 'All products', fr: 'Tous les produits' },
     badgeActive: { ja: '有効', en: 'Active', fr: 'Actif' },
     badgeTrial: { ja: 'トライアル中', en: 'Trial', fr: 'Essai' },
     badgeLocked: { ja: '未契約', en: 'Locked', fr: 'Verrouillé' },
@@ -61,9 +67,9 @@ export const translations = {
       fr: 'Quantités et devis échafaudage kusabi/cadres',
     },
     productScaffoldBody: {
-      ja: '図面から数量を自動算出し、見積・2D/3D図・Excel出力までワンストップ。',
-      en: 'Quantity takeoff from drawings, quotation, 2D/3D views and Excel export, end to end.',
-      fr: 'Quantitatif depuis les plans, devis, vues 2D/3D et export Excel, de bout en bout.',
+      ja: 'DXF・PDF・画像・IFC から外形を取得（IFC は決定的パース）。Premium では壁スケジュール（JSON/CSV/テキスト）取込も可。見積・2D/3D・Excel まで一気通貫。',
+      en: 'Footprint from DXF, PDF, images, or IFC (deterministic IFC mesh). Premium: import companion wall schedules (JSON v1, CSV, span text). Quotation, 2D/3D, and Excel in one flow.',
+      fr: 'Contour depuis DXF, PDF, images ou IFC (IFC déterministe). Premium : import de carnets de murs (JSON v1, CSV, texte). Devis, vues 2D/3D et Excel.',
     },
 
     productBim: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
@@ -85,9 +91,9 @@ export const translations = {
       fr: 'Métré poteaux/poutres/escaliers + planning et livraisons',
     },
     productConstructionPlanBody: {
-      ja: '図面から階別・工区別に部材を抽出し、工程と日次搬入計画を Excel で出力します。',
-      en: 'Extract elements per floor and block, then output schedule + daily truck plan to Excel.',
-      fr: "Extrayez les éléments par étage et zone, puis exportez planning et plan de livraisons en Excel.",
+      ja: '図面から階別・工区別に部材を抽出。工程・日次搬入計画を Excel 化。図面ファイルの保管、搬入計画の上書き、チームのオンライン表示（プレゼンス）に対応。',
+      en: 'Per-floor / per-block takeoff, schedule, and daily truck plan to Excel—plus plan file storage, delivery-plan overrides, and who is online on a plan (presence).',
+      fr: 'Métré par étage et zone, planning et livraisons quotidiennes en Excel — fichiers de plan, ajustements du plan de livraison, présence en ligne.',
     },
   },
 
@@ -260,16 +266,28 @@ export const translations = {
 
   // ─── Dashboard ─────────────────────────────────────────────────
   dashboard: {
-    title: { ja: '仮設材積算システム', en: 'Scaffold Material Estimation System', fr: "Système d'estimation des matériaux d'échafaudage" },
-    subtitle: { ja: 'くさび式・枠組足場の材料数量計算・見積・コスト計算・2D/3D組立図作成・エクスポート', en: 'Kusabi & frame scaffold: material calc, quotation, cost analysis, 2D/3D assembly & export', fr: 'Échafaudage kusabi & cadres : calcul matériaux, devis, coûts, assemblage 2D/3D et export' },
+    title: {
+      ja: '仮設材積算・BIM・建方計画ワークスペース',
+      en: 'Quantity, BIM & construction planning',
+      fr: 'Quantités, BIM et planning chantier',
+    },
+    subtitle: {
+      ja: '足場積算（くさび式・枠組）・IFC/DXF の BIM ビューア・建方・搬入計画（積算・工程・トラック）を同一ハブから利用できます。',
+      en: 'Scaffold BOM (kusabi & frame), IFC/DXF BIM viewer, and construction / delivery planning (takeoff, schedule, trucks)—from one hub.',
+      fr: 'Nomenclature échafaudage (kusabi & cadres), visionneuse BIM IFC/DXF, et planning chantier / livraisons — un seul hub.',
+    },
     workflow: { ja: 'ワークフロー', en: 'Workflow', fr: 'Workflow' },
     step1: { ja: '1. 入力（図面/手入力）', en: '1. Input (Drawing/Manual)', fr: '1. Saisie (plan/saisie manuelle)' },
     step2: { ja: '2. 積算計算', en: '2. Calculate', fr: '2. Calcul' },
     step3: { ja: '3. 見積・コスト', en: '3. Quotation & Cost', fr: '3. Devis et coûts' },
     step4: { ja: '4. 2D/3D組立図', en: '4. 2D/3D Assembly', fr: '4. Assemblage 2D/3D' },
     step5: { ja: '5. エクスポート（Excel/PDF/CAD/BIM）', en: '5. Export (Excel/PDF/CAD/BIM)', fr: '5. Export (Excel/PDF/CAD/BIM)' },
-    dashboardIntro: { ja: 'ここから足場積算・見積・2D/3Dの作業を開始できます。', en: 'Start scaffold calculation, quotations, and 2D/3D from here.', fr: 'Lancez le calcul d\'échafaudage, les devis et les vues 2D/3D depuis ici.' },
-    quickStartTitle: { ja: '足場積算を開始', en: 'Start Scaffold Estimation', fr: 'Démarrer l\'estimation échafaudage' },
+    dashboardIntro: {
+      ja: '下のプロダクトカードから足場積算・BIM・建方計画のいずれかを開けます。カードを選ぶとそのモジュールに集中表示されます。',
+      en: 'Pick a product card below for scaffold takeoff, the BIM viewer, or construction planning. Click a card to focus it and hide the rest of the page.',
+      fr: 'Choisissez une carte : échafaudage, BIM ou planning. Cliquez pour la mettre en avant et masquer le reste de la page.',
+    },
+    quickStartTitle: { ja: '足場積算へ', en: 'Scaffold takeoff', fr: 'Métré échafaudage' },
     quickStartDesc: { ja: '図面アップロード or 手動入力 → 寸法を確認・編集 → 積算計算', en: 'Upload drawing or enter manually → Review & edit dimensions → Calculate', fr: 'Téléverser un plan ou saisir → Vérifier/éditer les cotes → Calculer' },
     quickStep1Title: { ja: '図面アップロード or 手入力', en: 'Upload Drawing or Enter Manually', fr: 'Téléverser un plan ou saisir manuellement' },
     quickStep1Desc: { ja: 'DXF/PDF/画像をアップロードして寸法を取得。手入力やクイックビルダーも可能。', en: 'Upload DXF/PDF/images, or type dimensions directly with the quick builder.', fr: 'Téléversez DXF/PDF/images ou saisissez les cotes avec le constructeur rapide.' },
@@ -439,7 +457,7 @@ export const translations = {
     manageBilling: { ja: '請求を管理', en: 'Manage Billing', fr: 'Gérer la facturation' },
     trialRemaining: { ja: '無料トライアル残り {days} 日', en: 'Free trial: {days} day(s) remaining', fr: 'Essai gratuit : {days} jour(s) restant(s)' },
     trialEnded: { ja: 'トライアル期間が終了しました。請求ページで有料プランを開始してください。', en: 'Your trial has ended. Start a paid plan from Billing to continue using core features.', fr: "Votre essai est terminé. Démarrez une offre payante depuis la facturation pour continuer à utiliser les fonctions principales." },
-    siteHubBadge: { ja: '足場積算ワークスペース', en: 'Scaffold workspace', fr: 'Espace échafaudage' },
+    siteHubBadge: { ja: 'プロダクトハブ', en: 'Product hub', fr: 'Hub produits' },
     quickAccess: { ja: 'クイックアクセス', en: 'Quick access', fr: 'Accès rapide' },
     shortcutQuotationsDesc: { ja: '保存した見積の一覧・管理', en: 'View and manage saved quotations', fr: 'Voir et gérer les devis enregistrés' },
     shortcutBillingDesc: { ja: 'プラン・お支払い方法', en: 'Plan and payment method', fr: 'Offre et moyen de paiement' },
