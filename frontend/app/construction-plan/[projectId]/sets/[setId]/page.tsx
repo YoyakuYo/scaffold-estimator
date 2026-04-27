@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
+import { SteelRulePreviewButton } from '@/components/steel-extraction/SteelRulePreviewButton';
 import {
   ELEMENT_LINE_KINDS,
   STRUCTURAL_ELEMENT_TYPES,
@@ -637,6 +638,12 @@ export default function ConstructionPlanSetReviewPage() {
                             >
                               <Download className="h-4 w-4" />
                             </button>
+                            <SteelRulePreviewButton
+                              setId={setId}
+                              fileId={f.id}
+                              filename={f.filename}
+                              defaultLevel={f.level ?? null}
+                            />
                             <button
                               onClick={() => reclassifyAi.mutate(f.id)}
                               disabled={

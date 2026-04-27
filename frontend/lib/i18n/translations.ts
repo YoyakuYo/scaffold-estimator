@@ -3247,6 +3247,17 @@ export const translations = {
     colSource: { ja: '判定', en: 'Source', fr: 'Source' },
     delete: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
     download: { ja: 'ダウンロード', en: 'Download', fr: 'Télécharger' },
+    steelRulePreviewTitle: {
+      ja: '鉄骨ルール抽出プレビュー（デバッグ）',
+      en: 'Steel rule extraction preview (debug)',
+      fr: 'Aperçu extraction acier (règles, debug)',
+    },
+    steelRulePreviewClose: { ja: '閉じる', en: 'Close', fr: 'Fermer' },
+    steelRulePreviewEmpty: {
+      ja: '表示できるSVGがありません。',
+      en: 'No SVG to display.',
+      fr: 'Aucun SVG à afficher.',
+    },
     aiReclassify: {
       ja: 'AIで題名欄から再分類',
       en: 'AI: classify from title block',
