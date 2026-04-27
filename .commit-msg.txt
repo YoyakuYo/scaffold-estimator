@@ -1,40 +1,53 @@
-feat(platform): phase 2 multi-product subscriptions + dashboard portal
+feat(construction-plan): phase 3 structural takeoff foundation (no-AI default)
 
-Subscriptions become per-product (scaffold / bim / construction_plan). Existing
-single-product flow stays scaffold-scoped; new products land cleanly without
-retrofitting later.
+Construction Plan product gets its end-to-end takeoff foundation:
+projects, drawing-set batch uploads with deterministic auto-classification,
+and a per-floor x per-block manual element editor for the eight structural
+categories. Gated behind @RequiresProduct('construction_plan') from Phase 2.
 
 Backend
-- Migration 135: subscriptions.product_code (default 'scaffold'), drop unique
-  on user_id alone, add unique (user_id, product_code).
-- Subscription entity gains productCode; all legacy queries scoped to
-  product_code='scaffold' to preserve existing behaviour.
-- New backend/src/modules/subscription/products.ts registry: ProductCode,
-  PRODUCTS, priceIdToProduct(), productForRoute(). Stripe price IDs read from
-  env (STRIPE_PRICE_SCAFFOLD_MONTHLY, STRIPE_PRICE_BIM_MONTHLY, etc.).
-- plan-capabilities.ts gains EffectiveAccess (keyed by product), per-product
-  Caps types, locked-access factories, bimCapsForPlan / constructionPlanCapsForPlan.
-- SubscriptionService.resolveEffectiveAccess(userId, role) returns one
-  ProductAccess slot per product. Superadmin / subscription-exempt users get
-  full access on every product. New helper getCompanyProductSubscriptions().
-- New @RequiresProduct decorator + ProductAccessGuard. 403 body embeds
-  productCode so the frontend can deep-link the user to /billing#<code>.
-- New endpoint GET /subscriptions/me/access feeds the dashboard portal.
+- Migration 136 creates construction_plan_projects, drawing_sets,
+  drawing_set_files, and extracted_elements with service-role RLS.
+- New backend/src/modules/structural-takeoff with:
+  - element-types.ts (StructuralElementType, DrawingKind, sources).
+  - drawing-classifier.ts: deterministic filename heuristics for 1F-RF/B1F/PH,
+    工区, 伏図/柱リスト/梁リスト/階段詳細/EVシャフト/階高表 etc. Pure regex,
+    no AI key required, returns confidence 0-1.
+  - Entities for project, drawing set, drawing set file, extracted element.
+  - StructuralTakeoffService: project CRUD, set lifecycle, batch file upload
+    with auto-classification, manual classification override (manual source
+    is sticky, never overwritten by re-runs), element upsert/delete, and a
+    composite getSetReview() for the front-end one-shot fetch.
+  - StructuralTakeoffController: REST surface
+    GET/POST /structural-takeoff/projects, project CRUD, set CRUD,
+    multi-file POST /sets/:id/files (FilesInterceptor, 30 files / 50 MB each),
+    PATCH /sets/:id/files/:fileId for classification overrides, element
+    upsert/delete. Records every batch upload in upload_events so the
+    superadmin cockpit shows construction_plan uploads in the unified feed.
 
 Frontend
-- lib/api/access.ts: typed accessApi.getEffectiveAccess() + ProductCode helpers
-  (productForRoute, isProductUnlocked).
-- New components/product-portal/{product-card,product-portal,billing-product-overview}.tsx.
-  ProductPortal renders three cards always; locked cards show a Subscribe CTA
-  (deep-linked to /billing#<code>); active/trial cards show a primary "Open"
-  action linking to the product UI.
-- Dashboard hero now hosts <ProductPortal /> right above the existing scaffold
-  workflow, so existing users see the new BIM / Construction Plan cards with
-  locked overlays from day one.
-- Billing page gains <BillingProductOverview /> at the top + scrollable
-  #payment-options anchor so deep-links from the dashboard land correctly.
-- ja/en/fr translations for the new products section.
+- lib/api/structural-takeoff.ts: typed client + StructuralElementType /
+  DrawingKind constants.
+- /construction-plan home page: lists projects (gated, locked overlay when
+  the user has not subscribed) and a create-project form with blocks/levels
+  CSV input.
+- /construction-plan/[projectId] page: project header with level/block
+  badges + drawing-set list + new-set button.
+- /construction-plan/[projectId]/sets/[setId] review page:
+  - Multi-file drag-and-drop upload (PDF/image/DXF/DWG/JWW/Excel/CSV).
+  - Auto-classification grid showing per-file kind/level/block + confidence;
+    user can override and provenance switches to "manual".
+  - Per-floor x per-block element editor for the 8 categories
+    (柱 / 大梁 / 小梁 / 耐風梁 / ブレース / 階段 / エレベーター / デッキ);
+    add rows from quick-add buttons; "Save all" performs a single upsert.
+- ja/en/fr keys for landing, project, and review screens.
 
 Quality
 - Backend tsc --noEmit: passes.
 - Frontend tsc --noEmit: passes.
+
+Deferred to later phases (per plan):
+- Mode 2 Excel/CSV element import with header synonym map.
+- Mode 3 DXF layer-based extraction.
+- Mode 4 AI vision (Premium add-on, optional).
+- Phase 4 schedule + truck-plan + 8-sheet Excel.

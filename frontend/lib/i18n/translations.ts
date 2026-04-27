@@ -3002,6 +3002,156 @@ export const translations = {
     },
   },
 
+  // ─── Phase 3: Construction Plan (landing / project / review) ─
+  constructionPlanLanding: {
+    title: { ja: '建方・搬入計画', en: 'Construction Plan', fr: 'Plan de construction' },
+    subtitle: {
+      ja: '案件ごとに図面をアップロードし、階・工区別に部材を集計します。',
+      en: 'Upload drawings per project; tally elements by floor and block.',
+      fr: 'Importez les plans par chantier ; comptez les éléments par étage et zone.',
+    },
+    lockedTitle: { ja: 'まだ契約していません', en: 'Subscription required', fr: 'Abonnement requis' },
+    lockedBody: {
+      ja: 'このプロダクトは個別契約が必要です。「契約する」を押すと、ご契約手続きに進みます。',
+      en: 'This product is sold separately. Subscribe to start using it.',
+      fr: "Ce produit est vendu séparément. Abonnez-vous pour l'utiliser.",
+    },
+    newProject: { ja: '新しい案件', en: 'New project', fr: 'Nouveau chantier' },
+    newProjectTitle: { ja: '案件を作成', en: 'Create project', fr: 'Créer un chantier' },
+    projectName: { ja: '案件名', en: 'Project name', fr: 'Nom du chantier' },
+    siteAddress: { ja: '現場住所', en: 'Site address', fr: 'Adresse du site' },
+    blocks: { ja: '工区', en: 'Blocks', fr: 'Zones' },
+    blocksHint: {
+      ja: 'A,B,C のようにカンマ区切り。空欄なら工区なしで進められます。',
+      en: 'Comma-separated, e.g. A,B,C. Leave empty to skip blocks.',
+      fr: 'Séparé par des virgules, ex. A,B,C. Vide pour ignorer.',
+    },
+    levels: { ja: '階', en: 'Levels', fr: 'Étages' },
+    levelsHint: {
+      ja: 'カンマ区切り（1F,2F,…,RF）。',
+      en: 'Comma-separated (1F,2F,…,RF).',
+      fr: 'Séparés par des virgules (1F,2F,…,RF).',
+    },
+    cancel: { ja: 'キャンセル', en: 'Cancel', fr: 'Annuler' },
+    create: { ja: '作成', en: 'Create', fr: 'Créer' },
+    createFailed: {
+      ja: '作成に失敗しました。',
+      en: 'Could not create the project.',
+      fr: 'Impossible de créer le chantier.',
+    },
+    project: { ja: '案件', en: 'Project', fr: 'Chantier' },
+    emptyTitle: {
+      ja: 'まだ案件がありません',
+      en: 'No projects yet',
+      fr: 'Aucun chantier pour le moment',
+    },
+    emptyHint: {
+      ja: '右上の「新しい案件」から作成してください。',
+      en: 'Create one from "New project" above.',
+      fr: 'Créez-en un depuis « Nouveau chantier » ci-dessus.',
+    },
+  },
+
+  constructionPlanProject: {
+    back: { ja: '案件一覧へ', en: 'Back to projects', fr: 'Retour aux chantiers' },
+    blockLabel: { ja: '工区', en: 'Block', fr: 'Zone' },
+    setsTitle: { ja: 'アップロードバッチ', en: 'Drawing sets', fr: 'Lots de plans' },
+    newSet: { ja: '新しいバッチ', en: 'New set', fr: 'Nouveau lot' },
+    untitledSet: { ja: '未命名', en: 'Untitled', fr: 'Sans titre' },
+    noSetsTitle: {
+      ja: 'まだバッチがありません',
+      en: 'No drawing sets yet',
+      fr: 'Aucun lot de plans pour le moment',
+    },
+    noSetsHint: {
+      ja: '「新しいバッチ」から、図面をまとめてアップロードできます。',
+      en: 'Create a set to upload multiple drawings at once.',
+      fr: 'Créez un lot pour téléverser plusieurs plans en une fois.',
+    },
+    createSetFailed: {
+      ja: 'バッチの作成に失敗しました。',
+      en: 'Could not create the drawing set.',
+      fr: 'Impossible de créer le lot.',
+    },
+  },
+
+  constructionPlanReview: {
+    back: { ja: '案件へ戻る', en: 'Back to project', fr: 'Retour au chantier' },
+    setLabel: { ja: 'バッチ', en: 'Set', fr: 'Lot' },
+    uploadTitle: {
+      ja: '図面アップロード（自動分類）',
+      en: 'Upload drawings (auto-classified)',
+      fr: 'Importer les plans (classés automatiquement)',
+    },
+    addFiles: { ja: 'ファイルを追加', en: 'Add files', fr: 'Ajouter des fichiers' },
+    dropTitle: {
+      ja: 'ここにドロップ、またはファイル追加',
+      en: 'Drop files here, or click Add files',
+      fr: 'Déposez ici, ou cliquez sur Ajouter',
+    },
+    dropHint: {
+      ja: 'PDF / 画像 / DXF / Excel / CSV を一度にアップロードできます。ファイル名から階と工区を自動判定します。',
+      en: 'PDF / image / DXF / Excel / CSV in batch. Floor & block inferred from filename.',
+      fr: 'PDF / image / DXF / Excel / CSV en lot. Étage et zone déduits du nom.',
+    },
+    colFile: { ja: 'ファイル', en: 'File', fr: 'Fichier' },
+    colKind: { ja: '種別', en: 'Kind', fr: 'Type' },
+    colLevel: { ja: '階', en: 'Level', fr: 'Étage' },
+    colBlock: { ja: '工区', en: 'Block', fr: 'Zone' },
+    colSource: { ja: '判定', en: 'Source', fr: 'Source' },
+    delete: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
+    elementsTitle: {
+      ja: '部材集計（手動入力）',
+      en: 'Element takeoff (manual entry)',
+      fr: 'Métré (saisie manuelle)',
+    },
+    saveAll: { ja: 'まとめて保存', en: 'Save all', fr: 'Tout enregistrer' },
+    saveFailed: {
+      ja: '保存に失敗しました。',
+      en: 'Could not save.',
+      fr: 'Échec de la sauvegarde.',
+    },
+    loadFailed: {
+      ja: '読み込みに失敗しました。',
+      en: 'Could not load this set.',
+      fr: 'Impossible de charger ce lot.',
+    },
+    block: { ja: '工区', en: 'Block', fr: 'Zone' },
+    noLevels: {
+      ja: '階が定義されていません。案件設定から追加してください。',
+      en: 'No levels configured. Add some from the project settings.',
+      fr: 'Aucun étage défini. Ajoutez-en depuis les paramètres du chantier.',
+    },
+    elementType: { ja: '部材', en: 'Element', fr: 'Élément' },
+    label: { ja: '符号', en: 'Mark', fr: 'Repère' },
+    section: { ja: '断面', en: 'Section', fr: 'Section' },
+    qty: { ja: '数量', en: 'Qty', fr: 'Qté' },
+    grid: { ja: '通り芯', en: 'Grid', fr: 'Trame' },
+    emptyAddBelow: {
+      ja: 'まだ部材がありません。下のボタンから追加してください。',
+      en: 'No elements yet. Add one from the buttons below.',
+      fr: 'Aucun élément. Ajoutez-en avec les boutons ci-dessous.',
+    },
+
+    elementType_hashira: { ja: '柱', en: 'Column (柱)', fr: 'Poteau (柱)' },
+    elementType_oobari: { ja: '大梁', en: 'Main beam (大梁)', fr: 'Poutre principale (大梁)' },
+    elementType_kobari: { ja: '小梁', en: 'Small beam (小梁)', fr: 'Poutre secondaire (小梁)' },
+    elementType_taifubari: { ja: '耐風梁', en: 'Wind beam (耐風梁)', fr: 'Poutre antivent (耐風梁)' },
+    elementType_brace: { ja: 'ブレース', en: 'Brace', fr: 'Contreventement' },
+    elementType_kaidan: { ja: '階段', en: 'Stair (階段)', fr: 'Escalier (階段)' },
+    elementType_elevator: { ja: 'エレベーター', en: 'Elevator (EV)', fr: 'Ascenseur (EV)' },
+    elementType_deck: { ja: 'デッキ', en: 'Deck plate (デッキ)', fr: 'Plancher (デッキ)' },
+
+    drawingKind_framing_plan: { ja: '構造伏図', en: 'Framing plan (伏図)', fr: 'Plan de structure (伏図)' },
+    drawingKind_column_list: { ja: '柱リスト', en: 'Column list (柱リスト)', fr: 'Liste poteaux (柱リスト)' },
+    drawingKind_beam_list: { ja: '梁リスト', en: 'Beam list (梁リスト)', fr: 'Liste poutres (梁リスト)' },
+    drawingKind_stair_detail: { ja: '階段詳細', en: 'Stair detail (階段)', fr: 'Détail escalier (階段)' },
+    drawingKind_elevator_shaft: { ja: 'EVシャフト', en: 'Elevator shaft (EV)', fr: 'Cage ascenseur (EV)' },
+    drawingKind_level_diagram: { ja: '階高表', en: 'Level diagram (階高表)', fr: 'Diagramme étages (階高表)' },
+    drawingKind_general: { ja: '一般図', en: 'General drawing', fr: 'Plan général' },
+    drawingKind_unknown: { ja: '未分類', en: 'Unknown', fr: 'Non classé' },
+  },
+
   // ─── Company verification (Superadmin) ─────────────────────
   companyVerify: {
     badge: { ja: '管理者用', en: 'Superadmin', fr: 'Super admin' },

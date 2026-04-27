@@ -20,6 +20,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { VisionBimModule } from './modules/vision-bim/vision-bim.module';
 import { TeamChatModule } from './modules/team-chat/team-chat.module';
 import { PresenceModule } from './modules/presence/presence.module';
+import { StructuralTakeoffModule } from './modules/structural-takeoff/structural-takeoff.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { PresenceModule } from './modules/presence/presence.module';
     VisionBimModule,
     TeamChatModule,
     PresenceModule,
+    StructuralTakeoffModule,
   ],
   providers: [
     {
