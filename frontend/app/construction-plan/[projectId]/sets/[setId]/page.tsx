@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowRight,
   Upload,
   Loader2,
   Trash2,
@@ -17,6 +18,7 @@ import {
   Calendar,
   FileSpreadsheet,
   Layers,
+  Truck,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
@@ -267,13 +269,25 @@ export default function ConstructionPlanSetReviewPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Calendar className="h-6 w-6 text-amber-600" />
-            {project.name}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {t('constructionPlanReview', 'setLabel')}: {set.name || set.id.slice(0, 8)}
-          </p>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Calendar className="h-6 w-6 text-amber-600" />
+                {project.name}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                {t('constructionPlanReview', 'setLabel')}: {set.name || set.id.slice(0, 8)}
+              </p>
+            </div>
+            <Link
+              href={`/construction-plan/${projectId}/sets/${setId}/schedule`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 text-sm"
+            >
+              <Truck className="h-4 w-4" />
+              {t('constructionPlanReview', 'openSchedule')}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap items-center gap-3">

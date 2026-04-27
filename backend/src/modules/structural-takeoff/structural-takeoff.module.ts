@@ -3,13 +3,19 @@ import { StructuralTakeoffController } from './structural-takeoff.controller';
 import { StructuralTakeoffService } from './structural-takeoff.service';
 import { ExcelElementImportService } from './extractors/excel-import.service';
 import { DxfLayerExtractorService } from './extractors/dxf-layer-extractor.service';
+import { ConstructionPlanExcelService } from './schedule/construction-plan-excel.service';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { PresenceModule } from '../presence/presence.module';
 
 @Module({
   imports: [SubscriptionModule, PresenceModule],
   controllers: [StructuralTakeoffController],
-  providers: [StructuralTakeoffService, ExcelElementImportService, DxfLayerExtractorService],
+  providers: [
+    StructuralTakeoffService,
+    ExcelElementImportService,
+    DxfLayerExtractorService,
+    ConstructionPlanExcelService,
+  ],
   exports: [StructuralTakeoffService],
 })
 export class StructuralTakeoffModule {}

@@ -3133,6 +3133,11 @@ export const translations = {
       fr: 'Aucun élément. Ajoutez-en avec les boutons ci-dessous.',
     },
 
+    openSchedule: {
+      ja: '工程・搬入計画を開く',
+      en: 'Open schedule & delivery plan',
+      fr: 'Ouvrir planning et livraisons',
+    },
     extractModesTitle: { ja: '一括抽出', en: 'Bulk extract', fr: 'Extraction en lot' },
     extractModesHint: {
       ja: 'Excel/CSV または DXF（レイヤー名）から数量を一括取込みできます。',
@@ -3179,6 +3184,43 @@ export const translations = {
     drawingKind_level_diagram: { ja: '階高表', en: 'Level diagram (階高表)', fr: 'Diagramme étages (階高表)' },
     drawingKind_general: { ja: '一般図', en: 'General drawing', fr: 'Plan général' },
     drawingKind_unknown: { ja: '未分類', en: 'Unknown', fr: 'Non classé' },
+  },
+
+  // ─── Phase 4: Construction Plan schedule + delivery ────────
+  constructionPlanSchedule: {
+    title: { ja: '工程表・搬入計画', en: 'Schedule & delivery plan', fr: 'Planning et livraisons' },
+    backToSet: { ja: 'バッチへ戻る', en: 'Back to set', fr: 'Retour au lot' },
+    loadFailed: {
+      ja: '工程の読み込みに失敗しました。先に部材を入力してください。',
+      en: 'Could not load the schedule. Make sure elements are entered first.',
+      fr: 'Impossible de charger le planning. Saisissez d’abord les éléments.',
+    },
+    startDate: { ja: '開始日', en: 'Start date', fr: 'Date de début' },
+    endDate: { ja: '終了日', en: 'End date', fr: 'Date de fin' },
+    workSaturday: { ja: '土曜稼働', en: 'Work Saturday', fr: 'Travailler samedi' },
+    downloadExcel: { ja: 'Excel ダウンロード', en: 'Download Excel', fr: 'Télécharger Excel' },
+    masterGantt: { ja: '工程表', en: 'Master schedule', fr: 'Planning' },
+    activities: { ja: '工程', en: 'activities', fr: 'tâches' },
+    deliveryPlanTitle: { ja: '搬入計画（便単位）', en: 'Delivery plan (per truck)', fr: 'Plan de livraisons (par camion)' },
+    monthlyTitle: { ja: '月次集計', en: 'Monthly aggregate', fr: 'Total mensuel' },
+    weeklyTitle: { ja: '週次集計', en: 'Weekly aggregate', fr: 'Total hebdomadaire' },
+    block: { ja: '工区', en: 'Block', fr: 'Zone' },
+    level: { ja: '階', en: 'Level', fr: 'Étage' },
+    element: { ja: '部材', en: 'Element', fr: 'Élément' },
+    date: { ja: '日付', en: 'Date', fr: 'Date' },
+    dow: { ja: '曜日', en: 'Day', fr: 'Jour' },
+    binNo: { ja: '便No', en: 'Bin #', fr: 'Bin #' },
+    truckType: { ja: '車種', en: 'Truck', fr: 'Camion' },
+    items: { ja: '内訳', en: 'Items', fr: 'Détail' },
+    pieces: { ja: '本数', en: 'Pieces', fr: 'Pièces' },
+    weightT: { ja: '重量(t)', en: 'Weight (t)', fr: 'Poids (t)' },
+    lengthM: { ja: '長さ(m)', en: 'Length (m)', fr: 'Longueur (m)' },
+    notes: { ja: '備考', en: 'Notes', fr: 'Notes' },
+    trucks: { ja: '便', en: 'trucks', fr: 'camions' },
+    trucksCount: { ja: '便数', en: 'Trucks', fr: 'Camions' },
+    days: { ja: '稼働日数', en: 'Working days', fr: 'Jours ouvrés' },
+    month: { ja: '月', en: 'Month', fr: 'Mois' },
+    isoWeek: { ja: '週', en: 'Week', fr: 'Semaine' },
   },
 
   // ─── Company verification (Superadmin) ─────────────────────

@@ -1,0 +1,58 @@
+feat(construction-plan): phase 4 schedule + truck plan + 8-sheet excel
+
+Construction Plan now produces a real schedule, a daily truck delivery
+plan, and an Excel workbook a foreman can print.
+
+Backend (backend/src/modules/structural-takeoff/schedule/)
+- jis-sections.ts: section weight catalog (H/I/RHS/CHS/L) with kg/m and a
+  typing-tolerant resolveKgPerM() that falls back to family averages when a
+  section string isn't in the catalog. pieceWeightKg() multiplies that by
+  per-element default piece lengths.
+- calendar.ts: working-calendar arithmetic (isWorking, next, add, range,
+  totalWorkingDaysBetween) with a seeded JP public-holiday list (2026/27)
+  and configurable Saturday/Sunday rules.
+- duration-template.ts: pieces-per-day per element type, slab cure delay,
+  block lag (二段乗り入れ), cycle order.
+- erection-sequencer.ts: block-aware CPM that aggregates extracted elements
+  per (block, level, type), runs cycle activities sequentially, schedules
+  optional kaidan/elevator in parallel, applies slab cure between floors,
+  and emits per-day demand for the bin packer.
+- truck-bin-pack.ts: greedy first-fit-decreasing bin packing per element
+  type group, with per-type truck preference (柱/大梁→10t, 小梁/ブレース→4t,
+  耐風梁→25tトレーラー, 階段/EV→4tユニック). Long pieces (>12m) auto-route
+  to the trailer with a road-permit note.
+- delivery-plan.ts: combines sequencer + packer into per-day rows, a flat
+  truck manifest, and monthly/weekly/daily aggregates.
+- construction-plan-excel.service.ts: 8-sheet ExcelJS workbook
+  (1) 工程表 master Gantt (merged blue cells per activity, vertical date
+  headers), (2) 数量集計 with a SUM total, (3) 月次集計, (4) 週次集計,
+  (5) 日次集計, (6) 搬入計画 one row per truck, (7) トラック日報 one block
+  per work day formatted for portrait A4, (8) 凡例・条件 with productivity
+  rates, truck specs, and assumptions.
+
+Backend endpoints (gated by @RequiresProduct('construction_plan')):
+- GET /structural-takeoff/sets/:id/schedule
+- GET /structural-takeoff/sets/:id/delivery-plan
+- GET /structural-takeoff/sets/:id/excel  (xlsx download; mirrors into
+  upload_events as kind='excel_export')
+
+Frontend
+- structuralTakeoffApi.getSchedule(), getDeliveryPlan(), downloadExcel().
+- New page /construction-plan/[projectId]/sets/[setId]/schedule:
+  * Header with start-date picker + Saturday-work toggle + Excel download.
+  * Master Gantt table: sticky block/level/element columns + vertical date
+    columns; activities highlighted in blue with piece counts.
+  * Delivery plan table: every truck row with bin No, type, block/level,
+    items, pieces, weight, length, road-permit notes.
+  * Monthly + weekly aggregates side-by-side.
+- Set review page gains "Open schedule & delivery plan" CTA.
+- ja/en/fr translations for the schedule + delivery UI.
+
+Quality
+- Backend tsc --noEmit: passes.
+- Frontend tsc --noEmit: passes.
+
+Deferred to a future phase:
+- Editable Gantt (drag bars to re-schedule).
+- Manual override of truck assignment (drag pieces between trucks).
+- Per-day printable PDF cards (ExcelJS daily-cards sheet already prints OK).

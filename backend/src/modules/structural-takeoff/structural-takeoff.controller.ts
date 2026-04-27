@@ -9,11 +9,13 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -24,6 +26,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StructuralTakeoffService } from './structural-takeoff.service';
 import { ExcelElementImportService } from './extractors/excel-import.service';
 import { DxfLayerExtractorService } from './extractors/dxf-layer-extractor.service';
+import { ConstructionPlanExcelService } from './schedule/construction-plan-excel.service';
+import { runSequencer } from './schedule/erection-sequencer';
+import { buildDeliveryPlan } from './schedule/delivery-plan';
+import { todayIso } from './schedule/calendar';
 import { PresenceService } from '../presence/presence.service';
 import {
   CreateProjectDto,
@@ -45,6 +51,7 @@ export class StructuralTakeoffController {
     private readonly presence: PresenceService,
     private readonly excelImport: ExcelElementImportService,
     private readonly dxfLayerExtractor: DxfLayerExtractorService,
+    private readonly excelExport: ConstructionPlanExcelService,
   ) {}
 
   // ─── Projects ─────────────────────────────────────────────
@@ -362,5 +369,96 @@ export class StructuralTakeoffController {
       warnings: result.warnings,
       layers: result.layers,
     };
+  }
+
+  // ─── Phase 4: schedule + delivery + Excel ────────────────
+
+  @Get('sets/:setId/schedule')
+  async getSchedule(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Query('startDate') startDate?: string,
+    @Query('workSaturday') workSaturdayQuery?: string,
+  ) {
+    const ctx = { userId: user.id, companyId: user.companyId ?? null, role: user.role };
+    const review = await this.service.getSetReview(ctx, setId);
+    const startDateIso = startDate || todayIso();
+    const workSaturday = workSaturdayQuery !== 'false';
+    const result = runSequencer({
+      levels: review.project.levels.length > 0 ? review.project.levels : ['1F'],
+      blocks: review.project.blocks ?? [],
+      elements: review.elements,
+      calendar: { startDateIso, workSaturday },
+    });
+    return {
+      project: review.project,
+      set: review.set,
+      activities: result.activities,
+      workingDays: result.workingDays,
+      endIso: result.endIso,
+      startDateIso,
+    };
+  }
+
+  @Get('sets/:setId/delivery-plan')
+  async getDeliveryPlan(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Query('startDate') startDate?: string,
+    @Query('workSaturday') workSaturdayQuery?: string,
+  ) {
+    const ctx = { userId: user.id, companyId: user.companyId ?? null, role: user.role };
+    const review = await this.service.getSetReview(ctx, setId);
+    const startDateIso = startDate || todayIso();
+    const workSaturday = workSaturdayQuery !== 'false';
+    const seq = runSequencer({
+      levels: review.project.levels.length > 0 ? review.project.levels : ['1F'],
+      blocks: review.project.blocks ?? [],
+      elements: review.elements,
+      calendar: { startDateIso, workSaturday },
+    });
+    const plan = buildDeliveryPlan(seq.activities, seq.dailyDemand);
+    return {
+      project: review.project,
+      set: review.set,
+      startDateIso,
+      ...plan,
+    };
+  }
+
+  @Get('sets/:setId/excel')
+  async exportExcel(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Res() res: Response,
+    @Query('startDate') startDate?: string,
+    @Query('workSaturday') workSaturdayQuery?: string,
+  ) {
+    const ctx = { userId: user.id, companyId: user.companyId ?? null, role: user.role };
+    const review = await this.service.getSetReview(ctx, setId);
+    const startDateIso = startDate || todayIso();
+    const workSaturday = workSaturdayQuery !== 'false';
+    const { buffer, filename } = await this.excelExport.build(review.project, review.set, review.elements, {
+      startDateIso,
+      workSaturday,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(buffer.length));
+    await this.presence.recordUpload({
+      userId: user.id,
+      companyId: user.companyId ?? null,
+      productCode: 'construction_plan',
+      kind: 'excel_export',
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      sizeBytes: buffer.length,
+      refId: setId,
+      metadata: { setId, startDateIso, workSaturday },
+    });
+    res.end(buffer);
   }
 }

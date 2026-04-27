@@ -233,6 +233,104 @@ export const structuralTakeoffApi = {
     return res.data;
   },
 
+  // Phase 4: schedule + delivery + Excel
+  getSchedule: async (
+    setId: string,
+    params?: { startDate?: string; workSaturday?: boolean },
+  ): Promise<{
+    project: ConstructionPlanProject;
+    set: DrawingSet;
+    activities: Array<{
+      block: string | null;
+      level: string;
+      elementType: StructuralElementType;
+      startIso: string;
+      endIso: string;
+      workingDays: number;
+      totalPieces: number;
+      totalWeightKg: number;
+    }>;
+    workingDays: string[];
+    endIso: string;
+    startDateIso: string;
+  }> => {
+    const res = await apiClient.get(`/structural-takeoff/sets/${setId}/schedule`, {
+      params: {
+        startDate: params?.startDate,
+        workSaturday: params?.workSaturday === false ? 'false' : undefined,
+      },
+    });
+    return res.data;
+  },
+  getDeliveryPlan: async (
+    setId: string,
+    params?: { startDate?: string; workSaturday?: boolean },
+  ): Promise<{
+    project: ConstructionPlanProject;
+    set: DrawingSet;
+    startDateIso: string;
+    days: Array<{
+      date: string;
+      dow: number;
+      totalPieces: number;
+      totalKg: number;
+      trucks: Array<{
+        truckType: string;
+        truckLabel: string;
+        payloadKg: number;
+        bedLengthMm: number;
+        totalKg: number;
+        totalLengthMm: number;
+        items: Array<{
+          block: string | null;
+          level: string;
+          elementType: StructuralElementType;
+          pieces: number;
+          pieceLengthMm: number;
+          kg: number;
+        }>;
+        notes: string[];
+      }>;
+    }>;
+    trucks: Array<{
+      date: string;
+      dow: number;
+      binNo: number;
+      load: {
+        truckType: string;
+        truckLabel: string;
+        totalKg: number;
+        totalLengthMm: number;
+        items: Array<{ block: string | null; level: string; elementType: StructuralElementType; pieces: number; pieceLengthMm: number; kg: number }>;
+        notes: string[];
+      };
+    }>;
+    monthly: Array<{ month: string; pieces: number; kg: number; trucks: number; days: number }>;
+    weekly: Array<{ isoWeek: string; pieces: number; kg: number; trucks: number; days: number }>;
+    byType: Record<StructuralElementType, { pieces: number; kg: number }>;
+  }> => {
+    const res = await apiClient.get(`/structural-takeoff/sets/${setId}/delivery-plan`, {
+      params: {
+        startDate: params?.startDate,
+        workSaturday: params?.workSaturday === false ? 'false' : undefined,
+      },
+    });
+    return res.data;
+  },
+  downloadExcel: async (
+    setId: string,
+    params?: { startDate?: string; workSaturday?: boolean },
+  ): Promise<Blob> => {
+    const res = await apiClient.get(`/structural-takeoff/sets/${setId}/excel`, {
+      responseType: 'blob',
+      params: {
+        startDate: params?.startDate,
+        workSaturday: params?.workSaturday === false ? 'false' : undefined,
+      },
+    });
+    return res.data as Blob;
+  },
+
   // Phase 3 follow-ups: Excel/CSV + DXF layer imports
   importExcel: async (
     setId: string,
