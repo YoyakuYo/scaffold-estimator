@@ -216,6 +216,35 @@ export class PresenceService {
     return result;
   }
 
+  /** Resolve tenant display names whether the DB uses `companies` or `organizations` (migration 100). */
+  private async resolveTenantDisplayNames(ids: readonly string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(ids.filter(Boolean))];
+    const map = new Map<string, string>();
+    if (!unique.length) return map;
+    const client = this.supabase.getClient();
+
+    const { data: orgs, error: orgErr } = await client
+      .from('organizations')
+      .select('id, name')
+      .in('id', unique);
+    if (!orgErr && orgs) {
+      for (const r of orgs as { id: string; name: string }[]) map.set(r.id, r.name);
+    }
+
+    const missing = unique.filter((id) => !map.has(id));
+    if (missing.length) {
+      const { data: comps, error: compErr } = await client
+        .from('companies')
+        .select('id, name')
+        .in('id', missing);
+      if (!compErr && comps) {
+        for (const r of comps as { id: string; name: string }[]) map.set(r.id, r.name);
+      }
+    }
+
+    return map;
+  }
+
   /**
    * Recent upload events for the superadmin cockpit. Joined with user/company.
    */
@@ -233,8 +262,7 @@ export class PresenceService {
         `
           id, user_id, company_id, product_code, kind, filename, mime_type,
           size_bytes, ref_id, metadata, created_at,
-          users:users ( email, first_name, last_name ),
-          companies:companies ( name )
+          users:users ( email, first_name, last_name )
         `,
       )
       .order('created_at', { ascending: false })
@@ -250,9 +278,13 @@ export class PresenceService {
       return [];
     }
     const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const tenantNameById = await this.resolveTenantDisplayNames(
+      rows.map((r) => String(r.company_id ?? '')),
+    );
     return rows.map((row) => {
       const user = (row.users as Record<string, unknown> | null) || null;
-      const company = (row.companies as Record<string, unknown> | null) || null;
+      const cid = (row.company_id as string) ?? null;
+      const companyName = cid ? tenantNameById.get(cid) ?? null : null;
       const sizeRaw = row.size_bytes;
       const sizeBytes =
         typeof sizeRaw === 'number'
@@ -266,8 +298,8 @@ export class PresenceService {
         userEmail: (user?.email as string) ?? null,
         userFirstName: (user?.first_name as string) ?? null,
         userLastName: (user?.last_name as string) ?? null,
-        companyId: (row.company_id as string) ?? null,
-        companyName: (company?.name as string) ?? null,
+        companyId: cid,
+        companyName,
         productCode: String(row.product_code ?? 'scaffold'),
         kind: String(row.kind ?? ''),
         filename: (row.filename as string) ?? null,

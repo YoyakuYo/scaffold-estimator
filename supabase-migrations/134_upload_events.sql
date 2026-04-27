@@ -5,7 +5,9 @@
 CREATE TABLE IF NOT EXISTS public.upload_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  company_id uuid REFERENCES public.companies(id) ON DELETE SET NULL,
+  -- Tenant scope UUID: legacy DBs use companies(id); post–100 SaaS uses organizations(id).
+  -- FK is added below against whichever parent table exists.
+  company_id uuid,
   product_code text NOT NULL DEFAULT 'scaffold',
   kind text NOT NULL,
   filename text,
@@ -24,6 +26,24 @@ CREATE INDEX IF NOT EXISTS upload_events_company_id_idx
   ON public.upload_events (company_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS upload_events_product_code_idx
   ON public.upload_events (product_code, created_at DESC);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'upload_events_company_id_fkey'
+  ) THEN
+    RETURN;
+  END IF;
+  IF to_regclass('public.companies') IS NOT NULL THEN
+    ALTER TABLE public.upload_events
+      ADD CONSTRAINT upload_events_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.companies (id) ON DELETE SET NULL;
+  ELSIF to_regclass('public.organizations') IS NOT NULL THEN
+    ALTER TABLE public.upload_events
+      ADD CONSTRAINT upload_events_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.organizations (id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- Service role only.
 ALTER TABLE public.upload_events ENABLE ROW LEVEL SECURITY;
