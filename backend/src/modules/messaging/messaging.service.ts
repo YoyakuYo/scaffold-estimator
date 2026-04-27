@@ -97,12 +97,13 @@ export class MessagingService {
       if (msgRows?.[0]) {
         lastMsg = mapRowToCamel<Message>(msgRows[0] as Record<string, unknown>)!;
       }
+      // Admin "unread" = inbound from the account owner (not own outgoing messages).
       const { count } = await client
         .from('messages')
         .select('*', { count: 'exact', head: true })
         .eq('conversation_id', c.id)
-        .is('read_at', null)
-        .neq('sender_id', c.userId);
+        .eq('sender_id', c.userId)
+        .is('read_at', null);
       result.push({
         ...c,
         user,
