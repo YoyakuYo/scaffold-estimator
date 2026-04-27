@@ -3469,6 +3469,27 @@ export const translations = {
       en: 'Render IFC files in 3D right in the browser. Files never leave your machine.',
       fr: 'Affichez vos fichiers IFC en 3D dans le navigateur. Les fichiers ne quittent jamais votre poste.',
     },
+    anonTitle: {
+      ja: 'BIM ダッシュボード',
+      en: 'BIM dashboard',
+      fr: 'Tableau de bord BIM',
+    },
+    anonBody: {
+      ja: 'ログインすると契約状況やアップロード履歴が表示されます。3D ビューアはアカウントなしでも利用できます。',
+      en: 'Sign in to see your subscription and upload history. The 3D viewer works without an account.',
+      fr: 'Connectez-vous pour voir votre abonnement et l’historique. La visionneuse 3D fonctionne sans compte.',
+    },
+    anonLogIn: { ja: 'ログイン', en: 'Sign in', fr: 'Se connecter' },
+    accessErrorTitle: {
+      ja: '契約情報を読み込めませんでした',
+      en: 'Could not load subscription status',
+      fr: 'Impossible de charger l’abonnement',
+    },
+    accessErrorBody: {
+      ja: 'セッションの有効期限が切れている可能性があります。再度ログインしてください。',
+      en: 'Your session may have expired. Please sign in again.',
+      fr: 'Votre session a peut-être expiré. Reconnectez-vous.',
+    },
     lockedTitle: { ja: 'BIM ビューアは未契約です', en: 'BIM Viewer is locked', fr: 'BIM Viewer verrouillé' },
     lockedBody: {
       ja: 'このプロダクトは個別契約が必要です。「契約する」を押して進めてください。',

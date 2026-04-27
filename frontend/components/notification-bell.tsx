@@ -6,6 +6,7 @@ import { notificationsApi, Notification } from '@/lib/api/notifications';
 import { Bell, Loader2 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
+import { authApi } from '@/lib/api/auth';
 
 export function NotificationBell() {
   const router = useRouter();
@@ -22,17 +23,23 @@ export function NotificationBell() {
       ? 5_000
       : 30_000;
 
+  const hasSession = !!authApi.getToken();
+
   const { data: notifications, isLoading } = useQuery({
     queryKey: ['notifications'],
     queryFn: notificationsApi.list,
-    refetchInterval: messagingPollMs,
+    enabled: hasSession,
+    retry: false,
+    refetchInterval: hasSession ? messagingPollMs : false,
     staleTime: Math.min(messagingPollMs - 1_000, 25_000),
     refetchIntervalInBackground: false,
   });
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread'],
     queryFn: notificationsApi.getUnreadCount,
-    refetchInterval: messagingPollMs,
+    enabled: hasSession,
+    retry: false,
+    refetchInterval: hasSession ? messagingPollMs : false,
     staleTime: Math.min(messagingPollMs - 1_000, 25_000),
     refetchIntervalInBackground: false,
   });

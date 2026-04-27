@@ -24,6 +24,9 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   const noNavPages = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/join-team'];
   const isPublicPage = noNavPages.includes(pathname);
   const isSuperAdminLogin = pathname === '/superadmin';
+  /** Full-width BIM viewer for guests (IFC is client-side); avoids unauthenticated nav API calls. */
+  const isAnonymousBimViewer =
+    pathname === '/bim/viewer' && mounted && !authApi.getToken();
 
   const hasToken = mounted && !!authApi.getToken();
   const { data: profile } = useQuery({
@@ -56,7 +59,8 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
     mounted &&
     !isPublicPage &&
     !isSuperAdminLogin &&
-    pathname !== '/activate-bank-subscription';
+    pathname !== '/activate-bank-subscription' &&
+    !isAnonymousBimViewer;
 
   return (
     <>

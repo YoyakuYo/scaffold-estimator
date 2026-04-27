@@ -102,8 +102,18 @@ apiClient.interceptors.response.use(
         '/join-team',
       ];
       const isPublicPage = publicPages.includes(currentPath);
+      /** IFC/DXF viewer is usable without a session; do not hard-redirect on 401. */
+      const isBimClientRoute =
+        currentPath === '/bim' ||
+        currentPath === '/bim/viewer' ||
+        currentPath.startsWith('/bim/');
       const requestUrl = error.config?.url || '';
       const isAuthEndpoint = requestUrl.includes('/auth/login');
+
+      if (isBimClientRoute && error.response) {
+        clearAccessTokenCookie();
+        return Promise.reject(error);
+      }
 
       if (!isPublicPage && !isAuthEndpoint && error.response) {
         const errorMessage = error.response?.data?.message || '';
