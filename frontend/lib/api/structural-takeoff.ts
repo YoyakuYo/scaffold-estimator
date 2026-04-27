@@ -232,4 +232,39 @@ export const structuralTakeoffApi = {
     );
     return res.data;
   },
+
+  // Phase 3 follow-ups: Excel/CSV + DXF layer imports
+  importExcel: async (
+    setId: string,
+    file: File,
+  ): Promise<{
+    saved: ExtractedElement[];
+    proposals: unknown[];
+    warnings: string[];
+  }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await apiClient.post(`/structural-takeoff/sets/${setId}/import/excel`, fd);
+    return res.data;
+  },
+  importDxfLayers: async (
+    setId: string,
+    file: File,
+    fallbackLevel?: string,
+  ): Promise<{
+    saved: ExtractedElement[];
+    proposals: unknown[];
+    warnings: string[];
+    layers: string[];
+  }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const params = fallbackLevel ? { fallbackLevel } : undefined;
+    const res = await apiClient.post(
+      `/structural-takeoff/sets/${setId}/import/dxf-layers`,
+      fd,
+      { params },
+    );
+    return res.data;
+  },
 };

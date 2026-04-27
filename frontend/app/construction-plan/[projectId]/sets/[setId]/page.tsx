@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   FileText,
   Calendar,
+  FileSpreadsheet,
+  Layers,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
@@ -74,8 +76,11 @@ export default function ConstructionPlanSetReviewPage() {
   const presenceActions = usePresenceActions();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const dxfInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<DraftRow[]>([]);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<SetReviewPayload>({
     queryKey: ['structural-takeoff', 'set-review', setId],
@@ -95,6 +100,31 @@ export default function ConstructionPlanSetReviewPage() {
       queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
       presenceActions.recordAction(`Uploaded structural drawings to set ${setId.slice(0, 8)}`);
     },
+  });
+
+  const importExcel = useMutation({
+    mutationFn: (file: File) => structuralTakeoffApi.importExcel(setId, file),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+      setDraftLoaded(false);
+      const warn = res.warnings.length > 0 ? ` (${res.warnings.length} warnings)` : '';
+      setImportMessage(t('constructionPlanReview', 'excelImportedToast').replace('{count}', String(res.saved.length)) + warn);
+      presenceActions.recordAction(`Imported ${res.saved.length} elements from Excel into set ${setId.slice(0, 8)}`);
+    },
+    onError: () => setImportMessage(t('constructionPlanReview', 'excelImportFailed')),
+  });
+
+  const importDxf = useMutation({
+    mutationFn: (file: File) =>
+      structuralTakeoffApi.importDxfLayers(setId, file, data?.project.levels[0] ?? '1F'),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+      setDraftLoaded(false);
+      const warn = res.warnings.length > 0 ? ` (${res.warnings.length} warnings)` : '';
+      setImportMessage(t('constructionPlanReview', 'dxfImportedToast').replace('{count}', String(res.saved.length)) + warn);
+      presenceActions.recordAction(`Imported ${res.saved.length} elements from DXF layers into set ${setId.slice(0, 8)}`);
+    },
+    onError: () => setImportMessage(t('constructionPlanReview', 'dxfImportFailed')),
   });
 
   const patchFile = useMutation({
@@ -244,6 +274,66 @@ export default function ConstructionPlanSetReviewPage() {
           <p className="text-sm text-gray-500 mt-1">
             {t('constructionPlanReview', 'setLabel')}: {set.name || set.id.slice(0, 8)}
           </p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-gray-700">
+            {t('constructionPlanReview', 'extractModesTitle')}:
+          </span>
+          <button
+            onClick={() => excelInputRef.current?.click()}
+            disabled={importExcel.isPending}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 text-sm"
+          >
+            {importExcel.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            {t('constructionPlanReview', 'importExcel')}
+          </button>
+          <input
+            ref={excelInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importExcel.mutate(f);
+              if (excelInputRef.current) excelInputRef.current.value = '';
+            }}
+          />
+          <button
+            onClick={() => dxfInputRef.current?.click()}
+            disabled={importDxf.isPending}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 text-sm"
+          >
+            {importDxf.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Layers className="h-4 w-4" />
+            )}
+            {t('constructionPlanReview', 'importDxf')}
+          </button>
+          <input
+            ref={dxfInputRef}
+            type="file"
+            accept=".dxf,application/dxf,image/vnd.dxf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importDxf.mutate(f);
+              if (dxfInputRef.current) dxfInputRef.current.value = '';
+            }}
+          />
+          <span className="text-xs text-gray-500">
+            {t('constructionPlanReview', 'extractModesHint')}
+          </span>
+          {importMessage && (
+            <p className="ml-auto text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              {importMessage}
+            </p>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

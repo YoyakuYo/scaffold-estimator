@@ -1,0 +1,32 @@
+feat(construction-plan): phase 3 follow-ups - excel/csv + dxf-layer extraction
+
+Two additional extraction modes for the structural takeoff, both fully
+deterministic (no AI key needed).
+
+Backend
+- ExcelElementImportService (.xlsx / .xls / .csv): synonym map for Japanese
+  + English headers (階, 工区, 部材, 符号, 断面, 数量, 通り芯, 備考 / level,
+  block, type, mark, section, qty, grid, notes), normalized floor labels
+  (1F, RF, B1, PH), and structured-output rows tagged source='excel'.
+- DxfLayerExtractorService: groups DXF entities by layer name and matches
+  layer name patterns against structural categories (柱 / 大梁 / 小梁 /
+  耐風梁 / ブレース / 階段 / エレベーター / デッキ). Layer-name floor hints
+  (e.g. "S-2F-柱") propagate to the level field. Rows tagged source='dxf'.
+- Two new endpoints:
+    POST /structural-takeoff/sets/:id/import/excel    (multipart .xlsx/.csv)
+    POST /structural-takeoff/sets/:id/import/dxf-layers (multipart .dxf)
+  Both gated by @RequiresProduct('construction_plan'); both record into
+  upload_events so the superadmin cockpit sees Construction Plan imports.
+
+Frontend
+- structuralTakeoffApi.importExcel() + importDxfLayers().
+- Set-review page gains a "Bulk extract" toolbar with Excel/CSV and DXF
+  import buttons. Imports invalidate the review query so the manual table
+  refreshes with new rows tagged with their source. Inline toast surfaces
+  warning counts and saved-row counts.
+- ja/en/fr keys for the new toolbar.
+
+Quality
+- Backend tsc --noEmit: passes (with a small Buffer<ArrayBuffer> round-trip
+  in excel-import.service to align with exceljs typings).
+- Frontend tsc --noEmit: passes.

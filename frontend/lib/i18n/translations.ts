@@ -3133,6 +3133,35 @@ export const translations = {
       fr: 'Aucun élément. Ajoutez-en avec les boutons ci-dessous.',
     },
 
+    extractModesTitle: { ja: '一括抽出', en: 'Bulk extract', fr: 'Extraction en lot' },
+    extractModesHint: {
+      ja: 'Excel/CSV または DXF（レイヤー名）から数量を一括取込みできます。',
+      en: 'Pull quantities at once from Excel/CSV or a layered DXF.',
+      fr: "Importez les quantités d'un seul coup depuis Excel/CSV ou un DXF par calques.",
+    },
+    importExcel: { ja: 'Excel/CSV 取込', en: 'Import Excel/CSV', fr: 'Importer Excel/CSV' },
+    importDxf: { ja: 'DXFレイヤー取込', en: 'Import DXF layers', fr: 'Importer calques DXF' },
+    excelImportedToast: {
+      ja: 'Excelから {count} 件取り込みました。',
+      en: 'Imported {count} rows from Excel.',
+      fr: 'Importé {count} lignes depuis Excel.',
+    },
+    excelImportFailed: {
+      ja: 'Excelの取込に失敗しました。',
+      en: 'Excel import failed.',
+      fr: "L'import Excel a échoué.",
+    },
+    dxfImportedToast: {
+      ja: 'DXFから {count} 件取り込みました。',
+      en: 'Imported {count} rows from DXF.',
+      fr: 'Importé {count} lignes depuis DXF.',
+    },
+    dxfImportFailed: {
+      ja: 'DXFの取込に失敗しました。',
+      en: 'DXF import failed.',
+      fr: "L'import DXF a échoué.",
+    },
+
     elementType_hashira: { ja: '柱', en: 'Column (柱)', fr: 'Poteau (柱)' },
     elementType_oobari: { ja: '大梁', en: 'Main beam (大梁)', fr: 'Poutre principale (大梁)' },
     elementType_kobari: { ja: '小梁', en: 'Small beam (小梁)', fr: 'Poutre secondaire (小梁)' },
