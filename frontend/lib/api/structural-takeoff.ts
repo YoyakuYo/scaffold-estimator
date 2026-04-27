@@ -42,7 +42,16 @@ export const DRAWING_KINDS: readonly DrawingKind[] = [
   'unknown',
 ] as const;
 
-export type ExtractionSource = 'manual' | 'excel' | 'dxf' | 'ai';
+export type ExtractionSource = 'manual' | 'excel' | 'dxf' | 'ai' | 'ifc';
+
+export type ElementLineKind = 'member' | 'bolt' | 'connection' | 'misc';
+
+export const ELEMENT_LINE_KINDS: readonly ElementLineKind[] = [
+  'member',
+  'bolt',
+  'connection',
+  'misc',
+] as const;
 export type ClassificationSource = 'auto' | 'manual';
 
 export interface ConstructionPlanProject {
@@ -95,6 +104,11 @@ export interface ExtractedElement {
   qty: number;
   /** Single-member length (mm); omit or null → type default for weight / steel rollup. */
   pieceLengthMm?: number | null;
+  phase?: string | null;
+  shop?: string | null;
+  lineKind?: ElementLineKind | null;
+  extractionConfidence?: number | null;
+  needsReview?: boolean | null;
   grid: string | null;
   source: ExtractionSource;
   notes: string | null;
@@ -135,6 +149,11 @@ export interface UpsertElementsPayload {
     section?: string | null;
     qty: number;
     pieceLengthMm?: number | null;
+    phase?: string | null;
+    shop?: string | null;
+    lineKind?: ElementLineKind | null;
+    extractionConfidence?: number | null;
+    needsReview?: boolean | null;
     grid?: string | null;
     notes?: string | null;
   }>;
@@ -428,6 +447,30 @@ export const structuralTakeoffApi = {
       `/structural-takeoff/sets/${setId}/import/dxf-layers`,
       fd,
       { params },
+    );
+    return res.data;
+  },
+
+  importIfc: async (
+    setId: string,
+    file: File,
+  ): Promise<{ saved: ExtractedElement[]; warnings: string[] }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await apiClient.post<{ saved: ExtractedElement[]; warnings: string[] }>(
+      `/structural-takeoff/sets/${setId}/import/ifc`,
+      fd,
+    );
+    return res.data;
+  },
+
+  confirmElementsReview: async (
+    setId: string,
+    ids: string[],
+  ): Promise<{ updated: number }> => {
+    const res = await apiClient.post<{ updated: number }>(
+      `/structural-takeoff/sets/${setId}/elements/confirm-review`,
+      { ids },
     );
     return res.data;
   },

@@ -17,6 +17,7 @@ describe('ExcelElementImportService — CSV parsing', () => {
     expect(r.rows[0].label).toBe('G1');
     expect(r.rows[0].qty).toBe(8);
     expect(r.rows[0].pieceLengthMm).toBeNull();
+    expect(r.rows[0].lineKind).toBe('member');
     expect(r.rows[1].elementType).toBe('kobari');
     expect(r.rows[2].elementType).toBe('hashira');
   });

@@ -14,6 +14,11 @@ function row(p: Partial<ExtractedElement> & Pick<ExtractedElement, 'qty'>): Extr
     source: 'manual',
     notes: null,
     pieceLengthMm: null,
+    phase: null,
+    shop: null,
+    lineKind: 'member',
+    extractionConfidence: null,
+    needsReview: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...p,
@@ -39,5 +44,20 @@ describe('aggregateSteelFrameLines', () => {
     ]);
     expect(lines.length).toBe(1);
     expect(lines[0].lengthM).toBeGreaterThan(0);
+  });
+
+  it('skips non-member line kinds (e.g. bolts) in steel mass rollups', () => {
+    const lines = aggregateSteelFrameLines([
+      row({ qty: 2, pieceLengthMm: 6000, lineKind: 'member' }),
+      row({
+        qty: 100,
+        elementType: 'brace',
+        section: 'HTB-M20',
+        lineKind: 'bolt',
+        pieceLengthMm: 65,
+      }),
+    ]);
+    expect(lines.length).toBe(1);
+    expect(lines[0].lengthM).toBeCloseTo(12, 1);
   });
 });

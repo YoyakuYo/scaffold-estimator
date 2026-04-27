@@ -9,7 +9,13 @@ import {
   ArrayUnique,
   MaxLength,
 } from 'class-validator';
-import { STRUCTURAL_ELEMENT_TYPES, type StructuralElementType, DRAWING_KINDS, type DrawingKind } from '../element-types';
+import {
+  STRUCTURAL_ELEMENT_TYPES,
+  type StructuralElementType,
+  DRAWING_KINDS,
+  type DrawingKind,
+  type ElementLineKind,
+} from '../element-types';
 
 export class CreateProjectDto {
   @IsString()
@@ -112,9 +118,20 @@ export class UpsertElementsDto {
     qty: number;
     /** Optional single-member length in mm; omit/null to use type default in rollups. */
     pieceLengthMm?: number | null;
+    phase?: string | null;
+    shop?: string | null;
+    lineKind?: ElementLineKind | null;
+    extractionConfidence?: number | null;
+    needsReview?: boolean | null;
     grid?: string | null;
     notes?: string | null;
   }>;
+}
+
+export class ConfirmElementReviewDto {
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
 }
 
 export class DeleteElementDto {

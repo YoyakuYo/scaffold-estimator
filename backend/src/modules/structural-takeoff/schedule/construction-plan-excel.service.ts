@@ -3,7 +3,7 @@ import * as ExcelJS from 'exceljs';
 import type { ConstructionPlanProject } from '../construction-plan-project.entity';
 import type { DrawingSet } from '../drawing-set.entity';
 import type { ExtractedElement } from '../extracted-element.entity';
-import type { StructuralElementType } from '../element-types';
+import type { ElementLineKind, StructuralElementType } from '../element-types';
 import { STRUCTURAL_ELEMENT_TYPES } from '../element-types';
 import type { ScheduleActivity } from './erection-sequencer';
 import { runSequencer } from './erection-sequencer';
@@ -30,6 +30,13 @@ const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
   kaidan: '階段',
   elevator: 'エレベーター',
   deck: 'デッキ',
+};
+
+const LINE_KIND_LABEL_JP: Record<ElementLineKind, string> = {
+  member: '部材',
+  bolt: 'ボルト',
+  connection: '接合',
+  misc: 'その他',
 };
 
 const DOW_JP = ['日', '月', '火', '水', '木', '金', '土'];
@@ -192,11 +199,27 @@ export class ConstructionPlanExcelService {
     elements: ExtractedElement[],
   ): void {
     const sheet = wb.addWorksheet('数量集計');
-    sheet.getRow(1).values = ['階', '工区', '部材', '符号', '断面', '長さ(mm)', '数量', '通り芯', '出所', '備考'];
+    sheet.getRow(1).values = [
+      '階',
+      '工区',
+      '部材',
+      '行種',
+      '符号',
+      '断面',
+      '長さ(mm)',
+      '数量',
+      '通り芯',
+      '工程',
+      '製作場',
+      '出所',
+      '確信度',
+      '要確認',
+      '備考',
+    ];
     sheet.getRow(1).font = { bold: true };
     sheet.getRow(1).fill = HEADER_FILL;
     sheet.getRow(1).eachCell((c) => (c.border = THIN));
-    [10, 8, 12, 10, 22, 10, 8, 14, 10, 24].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+    [8, 6, 12, 8, 10, 22, 10, 8, 12, 10, 12, 8, 8, 8, 26].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
 
     const sortedElements = elements
       .slice()
@@ -210,25 +233,34 @@ export class ConstructionPlanExcelService {
 
     let r = 2;
     for (const el of sortedElements) {
+      const lk = (el.lineKind ?? 'member') as ElementLineKind;
       sheet.getCell(r, 1).value = el.level;
       sheet.getCell(r, 2).value = el.block ?? '—';
       sheet.getCell(r, 3).value = ELEMENT_LABEL_JP[el.elementType] ?? el.elementType;
-      sheet.getCell(r, 4).value = el.label ?? '';
-      sheet.getCell(r, 5).value = el.section ?? '';
-      sheet.getCell(r, 6).value =
+      sheet.getCell(r, 4).value = LINE_KIND_LABEL_JP[lk] ?? lk;
+      sheet.getCell(r, 5).value = el.label ?? '';
+      sheet.getCell(r, 6).value = el.section ?? '';
+      sheet.getCell(r, 7).value =
         el.pieceLengthMm != null && el.pieceLengthMm > 0 ? el.pieceLengthMm : '';
-      sheet.getCell(r, 7).value = el.qty;
-      sheet.getCell(r, 8).value = el.grid ?? '';
-      sheet.getCell(r, 9).value = el.source;
-      sheet.getCell(r, 10).value = el.notes ?? '';
-      for (let c = 1; c <= 10; c++) sheet.getCell(r, c).border = THIN;
+      sheet.getCell(r, 8).value = el.qty;
+      sheet.getCell(r, 9).value = el.grid ?? '';
+      sheet.getCell(r, 10).value = el.phase ?? '';
+      sheet.getCell(r, 11).value = el.shop ?? '';
+      sheet.getCell(r, 12).value = el.source;
+      sheet.getCell(r, 13).value =
+        el.extractionConfidence != null && Number.isFinite(el.extractionConfidence)
+          ? Math.round(el.extractionConfidence * 1000) / 1000
+          : '';
+      sheet.getCell(r, 14).value = el.needsReview ? '要' : '';
+      sheet.getCell(r, 15).value = el.notes ?? '';
+      for (let c = 1; c <= 15; c++) sheet.getCell(r, c).border = THIN;
       r++;
     }
     if (r > 2) {
-      sheet.getCell(r, 6).value = '合計(本数)';
-      sheet.getCell(r, 6).font = { bold: true };
-      sheet.getCell(r, 7).value = { formula: `SUM(G2:G${r - 1})` };
+      sheet.getCell(r, 7).value = '合計(本数)';
       sheet.getCell(r, 7).font = { bold: true };
+      sheet.getCell(r, 8).value = { formula: `SUM(H2:H${r - 1})` };
+      sheet.getCell(r, 8).font = { bold: true };
     }
     sheet.getCell(`A${r + 2}`).value = `案件: ${project.name}`;
     sheet.getCell(`A${r + 2}`).font = { italic: true };

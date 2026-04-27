@@ -25,7 +25,16 @@ export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'deck',
 ] as const;
 
-export type ExtractionSource = 'manual' | 'excel' | 'dxf' | 'ai';
+export type ExtractionSource = 'manual' | 'excel' | 'dxf' | 'ai' | 'ifc';
+
+export type ElementLineKind = 'member' | 'bolt' | 'connection' | 'misc';
+
+export const ELEMENT_LINE_KINDS: readonly ElementLineKind[] = [
+  'member',
+  'bolt',
+  'connection',
+  'misc',
+] as const;
 
 /** Drawing classification kinds — what role each uploaded file plays. */
 export type DrawingKind =

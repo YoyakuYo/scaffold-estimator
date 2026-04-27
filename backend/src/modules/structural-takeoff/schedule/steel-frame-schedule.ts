@@ -84,6 +84,8 @@ export function aggregateSteelFrameLines(
 
   for (const e of elements) {
     if (!STRUCTURAL_ELEMENT_TYPES.includes(e.elementType)) continue;
+    const lk = e.lineKind ?? 'member';
+    if (lk !== 'member') continue;
     const qty = Number.isFinite(e.qty) ? Math.floor(e.qty) : 0;
     if (qty <= 0) continue;
     const sec = (e.section ?? '').trim();

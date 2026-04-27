@@ -14,10 +14,13 @@ import { ExtractedElement } from './extracted-element.entity';
 import { classifyDrawingFilename } from './drawing-classifier';
 import {
   STRUCTURAL_ELEMENT_TYPES,
+  ELEMENT_LINE_KINDS,
+  type ElementLineKind,
   type ExtractionSource,
   type StructuralElementType,
 } from './element-types';
 import {
+  ConfirmElementReviewDto,
   CreateProjectDto,
   PatchClassificationDto,
   UpdateProjectDto,
@@ -26,7 +29,13 @@ import {
 import { buildSampleFixture } from './sample-fixtures';
 import { TitleBlockVisionService } from './extractors/title-block-vision.service';
 import { AiElementVisionService } from './extractors/ai-element-vision.service';
+import { extractStructuralElementsFromIfc } from './extractors/ifc-structural-import';
 import type { DeliveryPlanOverridesPayload } from './schedule/delivery-plan-overrides';
+
+function normalizeLineKind(v: unknown): ElementLineKind {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return (ELEMENT_LINE_KINDS as readonly string[]).includes(s) ? (s as ElementLineKind) : 'member';
+}
 
 const DEFAULT_LEVELS = ['1F', '2F', '3F', 'RF'];
 const DEFAULT_BLOCKS: string[] = [];
@@ -482,9 +491,19 @@ export class StructuralTakeoffService {
         const n = Math.floor(Number(row.pieceLengthMm));
         if (n > 0) pieceLengthMm = Math.min(120_000, Math.max(1, n));
       }
-      // Omit null piece_length_mm so PostgREST does not require the column
-      // (older DBs before migration 142). Non-null values still need the column.
-      const payload: Record<string, unknown> = {
+      let extractionConfidence: number | null = null;
+      if (row.extractionConfidence != null && Number.isFinite(Number(row.extractionConfidence))) {
+        extractionConfidence = Math.min(1, Math.max(0, Number(row.extractionConfidence)));
+      }
+      const lineKind = normalizeLineKind(row.lineKind);
+      const phase = row.phase != null ? String(row.phase).trim().slice(0, 200) || null : null;
+      const shop = row.shop != null ? String(row.shop).trim().slice(0, 200) || null : null;
+      const needsReview =
+        row.needsReview != null && typeof row.needsReview === 'boolean'
+          ? row.needsReview
+          : source === 'ifc' || source === 'ai' || source === 'dxf';
+
+      const rowPayload: Record<string, unknown> = {
         id: row.id ?? undefined,
         setId,
         level: row.level,
@@ -493,12 +512,19 @@ export class StructuralTakeoffService {
         label: row.label ?? null,
         section: row.section ?? null,
         qty,
+        pieceLengthMm,
+        phase,
+        shop,
+        lineKind,
+        extractionConfidence,
+        needsReview,
         grid: row.grid ?? null,
         notes: row.notes ?? null,
         source,
       };
-      if (pieceLengthMm != null) payload.pieceLengthMm = pieceLengthMm;
-      return mapPayloadToSnake(payload);
+      if (pieceLengthMm == null) delete rowPayload.pieceLengthMm;
+      if (extractionConfidence == null) delete rowPayload.extractionConfidence;
+      return mapPayloadToSnake(rowPayload);
     });
     const { data, error } = await this.supabase
       .getClient()
@@ -521,6 +547,72 @@ export class StructuralTakeoffService {
       .eq('id', elementId)
       .eq('set_id', setId);
     if (error) throw new BadRequestException('Delete failed.');
+  }
+
+  /**
+   * Human-in-the-loop: mark extracted rows as reviewed (clears needs_review).
+   * Only affects rows in this set whose ids are listed.
+   */
+  async confirmElementsReview(
+    ctx: CallerContext,
+    setId: string,
+    dto: ConfirmElementReviewDto,
+  ): Promise<{ updated: number }> {
+    await this.getSet(ctx, setId);
+    const ids = Array.isArray(dto.ids) ? dto.ids.filter((id) => typeof id === 'string' && id.length > 0) : [];
+    if (ids.length === 0) return { updated: 0 };
+    const client = this.supabase.getClient();
+    const { data, error } = await client
+      .from('extracted_elements')
+      .update({ needs_review: false })
+      .eq('set_id', setId)
+      .in('id', ids)
+      .select('id');
+    if (error) {
+      this.logger.warn(`confirmElementsReview: ${error.message}`);
+      throw new BadRequestException('Could not update review flags.');
+    }
+    return { updated: (data ?? []).length };
+  }
+
+  /**
+   * Deterministic IFC structural import (web-ifc). Rows are inserted with
+   * source='ifc' and needs_review=true until the estimator confirms.
+   */
+  async importIfcToSet(
+    ctx: CallerContext,
+    setId: string,
+    buffer: Buffer,
+  ): Promise<{ saved: ExtractedElement[]; warnings: string[] }> {
+    await this.getSet(ctx, setId);
+    const { rows, warnings } = await extractStructuralElementsFromIfc(buffer);
+    if (rows.length === 0) {
+      return { saved: [], warnings };
+    }
+    const saved = await this.upsertElements(
+      ctx,
+      setId,
+      {
+        rows: rows.map((r) => ({
+          level: r.level,
+          block: r.block,
+          elementType: r.elementType,
+          label: r.label,
+          section: r.section,
+          qty: r.qty,
+          pieceLengthMm: r.pieceLengthMm,
+          phase: r.phase,
+          shop: r.shop,
+          lineKind: r.lineKind,
+          extractionConfidence: r.extractionConfidence,
+          needsReview: r.needsReview,
+          grid: r.grid,
+          notes: r.notes,
+        })),
+      },
+      'ifc',
+    );
+    return { saved, warnings };
   }
 
   /** Rich review payload: project + set + files + elements in one round-trip. */
@@ -683,54 +775,106 @@ export class StructuralTakeoffService {
       throw new BadRequestException('Could not read stored file.');
     }
     const arrayBuf = await bin.arrayBuffer();
-    let imageBuffer: Buffer = Buffer.from(arrayBuf);
+    const fileBuffer = Buffer.from(arrayBuf);
     const lower = (fileRow.filename ?? '').toLowerCase();
     if (lower.endsWith('.dwg') || lower.endsWith('.jww')) {
       throw new BadRequestException(
         'AI cannot extract elements from DWG/JWW directly. Please re-upload as DXF or PDF for AI extraction.',
       );
     }
-    if (lower.endsWith('.pdf')) {
-      try {
-        const sharp = (await import('sharp')).default;
-        imageBuffer = await sharp(imageBuffer, { density: 200 })
-          .resize(2400, 2400, { fit: 'inside', withoutEnlargement: true })
-          .png({ compressionLevel: 7 })
-          .toBuffer();
-      } catch (sharpErr) {
-        this.logger.warn(
-          `extractElementsWithAi PDF→image failed: ${(sharpErr as Error).message}; sending raw buffer`,
-        );
-      }
-    }
 
-    const result = await this.aiElementVision.extract(imageBuffer, {
-      filename: fileRow.filename,
+    const extractOpts = {
+      filename: fileRow.filename ?? '',
       kind: fileRow.kind ?? null,
       level: fileRow.level ?? null,
       block: fileRow.block ?? null,
-    });
-    if (result.rows.length === 0) {
-      return { saved: [], proposalCount: 0, warnings: result.warnings };
+    };
+
+    type AiRow = import('./extractors/ai-element-vision.service').AiExtractedElement;
+    const mergedRows: AiRow[] = [];
+    const warnings: string[] = [];
+
+    if (lower.endsWith('.pdf')) {
+      const sharp = (await import('sharp')).default;
+      const maxPages = 40;
+      let consecutiveEmpty = 0;
+      for (let p = 0; p < maxPages; p++) {
+        try {
+          const pageBuf = await sharp(fileBuffer, { density: 200, page: p })
+            .resize(2400, 2400, { fit: 'inside', withoutEnlargement: true })
+            .png({ compressionLevel: 7 })
+            .toBuffer();
+          const pageResult = await this.aiElementVision.extract(pageBuf, extractOpts);
+          for (const w of pageResult.warnings) warnings.push(`PDF page ${p + 1}: ${w}`);
+          if (pageResult.rows.length === 0) {
+            consecutiveEmpty += 1;
+            if (p > 0 && consecutiveEmpty >= 2) break;
+          } else {
+            consecutiveEmpty = 0;
+            for (const r of pageResult.rows) {
+              const sheetNote = `sheet ${p + 1}`;
+              mergedRows.push({
+                ...r,
+                notes: [r.notes, sheetNote].filter(Boolean).join(' | ') || sheetNote,
+              });
+            }
+          }
+        } catch {
+          break;
+        }
+      }
+      if (mergedRows.length === 0) {
+        try {
+          const pageBuf = await sharp(fileBuffer, { density: 200 })
+            .resize(2400, 2400, { fit: 'inside', withoutEnlargement: true })
+            .png({ compressionLevel: 7 })
+            .toBuffer();
+          const fallback = await this.aiElementVision.extract(pageBuf, extractOpts);
+          warnings.push(...fallback.warnings);
+          mergedRows.push(...fallback.rows);
+        } catch (e) {
+          warnings.push((e as Error).message);
+        }
+      }
+    } else {
+      const result = await this.aiElementVision.extract(fileBuffer, extractOpts);
+      warnings.push(...result.warnings);
+      mergedRows.push(...result.rows);
     }
+
+    if (mergedRows.length === 0) {
+      return { saved: [], proposalCount: 0, warnings };
+    }
+
+    const confidenceReviewThreshold = 0.82;
     const saved = await this.upsertElements(
       ctx,
       setId,
       {
-        rows: result.rows.map((r) => ({
-          level: r.level,
-          block: r.block,
-          elementType: r.elementType,
-          label: r.label,
-          section: r.section,
-          qty: r.qty,
-          grid: r.grid,
-          notes: 'AI extracted from drawing',
-        })),
+        rows: mergedRows.map((r) => {
+          const conf = r.confidence ?? null;
+          const needsReview = conf == null || conf < confidenceReviewThreshold;
+          return {
+            level: r.level,
+            block: r.block,
+            elementType: r.elementType,
+            label: r.label,
+            section: r.section,
+            qty: r.qty,
+            pieceLengthMm: r.pieceLengthMm ?? null,
+            phase: r.phase ?? null,
+            shop: r.shop ?? null,
+            lineKind: r.lineKind ?? 'member',
+            extractionConfidence: conf,
+            needsReview,
+            grid: r.grid,
+            notes: r.notes ?? 'AI extracted from drawing',
+          };
+        }),
       },
       'ai',
     );
-    return { saved, proposalCount: result.rows.length, warnings: result.warnings };
+    return { saved, proposalCount: mergedRows.length, warnings };
   }
 
   /**

@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
-import type { ExtractionSource, StructuralElementType } from './element-types';
+import type { ElementLineKind, ExtractionSource, StructuralElementType } from './element-types';
 
 /** Per-set × per-floor × per-block × per-type extracted quantity row. */
 @Entity('extracted_elements')
@@ -39,6 +39,21 @@ export class ExtractedElement {
   /** Single-piece length (mm); null → default length for `elementType` in scheduling / steel rollups. */
   @Column({ name: 'piece_length_mm', type: 'int', nullable: true })
   pieceLengthMm: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  phase: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  shop: string | null;
+
+  @Column({ name: 'line_kind', type: 'text', default: 'member' })
+  lineKind: ElementLineKind;
+
+  @Column({ name: 'extraction_confidence', type: 'float', nullable: true })
+  extractionConfidence: number | null;
+
+  @Column({ name: 'needs_review', type: 'boolean', default: false })
+  needsReview: boolean;
 
   @Column({ type: 'text', nullable: true })
   grid: string | null;

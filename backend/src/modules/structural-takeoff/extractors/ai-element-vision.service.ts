@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   STRUCTURAL_ELEMENT_TYPES,
+  ELEMENT_LINE_KINDS,
+  type ElementLineKind,
   type StructuralElementType,
   type DrawingKind,
 } from '../element-types';
@@ -14,6 +16,15 @@ export interface AiExtractedElement {
   section: string | null;
   qty: number;
   grid: string | null;
+  /** Single-member length in mm when readable from the schedule. */
+  pieceLengthMm?: number | null;
+  phase?: string | null;
+  shop?: string | null;
+  /** member | bolt | connection | misc — bolts map to brace + lineKind bolt in downstream steel rollups. */
+  lineKind?: ElementLineKind | null;
+  /** Model self-reported 0–1 confidence for this row; drives needs_review server-side. */
+  confidence?: number | null;
+  notes?: string | null;
 }
 
 export interface AiElementVisionResult {
@@ -22,8 +33,10 @@ export interface AiElementVisionResult {
   rawText?: string;
 }
 
-const SYSTEM_PROMPT_BASE = `You are reading a Japanese structural-engineering drawing.
-Extract the rows visible on the drawing into a strict JSON schema. Mapping:
+const SYSTEM_PROMPT_BASE = `You are reading a Japanese structural-engineering drawing (possibly one sheet of a PDF set).
+Extract EVERY member line you can read: columns, beams, braces, stairs, deck/slab references, elevator shaft pieces, and bolt / 高力ボルト lines when shown in a table.
+
+Element type mapping (field elementType):
 - 柱 -> hashira
 - 大梁 -> oobari
 - 小梁 -> kobari
@@ -31,17 +44,25 @@ Extract the rows visible on the drawing into a strict JSON schema. Mapping:
 - ブレース / 筋交 -> brace
 - 階段 -> kaidan
 - エレベーター / EV -> elevator
-- デッキ / 床 -> deck
+- デッキ / 床 / スラブ -> deck
+
+Line kind (field lineKind, default "member"):
+- Steel shapes H/□/L/CT/PL etc. -> "member"
+- 高力ボルト / アンカーボルト / ボルト類 rows (not structural shapes) -> "bolt"
+- 溶接 / 接合部品が部材と一体でない場合 -> "connection"
+- その他副資材 -> "misc"
 
 Floor labels normalize to 1F / 2F / ... / RF / B1 / PH.
 Block (工区) is one of A/B/C/D, or null.
-Quantities are integers. Sections include the steel section text as written
-on the drawing (e.g. "H-600x200x11x17").
+Quantities are integers (本数 / 個数). Sections: steel callout as written (e.g. "H-600x200x11x17") or bolt spec (e.g. "S10T HTB-20x65").
+pieceLengthMm: member length in millimetres when a length column exists (設計数量 as mm or m — convert m to mm).
+phase: short text if a 工程 / フェーズ column exists. shop: 製作場 / 工場タグ if present.
+confidence: 0–1 per row for your own certainty (low when occluded or guessed).
 
 OUTPUT RULES:
 * Respond with a single JSON object on one line.
-* Shape: {"rows":[{"level":"2F","block":"A","elementType":"oobari","label":"G1","section":"H-600x200x11x17","qty":8,"grid":"X1-X8"}, ...]}
-* Use null where unknown. Do not invent grids.
+* Shape: {"rows":[{"level":"2F","block":"A","elementType":"oobari","lineKind":"member","label":"G1","section":"H-600x200x11x17","pieceLengthMm":6000,"qty":8,"grid":"X1-X8","phase":null,"shop":null,"confidence":0.92,"notes":null}, ...]}
+* Use null where unknown. Do not invent grids or lengths.
 * If you can't confidently identify any rows, return {"rows":[]}.
 * Never wrap the JSON in markdown fences or commentary.`;
 
@@ -109,7 +130,7 @@ export class AiElementVisionService {
 
     const message = await client.messages.create({
       model,
-      max_tokens: 2048,
+      max_tokens: 8192,
       temperature: 0,
       system: SYSTEM_PROMPT_BASE,
       messages: [
@@ -157,6 +178,19 @@ export class AiElementVisionService {
       }
       const level = this.normalizeLevel(r?.level) ?? options.level ?? '1F';
       const block = (typeof r?.block === 'string' && r.block.trim()) ? r.block.trim().toUpperCase() : options.block;
+      const lkRaw = typeof r?.lineKind === 'string' ? r.lineKind.trim().toLowerCase() : '';
+      const lineKind = (ELEMENT_LINE_KINDS as readonly string[]).includes(lkRaw)
+        ? (lkRaw as ElementLineKind)
+        : ('member' as ElementLineKind);
+      let pieceLengthMm: number | null = null;
+      if (r?.pieceLengthMm != null && Number.isFinite(Number(r.pieceLengthMm))) {
+        const pl = Math.floor(Number(r.pieceLengthMm));
+        if (pl > 0) pieceLengthMm = Math.min(120_000, pl);
+      }
+      let confidence: number | null = null;
+      if (r?.confidence != null && Number.isFinite(Number(r.confidence))) {
+        confidence = Math.min(1, Math.max(0, Number(r.confidence)));
+      }
       rows.push({
         level,
         block,
@@ -165,6 +199,12 @@ export class AiElementVisionService {
         section: typeof r?.section === 'string' && r.section.trim() ? r.section.trim() : null,
         qty,
         grid: typeof r?.grid === 'string' && r.grid.trim() ? r.grid.trim() : null,
+        pieceLengthMm,
+        phase: typeof r?.phase === 'string' && r.phase.trim() ? r.phase.trim().slice(0, 200) : null,
+        shop: typeof r?.shop === 'string' && r.shop.trim() ? r.shop.trim().slice(0, 200) : null,
+        lineKind,
+        confidence,
+        notes: typeof r?.notes === 'string' && r.notes.trim() ? r.notes.trim().slice(0, 500) : null,
       });
     }
     return { rows, warnings, rawText: text };

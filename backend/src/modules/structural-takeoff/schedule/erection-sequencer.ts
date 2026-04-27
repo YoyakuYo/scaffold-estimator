@@ -79,6 +79,8 @@ function aggregate(elements: ExtractedElement[]): Aggregated[] {
   const map = new Map<string, Aggregated>();
   for (const e of elements) {
     if (!Number.isFinite(e.qty) || e.qty <= 0) continue;
+    const lk = e.lineKind ?? 'member';
+    if (lk !== 'member') continue;
     const key = `${e.block ?? ''}|${e.level}|${e.elementType}`;
     const existing = map.get(key);
     const lenMm =

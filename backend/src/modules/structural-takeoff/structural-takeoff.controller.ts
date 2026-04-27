@@ -34,6 +34,7 @@ import { applyDeliveryPlanOverrides, type DeliveryPlanOverridesPayload } from '.
 import { todayIso } from './schedule/calendar';
 import { PresenceService } from '../presence/presence.service';
 import {
+  ConfirmElementReviewDto,
   CreateProjectDto,
   CreateSetDto,
   PatchClassificationDto,
@@ -314,6 +315,20 @@ export class StructuralTakeoffController {
     );
   }
 
+  /** Human-in-the-loop: clear needs_review on selected element rows. */
+  @Post('sets/:setId/elements/confirm-review')
+  async confirmElementReview(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Body() dto: ConfirmElementReviewDto,
+  ) {
+    return this.service.confirmElementsReview(
+      { userId: user.id, companyId: user.companyId ?? null, role: user.role },
+      setId,
+      dto,
+    );
+  }
+
   @Delete('sets/:setId/elements/:elementId')
   async deleteElement(
     @CurrentUser() user: any,
@@ -365,6 +380,9 @@ export class StructuralTakeoffController {
           section: r.section,
           qty: r.qty,
           pieceLengthMm: r.pieceLengthMm ?? null,
+          phase: r.phase ?? null,
+          shop: r.shop ?? null,
+          lineKind: r.lineKind ?? 'member',
           grid: r.grid,
           notes: r.notes,
         })),
@@ -453,6 +471,44 @@ export class StructuralTakeoffController {
       warnings: result.warnings,
       layers: result.layers,
     };
+  }
+
+  @Post('sets/:setId/import/ifc')
+  @Throttle({ default: { limit: 8, ttl: 60000 } })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 80 * 1024 * 1024 },
+    }),
+  )
+  async importIfc(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded.');
+    const lower = (file.originalname ?? '').toLowerCase();
+    if (!lower.endsWith('.ifc')) {
+      throw new BadRequestException('Upload a single .ifc file.');
+    }
+    const buffer = (file as any).buffer as Buffer | undefined;
+    if (!buffer?.length) throw new BadRequestException('File has no content.');
+    const ctx = { userId: user.id, companyId: user.companyId ?? null, role: user.role };
+    const { saved, warnings } = await this.service.importIfcToSet(ctx, setId, buffer);
+
+    await this.presence.recordUpload({
+      userId: user.id,
+      companyId: user.companyId ?? null,
+      productCode: 'construction_plan',
+      kind: 'ifc',
+      filename: file.originalname,
+      mimeType: file.mimetype || null,
+      sizeBytes: file.size ?? null,
+      refId: setId,
+      metadata: { setId, rowsImported: saved.length, mode: 'ifc-structural' },
+    });
+
+    return { saved, warnings };
   }
 
   // ─── Phase 4: schedule + delivery + Excel ────────────────

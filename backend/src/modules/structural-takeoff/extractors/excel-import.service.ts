@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import {
+  ELEMENT_LINE_KINDS,
   STRUCTURAL_ELEMENT_TYPES,
+  type ElementLineKind,
   type StructuralElementType,
 } from '../element-types';
 
@@ -14,6 +16,9 @@ export interface ExcelImportRow {
   qty: number;
   /** Single-member length in millimetres (optional). */
   pieceLengthMm: number | null;
+  phase: string | null;
+  shop: string | null;
+  lineKind: ElementLineKind;
   grid: string | null;
   notes: string | null;
 }
@@ -57,6 +62,9 @@ export class ExcelElementImportService {
     ],
     qty: ['数量', '個数', '本数', 'qty', 'quantity', 'count'],
     grid: ['通り芯', '通り', 'grid', 'axis'],
+    phase: ['工程', 'フェーズ', 'phase', '工順'],
+    shop: ['製作場', '工場', 'shop', 'fab', 'fabricator'],
+    lineKind: ['行種', 'line_kind', 'linekind', '種別行', 'bolt/member'],
     notes: ['備考', 'note', 'notes', 'remarks', 'remark'],
   };
 
@@ -205,6 +213,9 @@ export class ExcelElementImportService {
     const colQty = Number(headerMap.qty);
     const colGrid = headerMap.grid !== undefined ? Number(headerMap.grid) : null;
     const colNotes = headerMap.notes !== undefined ? Number(headerMap.notes) : null;
+    const colPhase = headerMap.phase !== undefined ? Number(headerMap.phase) : null;
+    const colShop = headerMap.shop !== undefined ? Number(headerMap.shop) : null;
+    const colLineKind = headerMap.lineKind !== undefined ? Number(headerMap.lineKind) : null;
 
     let rowIndex = 1;
     for (const dataRow of data) {
@@ -235,6 +246,11 @@ export class ExcelElementImportService {
           pieceLengthMm = Math.min(120_000, Math.max(1, Math.floor(lenN)));
         }
       }
+      const lkRaw = colLineKind != null ? get(colLineKind).trim().toLowerCase() : '';
+      const lineKind = (ELEMENT_LINE_KINDS as readonly string[]).includes(lkRaw)
+        ? (lkRaw as ElementLineKind)
+        : ('member' as ElementLineKind);
+
       rows.push({
         level: this.normalizeLevel(level),
         block: get(colBlock) || null,
@@ -243,6 +259,21 @@ export class ExcelElementImportService {
         section: get(colSection) || null,
         qty,
         pieceLengthMm,
+        phase:
+          colPhase != null
+            ? (() => {
+                const p = get(colPhase).trim().slice(0, 200);
+                return p || null;
+              })()
+            : null,
+        shop:
+          colShop != null
+            ? (() => {
+                const s = get(colShop).trim().slice(0, 200);
+                return s || null;
+              })()
+            : null,
+        lineKind,
         grid: get(colGrid) || null,
         notes: get(colNotes) || null,
       });

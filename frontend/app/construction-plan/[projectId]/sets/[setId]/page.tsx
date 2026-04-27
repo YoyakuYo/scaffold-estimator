@@ -25,16 +25,35 @@ import {
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 import {
+  ELEMENT_LINE_KINDS,
   STRUCTURAL_ELEMENT_TYPES,
   DRAWING_KINDS,
   structuralTakeoffApi,
   type DrawingKind,
+  type ElementLineKind,
   type ExtractedElement,
   type SetReviewPayload,
   type StructuralElementType,
 } from '@/lib/api/structural-takeoff';
 
-const ACCEPTED_EXT = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'dxf', 'dwg', 'jww', 'xlsx', 'xls', 'csv'];
+const ACCEPTED_EXT = [
+  'pdf',
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+  'gif',
+  'bmp',
+  'tif',
+  'tiff',
+  'dxf',
+  'dwg',
+  'jww',
+  'xlsx',
+  'xls',
+  'csv',
+  'ifc',
+];
 
 interface DraftRow {
   /** Existing extracted_elements.id, undefined for new rows. */
@@ -48,10 +67,20 @@ interface DraftRow {
   pieceLengthMm: string;
   qty: number;
   grid: string;
+  phase: string;
+  shop: string;
+  lineKind: ElementLineKind;
+  needsReview: boolean;
+  /** Read-only from server (AI/IFC self-score); not edited in grid. */
+  extractionConfidence: string;
   notes: string;
 }
 
 function rowFromExisting(e: ExtractedElement): DraftRow {
+  const conf =
+    e.extractionConfidence != null && Number.isFinite(e.extractionConfidence)
+      ? String(Math.round(e.extractionConfidence * 1000) / 1000)
+      : '';
   return {
     id: e.id,
     level: e.level,
@@ -63,6 +92,11 @@ function rowFromExisting(e: ExtractedElement): DraftRow {
       e.pieceLengthMm != null && e.pieceLengthMm > 0 ? String(e.pieceLengthMm) : '',
     qty: Number.isFinite(e.qty) ? e.qty : 0,
     grid: e.grid ?? '',
+    phase: e.phase ?? '',
+    shop: e.shop ?? '',
+    lineKind: (e.lineKind as ElementLineKind) || 'member',
+    needsReview: !!e.needsReview,
+    extractionConfidence: conf,
     notes: e.notes ?? '',
   };
 }
@@ -77,6 +111,11 @@ function blankRow(level: string, block: string | null, elementType: StructuralEl
     pieceLengthMm: '',
     qty: 0,
     grid: '',
+    phase: '',
+    shop: '',
+    lineKind: 'member',
+    needsReview: false,
+    extractionConfidence: '',
     notes: '',
   };
 }
@@ -96,9 +135,11 @@ export default function ConstructionPlanSetReviewPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
   const dxfInputRef = useRef<HTMLInputElement>(null);
+  const ifcInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<DraftRow[]>([]);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [reviewSelectedIds, setReviewSelectedIds] = useState<Set<string>>(() => new Set());
 
   const { data, isLoading, error } = useQuery<SetReviewPayload>({
     queryKey: ['structural-takeoff', 'set-review', setId],
@@ -143,6 +184,31 @@ export default function ConstructionPlanSetReviewPage() {
       presenceActions.recordAction(`Imported ${res.saved.length} elements from DXF layers into set ${setId.slice(0, 8)}`);
     },
     onError: () => setImportMessage(t('constructionPlanReview', 'dxfImportFailed')),
+  });
+
+  const importIfc = useMutation({
+    mutationFn: (file: File) => structuralTakeoffApi.importIfc(setId, file),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+      setDraftLoaded(false);
+      const warn = res.warnings.length > 0 ? ` (${res.warnings.length} warnings)` : '';
+      setImportMessage(
+        t('constructionPlanReview', 'ifcImportedToast').replace('{count}', String(res.saved.length)) + warn,
+      );
+      presenceActions.recordAction(`Imported ${res.saved.length} elements from IFC into set ${setId.slice(0, 8)}`);
+    },
+    onError: () => setImportMessage(t('constructionPlanReview', 'ifcImportFailed')),
+  });
+
+  const confirmReview = useMutation({
+    mutationFn: (ids: string[]) => structuralTakeoffApi.confirmElementsReview(setId, ids),
+    onSuccess: (res) => {
+      setReviewSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
+      setDraftLoaded(false);
+      setImportMessage(t('constructionPlanReview', 'confirmReviewToast').replace('{count}', String(res.updated)));
+    },
+    onError: () => setImportMessage(t('constructionPlanReview', 'confirmReviewFailed')),
   });
 
   const patchFile = useMutation({
@@ -208,6 +274,10 @@ export default function ConstructionPlanSetReviewPage() {
               section: r.section.trim() || null,
               qty: r.qty,
               pieceLengthMm,
+              phase: r.phase.trim() || null,
+              shop: r.shop.trim() || null,
+              lineKind: r.lineKind,
+              needsReview: r.needsReview,
               grid: r.grid.trim() || null,
               notes: r.notes.trim() || null,
             };
@@ -387,6 +457,29 @@ export default function ConstructionPlanSetReviewPage() {
               if (dxfInputRef.current) dxfInputRef.current.value = '';
             }}
           />
+          <button
+            onClick={() => ifcInputRef.current?.click()}
+            disabled={importIfc.isPending}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 text-sm"
+          >
+            {importIfc.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            {t('constructionPlanReview', 'importIfc')}
+          </button>
+          <input
+            ref={ifcInputRef}
+            type="file"
+            accept=".ifc,application/ifc,application/x-step"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importIfc.mutate(f);
+              if (ifcInputRef.current) ifcInputRef.current.value = '';
+            }}
+          />
           <span className="text-xs text-gray-500">
             {t('constructionPlanReview', 'extractModesHint')}
           </span>
@@ -414,7 +507,7 @@ export default function ConstructionPlanSetReviewPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".pdf,image/*,.dxf,.dwg,.jww,.xlsx,.xls,.csv"
+              accept=".pdf,image/*,.dxf,.dwg,.jww,.xlsx,.xls,.csv,.ifc"
               className="hidden"
               onChange={(e) => {
                 handleFiles(e.target.files);
@@ -602,22 +695,41 @@ export default function ConstructionPlanSetReviewPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-lg font-semibold text-gray-900">
               {t('constructionPlanReview', 'elementsTitle')}
             </h2>
-            <button
-              onClick={() => saveElements.mutate()}
-              disabled={saveElements.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 text-sm"
-            >
-              {saveElements.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {t('constructionPlanReview', 'saveAll')}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = Array.from(reviewSelectedIds);
+                  if (ids.length === 0) return;
+                  confirmReview.mutate(ids);
+                }}
+                disabled={confirmReview.isPending || reviewSelectedIds.size === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50 text-sm"
+              >
+                {confirmReview.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {t('constructionPlanReview', 'confirmReviewSelected')}
+              </button>
+              <button
+                onClick={() => saveElements.mutate()}
+                disabled={saveElements.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 text-sm"
+              >
+                {saveElements.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {t('constructionPlanReview', 'saveAll')}
+              </button>
+            </div>
           </div>
 
           <div className="p-6 space-y-6">
@@ -645,7 +757,11 @@ export default function ConstructionPlanSetReviewPage() {
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50/50">
                             <tr className="text-left text-gray-500">
+                              <th className="px-3 py-2 font-medium w-8" title={t('constructionPlanReview', 'reviewSelectHint')}>
+                                {' '}
+                              </th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'elementType')}</th>
+                              <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'lineKind')}</th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'label')}</th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'section')}</th>
                               <th className="px-3 py-2 font-medium whitespace-nowrap">
@@ -653,19 +769,45 @@ export default function ConstructionPlanSetReviewPage() {
                               </th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'qty')}</th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'grid')}</th>
+                              <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'phase')}</th>
+                              <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'shop')}</th>
+                              <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'needsReview')}</th>
+                              <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'confidence')}</th>
                               <th className="px-3 py-2 font-medium" />
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {sectionRows.length === 0 ? (
                               <tr>
-                                <td colSpan={7} className="px-3 py-3 text-xs text-gray-400">
+                                <td colSpan={13} className="px-3 py-3 text-xs text-gray-400">
                                   {t('constructionPlanReview', 'emptyAddBelow')}
                                 </td>
                               </tr>
                             ) : (
                               sectionRows.map(({ row, idx }) => (
-                                <tr key={`${level}-${block ?? 'all'}-${idx}`}>
+                                <tr
+                                  key={`${level}-${block ?? 'all'}-${idx}`}
+                                  className={row.needsReview ? 'bg-amber-50/40' : undefined}
+                                >
+                                  <td className="px-3 py-2 align-middle">
+                                    {row.id && row.needsReview ? (
+                                      <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        checked={reviewSelectedIds.has(row.id)}
+                                        onChange={() => {
+                                          if (!row.id) return;
+                                          setReviewSelectedIds((prev) => {
+                                            const n = new Set(prev);
+                                            if (n.has(row.id!)) n.delete(row.id!);
+                                            else n.add(row.id!);
+                                            return n;
+                                          });
+                                        }}
+                                        aria-label={t('constructionPlanReview', 'reviewSelectHint')}
+                                      />
+                                    ) : null}
+                                  </td>
                                   <td className="px-3 py-2">
                                     <select
                                       value={row.elementType}
@@ -675,6 +817,21 @@ export default function ConstructionPlanSetReviewPage() {
                                       {STRUCTURAL_ELEMENT_TYPES.map((et) => (
                                         <option key={et} value={et}>
                                           {t('constructionPlanReview', `elementType_${et}` as never)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <select
+                                      value={row.lineKind}
+                                      onChange={(e) =>
+                                        updateRow(idx, { lineKind: e.target.value as ElementLineKind })
+                                      }
+                                      className="px-2 py-1 border border-gray-200 rounded-md text-xs max-w-[7rem]"
+                                    >
+                                      {ELEMENT_LINE_KINDS.map((lk) => (
+                                        <option key={lk} value={lk}>
+                                          {t('constructionPlanReview', `lineKind_${lk}` as never)}
                                         </option>
                                       ))}
                                     </select>
@@ -725,6 +882,33 @@ export default function ConstructionPlanSetReviewPage() {
                                       placeholder="X1-Y1"
                                       className="w-24 px-2 py-1 border border-gray-200 rounded-md text-xs"
                                     />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      value={row.phase}
+                                      onChange={(e) => updateRow(idx, { phase: e.target.value })}
+                                      className="w-20 px-2 py-1 border border-gray-200 rounded-md text-xs"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      value={row.shop}
+                                      onChange={(e) => updateRow(idx, { shop: e.target.value })}
+                                      className="w-20 px-2 py-1 border border-gray-200 rounded-md text-xs"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <label className="inline-flex items-center gap-1 text-xs text-gray-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={row.needsReview}
+                                        onChange={(e) => updateRow(idx, { needsReview: e.target.checked })}
+                                      />
+                                      {row.needsReview ? t('constructionPlanReview', 'needsReviewYes') : ''}
+                                    </label>
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-gray-500 font-mono whitespace-nowrap">
+                                    {row.extractionConfidence || '—'}
                                   </td>
                                   <td className="px-3 py-2 text-right">
                                     <button
