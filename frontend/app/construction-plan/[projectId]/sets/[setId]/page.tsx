@@ -19,6 +19,7 @@ import {
   FileSpreadsheet,
   Layers,
   Truck,
+  Download,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
@@ -477,13 +478,31 @@ export default function ConstructionPlanSetReviewPage() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => deleteFile.mutate(f.id)}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                        title={t('constructionPlanReview', 'delete')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        {f.storagePath ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const link = await structuralTakeoffApi.getFileSignedUrl(setId, f.id);
+                                window.open(link.url, '_blank', 'noopener,noreferrer');
+                              } catch {
+                                /* signed URL failures are silent — UI stays usable */
+                              }
+                            }}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                            title={t('constructionPlanReview', 'download')}
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => deleteFile.mutate(f.id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          title={t('constructionPlanReview', 'delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

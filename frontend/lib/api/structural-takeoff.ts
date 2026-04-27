@@ -214,6 +214,15 @@ export const structuralTakeoffApi = {
     );
     return res.data;
   },
+  getFileSignedUrl: async (
+    setId: string,
+    fileId: string,
+  ): Promise<{ url: string; expiresInSeconds: number; filename: string }> => {
+    const res = await apiClient.get<{ url: string; expiresInSeconds: number; filename: string }>(
+      `/structural-takeoff/sets/${setId}/files/${fileId}/url`,
+    );
+    return res.data;
+  },
 
   // Elements
   upsertElements: async (

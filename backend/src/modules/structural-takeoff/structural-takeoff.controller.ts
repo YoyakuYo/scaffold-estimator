@@ -154,9 +154,9 @@ export class StructuralTakeoffController {
       filename: f.originalname,
       mimeType: f.mimetype || null,
       sizeBytes: f.size ?? null,
-      // Phase 3 foundation persists metadata only; storage path wiring is
-      // an integration follow-up (Supabase storage bucket + signed URLs).
-      storagePath: null,
+      // Pass the buffer through so the service can persist the bytes to
+      // the construction-plan-files Supabase Storage bucket.
+      buffer: ((f as any).buffer as Buffer | undefined) ?? null,
     }));
     const saved = await this.service.addFilesToSet(ctx, setId, inputs);
 
@@ -205,6 +205,23 @@ export class StructuralTakeoffController {
       fileId,
     );
     return { ok: true };
+  }
+
+  /**
+   * Short-lived signed download URL for an uploaded file. Returns 404 when
+   * the file is metadata-only (no stored bytes).
+   */
+  @Get('sets/:setId/files/:fileId/url')
+  async getFileSignedUrl(
+    @CurrentUser() user: any,
+    @Param('setId') setId: string,
+    @Param('fileId') fileId: string,
+  ) {
+    return this.service.getFileSignedUrl(
+      { userId: user.id, companyId: user.companyId ?? null, role: user.role },
+      setId,
+      fileId,
+    );
   }
 
   // ─── Manual element entry ────────────────────────────────

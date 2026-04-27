@@ -37,8 +37,18 @@ interface UploadFileInput {
   filename: string;
   mimeType: string | null;
   sizeBytes: number | null;
-  storagePath: string | null;
+  /**
+   * Raw bytes. When supplied, the service uploads the buffer to the
+   * `construction-plan-files` bucket and persists the resulting object
+   * key as `storagePath`. When undefined, only metadata is recorded.
+   */
+  buffer?: Buffer | null;
 }
+
+/** Private Supabase Storage bucket holding all Construction Plan uploads. */
+const CONSTRUCTION_PLAN_BUCKET = 'construction-plan-files';
+/** Default signed-URL TTL for downloads (seconds). 5 minutes is plenty for one-shot reviews. */
+const SIGNED_URL_TTL_SECONDS = 60 * 5;
 
 @Injectable()
 export class StructuralTakeoffService {
@@ -227,11 +237,16 @@ export class StructuralTakeoffService {
   // ─── File upload + classification ──────────────────────────
 
   /**
-   * Persist uploaded files for an existing set and run the deterministic
-   * filename classifier. Returns the inserted file rows with classifications.
-   * No AI is invoked. Storage is not strictly required for this milestone:
-   * if `storagePath` is null we still record the file metadata + classification
-   * so the UI can drive the manual review workflow.
+   * Persist uploaded files for an existing set, run the deterministic
+   * filename classifier, AND store raw bytes in the
+   * `construction-plan-files` Supabase Storage bucket so they can be
+   * downloaded, previewed, or re-classified later (AI vision pass).
+   *
+   * If a buffer is omitted (e.g. callers that only have metadata), the row
+   * is created with `storage_path = null` and the file simply isn't
+   * downloadable. Storage failures are logged but never block the metadata
+   * insert — the user shouldn't lose classification work over a transient
+   * storage hiccup.
    */
   async addFilesToSet(
     ctx: CallerContext,
@@ -241,14 +256,17 @@ export class StructuralTakeoffService {
     const set = await this.getSet(ctx, setId);
     if (files.length === 0) return [];
 
-    const rows = files.map((f) => {
+    const client = this.supabase.getClient();
+
+    // Insert metadata first so we have a stable file id for the storage path.
+    const metaRows = files.map((f) => {
       const cls = classifyDrawingFilename(f.filename);
       return mapPayloadToSnake({
         setId: set.id,
         filename: f.filename,
         mimeType: f.mimeType,
         sizeBytes: f.sizeBytes,
-        storagePath: f.storagePath,
+        storagePath: null,
         kind: cls.kind,
         level: cls.level,
         block: cls.block,
@@ -257,16 +275,93 @@ export class StructuralTakeoffService {
       });
     });
 
-    const { data, error } = await this.supabase
-      .getClient()
+    const { data: inserted, error: insertErr } = await client
       .from('drawing_set_files')
-      .insert(rows)
+      .insert(metaRows)
       .select();
-    if (error) {
-      this.logger.error(`addFilesToSet failed: ${error.message}`);
+    if (insertErr || !inserted) {
+      this.logger.error(`addFilesToSet meta insert failed: ${insertErr?.message}`);
       throw new BadRequestException('Could not save uploaded files.');
     }
-    return mapRowsToCamel<DrawingSetFile>(data || []);
+
+    // Upload bytes for any file that came with a buffer; update storage_path.
+    for (let i = 0; i < inserted.length; i++) {
+      const row = inserted[i] as Record<string, unknown>;
+      const file = files[i];
+      if (!file?.buffer || !Buffer.isBuffer(file.buffer)) continue;
+      const fileId = String(row.id);
+      const ext = this.extractExtension(file.filename);
+      const objectKey = `${set.id}/${fileId}${ext}`;
+      const { error: upErr } = await client.storage
+        .from(CONSTRUCTION_PLAN_BUCKET)
+        .upload(objectKey, file.buffer, {
+          contentType: file.mimeType || 'application/octet-stream',
+          upsert: true,
+        });
+      if (upErr) {
+        this.logger.warn(
+          `addFilesToSet storage upload failed for ${fileId}: ${upErr.message}`,
+        );
+        continue;
+      }
+      const { error: patchErr } = await client
+        .from('drawing_set_files')
+        .update({ storage_path: objectKey })
+        .eq('id', fileId);
+      if (patchErr) {
+        this.logger.warn(
+          `addFilesToSet storage_path patch failed for ${fileId}: ${patchErr.message}`,
+        );
+      } else {
+        (row as { storage_path: string }).storage_path = objectKey;
+      }
+    }
+
+    return mapRowsToCamel<DrawingSetFile>(inserted as Record<string, unknown>[]);
+  }
+
+  private extractExtension(filename: string): string {
+    const m = filename.match(/\.[^./\\]+$/);
+    return m ? m[0].toLowerCase() : '';
+  }
+
+  /**
+   * Generate a short-lived signed URL so a Construction Plan member can
+   * download / preview an uploaded file without exposing the bucket.
+   */
+  async getFileSignedUrl(
+    ctx: CallerContext,
+    setId: string,
+    fileId: string,
+    ttlSeconds = SIGNED_URL_TTL_SECONDS,
+  ): Promise<{ url: string; expiresInSeconds: number; filename: string }> {
+    await this.getSet(ctx, setId);
+    const { data: row, error } = await this.supabase
+      .getClient()
+      .from('drawing_set_files')
+      .select('id, filename, storage_path, set_id')
+      .eq('id', fileId)
+      .eq('set_id', setId)
+      .maybeSingle();
+    if (error || !row) throw new NotFoundException('File not found.');
+    const r = row as Record<string, unknown>;
+    const path = r.storage_path as string | null | undefined;
+    if (!path) {
+      throw new NotFoundException('File has no stored bytes (metadata-only).');
+    }
+    const { data, error: signErr } = await this.supabase
+      .getClient()
+      .storage.from(CONSTRUCTION_PLAN_BUCKET)
+      .createSignedUrl(path, ttlSeconds);
+    if (signErr || !data?.signedUrl) {
+      this.logger.warn(`getFileSignedUrl failed: ${signErr?.message}`);
+      throw new BadRequestException('Could not create download link.');
+    }
+    return {
+      url: data.signedUrl,
+      expiresInSeconds: ttlSeconds,
+      filename: String(r.filename),
+    };
   }
 
   async listFilesForSet(ctx: CallerContext, setId: string): Promise<DrawingSetFile[]> {
@@ -311,13 +406,35 @@ export class StructuralTakeoffService {
 
   async deleteFile(ctx: CallerContext, setId: string, fileId: string): Promise<void> {
     await this.getSet(ctx, setId);
-    const { error } = await this.supabase
-      .getClient()
+    const client = this.supabase.getClient();
+    // Look up storage path first so we can clean up the bucket after a
+    // successful row delete. Storage failures here are warnings — a stale
+    // object is much less harmful than a row delete that silently rolls back.
+    const { data: existing } = await client
+      .from('drawing_set_files')
+      .select('storage_path')
+      .eq('id', fileId)
+      .eq('set_id', setId)
+      .maybeSingle();
+    const storagePath = (existing as { storage_path?: string | null } | null)?.storage_path ?? null;
+
+    const { error } = await client
       .from('drawing_set_files')
       .delete()
       .eq('id', fileId)
       .eq('set_id', setId);
     if (error) throw new BadRequestException('Delete failed.');
+
+    if (storagePath) {
+      const { error: rmErr } = await client.storage
+        .from(CONSTRUCTION_PLAN_BUCKET)
+        .remove([storagePath]);
+      if (rmErr) {
+        this.logger.warn(
+          `deleteFile storage remove failed for ${storagePath}: ${rmErr.message}`,
+        );
+      }
+    }
   }
 
   // ─── Manual element entry ──────────────────────────────────

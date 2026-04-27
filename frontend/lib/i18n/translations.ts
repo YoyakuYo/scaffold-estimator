@@ -3100,6 +3100,7 @@ export const translations = {
     colBlock: { ja: '工区', en: 'Block', fr: 'Zone' },
     colSource: { ja: '判定', en: 'Source', fr: 'Source' },
     delete: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
+    download: { ja: 'ダウンロード', en: 'Download', fr: 'Télécharger' },
     elementsTitle: {
       ja: '部材集計（手動入力）',
       en: 'Element takeoff (manual entry)',
