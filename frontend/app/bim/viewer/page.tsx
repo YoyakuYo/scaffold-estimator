@@ -14,6 +14,7 @@ import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 import { parseIfcToMeshes, type IfcMeshData } from '@/lib/ifc-loader';
 import { createBimMaterialSet, getMaterialForElement } from '@/lib/ifc-bim-materials';
+import { buildBimFromDxf } from '@/lib/bim/dxf-procedural-bim';
 import { bimApi } from '@/lib/api/bim';
 
 interface SceneStats {
@@ -189,7 +190,7 @@ export default function BimViewerPage() {
   const handleFile = useCallback(
     async (file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext !== 'ifc') {
+      if (ext !== 'ifc' && ext !== 'dxf') {
         setError(t('bimViewer', 'unsupportedFormat'));
         return;
       }
@@ -198,7 +199,15 @@ export default function BimViewerPage() {
       const start = performance.now();
       try {
         const buffer = await file.arrayBuffer();
-        const meshes = await parseIfcToMeshes(buffer);
+        let meshes: IfcMeshData[];
+        let warnings: string[] = [];
+        if (ext === 'dxf') {
+          const result = buildBimFromDxf(buffer);
+          meshes = result.meshes;
+          warnings = result.warnings;
+        } else {
+          meshes = await parseIfcToMeshes(buffer);
+        }
         sceneStateRef.current.clearMeshes?.();
         sceneStateRef.current.addMeshes?.(meshes);
         const byType: Record<string, number> = {};
@@ -208,6 +217,9 @@ export default function BimViewerPage() {
         const durationMs = Math.round(performance.now() - start);
         setStats({ meshCount: meshes.length, byType, durationMs });
         setFilename(file.name);
+        if (warnings.length > 0) {
+          setError(warnings.join(' / '));
+        }
 
         // Mirror to the upload feed (best-effort).
         bimApi
@@ -215,11 +227,13 @@ export default function BimViewerPage() {
             filename: file.name,
             mimeType: file.type || 'application/octet-stream',
             sizeBytes: file.size,
-            metadata: { meshCount: meshes.length, byType, durationMs },
+            metadata: { meshCount: meshes.length, byType, durationMs, kind: ext },
           })
           .catch(() => undefined);
 
-        presenceActions.recordAction(`Rendered IFC "${file.name}" (${meshes.length} meshes)`);
+        presenceActions.recordAction(
+          `Rendered ${ext.toUpperCase()} "${file.name}" (${meshes.length} meshes)`,
+        );
       } catch (err) {
         setError((err as Error)?.message || t('bimViewer', 'parseFailed'));
       } finally {
@@ -244,7 +258,7 @@ export default function BimViewerPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".ifc"
+              accept=".ifc,.dxf"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -258,7 +272,7 @@ export default function BimViewerPage() {
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 text-sm"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {t('bimViewer', 'openIfc')}
+              {t('bimViewer', 'openFile')}
             </button>
             <button
               onClick={() => {

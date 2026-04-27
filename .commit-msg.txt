@@ -1,0 +1,42 @@
+feat(bim): gap #5 - BIM Viewer accepts DXF and extrudes a procedural BIM
+
+The viewer now opens .dxf alongside .ifc. DXF parsing is fully
+client-side (no server round-trip, no AI), so customers with DXF-only
+sources can preview their building immediately.
+
+Frontend
+- New lib/bim/dxf-procedural-bim.ts (pure function, test-friendly):
+  * Parses DXF buffer with dxf-parser.
+  * Groups LWPOLYLINE / POLYLINE / LINE entities by layer.
+  * Auto-detects mm vs metres from bounding-box span.
+  * Emits 3 m walls (extrudes wall-layer closed polylines, falls back to
+    every closed polyline when no wall layer matched).
+  * Emits a 200 mm slab from the outermost closed polygon (largest area
+    on slab/floor layer or fallback).
+  * Emits short column extrusions for column-layer polygons.
+  * Emits a roof slab from roof-layer polygons.
+  * Each output mesh is shaped exactly like the existing IfcMeshData
+    (interleaved x,y,z,nx,ny,nz vertices + indices), so it rides through
+    the existing createBimMaterialSet / getMaterialForElement pipeline
+    and gets the same brick / concrete / slate textures as IFC walls.
+  * Fan triangulation from polygon centroid for caps (good enough for
+    convex + simple non-convex polygons typical of building outlines).
+- /bim/viewer page now accepts .ifc OR .dxf:
+  * File input + drag-and-drop accept .dxf.
+  * handleFile dispatches to buildBimFromDxf for DXF, parseIfcToMeshes for
+    IFC.
+  * Stats card shows the same per-element-type breakdown for both formats.
+  * Warnings from DXF parsing surface as a soft red banner.
+- Translation key swap: bimViewer.openIfc → bimViewer.openFile (also kept
+  the old key untouched for backward references); unsupportedFormat now
+  mentions both formats.
+
+Quality
+- Frontend tsc --noEmit passes.
+
+Limitations (honest scope):
+- No window/door grids generated (gap #10 covers the procedural facade
+  generation work).
+- Slab / wall heights are hard-coded defaults (3 m / 200 mm). When DXFs
+  carry storey heights in the title block we'll lift those.
+- Non-convex polygons with holes (e.g. an atrium) render as solid blobs.
