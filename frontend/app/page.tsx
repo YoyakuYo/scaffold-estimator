@@ -21,6 +21,7 @@ import {
   Download,
   Mail,
   Loader2,
+  ArrowRight,
 } from 'lucide-react';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { usersApi } from '@/lib/api/users';
@@ -479,7 +480,7 @@ export default function LandingPage() {
                   {/* Floating 2D inset — desktop / large tablet */}
                   <div className="pointer-events-none absolute -bottom-2 left-0 z-20 hidden w-[min(100%,340px)] -translate-x-1 translate-y-1/4 lg:block lg:-left-4 lg:bottom-10 lg:translate-x-0 lg:translate-y-0">
                     <div
-                      className="pointer-events-auto rotate-[-2deg] overflow-hidden rounded-2xl border border-white/20 bg-slate-900/95 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.85)] ring-1 ring-cyan-500/25 transition duration-300 hover:rotate-0 hover:ring-cyan-400/40"
+                      className="pointer-events-none rotate-[-2deg] overflow-hidden rounded-2xl border border-white/20 bg-slate-900/95 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.85)] ring-1 ring-cyan-500/25"
                     >
                       <div className="relative aspect-[4/3] w-full">
                         <Image
@@ -526,9 +527,14 @@ export default function LandingPage() {
                 {t('landing', 'productsTitle')}
               </h2>
               <p className="mt-3 text-slate-300">{t('landing', 'productsSubtitle')}</p>
+              {!hasToken ? (
+                <p className="mt-4 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2 text-xs leading-relaxed text-slate-400">
+                  {t('landing', 'productsPublicNote')}
+                </p>
+              ) : null}
             </div>
 
-            <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-5 md:items-stretch">
               <LandingProductCard
                 tone="cyan"
                 title={t('products', 'productScaffold')}
@@ -541,6 +547,8 @@ export default function LandingPage() {
                 formats="IFC · DXF · PDF · 画像"
                 ctaLabel={t('landing', 'productScaffoldCta')}
                 ctaHref="/scaffold"
+                isSignedIn={hasToken}
+                ctaSignInLabel={t('landing', 'productCtaSignIn')}
               />
               <LandingProductCard
                 tone="violet"
@@ -554,6 +562,8 @@ export default function LandingPage() {
                 formats="IFC · DXF · PDF · DWG"
                 ctaLabel={t('landing', 'productBimCta')}
                 ctaHref="/bim"
+                isSignedIn={hasToken}
+                ctaSignInLabel={t('landing', 'productCtaSignIn')}
               />
               <LandingProductCard
                 tone="amber"
@@ -567,6 +577,8 @@ export default function LandingPage() {
                 formats="PDF · DXF · DWG · 画像 · Excel/CSV"
                 ctaLabel={t('landing', 'productCpCta')}
                 ctaHref="/construction-plan"
+                isSignedIn={hasToken}
+                ctaSignInLabel={t('landing', 'productCtaSignIn')}
               />
             </div>
           </div>
@@ -1095,6 +1107,8 @@ function LandingProductCard({
   formats,
   ctaLabel,
   ctaHref,
+  isSignedIn,
+  ctaSignInLabel,
 }: {
   tone: 'cyan' | 'violet' | 'amber';
   title: string;
@@ -1102,45 +1116,58 @@ function LandingProductCard({
   features: string[];
   formats: string;
   ctaLabel: string;
+  /** In-app route, e.g. `/scaffold`. Used as `next` when signed out. */
   ctaHref: string;
+  isSignedIn: boolean;
+  ctaSignInLabel: string;
 }) {
   const tones = PRODUCT_TONES[tone];
   const Icon = tone === 'cyan' ? Calculator : tone === 'violet' ? Box : Ruler;
+  const href = isSignedIn ? ctaHref : `/login?next=${encodeURIComponent(ctaHref)}`;
+  const label = isSignedIn ? ctaLabel : ctaSignInLabel;
+  const ctaVisual = isSignedIn
+    ? `${tones.cta} ${tones.ctaHover} shadow-md shadow-black/20`
+    : 'border border-white/30 bg-white/[0.06] text-white hover:bg-white/[0.12] hover:border-white/45';
+
   return (
     <div
-      className={`group relative flex flex-col rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur-sm p-6 ring-1 transition ${tones.ring}`}
+      className={`group relative flex h-full min-h-[320px] flex-col rounded-2xl border border-white/10 bg-slate-900/75 p-6 shadow-xl shadow-black/30 ring-1 backdrop-blur-sm transition ${tones.ring}`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl ${tones.iconBg}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${tones.iconBg}`}
         >
           <Icon className="h-5 w-5" aria-hidden />
         </div>
-        <h3 className="text-lg font-semibold tracking-tight text-white">{title}</h3>
+        <h3 className="min-w-0 flex-1 pt-0.5 text-lg font-semibold leading-snug tracking-tight text-white">
+          {title}
+        </h3>
       </div>
       <p className="mt-3 text-sm text-slate-300 leading-relaxed">{tagline}</p>
-      <ul className="mt-4 space-y-1.5 text-sm text-slate-300">
+      <ul className="mt-4 flex-1 space-y-2 text-sm text-slate-300">
         {features.map((line) => (
-          <li key={line} className="flex gap-2 items-start">
-            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400/80" aria-hidden />
-            <span>{line}</span>
+          <li key={line} className="flex gap-2.5 items-start">
+            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400/85" aria-hidden />
+            <span className="leading-snug">{line}</span>
           </li>
         ))}
       </ul>
-      <div className="mt-5">
+      <div className="mt-5 border-t border-white/10 pt-5">
         <span
           className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${tones.chip}`}
         >
           {formats}
         </span>
       </div>
-      <Link
-        href={ctaHref}
-        className={`mt-6 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${tones.cta} ${tones.ctaHover}`}
-      >
-        {ctaLabel}
-        <span aria-hidden>→</span>
-      </Link>
+      <div className="mt-5">
+        <Link
+          href={href}
+          className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${ctaVisual}`}
+        >
+          <span>{label}</span>
+          <ArrowRight className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+        </Link>
+      </div>
     </div>
   );
 }

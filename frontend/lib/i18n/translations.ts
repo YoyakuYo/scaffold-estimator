@@ -1514,6 +1514,16 @@ export const translations = {
       en: 'Shared identity, audit log and admin cockpit — but each product is sold and unlocked separately.',
       fr: 'Identité, audit et cockpit admin partagés — mais chaque produit s’abonne séparément.',
     },
+    productsPublicNote: {
+      ja: 'このセクションは製品紹介のみです。各機能はログイン後に別画面で開きます（このページではデータは読み込みません）。',
+      en: 'This section is informational only. Each module opens after sign-in on its own screen — no project data is loaded here.',
+      fr: 'Cette section est informative uniquement. Chaque module s’ouvre après connexion — aucune donnée de chantier n’est chargée ici.',
+    },
+    productCtaSignIn: {
+      ja: 'ログインして開く',
+      en: 'Sign in to open',
+      fr: 'Se connecter pour ouvrir',
+    },
 
     productScaffoldF1: {
       ja: 'くさび式・枠組式の数量を Excel まで自動算出',
