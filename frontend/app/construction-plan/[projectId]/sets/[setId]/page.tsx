@@ -44,6 +44,8 @@ interface DraftRow {
   elementType: StructuralElementType;
   label: string;
   section: string;
+  /** Single-member length (mm); empty → server default per element type. */
+  pieceLengthMm: string;
   qty: number;
   grid: string;
   notes: string;
@@ -57,6 +59,8 @@ function rowFromExisting(e: ExtractedElement): DraftRow {
     elementType: e.elementType,
     label: e.label ?? '',
     section: e.section ?? '',
+    pieceLengthMm:
+      e.pieceLengthMm != null && e.pieceLengthMm > 0 ? String(e.pieceLengthMm) : '',
     qty: Number.isFinite(e.qty) ? e.qty : 0,
     grid: e.grid ?? '',
     notes: e.notes ?? '',
@@ -64,7 +68,17 @@ function rowFromExisting(e: ExtractedElement): DraftRow {
 }
 
 function blankRow(level: string, block: string | null, elementType: StructuralElementType): DraftRow {
-  return { level, block, elementType, label: '', section: '', qty: 0, grid: '', notes: '' };
+  return {
+    level,
+    block,
+    elementType,
+    label: '',
+    section: '',
+    pieceLengthMm: '',
+    qty: 0,
+    grid: '',
+    notes: '',
+  };
 }
 
 export default function ConstructionPlanSetReviewPage() {
@@ -180,17 +194,24 @@ export default function ConstructionPlanSetReviewPage() {
       structuralTakeoffApi.upsertElements(setId, {
         rows: draft
           .filter((r) => r.qty > 0 || (r.label && r.label.trim().length > 0))
-          .map((r) => ({
-            id: r.id,
-            level: r.level,
-            block: r.block,
-            elementType: r.elementType,
-            label: r.label.trim() || null,
-            section: r.section.trim() || null,
-            qty: r.qty,
-            grid: r.grid.trim() || null,
-            notes: r.notes.trim() || null,
-          })),
+          .map((r) => {
+            const lenRaw = r.pieceLengthMm.trim().replace(/[, ]/g, '');
+            const lenN = lenRaw ? Number.parseInt(lenRaw, 10) : NaN;
+            const pieceLengthMm =
+              Number.isFinite(lenN) && lenN > 0 ? Math.min(120_000, lenN) : null;
+            return {
+              id: r.id,
+              level: r.level,
+              block: r.block,
+              elementType: r.elementType,
+              label: r.label.trim() || null,
+              section: r.section.trim() || null,
+              qty: r.qty,
+              pieceLengthMm,
+              grid: r.grid.trim() || null,
+              notes: r.notes.trim() || null,
+            };
+          }),
       }),
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ['structural-takeoff', 'set-review', setId] });
@@ -627,6 +648,9 @@ export default function ConstructionPlanSetReviewPage() {
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'elementType')}</th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'label')}</th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'section')}</th>
+                              <th className="px-3 py-2 font-medium whitespace-nowrap">
+                                {t('constructionPlanReview', 'pieceLengthMm')}
+                              </th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'qty')}</th>
                               <th className="px-3 py-2 font-medium">{t('constructionPlanReview', 'grid')}</th>
                               <th className="px-3 py-2 font-medium" />
@@ -635,7 +659,7 @@ export default function ConstructionPlanSetReviewPage() {
                           <tbody className="divide-y divide-gray-100">
                             {sectionRows.length === 0 ? (
                               <tr>
-                                <td colSpan={6} className="px-3 py-3 text-xs text-gray-400">
+                                <td colSpan={7} className="px-3 py-3 text-xs text-gray-400">
                                   {t('constructionPlanReview', 'emptyAddBelow')}
                                 </td>
                               </tr>
@@ -669,6 +693,20 @@ export default function ConstructionPlanSetReviewPage() {
                                       onChange={(e) => updateRow(idx, { section: e.target.value })}
                                       placeholder="H-600x200x11x17"
                                       className="w-44 px-2 py-1 border border-gray-200 rounded-md text-xs font-mono"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={120000}
+                                      value={row.pieceLengthMm}
+                                      onChange={(e) =>
+                                        updateRow(idx, { pieceLengthMm: e.target.value.replace(/\D/g, '') })
+                                      }
+                                      placeholder="6000"
+                                      title={t('constructionPlanReview', 'pieceLengthHint')}
+                                      className="w-24 px-2 py-1 border border-gray-200 rounded-md text-xs"
                                     />
                                   </td>
                                   <td className="px-3 py-2">

@@ -110,6 +110,8 @@ export class UpsertElementsDto {
     label?: string | null;
     section?: string | null;
     qty: number;
+    /** Optional single-member length in mm; omit/null to use type default in rollups. */
+    pieceLengthMm?: number | null;
     grid?: string | null;
     notes?: string | null;
   }>;

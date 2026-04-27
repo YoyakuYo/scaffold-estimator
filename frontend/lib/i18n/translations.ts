@@ -3297,6 +3297,12 @@ export const translations = {
     elementType: { ja: '部材', en: 'Element', fr: 'Élément' },
     label: { ja: '符号', en: 'Mark', fr: 'Repère' },
     section: { ja: '断面', en: 'Section', fr: 'Section' },
+    pieceLengthMm: { ja: '長さ(mm)', en: 'Length (mm)', fr: 'Longueur (mm)' },
+    pieceLengthHint: {
+      ja: '空欄＝部材種別ごとの標準長。鉄骨集計の設計数量(m)に使います。',
+      en: 'Blank = default length for the element type; drives design length (m) on the steel summary sheets.',
+      fr: 'Vide = longueur standard par type ; sert à la longueur de calcul (m) sur les feuilles acier.',
+    },
     qty: { ja: '数量', en: 'Qty', fr: 'Qté' },
     grid: { ja: '通り芯', en: 'Grid', fr: 'Trame' },
     emptyAddBelow: {
@@ -3312,9 +3318,9 @@ export const translations = {
     },
     extractModesTitle: { ja: '一括抽出', en: 'Bulk extract', fr: 'Extraction en lot' },
     extractModesHint: {
-      ja: 'Excel/CSV または DXF（レイヤー名）から数量を一括取込みできます。',
-      en: 'Pull quantities at once from Excel/CSV or a layered DXF.',
-      fr: "Importez les quantités d'un seul coup depuis Excel/CSV ou un DXF par calques.",
+      ja: 'Excel/CSV または DXF（レイヤー名）から数量を一括取込みできます。列名「長さ(mm)」で本長を取り込めます。',
+      en: 'Bulk-import from Excel/CSV or layered DXF. Add a “長さ(mm)” / piece length column for member length.',
+      fr: 'Import en masse depuis Excel/CSV ou DXF par calques. Colonne « longueur (mm) » pour la longueur des pièces.',
     },
     importExcel: { ja: 'Excel/CSV 取込', en: 'Import Excel/CSV', fr: 'Importer Excel/CSV' },
     importDxf: { ja: 'DXFレイヤー取込', en: 'Import DXF layers', fr: 'Importer calques DXF' },
@@ -3522,6 +3528,11 @@ export const translations = {
     endDate: { ja: '終了日', en: 'End date', fr: 'Date de fin' },
     workSaturday: { ja: '土曜稼働', en: 'Work Saturday', fr: 'Travailler samedi' },
     downloadExcel: { ja: 'Excel ダウンロード', en: 'Download Excel', fr: 'Télécharger Excel' },
+    excelIncludesSteel: {
+      ja: 'Excel には「鉄骨集計一覧」「本体鉄骨集計」シートが含まれます（JIS単重×長さ×本数、5%ロス込み）。',
+      en: 'Workbook includes “鉄骨集計一覧” and “本体鉄骨集計” (JIS kg/m × length × qty, 5% loss).',
+      fr: 'Le classeur inclut « 鉄骨集計一覧 » et « 本体鉄骨集計 » (kg/m JIS × longueur × qté, 5 % de perte).',
+    },
     masterGantt: { ja: '工程表', en: 'Master schedule', fr: 'Planning' },
     activities: { ja: '工程', en: 'activities', fr: 'tâches' },
     deliveryPlanTitle: { ja: '搬入計画（便単位）', en: 'Delivery plan (per truck)', fr: 'Plan de livraisons (par camion)' },

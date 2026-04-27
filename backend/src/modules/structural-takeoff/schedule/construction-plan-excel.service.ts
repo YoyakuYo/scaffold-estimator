@@ -15,6 +15,11 @@ import {
 import { DEFAULT_DURATION_TEMPLATE, type DurationTemplate } from './duration-template';
 import { DEFAULT_TRUCKS } from './truck-bin-pack';
 import { todayIso } from './calendar';
+import {
+  aggregateSteelFrameLines,
+  DEFAULT_STEEL_LOSS_RATE,
+  totalsFromSteelLines,
+} from './steel-frame-schedule';
 
 const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
   hashira: '柱',
@@ -51,7 +56,7 @@ const ACTIVITY_FILL: ExcelJS.FillPattern = {
 @Injectable()
 export class ConstructionPlanExcelService {
   /**
-   * Build the 8-sheet Excel workbook for a Construction Plan set:
+   * Build the Excel workbook for a Construction Plan set:
    *   1. 工程表 (master Gantt by activity x date)
    *   2. 数量集計 (element type x level x block totals)
    *   3. 月次集計
@@ -59,7 +64,9 @@ export class ConstructionPlanExcelService {
    *   5. 日次集計
    *   6. 搬入計画 (one row per truck)
    *   7. トラック日報 (one printable card block per work day)
-   *   8. 凡例・条件 (legend / assumptions: durations, trucks, holidays)
+   *   8. 鉄骨集計一覧 (rolled-up steel weights, 鉄骨集計表 style)
+   *   9. 本体鉄骨集計 (per-section lines: m, kg/m, design/gross kg)
+   *   10. 凡例・条件 (legend / assumptions: durations, trucks, holidays)
    */
   async build(
     project: ConstructionPlanProject,
@@ -97,6 +104,8 @@ export class ConstructionPlanExcelService {
     this.writeDailySummary(wb, delivery);
     this.writeDeliveryPlan(wb, delivery);
     this.writeDailyTruckCards(wb, delivery);
+    this.writeSteelFrameRollup(wb, project, set, elements);
+    this.writeSteelFrameDetail(wb, project, set, elements);
     this.writeLegend(wb, project, tmpl, startDateIso, options?.workSaturday ?? true);
 
     const arr = await wb.xlsx.writeBuffer();
@@ -183,11 +192,11 @@ export class ConstructionPlanExcelService {
     elements: ExtractedElement[],
   ): void {
     const sheet = wb.addWorksheet('数量集計');
-    sheet.getRow(1).values = ['階', '工区', '部材', '符号', '断面', '数量', '通り芯', '出所', '備考'];
+    sheet.getRow(1).values = ['階', '工区', '部材', '符号', '断面', '長さ(mm)', '数量', '通り芯', '出所', '備考'];
     sheet.getRow(1).font = { bold: true };
     sheet.getRow(1).fill = HEADER_FILL;
     sheet.getRow(1).eachCell((c) => (c.border = THIN));
-    [10, 8, 12, 10, 22, 8, 14, 10, 24].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+    [10, 8, 12, 10, 22, 10, 8, 14, 10, 24].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
 
     const sortedElements = elements
       .slice()
@@ -206,18 +215,20 @@ export class ConstructionPlanExcelService {
       sheet.getCell(r, 3).value = ELEMENT_LABEL_JP[el.elementType] ?? el.elementType;
       sheet.getCell(r, 4).value = el.label ?? '';
       sheet.getCell(r, 5).value = el.section ?? '';
-      sheet.getCell(r, 6).value = el.qty;
-      sheet.getCell(r, 7).value = el.grid ?? '';
-      sheet.getCell(r, 8).value = el.source;
-      sheet.getCell(r, 9).value = el.notes ?? '';
-      for (let c = 1; c <= 9; c++) sheet.getCell(r, c).border = THIN;
+      sheet.getCell(r, 6).value =
+        el.pieceLengthMm != null && el.pieceLengthMm > 0 ? el.pieceLengthMm : '';
+      sheet.getCell(r, 7).value = el.qty;
+      sheet.getCell(r, 8).value = el.grid ?? '';
+      sheet.getCell(r, 9).value = el.source;
+      sheet.getCell(r, 10).value = el.notes ?? '';
+      for (let c = 1; c <= 10; c++) sheet.getCell(r, c).border = THIN;
       r++;
     }
     if (r > 2) {
-      sheet.getCell(r, 5).value = '合計';
-      sheet.getCell(r, 5).font = { bold: true };
-      sheet.getCell(r, 6).value = { formula: `SUM(F2:F${r - 1})` };
+      sheet.getCell(r, 6).value = '合計(本数)';
       sheet.getCell(r, 6).font = { bold: true };
+      sheet.getCell(r, 7).value = { formula: `SUM(G2:G${r - 1})` };
+      sheet.getCell(r, 7).font = { bold: true };
     }
     sheet.getCell(`A${r + 2}`).value = `案件: ${project.name}`;
     sheet.getCell(`A${r + 2}`).font = { italic: true };
@@ -353,7 +364,118 @@ export class ConstructionPlanExcelService {
     }
   }
 
-  // ─── 8. 凡例・条件 ────────────────────────────────────────
+  // ─── 8. 鉄骨集計一覧 (summary) ─────────────────────────────
+
+  private writeSteelFrameRollup(
+    wb: ExcelJS.Workbook,
+    project: ConstructionPlanProject,
+    set: DrawingSet,
+    elements: ExtractedElement[],
+  ): void {
+    const sheet = wb.addWorksheet('鉄骨集計一覧', {
+      pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const lines = aggregateSteelFrameLines(elements, DEFAULT_STEEL_LOSS_RATE);
+    const { designKg, grossKg } = totalsFromSteelLines(lines);
+
+    sheet.getCell('A1').value = '鉄骨集計一覧';
+    sheet.getCell('A1').font = { bold: true, size: 14 };
+    sheet.getCell('A2').value = `案件: ${project.name} / Set: ${set.name || set.id.slice(0, 8)}`;
+    sheet.getCell('A2').font = { italic: true, color: { argb: 'FF6B7280' } };
+    sheet.getCell('A3').value = `ロス率（集計用）: ${(DEFAULT_STEEL_LOSS_RATE * 100).toFixed(0)}%`;
+    let r = 5;
+    sheet.getRow(r).values = ['区分', '設計重量(kg)', '所用重量(kg)'];
+    sheet.getRow(r).font = { bold: true };
+    sheet.getRow(r).fill = HEADER_FILL;
+    sheet.getRow(r).eachCell((c) => (c.border = THIN));
+    r++;
+    sheet.getCell(r, 1).value = '本体鉄骨';
+    sheet.getCell(r, 2).value = Math.round(designKg);
+    sheet.getCell(r, 3).value = Math.round(grossKg);
+    for (let c = 1; c <= 3; c++) sheet.getCell(r, c).border = THIN;
+    r++;
+    sheet.getCell(r, 1).value = 'その他';
+    sheet.getCell(r, 2).value = 0;
+    sheet.getCell(r, 3).value = 0;
+    for (let c = 1; c <= 3; c++) sheet.getCell(r, c).border = THIN;
+    r++;
+    sheet.getCell(r, 1).value = '総合計';
+    sheet.getCell(r, 1).font = { bold: true };
+    sheet.getCell(r, 2).value = Math.round(designKg);
+    sheet.getCell(r, 2).font = { bold: true };
+    sheet.getCell(r, 3).value = Math.round(grossKg);
+    sheet.getCell(r, 3).font = { bold: true };
+    for (let c = 1; c <= 3; c++) sheet.getCell(r, c).border = THIN;
+    r += 2;
+    sheet.getCell(r, 1).value =
+      '※ 断面が JIS カタログと一致する行のみ単重(kg/m)から重量を積算。数量表の「長さ(mm)」列で本長を上書きできます。';
+    sheet.getCell(r, 1).font = { size: 9, italic: true, color: { argb: 'FF6B7280' } };
+    sheet.mergeCells(r, 1, r, 5);
+    [18, 16, 16].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+  }
+
+  // ─── 9. 本体鉄骨集計 (detail) ──────────────────────────────
+
+  private writeSteelFrameDetail(
+    wb: ExcelJS.Workbook,
+    project: ConstructionPlanProject,
+    set: DrawingSet,
+    elements: ExtractedElement[],
+  ): void {
+    const sheet = wb.addWorksheet('本体鉄骨集計', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const lines = aggregateSteelFrameLines(elements, DEFAULT_STEEL_LOSS_RATE);
+
+    sheet.getCell('A1').value = '本体鉄骨集計';
+    sheet.getCell('A1').font = { bold: true, size: 14 };
+    sheet.getCell('A2').value = `案件: ${project.name} / Set: ${set.name || set.id.slice(0, 8)}`;
+    sheet.getCell('A2').font = { italic: true, color: { argb: 'FF6B7280' } };
+
+    const headerRow = 4;
+    sheet.getRow(headerRow).values = [
+      'No',
+      '名称',
+      '材質',
+      '寸法(断面)',
+      '設計数量(m)',
+      '単重(kg/m)',
+      '設計重量(kg)',
+      'ロス率',
+      '所用重量(kg)',
+    ];
+    sheet.getRow(headerRow).font = { bold: true };
+    sheet.getRow(headerRow).fill = HEADER_FILL;
+    sheet.getRow(headerRow).eachCell((c) => (c.border = THIN));
+    [5, 14, 10, 28, 14, 12, 14, 8, 14].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+
+    let r = headerRow + 1;
+    let no = 1;
+    for (const line of lines) {
+      sheet.getCell(r, 1).value = no++;
+      sheet.getCell(r, 2).value = line.shapeNameJp;
+      sheet.getCell(r, 3).value = line.grade;
+      sheet.getCell(r, 4).value = line.section;
+      sheet.getCell(r, 5).value = line.lengthM;
+      sheet.getCell(r, 6).value = line.kgPerM;
+      sheet.getCell(r, 7).value = line.designWeightKg;
+      sheet.getCell(r, 8).value = DEFAULT_STEEL_LOSS_RATE;
+      sheet.getCell(r, 9).value = line.grossWeightKg;
+      for (let c = 1; c <= 9; c++) sheet.getCell(r, c).border = THIN;
+      r++;
+    }
+    if (lines.length > 0) {
+      sheet.getCell(r, 4).value = '合計';
+      sheet.getCell(r, 4).font = { bold: true };
+      sheet.getCell(r, 7).value = { formula: `SUM(G${headerRow + 1}:G${r - 1})` };
+      sheet.getCell(r, 7).font = { bold: true };
+      sheet.getCell(r, 9).value = { formula: `SUM(I${headerRow + 1}:I${r - 1})` };
+      sheet.getCell(r, 9).font = { bold: true };
+      for (let c = 1; c <= 9; c++) sheet.getCell(r, c).border = THIN;
+    }
+  }
+
+  // ─── 10. 凡例・条件 ───────────────────────────────────────
 
   private writeLegend(
     wb: ExcelJS.Workbook,

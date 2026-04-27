@@ -93,6 +93,8 @@ export interface ExtractedElement {
   label: string | null;
   section: string | null;
   qty: number;
+  /** Single-member length (mm); omit or null → type default for weight / steel rollup. */
+  pieceLengthMm?: number | null;
   grid: string | null;
   source: ExtractionSource;
   notes: string | null;
@@ -132,6 +134,7 @@ export interface UpsertElementsPayload {
     label?: string | null;
     section?: string | null;
     qty: number;
+    pieceLengthMm?: number | null;
     grid?: string | null;
     notes?: string | null;
   }>;

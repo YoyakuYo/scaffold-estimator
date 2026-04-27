@@ -364,6 +364,7 @@ export class StructuralTakeoffController {
           label: r.label,
           section: r.section,
           qty: r.qty,
+          pieceLengthMm: r.pieceLengthMm ?? null,
           grid: r.grid,
           notes: r.notes,
         })),

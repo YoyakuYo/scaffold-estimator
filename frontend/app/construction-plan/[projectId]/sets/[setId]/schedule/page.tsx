@@ -213,6 +213,7 @@ export default function ConstructionPlanSchedulePage() {
               {t('constructionPlanSchedule', 'downloadExcel')}
             </button>
           </div>
+          <p className="mt-3 text-xs text-gray-500">{t('constructionPlanSchedule', 'excelIncludesSteel')}</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

@@ -81,7 +81,10 @@ function aggregate(elements: ExtractedElement[]): Aggregated[] {
     if (!Number.isFinite(e.qty) || e.qty <= 0) continue;
     const key = `${e.block ?? ''}|${e.level}|${e.elementType}`;
     const existing = map.get(key);
-    const lenMm = DEFAULT_PIECE_LENGTH_MM[e.elementType] ?? 4000;
+    const lenMm =
+      e.pieceLengthMm != null && Number.isFinite(e.pieceLengthMm) && e.pieceLengthMm > 0
+        ? Math.min(120_000, Math.max(1, Math.floor(e.pieceLengthMm)))
+        : DEFAULT_PIECE_LENGTH_MM[e.elementType] ?? 4000;
     const weight = pieceWeightKg(e.section, e.elementType, lenMm) * e.qty;
     if (existing) {
       existing.pieces += e.qty;

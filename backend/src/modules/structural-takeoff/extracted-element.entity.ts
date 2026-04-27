@@ -36,6 +36,10 @@ export class ExtractedElement {
   @Column({ type: 'integer', default: 0 })
   qty: number;
 
+  /** Single-piece length (mm); null → default length for `elementType` in scheduling / steel rollups. */
+  @Column({ name: 'piece_length_mm', type: 'int', nullable: true })
+  pieceLengthMm: number | null;
+
   @Column({ type: 'text', nullable: true })
   grid: string | null;
 

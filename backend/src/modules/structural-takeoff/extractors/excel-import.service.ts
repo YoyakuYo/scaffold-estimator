@@ -12,6 +12,8 @@ export interface ExcelImportRow {
   label: string | null;
   section: string | null;
   qty: number;
+  /** Single-member length in millimetres (optional). */
+  pieceLengthMm: number | null;
   grid: string | null;
   notes: string | null;
 }
@@ -43,6 +45,16 @@ export class ExcelElementImportService {
     elementType: ['部材', '部材種別', '種別', '種類', 'type', 'element', '区分'],
     label: ['符号', '記号', 'mark', 'tag', 'id'],
     section: ['断面', 'section', 'spec', '形状', 'profile'],
+    pieceLengthMm: [
+      '長さmm',
+      '長さ(mm)',
+      '長さ',
+      'piece_length_mm',
+      'piecelength',
+      'member length',
+      '材長',
+      '長さｍｍ',
+    ],
     qty: ['数量', '個数', '本数', 'qty', 'quantity', 'count'],
     grid: ['通り芯', '通り', 'grid', 'axis'],
     notes: ['備考', 'note', 'notes', 'remarks', 'remark'],
@@ -188,6 +200,8 @@ export class ExcelElementImportService {
     const colType = Number(headerMap.elementType);
     const colLabel = headerMap.label !== undefined ? Number(headerMap.label) : null;
     const colSection = headerMap.section !== undefined ? Number(headerMap.section) : null;
+    const colPieceLen =
+      headerMap.pieceLengthMm !== undefined ? Number(headerMap.pieceLengthMm) : null;
     const colQty = Number(headerMap.qty);
     const colGrid = headerMap.grid !== undefined ? Number(headerMap.grid) : null;
     const colNotes = headerMap.notes !== undefined ? Number(headerMap.notes) : null;
@@ -213,6 +227,14 @@ export class ExcelElementImportService {
         warnings.push(`Row ${rowIndex}: invalid qty "${get(colQty)}"`);
         continue;
       }
+      let pieceLengthMm: number | null = null;
+      if (colPieceLen != null) {
+        const lenRaw = get(colPieceLen).replace(/[, ]/g, '');
+        const lenN = Number.parseFloat(lenRaw);
+        if (Number.isFinite(lenN) && lenN > 0) {
+          pieceLengthMm = Math.min(120_000, Math.max(1, Math.floor(lenN)));
+        }
+      }
       rows.push({
         level: this.normalizeLevel(level),
         block: get(colBlock) || null,
@@ -220,6 +242,7 @@ export class ExcelElementImportService {
         label: get(colLabel) || null,
         section: get(colSection) || null,
         qty,
+        pieceLengthMm,
         grid: get(colGrid) || null,
         notes: get(colNotes) || null,
       });

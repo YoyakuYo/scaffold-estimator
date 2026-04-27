@@ -477,6 +477,11 @@ export class StructuralTakeoffService {
         throw new BadRequestException(`Unknown element type: ${row.elementType}`);
       }
       const qty = Number.isFinite(row.qty) ? Math.max(0, Math.floor(row.qty)) : 0;
+      let pieceLengthMm: number | null = null;
+      if (row.pieceLengthMm != null && Number.isFinite(row.pieceLengthMm)) {
+        const n = Math.floor(Number(row.pieceLengthMm));
+        if (n > 0) pieceLengthMm = Math.min(120_000, Math.max(1, n));
+      }
       return mapPayloadToSnake({
         id: row.id ?? undefined,
         setId,
@@ -486,6 +491,7 @@ export class StructuralTakeoffService {
         label: row.label ?? null,
         section: row.section ?? null,
         qty,
+        pieceLengthMm,
         grid: row.grid ?? null,
         notes: row.notes ?? null,
         source,

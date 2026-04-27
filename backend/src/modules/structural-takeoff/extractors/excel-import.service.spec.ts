@@ -16,6 +16,7 @@ describe('ExcelElementImportService — CSV parsing', () => {
     expect(r.rows[0].elementType).toBe('oobari');
     expect(r.rows[0].label).toBe('G1');
     expect(r.rows[0].qty).toBe(8);
+    expect(r.rows[0].pieceLengthMm).toBeNull();
     expect(r.rows[1].elementType).toBe('kobari');
     expect(r.rows[2].elementType).toBe('hashira');
   });
@@ -40,6 +41,15 @@ describe('ExcelElementImportService — CSV parsing', () => {
     const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
     expect(r.rows[0].level).toBe('1F');
     expect(r.rows[1].level).toBe('R');
+  });
+
+  it('parses optional piece length column (mm)', async () => {
+    const csv = ['階,部材,断面,長さ(mm),数量', '2F,大梁,H-600x200x11x17,6000,4'].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.length).toBe(1);
+    expect(r.rows[0].elementType).toBe('oobari');
+    expect(r.rows[0].pieceLengthMm).toBe(6000);
+    expect(r.rows[0].qty).toBe(4);
   });
 
   it('rejects rows with no header for required fields', async () => {
