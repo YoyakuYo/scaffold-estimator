@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Loader2,
@@ -31,7 +31,7 @@ interface SceneStats {
   referenceOnly?: boolean;
 }
 
-export default function BimViewerPage() {
+function BimViewerPageInner() {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -720,5 +720,19 @@ export default function BimViewerPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BimViewerPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <Loader2 className="h-10 w-10 animate-spin text-violet-500" aria-hidden />
+        </div>
+      }
+    >
+      <BimViewerPageInner />
+    </Suspense>
   );
 }
