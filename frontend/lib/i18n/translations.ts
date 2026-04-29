@@ -3668,6 +3668,11 @@ export const translations = {
       en: 'Structural model',
       fr: 'Modèle structurel',
     },
+    optionsHint: {
+      ja: 'model JSON の options で slabs / connections を false にすると床板・接合プレートを省略できます。',
+      en: 'In the model JSON, set options.slabs or options.connections to false to skip floor slabs or joint plates.',
+      fr: 'Dans le JSON du modèle, options.slabs ou options.connections à false désactive dalles ou platines.',
+    },
   },
 
   bimViewer: {

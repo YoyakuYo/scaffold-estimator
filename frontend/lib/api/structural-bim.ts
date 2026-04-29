@@ -9,6 +9,7 @@ export interface StructuralModelJson {
     elevationBottomMm: number;
     elevationTopMm: number;
   }>;
+  options?: { slabs?: boolean; connections?: boolean };
   members: Array<{
     id: string;
     mark: string;

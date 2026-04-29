@@ -10,7 +10,12 @@ import { BimService, type BimViewerModel } from '../bim/bim.service';
 import { mapPayloadToSnake, mapRowToCamel } from '../../common/utils/db-mapper';
 import { defaultStructuralModel, parseStructuralModel, type StructuralModel } from './structural-model.types';
 import { mergeMembersFromCsv } from './csv-import';
-import { placeMembers } from './placement';
+import {
+  computeFrameConnections,
+  computeSlabsPerStorey,
+  modelExportOptions,
+  placeMembers,
+} from './placement';
 import { buildStructuralIfcDocument } from './ifc-minimal-writer';
 
 export interface StructuralBimProjectRow {
@@ -187,14 +192,21 @@ export class StructuralBimService {
 
     try {
       const { columns, beams } = placeMembers(model);
-      const firstStorey = model.storeys[0];
-      const storeyElM = firstStorey ? firstStorey.elevationBottomMm / 1000 : 0;
+      const opts = modelExportOptions(model);
+      const slabs = opts.slabs ? computeSlabsPerStorey(model) : undefined;
+      const connections = opts.connections ? computeFrameConnections(model) : undefined;
+      const storeys = model.storeys.map((s) => ({
+        id: s.id,
+        name: s.name,
+        elevationBottomM: s.elevationBottomMm / 1000,
+      }));
       const ifcText = buildStructuralIfcDocument({
         projectName: String(row.name || 'Structural'),
-        storeyName: firstStorey?.name ?? '1F',
-        storeyElevationM: storeyElM,
+        storeys,
         columns,
         beams,
+        slabs,
+        connections,
       });
       const buffer = Buffer.from(ifcText, 'utf-8');
       const fname = `structural-${id.slice(0, 8)}.ifc`;

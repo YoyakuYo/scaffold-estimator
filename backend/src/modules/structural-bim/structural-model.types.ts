@@ -37,11 +37,19 @@ export interface StructuralMember {
   phaseColor?: string;
 }
 
+export interface StructuralModelOptions {
+  /** Default true — horizontal IfcSlab per storey on grid bbox. */
+  slabs?: boolean;
+  /** Default true — IfcPlate proxies at beam–column grid intersections. */
+  connections?: boolean;
+}
+
 export interface StructuralModel {
   gridX: GridLine[];
   gridY: GridLine[];
   storeys: Storey[];
   members: StructuralMember[];
+  options?: StructuralModelOptions;
 }
 
 export function defaultStructuralModel(): StructuralModel {
@@ -62,6 +70,12 @@ export function defaultStructuralModel(): StructuralModel {
         elevationBottomMm: 0,
         elevationTopMm: 4000,
       },
+      {
+        id: 's2',
+        name: '2F',
+        elevationBottomMm: 4000,
+        elevationTopMm: 8000,
+      },
     ],
     members: [
       {
@@ -70,7 +84,17 @@ export function defaultStructuralModel(): StructuralModel {
         category: 'column',
         profileName: 'H400x200',
         storeyId: 's1',
-        start: { xLabel: 'X2', yLabel: 'Y1' },
+        start: { xLabel: 'X1', yLabel: 'Y1' },
+        phaseColor: '#ef4444',
+      },
+      {
+        id: 'm-demo-col-end',
+        mark: 'C3',
+        category: 'column',
+        profileName: 'H400x200',
+        storeyId: 's1',
+        start: { xLabel: 'X3', yLabel: 'Y1' },
+        phaseColor: '#f97316',
       },
       {
         id: 'm-demo-beam',
@@ -80,8 +104,29 @@ export function defaultStructuralModel(): StructuralModel {
         storeyId: 's1',
         start: { xLabel: 'X1', yLabel: 'Y1' },
         end: { xLabel: 'X3', yLabel: 'Y1' },
+        phaseColor: '#3b82f6',
+      },
+      {
+        id: 'm-col-2f',
+        mark: 'C2',
+        category: 'column',
+        profileName: 'H400x200',
+        storeyId: 's2',
+        start: { xLabel: 'X2', yLabel: 'Y2' },
+        phaseColor: '#22c55e',
+      },
+      {
+        id: 'm-beam-2f',
+        mark: 'B2',
+        category: 'beam',
+        profileName: 'H300x150',
+        storeyId: 's2',
+        start: { xLabel: 'X2', yLabel: 'Y1' },
+        end: { xLabel: 'X2', yLabel: 'Y2' },
+        phaseColor: '#a855f7',
       },
     ],
+    options: { slabs: true, connections: true },
   };
 }
 
@@ -93,5 +138,13 @@ export function parseStructuralModel(raw: unknown): StructuralModel {
   const storeys = Array.isArray(o.storeys) ? (o.storeys as Storey[]) : [];
   const members = Array.isArray(o.members) ? (o.members as StructuralMember[]) : [];
   if (!gridX.length || !gridY.length || !storeys.length) return defaultStructuralModel();
-  return { gridX, gridY, storeys, members };
+  const options =
+    isPlainObject(o.options) && o.options
+      ? (o.options as StructuralModelOptions)
+      : undefined;
+  return { gridX, gridY, storeys, members, options };
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
