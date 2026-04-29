@@ -61,7 +61,7 @@ export class TitleBlockVisionService {
     const mediaType = this.detectImageMediaType(imageBuffer);
     const model = this.configService.get<string>('ANTHROPIC_TITLE_BLOCK_MODEL')?.trim()
       || this.configService.get<string>('ANTHROPIC_MODEL')?.trim()
-      || 'claude-3-5-haiku-20241022';
+      || 'claude-haiku-4-5-20251001';
 
     const message = await client.messages.create({
       model,

@@ -112,8 +112,9 @@ export class AiElementVisionService {
     const base64 = imageBuffer.toString('base64');
     const mediaType = this.detectImageMediaType(imageBuffer);
     const model = this.configService.get<string>('ANTHROPIC_ELEMENT_MODEL')?.trim()
+      || this.configService.get<string>('ANTHROPIC_VISION_MODEL')?.trim()
       || this.configService.get<string>('ANTHROPIC_MODEL')?.trim()
-      || 'claude-3-5-sonnet-20241022';
+      || 'claude-sonnet-4-6';
 
     const kind: DrawingKind = options.kind ?? 'unknown';
     const hint = KIND_HINTS[kind] ?? KIND_HINTS.unknown;
