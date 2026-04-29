@@ -1,5 +1,5 @@
 /// Service Worker for PWA — 仮設材積算システム
-const CACHE_NAME = 'scaffold-estimator-v7';
+const CACHE_NAME = 'scaffold-estimator-v8';
 const STATIC_ASSETS = [
   '/',
   '/dashboard',
@@ -96,15 +96,17 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (reqUrl.pathname.startsWith('/api/')) return;
 
+  // Do not cache HTML navigations. Caching + cache miss used to resolve to `undefined`
+  // (when `/` was not in cache), which breaks refresh with a generic "page couldn't load".
+  // Next.js App Router documents must always come from the network.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+      fetch(event.request).catch(() => {
+        return new Response(
+          '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline</title></head><body><p>Network error. Check your connection and reload.</p></body></html>',
+          { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+        );
+      }),
     );
     return;
   }
