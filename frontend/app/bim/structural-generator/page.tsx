@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Play, Save, Trash2, Upload } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
@@ -14,7 +14,7 @@ import {
   type StructuralModelJson,
 } from '@/lib/api/structural-bim';
 
-export default function StructuralGeneratorPage() {
+function StructuralGeneratorPageInner() {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -259,5 +259,19 @@ export default function StructuralGeneratorPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function StructuralGeneratorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <Loader2 className="h-10 w-10 animate-spin text-violet-500" aria-hidden />
+        </div>
+      }
+    >
+      <StructuralGeneratorPageInner />
+    </Suspense>
   );
 }
