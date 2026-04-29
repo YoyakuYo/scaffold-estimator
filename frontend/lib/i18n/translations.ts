@@ -3200,6 +3200,11 @@ export const translations = {
       en: 'Greedy 1D bin-packing of long / medium / short pieces onto 4t / 10t / 25t trucks. Editable + persisted overrides.',
       fr: 'Bin-packing 1D des pièces longues/moyennes/courtes sur camions 4t/10t/25t, avec overrides persistants.',
     },
+    featureLinksHint: {
+      ja: '案件と図面バッチを作成すると、取込・工程・搬入へ直接ジャンプできます。まだの場合は下の「新しい案件」から作成してください。',
+      en: 'Create a project and a drawing set to jump straight into intake, schedule, and trucks. Until then, links scroll here so you can add your first job.',
+      fr: 'Créez un chantier et un lot de plans pour ouvrir directement l’import, le planning et les camions. Sinon, ces liens ramènent ici pour créer le premier chantier.',
+    },
 
     recentActivityTitle: {
       ja: '最近のアップロード',
@@ -3505,9 +3510,9 @@ export const translations = {
   bimLanding: {
     title: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
     subtitle: {
-      ja: 'IFC ファイルをブラウザ上で 3D 表示します。データはサーバーに保存されません。',
-      en: 'Render IFC files in 3D right in the browser. Files never leave your machine.',
-      fr: 'Affichez vos fichiers IFC en 3D dans le navigateur. Les fichiers ne quittent jamais votre poste.',
+      ja: 'IFC / DXF / PDF をブラウザで 3D 表示。クラウドに保存したモデルは一覧から再開できます。',
+      en: 'Render IFC, DXF, and PDF in the browser. Saved models reopen from your library.',
+      fr: 'Affichez IFC, DXF et PDF dans le navigateur. Les modèles enregistrés se rouvrent depuis votre bibliothèque.',
     },
     anonTitle: {
       ja: 'BIM ダッシュボード',
@@ -3515,9 +3520,9 @@ export const translations = {
       fr: 'Tableau de bord BIM',
     },
     anonBody: {
-      ja: 'ログインすると契約状況やアップロード履歴が表示されます。3D ビューアはアカウントなしでも利用できます。',
-      en: 'Sign in to see your subscription and upload history. The 3D viewer works without an account.',
-      fr: 'Connectez-vous pour voir votre abonnement et l’historique. La visionneuse 3D fonctionne sans compte.',
+      ja: 'BIM ビューアは契約ユーザーのみ利用できます。ログインしてからビューアを開いてください。',
+      en: 'The BIM viewer requires a signed-in user with an active BIM subscription. Sign in to continue.',
+      fr: 'La visionneuse BIM nécessite un compte et un abonnement actif. Connectez-vous pour continuer.',
     },
     anonLogIn: { ja: 'ログイン', en: 'Sign in', fr: 'Se connecter' },
     accessErrorTitle: {
@@ -3544,9 +3549,9 @@ export const translations = {
     },
     openViewerCta: { ja: 'ビューアを開く', en: 'Open viewer', fr: 'Ouvrir la visionneuse' },
     privacyNote: {
-      ja: 'IFC / DXF / PDF はブラウザ内で解析されます。ファイル本体はサーバーへ送信されません（アップロード履歴のみ記録）。',
-      en: 'IFC, DXF and PDF parsing all run locally in the browser. The raw file is not uploaded — only an audit-log entry is recorded.',
-      fr: "Les IFC, DXF et PDF sont analysés localement dans le navigateur. Le fichier brut n'est pas envoyé (seul un enregistrement d'audit est conservé).",
+      ja: 'ローカル表示はブラウザ内で解析されます。「クラウドに保存」で Supabase に保管したモデルは一覧から再開できます。',
+      en: 'Local viewing parses in-browser. When you use Save to cloud, the file is stored in your private bucket and listed below.',
+      fr: 'L’affichage local reste dans le navigateur. « Enregistrer dans le cloud » stocke le fichier dans votre espace privé.',
     },
     manageSubscription: { ja: '契約管理', en: 'Manage subscription', fr: 'Gérer l’abonnement' },
 
@@ -3591,6 +3596,31 @@ export const translations = {
     colKind: { ja: '種類', en: 'Kind', fr: 'Type' },
     colSize: { ja: 'サイズ', en: 'Size', fr: 'Taille' },
     colWhen: { ja: '日時', en: 'When', fr: 'Quand' },
+    colActions: { ja: '操作', en: 'Actions', fr: 'Actions' },
+    deleteSavedModelConfirm: {
+      ja: 'この保存モデルを削除しますか？',
+      en: 'Delete this saved model?',
+      fr: 'Supprimer ce modèle enregistré ?',
+    },
+    renameModelPrompt: {
+      ja: '表示名を入力してください',
+      en: 'Display name',
+      fr: 'Nom affiché',
+    },
+
+    savedModelsTitle: { ja: '保存済みモデル', en: 'Saved models', fr: 'Modèles enregistrés' },
+    savedModelsEmpty: {
+      ja: 'まだありません。ビューアで「クラウドに保存」を押すとここに表示されます。',
+      en: 'None yet. Open the viewer and use Save to cloud after loading a file.',
+      fr: 'Aucun pour l’instant. Ouvrez la visionneuse puis « Enregistrer dans le cloud ».',
+    },
+    openSavedModel: { ja: '開く', en: 'Open', fr: 'Ouvrir' },
+    deleteSavedModel: { ja: '削除', en: 'Delete', fr: 'Supprimer' },
+    colSavedName: { ja: '表示名', en: 'Name', fr: 'Nom' },
+    colSavedKind: { ja: '種類', en: 'Kind', fr: 'Type' },
+    colSavedStatus: { ja: '変換', en: 'Conversion', fr: 'Conversion' },
+    conversionPending: { ja: '待機中', en: 'Pending', fr: 'En attente' },
+    conversionNa: { ja: '—', en: '—', fr: '—' },
   },
 
   bimViewer: {
@@ -3626,6 +3656,43 @@ export const translations = {
     statsTitle: { ja: '読み込み結果', en: 'Load result', fr: 'Résultat de chargement' },
     meshCount: { ja: 'メッシュ数', en: 'Meshes', fr: 'Mailles' },
     parseDuration: { ja: '解析時間', en: 'Parse time', fr: 'Temps de parsing' },
+    redirecting: { ja: 'リダイレクト中…', en: 'Redirecting…', fr: 'Redirection…' },
+    saveToCloud: { ja: 'クラウドに保存', en: 'Save to cloud', fr: 'Enregistrer dans le cloud' },
+    savedToCloudToast: {
+      ja: 'クラウドに保存しました。一覧からいつでも再開できます。',
+      en: 'Saved to cloud. Reopen it anytime from the BIM home list.',
+      fr: 'Enregistré dans le cloud. Rouvrez-le depuis l’accueil BIM.',
+    },
+    saveToCloudFailed: {
+      ja: '保存に失敗しました。接続と契約を確認してください。',
+      en: 'Save failed. Check your connection and BIM subscription.',
+      fr: 'Échec de l’enregistrement. Vérifiez la connexion et l’abonnement.',
+    },
+    cloudModelLoadFailed: {
+      ja: 'クラウドからの読み込みに失敗しました。',
+      en: 'Could not load this model from the cloud.',
+      fr: 'Impossible de charger ce modèle depuis le cloud.',
+    },
+    dwgCloudOnlyHint: {
+      ja: 'DWG をクラウドに保存しています…',
+      en: 'Uploading DWG to secure storage…',
+      fr: 'Téléversement du DWG vers le stockage sécurisé…',
+    },
+    dwgUploadedCloud: {
+      ja: 'DWG を保存しました。プレビューは DXF 変換後に可能です（変換ジョックは今後対応）。',
+      en: 'DWG saved. Preview requires conversion to DXF (automated conversion is planned).',
+      fr: 'DWG enregistré. L’aperçu nécessite une conversion DXF (automatisée, à venir).',
+    },
+    dwgFromCloudHint: {
+      ja: 'この DWG は保管済みです。ブラウザではプレビューできません。DXF に変換したファイルを開いてください。',
+      en: 'This DWG is on file. It cannot be previewed in-browser; open a converted DXF instead.',
+      fr: 'Ce DWG est archivé. Aperçu impossible dans le navigateur ; ouvrez un DXF converti.',
+    },
+    dwgSaveFailed: {
+      ja: 'DWG のアップロードに失敗しました。',
+      en: 'Could not upload the DWG.',
+      fr: 'Échec du téléversement du DWG.',
+    },
   },
 
   // ─── Phase 4: Construction Plan schedule + delivery ────────

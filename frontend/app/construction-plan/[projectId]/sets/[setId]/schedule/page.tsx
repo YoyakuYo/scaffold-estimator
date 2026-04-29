@@ -74,6 +74,14 @@ export default function ConstructionPlanSchedulePage() {
     enabled: !!setId,
   });
 
+  useEffect(() => {
+    const id = window.location.hash?.replace(/^#/, '');
+    if (!id) return;
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [sched.data, plan.data]);
+
   // Seed the local override draft from server every time the plan reloads.
   useEffect(() => {
     const data = plan.data as unknown as
@@ -216,7 +224,10 @@ export default function ConstructionPlanSchedulePage() {
           <p className="mt-3 text-xs text-gray-500">{t('constructionPlanSchedule', 'excelIncludesSteel')}</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div
+          id="cp-master-gantt"
+          className="bg-white rounded-2xl border border-gray-200 overflow-hidden scroll-mt-24"
+        >
           <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">
               {t('constructionPlanSchedule', 'masterGantt')}
@@ -288,7 +299,10 @@ export default function ConstructionPlanSchedulePage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div
+          id="cp-delivery-plan"
+          className="bg-white rounded-2xl border border-gray-200 overflow-hidden scroll-mt-24"
+        >
           <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Truck className="h-5 w-5 text-blue-500" />

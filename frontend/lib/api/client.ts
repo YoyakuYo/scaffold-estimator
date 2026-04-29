@@ -102,7 +102,7 @@ apiClient.interceptors.response.use(
         '/join-team',
       ];
       const isPublicPage = publicPages.includes(currentPath);
-      /** IFC/DXF viewer is usable without a session; do not hard-redirect on 401. */
+      /** BIM routes: avoid global 401 redirect storm while gated pages resolve (viewer requires login). */
       const isBimClientRoute =
         currentPath === '/bim' ||
         currentPath === '/bim/viewer' ||

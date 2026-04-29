@@ -24,7 +24,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   const noNavPages = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/join-team'];
   const isPublicPage = noNavPages.includes(pathname);
   const isSuperAdminLogin = pathname === '/superadmin';
-  /** Full-width BIM viewer for guests (IFC is client-side); avoids unauthenticated nav API calls. */
+  /** BIM viewer redirects guests to login; hide chrome briefly before redirect. */
   const isAnonymousBimViewer =
     pathname === '/bim/viewer' && mounted && !authApi.getToken();
 

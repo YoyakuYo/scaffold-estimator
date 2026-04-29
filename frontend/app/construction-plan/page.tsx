@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -52,6 +52,13 @@ export default function ConstructionPlanHomePage() {
     queryKey: ['structural-takeoff', 'projects'],
     queryFn: structuralTakeoffApi.listProjects,
     enabled,
+  });
+
+  const firstProjectId = projects?.[0]?.id;
+  const firstProjectSetsQuery = useQuery({
+    queryKey: ['structural-takeoff', 'sets', firstProjectId],
+    queryFn: () => structuralTakeoffApi.listSets(firstProjectId!),
+    enabled: enabled && !!firstProjectId,
   });
 
   const recentUploadsQuery = useQuery({
@@ -115,6 +122,20 @@ export default function ConstructionPlanHomePage() {
   const levels = parseCsvList(levelsText);
   const canSubmit = name.trim().length > 0 && levels.length > 0;
 
+  const firstSetId = firstProjectSetsQuery.data?.[0]?.id;
+  const extractHref =
+    firstProjectId && firstSetId
+      ? `/construction-plan/${firstProjectId}/sets/${firstSetId}`
+      : firstProjectId
+        ? `/construction-plan/${firstProjectId}`
+        : '/construction-plan#cp-new-project';
+  const scheduleBase =
+    firstProjectId && firstSetId
+      ? `/construction-plan/${firstProjectId}/sets/${firstSetId}/schedule`
+      : null;
+  const scheduleHref = scheduleBase ? `${scheduleBase}#cp-master-gantt` : '/construction-plan#cp-new-project';
+  const deliveryHref = scheduleBase ? `${scheduleBase}#cp-delivery-plan` : '/construction-plan#cp-new-project';
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -151,6 +172,8 @@ export default function ConstructionPlanHomePage() {
             </button>
           </div>
         </div>
+
+        <div id="cp-new-project" className="scroll-mt-24 h-0 overflow-hidden" aria-hidden />
 
         {showCreate && (
           <div className="mb-6 bg-white border border-gray-200 rounded-2xl p-6 space-y-4">
@@ -284,29 +307,31 @@ export default function ConstructionPlanHomePage() {
         })()}
 
         {/* Quick links to deeper product surfaces. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2">
           <FeatureLink
-            href="#"
+            href={extractHref}
             icon={<FileText className="h-5 w-5 text-amber-600" />}
             title={t('constructionPlanLanding', 'featureExtractTitle')}
             body={t('constructionPlanLanding', 'featureExtractBody')}
-            disabled
           />
           <FeatureLink
-            href="#"
+            href={scheduleHref}
             icon={<Calendar className="h-5 w-5 text-blue-600" />}
             title={t('constructionPlanLanding', 'featureScheduleTitle')}
             body={t('constructionPlanLanding', 'featureScheduleBody')}
-            disabled
           />
           <FeatureLink
-            href="#"
+            href={deliveryHref}
             icon={<Truck className="h-5 w-5 text-emerald-600" />}
             title={t('constructionPlanLanding', 'featureDeliveryTitle')}
             body={t('constructionPlanLanding', 'featureDeliveryBody')}
-            disabled
           />
         </div>
+        {!firstSetId && (
+          <p className="text-xs text-gray-500 mb-6">
+            {t('constructionPlanLanding', 'featureLinksHint')}
+          </p>
+        )}
 
         {/* Recent activity (uploads from any of this user's projects/sets). */}
         {(recentUploadsQuery.data ?? []).length > 0 && (
@@ -434,31 +459,21 @@ function FeatureLink({
   icon,
   title,
   body,
-  disabled,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   body: string;
-  disabled?: boolean;
 }) {
-  const inner = (
-    <div
-      className={`bg-white rounded-2xl border border-gray-200 p-4 h-full ${
-        disabled ? '' : 'hover:shadow-md hover:border-gray-300 transition'
-      }`}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="font-semibold text-gray-900 text-sm">{title}</span>
-      </div>
-      <p className="text-xs text-gray-600 leading-relaxed">{body}</p>
-    </div>
-  );
-  if (disabled) return inner;
   return (
-    <Link href={href} className="block">
-      {inner}
+    <Link href={href} className="block group">
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 h-full group-hover:shadow-md group-hover:border-gray-300 transition">
+        <div className="flex items-center gap-2 mb-2">
+          {icon}
+          <span className="font-semibold text-gray-900 text-sm">{title}</span>
+        </div>
+        <p className="text-xs text-gray-600 leading-relaxed">{body}</p>
+      </div>
     </Link>
   );
 }

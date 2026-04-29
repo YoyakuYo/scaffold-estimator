@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Loader2,
   ArrowRight,
@@ -14,12 +14,15 @@ import {
   Layers,
   Activity,
   Sparkles,
+  Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence } from '@/lib/page-presence-context';
 import { accessApi } from '@/lib/api/access';
 import { authApi } from '@/lib/api/auth';
 import { presenceApi, type UploadEventRow } from '@/lib/api/presence';
+import { bimApi, type BimViewerModel } from '@/lib/api/bim';
 
 function formatBytes(bytes: number | null): string {
   if (!bytes || bytes <= 0) return '—';
@@ -48,6 +51,7 @@ const KIND_BADGE_COLOR: Record<string, string> = {
 
 export default function BimHomePage() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   usePresence({ pageKey: 'bim/home', label: 'BIM: dashboard' });
 
   const hasSession = !!authApi.getToken();
@@ -70,6 +74,28 @@ export default function BimHomePage() {
     staleTime: 10_000,
   });
 
+  const modelsQuery = useQuery({
+    queryKey: ['bim-models'],
+    queryFn: () => bimApi.listModels(),
+    enabled,
+    staleTime: 15_000,
+  });
+
+  const deleteModel = useMutation({
+    mutationFn: (id: string) => bimApi.deleteModel(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bim-models'] });
+    },
+  });
+
+  const renameModel = useMutation({
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
+      bimApi.patchModel(id, { displayName }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bim-models'] });
+    },
+  });
+
   if (!hasSession) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -82,15 +108,8 @@ export default function BimHomePage() {
             <p className="mt-2 text-gray-600">{t('bimLanding', 'anonBody')}</p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <Link
-                href="/bim/viewer"
+                href="/login?next=%2Fbim"
                 className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-violet-600 text-white font-medium hover:bg-violet-700"
-              >
-                <Upload className="h-4 w-4" />
-                {t('bimLanding', 'openViewerCta')}
-              </Link>
-              <Link
-                href="/login?next=/bim"
-                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-800 font-medium hover:bg-gray-50"
               >
                 {t('bimLanding', 'anonLogIn')}
               </Link>
@@ -222,6 +241,96 @@ export default function BimHomePage() {
             value={formatBytes(totalBytes)}
             sub={t('bimLanding', 'kpiTotalSizeSub')}
           />
+        </div>
+
+        {/* Saved models (cloud) */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">{t('bimLanding', 'savedModelsTitle')}</h2>
+            {modelsQuery.isFetching && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          </div>
+          {(modelsQuery.data?.length ?? 0) === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-gray-500">
+              <Info className="h-5 w-5 mx-auto mb-2 text-gray-400" />
+              {t('bimLanding', 'savedModelsEmpty')}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 text-sm">
+                <thead className="bg-gray-50/60">
+                  <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-2.5 font-medium">{t('bimLanding', 'colSavedName')}</th>
+                    <th className="px-4 py-2.5 font-medium">{t('bimLanding', 'colFile')}</th>
+                    <th className="px-4 py-2.5 font-medium">{t('bimLanding', 'colSavedKind')}</th>
+                    <th className="px-4 py-2.5 font-medium">{t('bimLanding', 'colSavedStatus')}</th>
+                    <th className="px-4 py-2.5 font-medium">{t('bimLanding', 'colSize')}</th>
+                    <th className="px-4 py-2.5 font-medium">{t('bimLanding', 'colWhen')}</th>
+                    <th className="px-4 py-2.5 font-medium text-right">{t('bimLanding', 'colActions')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(modelsQuery.data ?? []).map((m: BimViewerModel) => (
+                    <tr key={m.id} className="hover:bg-gray-50/60">
+                      <td className="px-4 py-2.5 text-gray-900">
+                        {m.displayName || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-gray-700 max-w-[200px] truncate" title={m.filename}>
+                        {m.filename}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-xs font-medium uppercase text-violet-700">{m.fileKind}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-600">
+                        {m.conversionStatus === 'pending'
+                          ? t('bimLanding', 'conversionPending')
+                          : t('bimLanding', 'conversionNa')}
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600 tabular-nums">{formatBytes(Number(m.sizeBytes) || 0)}</td>
+                      <td className="px-4 py-2.5 text-gray-500 text-xs">{formatRelative(m.createdAt, now)}</td>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        <Link
+                          href={`/bim/viewer?model=${encodeURIComponent(m.id)}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-violet-600 text-white hover:bg-violet-700 mr-1"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {t('bimLanding', 'openSavedModel')}
+                        </Link>
+                        <button
+                          type="button"
+                          title={t('bimLanding', 'renameModelPrompt')}
+                          disabled={renameModel.isPending}
+                          onClick={() => {
+                            const next = window.prompt(
+                              t('bimLanding', 'renameModelPrompt'),
+                              m.displayName || m.filename,
+                            );
+                            if (next === null) return;
+                            renameModel.mutate({ id: m.id, displayName: next.trim() || m.filename });
+                          }}
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border border-gray-200 hover:bg-gray-50 mr-1"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          title={t('bimLanding', 'deleteSavedModel')}
+                          aria-label={t('bimLanding', 'deleteSavedModel')}
+                          disabled={deleteModel.isPending}
+                          onClick={() => {
+                            if (!window.confirm(t('bimLanding', 'deleteSavedModelConfirm'))) return;
+                            deleteModel.mutate(m.id);
+                          }}
+                          className="inline-flex items-center p-1 rounded-md text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Supported formats */}

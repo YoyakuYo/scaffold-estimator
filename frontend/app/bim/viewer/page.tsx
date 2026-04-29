@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -9,7 +10,10 @@ import {
   AlertTriangle,
   Box,
   RefreshCw,
+  Cloud,
+  CheckCircle2,
 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
 import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 import { parseIfcToMeshes, type IfcMeshData } from '@/lib/ifc-loader';
@@ -17,22 +21,28 @@ import { createBimMaterialSet, getMaterialForElement } from '@/lib/ifc-bim-mater
 import { buildBimFromDxf } from '@/lib/bim/dxf-procedural-bim';
 import { renderPdfFirstPageToPlane } from '@/lib/bim/pdf-reference-plane';
 import { bimApi } from '@/lib/api/bim';
+import { accessApi } from '@/lib/api/access';
+import { authApi } from '@/lib/api/auth';
 
 interface SceneStats {
   meshCount: number;
   byType: Record<string, number>;
   durationMs: number;
-  /** True for PDF: this isn't a real BIM model, just a textured reference floor. */
   referenceOnly?: boolean;
 }
 
 export default function BimViewerPage() {
   const { t } = useI18n();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   usePresence({ pageKey: 'bim/viewer', label: 'BIM Viewer: rendering IFC' });
   const presenceActions = usePresenceActions();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastFileRef = useRef<File | null>(null);
+  const loadedRemoteModelIdRef = useRef<string | null>(null);
   const sceneStateRef = useRef<{
     dispose: (() => void) | null;
     addMeshes: ((meshes: IfcMeshData[]) => void) | null;
@@ -47,10 +57,49 @@ export default function BimViewerPage() {
     clearMeshes: null,
   });
 
+  const [sceneReady, setSceneReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [stats, setStats] = useState<SceneStats | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
+
+  const hasToken = !!authApi.getToken();
+  const accessQuery = useQuery({
+    queryKey: ['effective-access'],
+    queryFn: accessApi.getEffectiveAccess,
+    enabled: hasToken,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!hasToken) {
+      const next = `/bim/viewer${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
+    }
+  }, [hasToken, router, searchParams]);
+
+  useEffect(() => {
+    if (!hasToken) return;
+    if (accessQuery.isLoading) return;
+    if (accessQuery.isError) return;
+    if (accessQuery.data && !accessQuery.data.bim?.hasAccess) {
+      router.replace('/billing#bim');
+    }
+  }, [hasToken, accessQuery.isLoading, accessQuery.isError, accessQuery.data, router]);
+
+  const saveToCloud = useMutation({
+    mutationFn: (file: File) => bimApi.uploadModel(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bim-models'] });
+      setInfo(t('bimViewer', 'savedToCloudToast'));
+      presenceActions.recordAction(`Saved BIM model "${lastFileRef.current?.name ?? 'file'}" to cloud`);
+    },
+    onError: () => {
+      setError(t('bimViewer', 'saveToCloudFailed'));
+    },
+  });
 
   // Bootstrap the Three.js scene once.
   useEffect(() => {
@@ -128,7 +177,6 @@ export default function BimViewerPage() {
         const bbox = new THREE.Box3();
         for (const md of data) {
           const geometry = new THREE.BufferGeometry();
-          // Each vertex is 6 floats: x,y,z,nx,ny,nz (interleaved by ifc-loader).
           const stride = 6;
           const count = md.vertices.length / stride;
           const positions = new Float32Array(count * 3);
@@ -151,7 +199,6 @@ export default function BimViewerPage() {
           if (geometry.boundingBox) bbox.union(geometry.boundingBox);
         }
 
-        // Recenter and frame the model.
         if (!bbox.isEmpty()) {
           const size = new THREE.Vector3();
           bbox.getSize(size);
@@ -182,11 +229,9 @@ export default function BimViewerPage() {
         const mesh = new THREE.Mesh(geo, mat);
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = 0.01;
-        // Tag with a recognisable userData so disposal can clean the texture.
         (mesh as any).userData = { kind: 'pdf-reference-plane' };
         meshGroup.add(mesh);
 
-        // Frame the camera around the plane.
         const radius = Math.max(worldWidth, worldDepth) * 0.6;
         camera.position.set(radius * 1.1, radius * 0.7, radius * 1.1);
         controls.target.set(0, 0, 0);
@@ -218,6 +263,7 @@ export default function BimViewerPage() {
       };
 
       cleanup = () => sceneStateRef.current.dispose?.();
+      if (!cancelled) setSceneReady(true);
     })().catch((err) => {
       if (cancelled) return;
       setError((err as Error)?.message || 'Failed to initialise 3D scene');
@@ -225,44 +271,55 @@ export default function BimViewerPage() {
 
     return () => {
       cancelled = true;
+      setSceneReady(false);
       cleanup?.();
     };
   }, []);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      const ext = file.name.split('.').pop()?.toLowerCase();
+  const processBuffer = useCallback(
+    async (
+      buffer: ArrayBuffer,
+      fileLabel: string,
+      options?: { skipTrack?: boolean; fromCloud?: boolean },
+    ) => {
+      const ext = fileLabel.split('.').pop()?.toLowerCase();
       const supported = new Set(['ifc', 'dxf', 'pdf', 'dwg']);
       if (!ext || !supported.has(ext)) {
         setError(t('bimViewer', 'unsupportedFormat'));
         return;
       }
 
-      // DWG has no in-browser parser. Track the upload so superadmin sees it,
-      // then surface a clear actionable message to the user.
       if (ext === 'dwg') {
-        bimApi
-          .trackUpload({
-            filename: file.name,
-            mimeType: file.type || 'application/acad',
-            sizeBytes: file.size,
-            metadata: { kind: 'dwg', deferred: true },
-          })
-          .catch(() => undefined);
-        presenceActions.recordAction(
-          `Uploaded DWG "${file.name}" — conversion required`,
-        );
-        setError(t('bimViewer', 'dwgNotSupported'));
+        setError(null);
+        setStats(null);
+        setFilename(fileLabel);
+        if (options?.fromCloud) {
+          setInfo(t('bimViewer', 'dwgFromCloudHint'));
+          return;
+        }
+        setInfo(null);
+        setBusy(true);
+        try {
+          const blob = new Blob([buffer], { type: 'application/acad' });
+          const f = new File([blob], fileLabel, { type: 'application/acad' });
+          await bimApi.uploadModel(f);
+          queryClient.invalidateQueries({ queryKey: ['bim-models'] });
+          setInfo(t('bimViewer', 'dwgUploadedCloud'));
+          presenceActions.recordAction(`Stored DWG "${fileLabel}" in cloud (pending conversion)`);
+        } catch {
+          setError(t('bimViewer', 'dwgSaveFailed'));
+          setInfo(null);
+        } finally {
+          setBusy(false);
+        }
         return;
       }
 
       setError(null);
+      setInfo(null);
       setBusy(true);
       const start = performance.now();
       try {
-        const buffer = await file.arrayBuffer();
-
-        // PDF — render page 1 to a textured ground plane (reference-only mode).
         if (ext === 'pdf') {
           const result = await renderPdfFirstPageToPlane(buffer);
           sceneStateRef.current.clearMeshes?.();
@@ -278,25 +335,25 @@ export default function BimViewerPage() {
             durationMs,
             referenceOnly: true,
           });
-          setFilename(file.name);
-          setError(t('bimViewer', 'pdfReferenceHint'));
-          bimApi
-            .trackUpload({
-              filename: file.name,
-              mimeType: file.type || 'application/pdf',
-              sizeBytes: file.size,
-              metadata: {
-                kind: 'pdf',
-                referenceOnly: true,
-                pageWidthPt: result.pageWidthPt,
-                pageHeightPt: result.pageHeightPt,
-                durationMs,
-              },
-            })
-            .catch(() => undefined);
-          presenceActions.recordAction(
-            `Loaded PDF "${file.name}" as reference plane`,
-          );
+          setFilename(fileLabel);
+          setInfo(t('bimViewer', 'pdfReferenceHint'));
+          if (!options?.skipTrack) {
+            bimApi
+              .trackUpload({
+                filename: fileLabel,
+                mimeType: 'application/pdf',
+                sizeBytes: buffer.byteLength,
+                metadata: {
+                  kind: 'pdf',
+                  referenceOnly: true,
+                  pageWidthPt: result.pageWidthPt,
+                  pageHeightPt: result.pageHeightPt,
+                  durationMs,
+                },
+              })
+              .catch(() => undefined);
+          }
+          presenceActions.recordAction(`Loaded PDF "${fileLabel}" as reference plane`);
           return;
         }
 
@@ -317,37 +374,108 @@ export default function BimViewerPage() {
         }
         const durationMs = Math.round(performance.now() - start);
         setStats({ meshCount: meshes.length, byType, durationMs });
-        setFilename(file.name);
+        setFilename(fileLabel);
         if (warnings.length > 0) {
           setError(warnings.join(' / '));
         }
 
-        // Mirror to the upload feed (best-effort).
-        bimApi
-          .trackUpload({
-            filename: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            sizeBytes: file.size,
-            metadata: { meshCount: meshes.length, byType, durationMs, kind: ext },
-          })
-          .catch(() => undefined);
-
-        presenceActions.recordAction(
-          `Rendered ${ext.toUpperCase()} "${file.name}" (${meshes.length} meshes)`,
-        );
+        if (!options?.skipTrack) {
+          bimApi
+            .trackUpload({
+              filename: fileLabel,
+              mimeType: 'application/octet-stream',
+              sizeBytes: buffer.byteLength,
+              metadata: { meshCount: meshes.length, byType, durationMs, kind: ext },
+            })
+            .catch(() => undefined);
+        }
+        presenceActions.recordAction(`Rendered ${ext.toUpperCase()} "${fileLabel}" (${meshes.length} meshes)`);
       } catch (err) {
         setError((err as Error)?.message || t('bimViewer', 'parseFailed'));
       } finally {
         setBusy(false);
       }
     },
-    [presenceActions, t],
+    [presenceActions, queryClient, t],
   );
+
+  const processBufferRef = useRef(processBuffer);
+  processBufferRef.current = processBuffer;
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      lastFileRef.current = file;
+      const buffer = await file.arrayBuffer();
+      await processBuffer(buffer, file.name);
+    },
+    [processBuffer],
+  );
+
+  useEffect(() => {
+    const modelId = searchParams.get('model');
+    if (!modelId || !sceneReady || !accessQuery.data?.bim?.hasAccess) return;
+    if (!sceneStateRef.current.addMeshes && !sceneStateRef.current.addReferencePlane) return;
+    if (loadedRemoteModelIdRef.current === modelId) return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      setError(null);
+      setInfo(null);
+      try {
+        const meta = await bimApi.getModel(modelId);
+        if (cancelled) return;
+        const { url } = await bimApi.getModelDownloadUrl(modelId);
+        if (cancelled) return;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Download failed');
+        const buf = await res.arrayBuffer();
+        if (cancelled) return;
+        loadedRemoteModelIdRef.current = modelId;
+        lastFileRef.current = null;
+        await processBufferRef.current(buf, meta.filename, { skipTrack: true, fromCloud: true });
+      } catch {
+        if (!cancelled) {
+          loadedRemoteModelIdRef.current = null;
+          setError(t('bimViewer', 'cloudModelLoadFailed'));
+        }
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, sceneReady, accessQuery.data?.bim?.hasAccess, t]);
+
+  if (!hasToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-10 w-10 animate-spin text-violet-500" aria-hidden />
+        <span className="sr-only">{t('bimViewer', 'redirecting')}</span>
+      </div>
+    );
+  }
+
+  if (accessQuery.isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-10 w-10 animate-spin text-violet-500" aria-hidden />
+      </div>
+    );
+  }
+
+  if (accessQuery.isError || !accessQuery.data?.bim?.hasAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-500" aria-hidden />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/bim"
             className="inline-flex items-center gap-1.5 text-sm text-violet-700 hover:underline"
@@ -355,7 +483,7 @@ export default function BimViewerPage() {
             <ArrowLeft className="h-4 w-4" />
             {t('bimViewer', 'back')}
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -368,7 +496,7 @@ export default function BimViewerPage() {
               }}
             />
             <button
-              disabled={busy}
+              disabled={busy || saveToCloud.isPending}
               onClick={() => fileInputRef.current?.click()}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 text-sm"
             >
@@ -376,10 +504,35 @@ export default function BimViewerPage() {
               {t('bimViewer', 'openFile')}
             </button>
             <button
+              type="button"
+              disabled={
+                busy ||
+                saveToCloud.isPending ||
+                !lastFileRef.current ||
+                lastFileRef.current.name.toLowerCase().endsWith('.dwg')
+              }
+              onClick={() => {
+                const f = lastFileRef.current;
+                if (f) saveToCloud.mutate(f);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 text-sm"
+            >
+              {saveToCloud.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Cloud className="h-4 w-4" />
+              )}
+              {t('bimViewer', 'saveToCloud')}
+            </button>
+            <button
               onClick={() => {
                 sceneStateRef.current.clearMeshes?.();
                 setStats(null);
                 setFilename(null);
+                setError(null);
+                setInfo(null);
+                lastFileRef.current = null;
+                loadedRemoteModelIdRef.current = null;
               }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm"
             >
@@ -389,7 +542,7 @@ export default function BimViewerPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden relative">
           <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
             <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Box className="h-5 w-5 text-violet-600" />
@@ -412,12 +565,14 @@ export default function BimViewerPage() {
               if (f) void handleFile(f);
             }}
           />
-          {!stats && !busy && (
-            <div className="absolute pointer-events-none inset-0 flex items-center justify-center">
-              {/* Visual hint sits above the canvas via the parent's relative-zero, kept inside the same card */}
-            </div>
-          )}
         </div>
+
+        {info && !error && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3 flex items-start gap-2 text-sm">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <p>{info}</p>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 flex items-start gap-2 text-sm">
@@ -428,9 +583,7 @@ export default function BimViewerPage() {
 
         {stats && (
           <div className="bg-white rounded-2xl border border-gray-200 p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">
-              {t('bimViewer', 'statsTitle')}
-            </h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('bimViewer', 'statsTitle')}</h2>
             <div className="flex flex-wrap items-center gap-3 text-xs">
               <span className="px-2 py-1 rounded bg-violet-50 text-violet-700 border border-violet-200">
                 {t('bimViewer', 'meshCount')}: {stats.meshCount}
