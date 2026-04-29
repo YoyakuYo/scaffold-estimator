@@ -118,6 +118,8 @@ export class BimService {
       filename: string;
       mimeType: string | null;
       buffer: Buffer;
+      /** Optional friendly name shown in the saved-models list. */
+      displayName?: string | null;
       metadata?: Record<string, unknown>;
     },
   ): Promise<BimViewerModel> {
@@ -137,7 +139,10 @@ export class BimService {
       companyId: ctx.companyId,
       createdBy: ctx.userId,
       filename: input.filename,
-      displayName: null,
+      displayName:
+        input.displayName && String(input.displayName).trim().length > 0
+          ? String(input.displayName).trim().slice(0, 200)
+          : null,
       mimeType: input.mimeType,
       sizeBytes: input.buffer.length,
       storagePath: null,

@@ -37,9 +37,15 @@ export const bimApi = {
     return res.data;
   },
 
-  uploadModel: async (file: File): Promise<BimViewerModel> => {
+  uploadModel: async (
+    file: File,
+    options?: { displayName?: string },
+  ): Promise<BimViewerModel> => {
     const fd = new FormData();
     fd.append('file', file);
+    if (options?.displayName?.trim()) {
+      fd.append('displayName', options.displayName.trim().slice(0, 200));
+    }
     const res = await apiClient.post<BimViewerModel>('/bim/models', fd);
     return res.data;
   },

@@ -3693,6 +3693,23 @@ export const translations = {
       en: 'Could not upload the DWG.',
       fr: 'Échec du téléversement du DWG.',
     },
+    saveNamePrompt: {
+      ja: 'クラウド上の表示名（空欄ならファイル名のまま）',
+      en: 'Display name in your library (leave blank to use the file name)',
+      fr: 'Nom affiché dans la bibliothèque (vide = nom du fichier)',
+    },
+    pdfPagesTitle: {
+      ja: 'PDF ページ',
+      en: 'PDF pages',
+      fr: 'Pages PDF',
+    },
+    pdfPrev: { ja: '前へ', en: 'Previous', fr: 'Précédent' },
+    pdfNext: { ja: '次へ', en: 'Next', fr: 'Suivant' },
+    pdfPageOf: {
+      ja: '{n} / {total} ページ',
+      en: 'Page {n} of {total}',
+      fr: 'Page {n} sur {total}',
+    },
   },
 
   // ─── Phase 4: Construction Plan schedule + delivery ────────
@@ -3742,6 +3759,11 @@ export const translations = {
     days: { ja: '稼働日数', en: 'Working days', fr: 'Jours ouvrés' },
     month: { ja: '月', en: 'Month', fr: 'Mois' },
     isoWeek: { ja: '週', en: 'Week', fr: 'Semaine' },
+    noActivitiesYet: {
+      ja: '工程行がありません。セット画面で部材数量を入力するか、サンプルを読み込んでください。',
+      en: 'No schedule rows yet. Enter quantities on the set page, or load the sample project.',
+      fr: 'Aucune ligne de planning. Saisissez des quantités sur le lot, ou chargez l’exemple.',
+    },
   },
 
   // ─── Company verification (Superadmin) ─────────────────────

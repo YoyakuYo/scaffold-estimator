@@ -1,23 +1,10 @@
 /**
- * Renders the first page of a PDF (in-browser, via `pdfjs-dist`) onto an
- * offscreen `<canvas>` so the BIM Viewer can drape it across a horizontal
- * "reference plane" in the 3D scene.
+ * Renders PDF pages (in-browser, via `pdfjs-dist`) onto an offscreen `<canvas>`
+ * for a horizontal "reference plane" in the BIM viewer 3D scene.
  *
- * Why a reference plane and not extruded geometry?
- *   PDFs are mostly opaque rasters with no usable layered geometry — even a
- *   "vector PDF" produced by AutoCAD is an image-like graphics-stream that
- *   cannot be reliably reverse-engineered into walls/columns/slabs without
- *   a full PDF→DXF converter (which is itself a non-trivial server-side
- *   binary, e.g. ODA File Converter).  Treating the PDF as a textured
- *   "blueprint floor" gives users an immediately useful overlay:
- *     - drop the PDF into the viewer
- *     - the page is laid flat at y = 0 with the correct aspect ratio
- *     - any IFC/DXF model loaded afterwards renders on top of it.
- *
- * The function is framework-agnostic — it never imports Three.js — so the
- * viewer page can decide how to wrap the canvas in a `CanvasTexture`.
+ * Multi-page: call `renderPdfPageToPlane` with `pageNumberOneBased` (1…N).
+ * `renderPdfFirstPageToPlane` remains a convenience wrapper for page 1.
  */
-
 export interface PdfPlaneRenderResult {
   /** Offscreen HTMLCanvasElement ready to be wrapped in a Three.js CanvasTexture. */
   canvas: HTMLCanvasElement;
@@ -31,43 +18,46 @@ export interface PdfPlaneRenderResult {
   /** Rendered raster dimensions, after the DPR/quality scale. */
   pixelWidth: number;
   pixelHeight: number;
+  /** Total pages in the document (for UI pagination). */
+  numPages: number;
+  /** Which page was rendered (clamped to 1…numPages). */
+  renderedPage: number;
 }
 
-const PDF_PT_TO_METRE = 0.0254 / 72; // 1pt = 1/72 inch; 1 inch = 0.0254 m
-const TARGET_LONG_EDGE_PIXELS = 2400; // crisp enough for zoom; safely under WebGL texture limits.
+const PDF_PT_TO_METRE = 0.0254 / 72;
+const TARGET_LONG_EDGE_PIXELS = 2400;
 
-/**
- * Render page 1 of a PDF to a canvas. The plane sizing assumes the PDF page
- * represents a real-world plan at unknown scale, so we map page-points
- * directly to metres (1pt = 0.353mm). Most architectural plans rendered at
- * A1/A0 will land at ~30–50m wide which is the same order of magnitude as
- * the buildings the viewer is built for.
- */
-export async function renderPdfFirstPageToPlane(
-  buffer: ArrayBuffer,
-): Promise<PdfPlaneRenderResult> {
-  // Load pdfjs-dist + worker lazily — keeps the BIM bundle slim.
-  // Mirrors the worker setup used in `components/perimeter-tracer/PerimeterTracer.tsx`.
+async function loadPdfJs() {
   const pdfjs = await import('pdfjs-dist');
   const pdfjsAny = pdfjs as any;
   if (pdfjsAny.GlobalWorkerOptions && !pdfjsAny.GlobalWorkerOptions.workerSrc) {
     pdfjsAny.GlobalWorkerOptions.workerSrc =
       `https://unpkg.com/pdfjs-dist@${pdfjsAny.version}/build/pdf.worker.min.mjs`;
   }
+  return pdfjs;
+}
 
-  // Important: pdfjs mutates the buffer (transfers ownership). Clone first.
+/**
+ * Render a single PDF page (1-based index) to a canvas.
+ */
+export async function renderPdfPageToPlane(
+  buffer: ArrayBuffer,
+  pageNumberOneBased: number,
+): Promise<PdfPlaneRenderResult> {
+  const pdfjs = await loadPdfJs();
   const safeBuf = buffer.slice(0);
   const loadingTask = pdfjs.getDocument({ data: safeBuf });
   const pdf = await loadingTask.promise;
-  if (pdf.numPages < 1) {
+  const numPages = pdf.numPages;
+  if (numPages < 1) {
     throw new Error('PDF has no pages');
   }
-  const page = await pdf.getPage(1);
+  const pageIndex = Math.max(1, Math.min(Math.floor(pageNumberOneBased) || 1, numPages));
+  const page = await pdf.getPage(pageIndex);
   const baseViewport = page.getViewport({ scale: 1 });
   const pageWidthPt = baseViewport.width;
   const pageHeightPt = baseViewport.height;
 
-  // Compute the render scale so the long edge ~ TARGET_LONG_EDGE_PIXELS.
   const longEdgePt = Math.max(pageWidthPt, pageHeightPt);
   const renderScale = Math.max(1, Math.min(4, TARGET_LONG_EDGE_PIXELS / longEdgePt));
   const viewport = page.getViewport({ scale: renderScale });
@@ -96,5 +86,12 @@ export async function renderPdfFirstPageToPlane(
     pageHeightPt,
     pixelWidth: canvas.width,
     pixelHeight: canvas.height,
+    numPages,
+    renderedPage: pageIndex,
   };
+}
+
+/** Render page 1 only (backwards-compatible entry point). */
+export async function renderPdfFirstPageToPlane(buffer: ArrayBuffer): Promise<PdfPlaneRenderResult> {
+  return renderPdfPageToPlane(buffer, 1);
 }

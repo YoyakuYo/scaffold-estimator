@@ -1,5 +1,6 @@
 -- BIM Viewer: persisted models in Supabase Storage + metadata for reopen,
 -- audit, and DWG intake (conversion_status reserved for a future worker).
+-- Numbered 144 to avoid collision with 143_extracted_element_phase_shop_review.sql.
 
 BEGIN;
 SELECT set_config('storage.allow_delete_query', 'true', true);

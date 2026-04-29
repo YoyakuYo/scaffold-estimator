@@ -19,7 +19,7 @@ import { usePresence, usePresenceActions } from '@/lib/page-presence-context';
 import { parseIfcToMeshes, type IfcMeshData } from '@/lib/ifc-loader';
 import { createBimMaterialSet, getMaterialForElement } from '@/lib/ifc-bim-materials';
 import { buildBimFromDxf } from '@/lib/bim/dxf-procedural-bim';
-import { renderPdfFirstPageToPlane } from '@/lib/bim/pdf-reference-plane';
+import { renderPdfPageToPlane } from '@/lib/bim/pdf-reference-plane';
 import { bimApi } from '@/lib/api/bim';
 import { accessApi } from '@/lib/api/access';
 import { authApi } from '@/lib/api/auth';
@@ -42,6 +42,9 @@ export default function BimViewerPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastFileRef = useRef<File | null>(null);
+  /** Clone of last dropped PDF bytes so the user can switch pages without re-reading the file input. */
+  const lastPdfBufferRef = useRef<ArrayBuffer | null>(null);
+  const lastPdfFilenameRef = useRef<string | null>(null);
   const loadedRemoteModelIdRef = useRef<string | null>(null);
   const sceneStateRef = useRef<{
     dispose: (() => void) | null;
@@ -63,6 +66,8 @@ export default function BimViewerPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [stats, setStats] = useState<SceneStats | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
+  const [pdfPage, setPdfPage] = useState(1);
+  const [pdfNumPages, setPdfNumPages] = useState(0);
 
   const hasToken = !!authApi.getToken();
   const accessQuery = useQuery({
@@ -80,17 +85,9 @@ export default function BimViewerPage() {
     }
   }, [hasToken, router, searchParams]);
 
-  useEffect(() => {
-    if (!hasToken) return;
-    if (accessQuery.isLoading) return;
-    if (accessQuery.isError) return;
-    if (accessQuery.data && !accessQuery.data.bim?.hasAccess) {
-      router.replace('/billing#bim');
-    }
-  }, [hasToken, accessQuery.isLoading, accessQuery.isError, accessQuery.data, router]);
-
   const saveToCloud = useMutation({
-    mutationFn: (file: File) => bimApi.uploadModel(file),
+    mutationFn: (payload: { file: File; displayName?: string }) =>
+      bimApi.uploadModel(payload.file, { displayName: payload.displayName }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bim-models'] });
       setInfo(t('bimViewer', 'savedToCloudToast'));
@@ -280,13 +277,20 @@ export default function BimViewerPage() {
     async (
       buffer: ArrayBuffer,
       fileLabel: string,
-      options?: { skipTrack?: boolean; fromCloud?: boolean },
+      options?: { skipTrack?: boolean; fromCloud?: boolean; pdfPage?: number },
     ) => {
       const ext = fileLabel.split('.').pop()?.toLowerCase();
       const supported = new Set(['ifc', 'dxf', 'pdf', 'dwg']);
       if (!ext || !supported.has(ext)) {
         setError(t('bimViewer', 'unsupportedFormat'));
         return;
+      }
+
+      if (ext !== 'pdf') {
+        lastPdfBufferRef.current = null;
+        lastPdfFilenameRef.current = null;
+        setPdfNumPages(0);
+        setPdfPage(1);
       }
 
       if (ext === 'dwg') {
@@ -321,7 +325,8 @@ export default function BimViewerPage() {
       const start = performance.now();
       try {
         if (ext === 'pdf') {
-          const result = await renderPdfFirstPageToPlane(buffer);
+          const pageReq = Math.max(1, options?.pdfPage ?? 1);
+          const result = await renderPdfPageToPlane(buffer, pageReq);
           sceneStateRef.current.clearMeshes?.();
           sceneStateRef.current.addReferencePlane?.(
             result.canvas,
@@ -329,6 +334,8 @@ export default function BimViewerPage() {
             result.worldDepth,
           );
           const durationMs = Math.round(performance.now() - start);
+          setPdfNumPages(result.numPages);
+          setPdfPage(result.renderedPage);
           setStats({
             meshCount: 1,
             byType: { PdfReferencePlane: 1 },
@@ -349,11 +356,15 @@ export default function BimViewerPage() {
                   pageWidthPt: result.pageWidthPt,
                   pageHeightPt: result.pageHeightPt,
                   durationMs,
+                  pdfPage: result.renderedPage,
+                  pdfNumPages: result.numPages,
                 },
               })
               .catch(() => undefined);
           }
-          presenceActions.recordAction(`Loaded PDF "${fileLabel}" as reference plane`);
+          presenceActions.recordAction(
+            `Loaded PDF "${fileLabel}" page ${result.renderedPage}/${result.numPages} as reference plane`,
+          );
           return;
         }
 
@@ -406,9 +417,31 @@ export default function BimViewerPage() {
     async (file: File) => {
       lastFileRef.current = file;
       const buffer = await file.arrayBuffer();
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') {
+        lastPdfBufferRef.current = buffer.slice(0);
+        lastPdfFilenameRef.current = file.name;
+      }
       await processBuffer(buffer, file.name);
     },
     [processBuffer],
+  );
+
+  const goPdfPage = useCallback(
+    async (nextPage: number) => {
+      const buf = lastPdfBufferRef.current;
+      const label = lastPdfFilenameRef.current;
+      if (!buf || !label || pdfNumPages < 2) return;
+      const p = Math.max(1, Math.min(nextPage, pdfNumPages));
+      setBusy(true);
+      setError(null);
+      try {
+        await processBufferRef.current(buf, label, { skipTrack: true, pdfPage: p });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [pdfNumPages],
   );
 
   useEffect(() => {
@@ -432,6 +465,14 @@ export default function BimViewerPage() {
         if (cancelled) return;
         loadedRemoteModelIdRef.current = modelId;
         lastFileRef.current = null;
+        const lower = meta.filename.toLowerCase();
+        if (lower.endsWith('.pdf')) {
+          lastPdfBufferRef.current = buf.slice(0);
+          lastPdfFilenameRef.current = meta.filename;
+        } else {
+          lastPdfBufferRef.current = null;
+          lastPdfFilenameRef.current = null;
+        }
         await processBufferRef.current(buf, meta.filename, { skipTrack: true, fromCloud: true });
       } catch {
         if (!cancelled) {
@@ -464,10 +505,43 @@ export default function BimViewerPage() {
     );
   }
 
-  if (accessQuery.isError || !accessQuery.data?.bim?.hasAccess) {
+  if (accessQuery.isError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-500" aria-hidden />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
+        <AlertTriangle className="h-10 w-10 text-red-500 mb-3" aria-hidden />
+        <p className="text-sm text-gray-700 text-center max-w-md">{t('bimLanding', 'accessErrorBody')}</p>
+        <Link
+          href="/login?next=%2Fbim%2Fviewer"
+          className="mt-4 text-sm font-medium text-violet-700 hover:underline"
+        >
+          {t('bimLanding', 'anonLogIn')}
+        </Link>
+      </div>
+    );
+  }
+
+  if (accessQuery.isSuccess && accessQuery.data && !accessQuery.data.bim?.hasAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-amber-200 p-8 text-center shadow-sm">
+          <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden />
+          <h1 className="text-lg font-semibold text-gray-900">{t('bimLanding', 'lockedTitle')}</h1>
+          <p className="text-sm text-gray-600 mt-2">{t('bimLanding', 'lockedBody')}</p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
+            <Link
+              href="/bim"
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-gray-200 text-gray-800 text-sm font-medium hover:bg-gray-50"
+            >
+              {t('bimViewer', 'back')}
+            </Link>
+            <Link
+              href="/billing#bim"
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700"
+            >
+              {t('products', 'subscribeCta')}
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -513,7 +587,14 @@ export default function BimViewerPage() {
               }
               onClick={() => {
                 const f = lastFileRef.current;
-                if (f) saveToCloud.mutate(f);
+                if (!f) return;
+                const base = f.name.replace(/\.[^./\\]+$/, '') || f.name;
+                const entered = window.prompt(t('bimViewer', 'saveNamePrompt'), base);
+                if (entered === null) return;
+                saveToCloud.mutate({
+                  file: f,
+                  displayName: entered.trim() || undefined,
+                });
               }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 text-sm"
             >
@@ -532,6 +613,10 @@ export default function BimViewerPage() {
                 setError(null);
                 setInfo(null);
                 lastFileRef.current = null;
+                lastPdfBufferRef.current = null;
+                lastPdfFilenameRef.current = null;
+                setPdfNumPages(0);
+                setPdfPage(1);
                 loadedRemoteModelIdRef.current = null;
               }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm"
@@ -566,6 +651,35 @@ export default function BimViewerPage() {
             }}
           />
         </div>
+
+        {stats?.referenceOnly && pdfNumPages > 1 && (
+          <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-medium text-gray-700">{t('bimViewer', 'pdfPagesTitle')}</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy || pdfPage <= 1}
+                onClick={() => void goPdfPage(pdfPage - 1)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-800 hover:bg-gray-50 disabled:opacity-40"
+              >
+                {t('bimViewer', 'pdfPrev')}
+              </button>
+              <span className="text-sm text-gray-600 tabular-nums min-w-[5rem] text-center">
+                {t('bimViewer', 'pdfPageOf')
+                  .replace('{n}', String(pdfPage))
+                  .replace('{total}', String(pdfNumPages))}
+              </span>
+              <button
+                type="button"
+                disabled={busy || pdfPage >= pdfNumPages}
+                onClick={() => void goPdfPage(pdfPage + 1)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-800 hover:bg-gray-50 disabled:opacity-40"
+              >
+                {t('bimViewer', 'pdfNext')}
+              </button>
+            </div>
+          </div>
+        )}
 
         {info && !error && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3 flex items-start gap-2 text-sm">

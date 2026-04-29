@@ -7,10 +7,12 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -86,14 +88,22 @@ export class BimController {
       limits: { fileSize: 120 * 1024 * 1024 },
     }),
   )
-  async uploadModel(@CurrentUser() user: any, @UploadedFile() file: Express.Multer.File) {
+  async uploadModel(
+    @CurrentUser() user: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
     if (!file) throw new BadRequestException('No file uploaded.');
     const buffer = (file as any).buffer as Buffer | undefined;
     if (!buffer?.length) throw new BadRequestException('File has no content.');
+    const raw = (req.body as { displayName?: unknown })?.displayName;
+    const displayName =
+      typeof raw === 'string' && raw.trim().length > 0 ? raw.trim().slice(0, 200) : null;
     return this.bim.createModelFromUpload(caller(user), {
       filename: file.originalname,
       mimeType: file.mimetype || null,
       buffer,
+      displayName,
       metadata: {},
     });
   }

@@ -261,39 +261,50 @@ export default function ConstructionPlanSchedulePage() {
                 </tr>
               </thead>
               <tbody>
-                {sched.data.activities.map((a, i) => {
-                  const startCol = dateIndex.get(a.startIso) ?? -1;
-                  const endCol = dateIndex.get(a.endIso) ?? -1;
-                  return (
-                    <tr key={`${a.block}-${a.level}-${a.elementType}-${i}`}>
-                      <td className="sticky left-0 z-10 bg-white border border-gray-200 px-2 py-1">{a.block ?? '—'}</td>
-                      <td className="sticky left-12 z-10 bg-white border border-gray-200 px-2 py-1">{a.level}</td>
-                      <td className="sticky left-24 z-10 bg-white border border-gray-200 px-2 py-1">
-                        {ELEMENT_LABEL_JP[a.elementType] ?? a.elementType}
-                      </td>
-                      {dateColumns.map((d, ci) => {
-                        const inSpan = startCol >= 0 && endCol >= 0 && ci >= startCol && ci <= endCol;
-                        const isStart = ci === startCol;
-                        return (
-                          <td
-                            key={d}
-                            className={`border border-gray-100 ${inSpan ? 'bg-blue-200' : ''}`}
-                            style={{ minWidth: 22 }}
-                            title={inSpan ? `${a.totalPieces}本 / ${a.totalWeightKg}kg` : undefined}
-                          >
-                            {isStart && inSpan ? (
-                              <span className="block text-center text-[10px] font-bold text-blue-900 px-1">
-                                {a.totalPieces}本
-                              </span>
-                            ) : (
-                              ''
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
+                {sched.data.activities.length === 0 ? (
+                  <tr>
+                    <td
+                      className="border border-gray-200 px-4 py-6 text-sm text-gray-600 text-center"
+                      colSpan={3 + dateColumns.length}
+                    >
+                      {t('constructionPlanSchedule', 'noActivitiesYet')}
+                    </td>
+                  </tr>
+                ) : (
+                  sched.data.activities.map((a, i) => {
+                    const startCol = dateIndex.get(a.startIso) ?? -1;
+                    const endCol = dateIndex.get(a.endIso) ?? -1;
+                    return (
+                      <tr key={`${a.block}-${a.level}-${a.elementType}-${i}`}>
+                        <td className="sticky left-0 z-10 bg-white border border-gray-200 px-2 py-1">{a.block ?? '—'}</td>
+                        <td className="sticky left-12 z-10 bg-white border border-gray-200 px-2 py-1">{a.level}</td>
+                        <td className="sticky left-24 z-10 bg-white border border-gray-200 px-2 py-1">
+                          {ELEMENT_LABEL_JP[a.elementType] ?? a.elementType}
+                        </td>
+                        {dateColumns.map((d, ci) => {
+                          const inSpan = startCol >= 0 && endCol >= 0 && ci >= startCol && ci <= endCol;
+                          const isStart = ci === startCol;
+                          return (
+                            <td
+                              key={d}
+                              className={`border border-gray-100 ${inSpan ? 'bg-blue-200' : ''}`}
+                              style={{ minWidth: 22 }}
+                              title={inSpan ? `${a.totalPieces}本 / ${a.totalWeightKg}kg` : undefined}
+                            >
+                              {isStart && inSpan ? (
+                                <span className="block text-center text-[10px] font-bold text-blue-900 px-1">
+                                  {a.totalPieces}本
+                                </span>
+                              ) : (
+                                ''
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
