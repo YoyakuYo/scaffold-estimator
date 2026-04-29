@@ -6,6 +6,7 @@ import { accessApi, type EffectiveAccess, type ProductCode } from '@/lib/api/acc
 import { authApi } from '@/lib/api/auth';
 import { useI18n } from '@/lib/i18n';
 import { ProductCard } from './product-card';
+import { ProductWorkspaceSwitcher } from './product-workspace-switcher';
 
 const SCAFFOLD_HREF = '/scaffold';
 const BIM_HREF = '/bim';
@@ -101,6 +102,10 @@ export function ProductPortal({
           />
         )}
       </div>
+
+      {isFocused && focusedProduct && onFocusProduct && onClearFocus ? (
+        <ProductWorkspaceSwitcher focused={focusedProduct} onSelect={onFocusProduct} onClear={onClearFocus} />
+      ) : null}
     </section>
   );
 }

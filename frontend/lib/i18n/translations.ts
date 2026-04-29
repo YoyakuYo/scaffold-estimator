@@ -35,18 +35,28 @@ export const translations = {
 
   // ─── Phase 2: products portal (dashboard + billing overview) ───
   products: {
-    sectionTitle: { ja: 'プロダクト', en: 'Products', fr: 'Produits' },
+    sectionTitle: { ja: 'ワークスペース', en: 'Workspaces', fr: 'Espaces de travail' },
     sectionSubtitle: {
-      ja: 'カードをクリックするとそのプロダクトだけに集中表示され、他のダッシュボード領域は非表示になります。戻るで一覧に復帰します。',
-      en: 'Click a card to focus that product—the rest of the dashboard hides until you go back. Subscribe to unlock modules you need.',
-      fr: 'Cliquez une carte pour la mettre en avant — le reste du tableau de bord se masque jusqu’au retour. Abonnez-vous pour activer les modules.',
+      ja: '足場積算・BIM・建方計画はそれぞれ独立したダッシュボードです。カードでワークスペースに入ると、他モジュールの内容は表示されません。',
+      en: 'Scaffold, BIM, and Construction Plan each have their own dashboard. Enter a workspace to hide the other modules entirely.',
+      fr: 'Échafaudage, BIM et planning ont chacun leur tableau de bord. Entrer dans un espace masque entièrement les autres modules.',
     },
     sectionSubtitleFocused: {
-      ja: '「開く」で各プロダクトへ。一覧に戻るとワークフローや案件履歴も再表示されます。',
-      en: 'Use Open to enter the product. Back restores the full dashboard, workflow, and scaffold job history.',
-      fr: 'Ouvrez le module avec « Ouvrir ». Retour réaffiche le tableau de bord complet, le flux et l’historique des dossiers échafaudage.',
+      ja: '「+」で別ワークスペースへ切り替え。「開く」でアプリ本体へ。一覧に戻るとハブのみ表示されます。',
+      en: 'Use + to switch workspace. Open launches the full app. Back shows the hub only.',
+      fr: 'Utilisez + pour changer d’espace. Ouvrir lance l’application. Retour affiche uniquement le hub.',
     },
-    backToAll: { ja: 'すべてのプロダクトに戻る', en: 'All products', fr: 'Tous les produits' },
+    backToAll: { ja: 'ワークスペース一覧へ', en: 'All workspaces', fr: 'Tous les espaces' },
+    switcherOpenTitle: {
+      ja: '別のワークスペースを開く',
+      en: 'Open another workspace',
+      fr: 'Ouvrir un autre espace',
+    },
+    switcherAllWorkspaces: {
+      ja: '一覧に戻る',
+      en: 'Hub',
+      fr: 'Hub',
+    },
     badgeActive: { ja: '有効', en: 'Active', fr: 'Actif' },
     badgeTrial: { ja: 'トライアル中', en: 'Trial', fr: 'Essai' },
     badgeLocked: { ja: '未契約', en: 'Locked', fr: 'Verrouillé' },
@@ -267,14 +277,14 @@ export const translations = {
   // ─── Dashboard ─────────────────────────────────────────────────
   dashboard: {
     title: {
-      ja: '仮設材積算・BIM・建方計画ワークスペース',
-      en: 'Quantity, BIM & construction planning',
-      fr: 'Quantités, BIM et planning chantier',
+      ja: '3 つの独立ワークスペース',
+      en: 'Three independent workspaces',
+      fr: 'Trois espaces de travail indépendants',
     },
     subtitle: {
-      ja: '足場積算（くさび式・枠組）・IFC/DXF の BIM ビューア・建方・搬入計画（積算・工程・トラック）を同一ハブから利用できます。',
-      en: 'Scaffold BOM (kusabi & frame), IFC/DXF BIM viewer, and construction / delivery planning (takeoff, schedule, trucks)—from one hub.',
-      fr: 'Nomenclature échafaudage (kusabi & cadres), visionneuse BIM IFC/DXF, et planning chantier / livraisons — un seul hub.',
+      ja: '足場積算・BIM・建方計画は別々のダッシュボードです。カードを選ぶとそのモジュールだけが表示され、他は隠れます。',
+      en: 'Scaffold, BIM, and Construction Plan are separate dashboards. Pick a card to show only that module; the others stay hidden.',
+      fr: 'Échafaudage, BIM et planning sont des tableaux de bord séparés. Choisissez une carte : seul ce module s’affiche.',
     },
     workflow: { ja: 'ワークフロー', en: 'Workflow', fr: 'Workflow' },
     step1: { ja: '1. 入力（図面/手入力）', en: '1. Input (Drawing/Manual)', fr: '1. Saisie (plan/saisie manuelle)' },
@@ -283,10 +293,36 @@ export const translations = {
     step4: { ja: '4. 2D/3D組立図', en: '4. 2D/3D Assembly', fr: '4. Assemblage 2D/3D' },
     step5: { ja: '5. エクスポート（Excel/PDF/CAD/BIM）', en: '5. Export (Excel/PDF/CAD/BIM)', fr: '5. Export (Excel/PDF/CAD/BIM)' },
     dashboardIntro: {
-      ja: '下のプロダクトカードから足場積算・BIM・建方計画のいずれかを開けます。カードを選ぶとそのモジュールに集中表示されます。',
-      en: 'Pick a product card below for scaffold takeoff, the BIM viewer, or construction planning. Click a card to focus it and hide the rest of the page.',
-      fr: 'Choisissez une carte : échafaudage, BIM ou planning. Cliquez pour la mettre en avant et masquer le reste de la page.',
+      ja: 'ハブではカードのみです。各カードでワークスペースに入ると、その製品専用の案内・履歴などだけが表示されます。',
+      en: 'The hub shows only the three cards. Inside a workspace you see that product’s dashboard only—no mixed content from the others.',
+      fr: 'Le hub n’affiche que les trois cartes. Dans un espace, vous ne voyez que le tableau de bord de ce produit.',
     },
+    bimWorkspaceBadge: { ja: 'BIM ワークスペース', en: 'BIM workspace', fr: 'Espace BIM' },
+    bimWorkspaceTitle: {
+      ja: 'IFC / DXF の閲覧と構造モデル',
+      en: 'IFC/DXF viewing & structural models',
+      fr: 'Lecture IFC/DXF et modèles structurels',
+    },
+    bimWorkspaceBody: {
+      ja: 'ビューアでフルジオメトリを表示するか、グリッドから簡易構造体を IFC 出力できます。下のリンクから各ツールへ進んでください。',
+      en: 'Open the viewer for full geometry, or build a simple structural model from a grid and export IFC. Use the links below.',
+      fr: 'Ouvrez la visionneuse pour la géométrie complète, ou générez une structure simple en IFC depuis une grille.',
+    },
+    bimWorkspaceCtaHome: { ja: 'BIM ホーム', en: 'BIM home', fr: 'Accueil BIM' },
+    bimWorkspaceCtaViewer: { ja: '3D ビューア', en: '3D viewer', fr: 'Visionneuse 3D' },
+    bimWorkspaceCtaStructural: { ja: '構造 IFC ジェネレータ', en: 'Structural IFC generator', fr: 'Générateur IFC structurel' },
+    cpWorkspaceBadge: { ja: '建方・搬入ワークスペース', en: 'Construction plan workspace', fr: 'Espace plan de chantier' },
+    cpWorkspaceTitle: {
+      ja: '部材集計・工程・搬入計画',
+      en: 'Takeoff, schedule & delivery planning',
+      fr: 'Métré, planning et livraisons',
+    },
+    cpWorkspaceBody: {
+      ja: '図面セットごとに部材を抽出し、工程表や日次搬入を Excel で扱えます。アプリ本体は下のボタンから開きます。',
+      en: 'Extract members per drawing set, manage schedules and daily trucks in Excel. Open the full app from the button below.',
+      fr: 'Extrayez les éléments par jeu de plans, gérez planning et camions en Excel. Ouvrez l’application ci-dessous.',
+    },
+    cpWorkspaceCta: { ja: '建方・搬入計画を開く', en: 'Open construction plan', fr: 'Ouvrir le plan de chantier' },
     quickStartTitle: { ja: '足場積算へ', en: 'Scaffold takeoff', fr: 'Métré échafaudage' },
     quickStartDesc: { ja: '図面アップロード or 手動入力 → 寸法を確認・編集 → 積算計算', en: 'Upload drawing or enter manually → Review & edit dimensions → Calculate', fr: 'Téléverser un plan ou saisir → Vérifier/éditer les cotes → Calculer' },
     quickStep1Title: { ja: '図面アップロード or 手入力', en: 'Upload Drawing or Enter Manually', fr: 'Téléverser un plan ou saisir manuellement' },
@@ -457,7 +493,7 @@ export const translations = {
     manageBilling: { ja: '請求を管理', en: 'Manage Billing', fr: 'Gérer la facturation' },
     trialRemaining: { ja: '無料トライアル残り {days} 日', en: 'Free trial: {days} day(s) remaining', fr: 'Essai gratuit : {days} jour(s) restant(s)' },
     trialEnded: { ja: 'トライアル期間が終了しました。請求ページで有料プランを開始してください。', en: 'Your trial has ended. Start a paid plan from Billing to continue using core features.', fr: "Votre essai est terminé. Démarrez une offre payante depuis la facturation pour continuer à utiliser les fonctions principales." },
-    siteHubBadge: { ja: 'プロダクトハブ', en: 'Product hub', fr: 'Hub produits' },
+    siteHubBadge: { ja: 'ワークスペースハブ', en: 'Workspace hub', fr: 'Hub des espaces' },
     quickAccess: { ja: 'クイックアクセス', en: 'Quick access', fr: 'Accès rapide' },
     shortcutQuotationsDesc: { ja: '保存した見積の一覧・管理', en: 'View and manage saved quotations', fr: 'Voir et gérer les devis enregistrés' },
     shortcutBillingDesc: { ja: 'プラン・お支払い方法', en: 'Plan and payment method', fr: 'Offre et moyen de paiement' },
@@ -1503,21 +1539,21 @@ export const translations = {
     register: { ja: '新規登録', en: 'Create account', fr: 'Créer un compte' },
     forConstruction: { ja: '足場積算ツール', en: 'Scaffold takeoff', fr: 'Métré échafaudage' },
 
-    productsEyebrow: { ja: '3 つのプロダクト', en: 'Three products', fr: 'Trois produits' },
+    productsEyebrow: { ja: '3 つの独立ワークスペース', en: 'Three independent workspaces', fr: 'Trois espaces indépendants' },
     productsTitle: {
-      ja: '足場・BIM・建方計画 — 1 つのプラットフォーム',
-      en: 'Scaffold, BIM and Construction Plan — one platform',
-      fr: 'Échafaudage, BIM et Plan de construction — une seule plateforme',
+      ja: '足場・BIM・建方計画 — それぞれ専用ダッシュボード',
+      en: 'Scaffold, BIM & construction plan — each with its own dashboard',
+      fr: 'Échafaudage, BIM et planning — chacun son tableau de bord',
     },
     productsSubtitle: {
-      ja: '案件・現場・ユーザーを横断して使えます。サブスクリプションはプロダクト単位で個別に購入できます。',
-      en: 'Shared identity, audit log and admin cockpit — but each product is sold and unlocked separately.',
-      fr: 'Identité, audit et cockpit admin partagés — mais chaque produit s’abonne séparément.',
+      ja: 'ログイン後はダッシュボードでワークスペースを選びます。選んだモジュールだけが表示され、他は「+」や一覧から切り替えます。',
+      en: 'After sign-in, pick a workspace on the dashboard—only that module shows; switch with + or return to the hub.',
+      fr: 'Après connexion, choisissez un espace sur le tableau de bord — un seul module visible ; basculez avec + ou le hub.',
     },
     productsPublicNote: {
-      ja: 'このセクションは製品紹介のみです。各機能はログイン後に別画面で開きます（このページではデータは読み込みません）。',
-      en: 'This section is informational only. Each module opens after sign-in on its own screen — no project data is loaded here.',
-      fr: 'Cette section est informative uniquement. Chaque module s’ouvre après connexion — aucune donnée de chantier n’est chargée ici.',
+      ja: 'ログイン後は各カードから専用ワークスペース（ダッシュボード）へ進みます。アプリ本体はワークスペース内の「開く」から開けます。',
+      en: 'After sign-in, each card opens its dedicated workspace on the dashboard. Use Open inside that workspace to launch the full app.',
+      fr: 'Après connexion, chaque carte ouvre son espace dédié. Utilisez Ouvrir dans cet espace pour lancer l’application.',
     },
     productCtaSignIn: {
       ja: 'ログインして開く',
@@ -1540,7 +1576,7 @@ export const translations = {
       en: 'Optional AI extraction from drawings & photos',
       fr: 'Extraction IA optionnelle depuis plans & photos',
     },
-    productScaffoldCta: { ja: '足場へ', en: 'Open Scaffold', fr: 'Ouvrir Échafaudage' },
+    productScaffoldCta: { ja: '足場ワークスペース', en: 'Scaffold workspace', fr: 'Espace échafaudage' },
 
     productBimF1: {
       ja: 'IFC を web-ifc でブラウザ内 3D 表示（フルジオメトリ）',
@@ -1557,7 +1593,7 @@ export const translations = {
       en: 'PDF as a 3D reference plane (DWG must be converted to DXF)',
       fr: 'PDF comme plan de référence 3D (DWG → conversion en DXF)',
     },
-    productBimCta: { ja: 'BIM へ', en: 'Open BIM', fr: 'Ouvrir BIM' },
+    productBimCta: { ja: 'BIM ワークスペース', en: 'BIM workspace', fr: 'Espace BIM' },
 
     productCpF1: {
       ja: '柱 / 大梁 / 小梁 / 耐風梁 / 階段 / EV を階・工区別に集計',
@@ -1575,9 +1611,9 @@ export const translations = {
       fr: 'Bin-pack des camions 4t / 10t / 25t',
     },
     productCpCta: {
-      ja: '建方計画へ',
-      en: 'Open Construction Plan',
-      fr: 'Ouvrir Plan de construction',
+      ja: '建方・搬入ワークスペース',
+      en: 'Construction plan workspace',
+      fr: 'Espace plan de chantier',
     },
     heroImageAlt: {
       ja: '高層ビルと建設現場の写真',

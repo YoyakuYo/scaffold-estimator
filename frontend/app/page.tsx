@@ -546,7 +546,7 @@ export default function LandingPage() {
                 ]}
                 formats="IFC · DXF · PDF · 画像"
                 ctaLabel={t('landing', 'productScaffoldCta')}
-                ctaHref="/scaffold"
+                ctaHref="/dashboard?workspace=scaffold"
                 isSignedIn={hasToken}
                 ctaSignInLabel={t('landing', 'productCtaSignIn')}
               />
@@ -561,7 +561,7 @@ export default function LandingPage() {
                 ]}
                 formats="IFC · DXF · PDF · DWG"
                 ctaLabel={t('landing', 'productBimCta')}
-                ctaHref="/bim"
+                ctaHref="/dashboard?workspace=bim"
                 isSignedIn={hasToken}
                 ctaSignInLabel={t('landing', 'productCtaSignIn')}
               />
@@ -576,7 +576,7 @@ export default function LandingPage() {
                 ]}
                 formats="PDF · DXF · DWG · 画像 · Excel/CSV"
                 ctaLabel={t('landing', 'productCpCta')}
-                ctaHref="/construction-plan"
+                ctaHref="/dashboard?workspace=construction_plan"
                 isSignedIn={hasToken}
                 ctaSignInLabel={t('landing', 'productCtaSignIn')}
               />

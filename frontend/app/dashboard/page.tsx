@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useState, useRef, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-configs';
 import type { ProductCode } from '@/lib/api/access';
@@ -44,7 +45,6 @@ import {
   Shapes,
   FolderOutput,
 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
 import { usePresence } from '@/lib/page-presence-context';
 import { ProductPortal } from '@/components/product-portal/product-portal';
 
@@ -65,7 +65,19 @@ export default function DashboardPage() {
   if (isAdmin) {
     return <AdminDashboard />;
   }
-  return <UserDashboard />;
+  return (
+    <Suspense fallback={<UserDashboardFallback />}>
+      <UserDashboard />
+    </Suspense>
+  );
+}
+
+function UserDashboardFallback() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 text-slate-500">
+      <Loader2 className="h-10 w-10 animate-spin text-slate-400" aria-hidden />
+    </div>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -456,12 +468,98 @@ function KpiCard({
 // USER DASHBOARD — Regular users (estimator / viewer)
 // ═══════════════════════════════════════════════════════════════
 
+function workspaceLinkClass(tone: 'violet' | 'amber') {
+  const base =
+    'inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
+  if (tone === 'violet') {
+    return `${base} border border-violet-200 bg-white text-violet-900 hover:bg-violet-50 focus-visible:ring-violet-500`;
+  }
+  return `${base} border border-amber-200 bg-white text-amber-950 hover:bg-amber-50 focus-visible:ring-amber-500`;
+}
+
+function BimWorkspacePanel() {
+  const { t } = useI18n();
+  return (
+    <section
+      className="relative overflow-hidden rounded-3xl border border-violet-200/90 bg-gradient-to-br from-violet-50/95 to-white p-8 sm:p-10 shadow-sm"
+      aria-labelledby="bim-ws-heading"
+    >
+      <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 max-w-2xl">
+          <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-100/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-violet-900">
+            {t('dashboard', 'bimWorkspaceBadge')}
+          </span>
+          <h2 id="bim-ws-heading" className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
+            {t('dashboard', 'bimWorkspaceTitle')}
+          </h2>
+          <p className="mt-3 text-slate-600 leading-relaxed">{t('dashboard', 'bimWorkspaceBody')}</p>
+        </div>
+        <nav className="flex shrink-0 flex-col gap-3 lg:min-w-[220px]" aria-label="BIM">
+          <Link href="/bim" className={workspaceLinkClass('violet')}>
+            <Building2 className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            {t('dashboard', 'bimWorkspaceCtaHome')}
+          </Link>
+          <Link href="/bim/viewer" className={workspaceLinkClass('violet')}>
+            <Eye className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            {t('dashboard', 'bimWorkspaceCtaViewer')}
+          </Link>
+          <Link href="/bim/structural-generator" className={workspaceLinkClass('violet')}>
+            <Shapes className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            {t('dashboard', 'bimWorkspaceCtaStructural')}
+          </Link>
+        </nav>
+      </div>
+    </section>
+  );
+}
+
+function ConstructionPlanWorkspacePanel() {
+  const { t } = useI18n();
+  return (
+    <section
+      className="relative overflow-hidden rounded-3xl border border-amber-200/90 bg-gradient-to-br from-amber-50/90 to-white p-8 sm:p-10 shadow-sm"
+      aria-labelledby="cp-ws-heading"
+    >
+      <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 max-w-2xl">
+          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100/90 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-950">
+            {t('dashboard', 'cpWorkspaceBadge')}
+          </span>
+          <h2 id="cp-ws-heading" className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
+            {t('dashboard', 'cpWorkspaceTitle')}
+          </h2>
+          <p className="mt-3 text-slate-600 leading-relaxed">{t('dashboard', 'cpWorkspaceBody')}</p>
+        </div>
+        <div className="shrink-0">
+          <Link href="/construction-plan" className={workspaceLinkClass('amber')}>
+            <ClipboardList className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            {t('dashboard', 'cpWorkspaceCta')}
+            <ArrowRight className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function UserDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [focusedProduct, setFocusedProduct] = useState<ProductCode | null>(null);
+
+  const ws = searchParams.get('workspace');
+  const focusedProduct: ProductCode | null =
+    ws === 'scaffold' || ws === 'bim' || ws === 'construction_plan' ? ws : null;
+
+  const setWorkspace = useCallback(
+    (p: ProductCode | null) => {
+      if (p) router.replace(`/dashboard?workspace=${p}`, { scroll: false });
+      else router.replace('/dashboard', { scroll: false });
+    },
+    [router],
+  );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -600,11 +698,15 @@ function UserDashboard() {
         {/* ── Phase 2: 3-card product portal ── */}
         <ProductPortal
           focusedProduct={focusedProduct}
-          onFocusProduct={setFocusedProduct}
-          onClearFocus={() => setFocusedProduct(null)}
+          onFocusProduct={setWorkspace}
+          onClearFocus={() => setWorkspace(null)}
         />
 
-        {!focusedProduct && (
+        {focusedProduct === 'bim' && <BimWorkspacePanel />}
+
+        {focusedProduct === 'construction_plan' && <ConstructionPlanWorkspacePanel />}
+
+        {focusedProduct === 'scaffold' && (
           <>
         {/* ── End-to-end flow ── */}
         <section
@@ -1020,3 +1122,4 @@ function UserDashboard() {
     </div>
   );
 }
+
