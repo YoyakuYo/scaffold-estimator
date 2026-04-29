@@ -207,6 +207,13 @@ export default function BimHomePage() {
               {t('bimLanding', 'openViewerCta')}
             </Link>
             <Link
+              href="/bim/structural-generator"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 font-medium"
+            >
+              <Layers className="h-4 w-4" />
+              {t('bimLanding', 'structuralGenCta')}
+            </Link>
+            <Link
               href="/billing#bim"
               className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 font-medium"
             >

@@ -3621,6 +3621,53 @@ export const translations = {
     colSavedStatus: { ja: '変換', en: 'Conversion', fr: 'Conversion' },
     conversionPending: { ja: '待機中', en: 'Pending', fr: 'En attente' },
     conversionNa: { ja: '—', en: '—', fr: '—' },
+    structuralGenCta: {
+      ja: '構造モデル生成（グリッド→IFC）',
+      en: 'Structural model → IFC',
+      fr: 'Modèle structurel → IFC',
+    },
+  },
+
+  bimStructuralGen: {
+    title: {
+      ja: '構造 BIM ジェネレータ',
+      en: 'Structural BIM generator',
+      fr: 'Générateur BIM structurel',
+    },
+    subtitle: {
+      ja: 'グリッドと部材表から簡易 IFC を生成し、ビューアで開きます（ドラフト用途）。',
+      en: 'Edit grid + members as JSON (or CSV import), then generate a draft IFC and open it in the viewer.',
+      fr: 'Modifiez grilles et éléments (JSON ou CSV), générez un IFC brouillon et ouvrez-le dans la visionneuse.',
+    },
+    backBim: { ja: 'BIM ホーム', en: 'BIM home', fr: 'Accueil BIM' },
+    modelJson: { ja: 'モデル JSON', en: 'Model JSON', fr: 'JSON du modèle' },
+    saveModel: { ja: '保存', en: 'Save', fr: 'Enregistrer' },
+    generateIfc: { ja: 'IFC を生成してビューアへ', en: 'Generate IFC & open viewer', fr: 'Générer IFC et ouvrir' },
+    deleteProject: { ja: 'プロジェクト削除', en: 'Delete project', fr: 'Supprimer le projet' },
+    deleteConfirm: {
+      ja: 'このプロジェクトを削除しますか？',
+      en: 'Delete this project?',
+      fr: 'Supprimer ce projet ?',
+    },
+    csvTitle: { ja: '部材 CSV 取り込み', en: 'Import members CSV', fr: 'Importer CSV membres' },
+    csvHelp: {
+      ja: '列: mark,category,profile,storeyId,xLabel,yLabel,x2Label,y2Label（柱は x2/y2 空）',
+      en: 'Columns: mark,category,profile,storeyId,xLabel,yLabel,x2Label,y2Label (leave x2/y2 empty for columns).',
+      fr: 'Colonnes : mark,category,profile,storeyId,xLabel,yLabel,x2Label,y2Label (x2/y2 vides pour poteaux).',
+    },
+    importCsv: { ja: 'CSV を取り込む', en: 'Import CSV', fr: 'Importer CSV' },
+    job: { ja: 'ジョブ', en: 'Job', fr: 'Tâche' },
+    startHint: {
+      ja: 'グリッドと柱・梁の定義から IFC4 を生成します。まずプロジェクトを作成してください。',
+      en: 'Create a project to get a starter grid and demo members, then edit JSON or import CSV.',
+      fr: 'Créez un projet pour obtenir une grille de départ, puis éditez le JSON ou importez un CSV.',
+    },
+    createProject: { ja: '新規プロジェクト', en: 'New project', fr: 'Nouveau projet' },
+    defaultProjectName: {
+      ja: '構造モデル',
+      en: 'Structural model',
+      fr: 'Modèle structurel',
+    },
   },
 
   bimViewer: {

@@ -22,6 +22,7 @@ import { TeamChatModule } from './modules/team-chat/team-chat.module';
 import { PresenceModule } from './modules/presence/presence.module';
 import { StructuralTakeoffModule } from './modules/structural-takeoff/structural-takeoff.module';
 import { BimModule } from './modules/bim/bim.module';
+import { StructuralBimModule } from './modules/structural-bim/structural-bim.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { BimModule } from './modules/bim/bim.module';
     PresenceModule,
     StructuralTakeoffModule,
     BimModule,
+    StructuralBimModule,
   ],
   providers: [
     {
