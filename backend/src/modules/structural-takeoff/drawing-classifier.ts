@@ -75,16 +75,29 @@ function matchKind(text: string): { kind: DrawingKind; confidence: number } {
   if (/大梁リスト|小梁リスト|梁リスト|梁表|beam[\s_-]?list|girder[\s_-]?list/.test(lower)) {
     return { kind: 'beam_list', confidence: 0.95 };
   }
-  if (/階段|stair/.test(lower) && /(詳細|detail|elevation|平面)/.test(lower)) {
-    return { kind: 'stair_detail', confidence: 0.85 };
+  // Stair detail / section sheets (踊り場・蹴込・セクション等)
+  if (
+    /階段|ステア|stair|踊(り)?場|蹴込|handrail|貸平台/.test(lower) &&
+    /(詳細|detail|section|セクション|断面|納まり|elevation|平面|伏図|\d+\s*[-–]\s*\d+)/.test(lower)
+  ) {
+    return { kind: 'stair_detail', confidence: 0.9 };
   }
-  if (/階段/.test(lower)) {
-    return { kind: 'stair_detail', confidence: 0.7 };
+  if (/階段|ステア|stair|踊(り)?場/.test(lower)) {
+    return { kind: 'stair_detail', confidence: 0.72 };
+  }
+  // Elevator / hoistway (シャフト・ピット・機械室)
+  if (
+    /エレベータ|エレベーター|elevator|昇降機|elv\b|ev[\s_-]?shaft|ev詳細|ev[\s_-]?シャフト|機械室|巻上|ロープ式|籠|カゴ/.test(
+      lower,
+    ) &&
+    /(詳細|detail|section|セクション|断面|伏図|壁式|ピット|シャフト|玄関|上屋|囲い)/.test(lower)
+  ) {
+    return { kind: 'elevator_shaft', confidence: 0.9 };
   }
   if (
-    /エレベーター|エレベータ|elevator|ev[\s_-]?shaft|ev詳細|ev[\s_-]?シャフト/.test(lower)
+    /エレベータ|エレベーター|elevator|昇降機|elv\b|ev[\s_-]?shaft|ev詳細|ev[\s_-]?シャフト|機械室/.test(lower)
   ) {
-    return { kind: 'elevator_shaft', confidence: 0.85 };
+    return { kind: 'elevator_shaft', confidence: 0.82 };
   }
   if (/階高表|level[\s_-]?diagram|level[\s_-]?list/.test(lower)) {
     return { kind: 'level_diagram', confidence: 0.9 };

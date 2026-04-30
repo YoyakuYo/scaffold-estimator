@@ -83,10 +83,13 @@ export class ConstructionPlanExcelService {
       startDateIso?: string;
       workSaturday?: boolean;
       overrides?: DeliveryPlanOverridesPayload | null;
+      /** When true, adds monthly/weekly/daily aggregates and truck-manifest sheets. Default false. */
+      includeTruckPlan?: boolean;
     },
   ): Promise<{ buffer: Buffer; filename: string }> {
     const tmpl = options?.template ?? DEFAULT_DURATION_TEMPLATE;
     const startDateIso = options?.startDateIso ?? todayIso();
+    const includeTruck = options?.includeTruckPlan === true;
     const sequencer = runSequencer({
       levels: project.levels.length > 0 ? project.levels : ['1F'],
       blocks: project.blocks ?? [],
@@ -94,8 +97,10 @@ export class ConstructionPlanExcelService {
       template: tmpl,
       calendar: { startDateIso, workSaturday: options?.workSaturday ?? true },
     });
-    const delivery = buildDeliveryPlan(sequencer.activities, sequencer.dailyDemand);
-    if (options?.overrides) {
+    const delivery = includeTruck
+      ? buildDeliveryPlan(sequencer.activities, sequencer.dailyDemand)
+      : null;
+    if (delivery && options?.overrides) {
       applyDeliveryPlanOverrides(delivery, options.overrides);
     }
 
@@ -105,14 +110,16 @@ export class ConstructionPlanExcelService {
 
     this.writeMasterGantt(wb, project, set, sequencer.activities, sequencer.workingDays);
     this.writeQuantitySummary(wb, project, elements);
-    this.writeMonthlySummary(wb, delivery);
-    this.writeWeeklySummary(wb, delivery);
-    this.writeDailySummary(wb, delivery);
-    this.writeDeliveryPlan(wb, delivery);
-    this.writeDailyTruckCards(wb, delivery);
+    if (delivery) {
+      this.writeMonthlySummary(wb, delivery);
+      this.writeWeeklySummary(wb, delivery);
+      this.writeDailySummary(wb, delivery);
+      this.writeDeliveryPlan(wb, delivery);
+      this.writeDailyTruckCards(wb, delivery);
+    }
     this.writeSteelFrameRollup(wb, project, set, elements);
     this.writeSteelFrameDetail(wb, project, set, elements);
-    this.writeLegend(wb, project, tmpl, startDateIso, options?.workSaturday ?? true);
+    this.writeLegend(wb, project, tmpl, startDateIso, options?.workSaturday ?? true, includeTruck);
 
     const arr = await wb.xlsx.writeBuffer();
     const filename = `construction_plan_${set.id.slice(0, 8)}.xlsx`;
@@ -514,6 +521,7 @@ export class ConstructionPlanExcelService {
     tmpl: DurationTemplate,
     startDateIso: string,
     workSaturday: boolean,
+    includeTruckPlan: boolean,
   ): void {
     const sheet = wb.addWorksheet('凡例・条件');
     [22, 18].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
@@ -534,6 +542,7 @@ export class ConstructionPlanExcelService {
     set('土曜稼働', workSaturday ? '有' : '無');
     set('スラブ養生(working days)', tmpl.slabCureDays);
     set('工区ラグ(階)', tmpl.blockOverlapFloors);
+    set('搬入便シート', includeTruckPlan ? '含む' : '未生成（オプション）');
     r += 1;
 
     sheet.getCell(r, 1).value = '部材日産レート (本/日)';
@@ -544,21 +553,23 @@ export class ConstructionPlanExcelService {
     }
     r += 1;
 
-    sheet.getCell(r, 1).value = 'トラック規格';
-    sheet.getCell(r, 1).font = { bold: true, size: 12 };
-    r++;
-    sheet.getRow(r).values = ['車種', '最大積載(kg)', '荷台長(mm)', '長尺対応'];
-    sheet.getRow(r).font = { bold: true };
-    sheet.getRow(r).fill = HEADER_FILL;
-    sheet.getRow(r).eachCell((c) => (c.border = THIN));
-    r++;
-    for (const truck of DEFAULT_TRUCKS) {
-      sheet.getCell(r, 1).value = truck.label;
-      sheet.getCell(r, 2).value = truck.payloadKg;
-      sheet.getCell(r, 3).value = truck.bedLengthMm;
-      sheet.getCell(r, 4).value = truck.acceptsLongPieces ? '有 (>12m, 道路使用許可)' : '無';
-      for (let c = 1; c <= 4; c++) sheet.getCell(r, c).border = THIN;
+    if (includeTruckPlan) {
+      sheet.getCell(r, 1).value = 'トラック規格';
+      sheet.getCell(r, 1).font = { bold: true, size: 12 };
       r++;
+      sheet.getRow(r).values = ['車種', '最大積載(kg)', '荷台長(mm)', '長尺対応'];
+      sheet.getRow(r).font = { bold: true };
+      sheet.getRow(r).fill = HEADER_FILL;
+      sheet.getRow(r).eachCell((c) => (c.border = THIN));
+      r++;
+      for (const truck of DEFAULT_TRUCKS) {
+        sheet.getCell(r, 1).value = truck.label;
+        sheet.getCell(r, 2).value = truck.payloadKg;
+        sheet.getCell(r, 3).value = truck.bedLengthMm;
+        sheet.getCell(r, 4).value = truck.acceptsLongPieces ? '有 (>12m, 道路使用許可)' : '無';
+        for (let c = 1; c <= 4; c++) sheet.getCell(r, c).border = THIN;
+        r++;
+      }
     }
   }
 }

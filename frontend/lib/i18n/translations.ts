@@ -3895,6 +3895,31 @@ export const translations = {
       en: 'Could not load the schedule. Make sure elements are entered first.',
       fr: 'Impossible de charger le planning. Saisissez d’abord les éléments.',
     },
+    includeTruckPlan: {
+      ja: '搬入便を自動計算する',
+      en: 'Auto-build truck delivery plan',
+      fr: 'Calculer le plan de livraison (camions)',
+    },
+    truckPlanDisabledHint: {
+      ja: 'チェックを入れると、鉄骨部材の建方工程に基づき便割付・月週集計をサーバで生成します。オフのときは工程表のみ表示されます。',
+      en: 'Turn on to generate steel-member truck loads and month/week summaries from the erection schedule. When off, only the master schedule is shown.',
+      fr: 'Activez pour générer les chargements camion (acier) et les totaux mois/semaine. Sinon, seul le planning principal s’affiche.',
+    },
+    truckPlanLoadFailed: {
+      ja: '搬入計画の取得に失敗しました。しばらくしてから再度お試しください。',
+      en: 'Could not load the truck plan. Try again in a moment.',
+      fr: 'Impossible de charger le plan de livraison. Réessayez plus tard.',
+    },
+    scheduleSteelMembersNote: {
+      ja: '工程表は鉄骨部材（柱・大梁・小梁・耐風梁・ブレース）のみです。階段・ELV はセット画面の数量表で管理し、図面は「階段詳細」「EVシャフト」として分類されます。',
+      en: 'This schedule covers steel members only (columns, beams, braces). Stairs and elevators stay in the quantity grid; classify those sheets as stair detail / elevator shaft.',
+      fr: 'Ce planning couvre uniquement l’acier (poteaux, poutres, contreventements). Escaliers et ascenseurs restent dans la grille ; classez les planches en détail escalier / cage ascenseur.',
+    },
+    excelTruckSheetsHint: {
+      ja: 'Excel の搬入・月次・週次・日次・トラック便シートは、「搬入便を自動計算する」がオンのときダウンロードにのみ含まれます。',
+      en: 'Excel truck / month / week / day sheets are included only when “Auto-build truck delivery plan” is checked at download time.',
+      fr: 'Les feuilles camion / mois / semaine / jour du fichier Excel ne sont incluses que si l’option de plan de livraison est cochée au téléchargement.',
+    },
     startDate: { ja: '開始日', en: 'Start date', fr: 'Date de début' },
     endDate: { ja: '終了日', en: 'End date', fr: 'Date de fin' },
     workSaturday: { ja: '土曜稼働', en: 'Work Saturday', fr: 'Travailler samedi' },

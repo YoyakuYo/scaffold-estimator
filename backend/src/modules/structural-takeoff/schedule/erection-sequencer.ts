@@ -12,10 +12,11 @@
  *   * Per-(block, level, activity) start/end ISO dates.
  *   * Per-day demand: Map<isoDate, ActivityDemand[]> for the bin packer.
  *
- * Stair / elevator / kaidan are NOT folded into the floor cycle — they're
- * treated as optional parallel tasks scheduled after the level's slab cure.
+ * Stair / elevator kits are excluded from the default schedule aggregate
+ * ({@link STEEL_MEMBER_ELEMENT_TYPES}). If you pass a wider `scheduledElementTypes`,
+ * kaidan / elevator are still parallel tasks after the frame cycle, not in `cycleOrder`.
  */
-import type { StructuralElementType } from '../element-types';
+import { STEEL_MEMBER_ELEMENT_TYPES, type StructuralElementType } from '../element-types';
 import type { ExtractedElement } from '../extracted-element.entity';
 import { buildWorkingCalendar, type WorkingCalendarOptions } from './calendar';
 import { DEFAULT_DURATION_TEMPLATE, type DurationTemplate } from './duration-template';
@@ -27,6 +28,11 @@ export interface SequencerInput {
   elements: ExtractedElement[];
   template?: DurationTemplate;
   calendar: WorkingCalendarOptions;
+  /**
+   * Element types that get schedule activities + daily truck demand.
+   * Default: {@link STEEL_MEMBER_ELEMENT_TYPES} (excludes stair / elevator kits).
+   */
+  scheduledElementTypes?: readonly StructuralElementType[];
 }
 
 export interface ScheduleActivity {
@@ -75,10 +81,15 @@ interface Aggregated extends AggregatedKey {
   representativeSection: string | null;
 }
 
-function aggregate(elements: ExtractedElement[]): Aggregated[] {
+function aggregate(
+  elements: ExtractedElement[],
+  scheduledElementTypes: readonly StructuralElementType[],
+): Aggregated[] {
+  const allowed = new Set<string>(scheduledElementTypes as readonly string[]);
   const map = new Map<string, Aggregated>();
   for (const e of elements) {
     if (!Number.isFinite(e.qty) || e.qty <= 0) continue;
+    if (!allowed.has(e.elementType)) continue;
     const lk = e.lineKind ?? 'member';
     if (lk !== 'member') continue;
     const key = `${e.block ?? ''}|${e.level}|${e.elementType}`;
@@ -113,7 +124,8 @@ function aggregate(elements: ExtractedElement[]): Aggregated[] {
 export function runSequencer(input: SequencerInput): SequencerResult {
   const tmpl = input.template ?? DEFAULT_DURATION_TEMPLATE;
   const calendar = buildWorkingCalendar(input.calendar);
-  const aggregated = aggregate(input.elements);
+  const scheduledTypes = input.scheduledElementTypes ?? STEEL_MEMBER_ELEMENT_TYPES;
+  const aggregated = aggregate(input.elements, scheduledTypes);
 
   // Index aggregations by (block, level, type) for fast lookup.
   const lookup = new Map<string, Aggregated>();

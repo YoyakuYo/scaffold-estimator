@@ -74,9 +74,9 @@ const KIND_HINTS: Record<DrawingKind, string> = {
   beam_list:
     'This sheet is a 梁リスト. Extract one row per beam mark; map 大梁/小梁/耐風梁 to oobari/kobari/taifubari.',
   stair_detail:
-    'This sheet is a stair detail. Most rows have elementType=kaidan. Capture pre-fab unit counts.',
+    'This sheet is a stair detail / section (階段詳細, 踊り場, 蹴込, 平面/断面). Most quantity lines are elementType=kaidan (steel stair flights, landings, supports as listed).',
   elevator_shaft:
-    'This sheet is an elevator (EV / ELV) shaft drawing. Most rows have elementType=elevator. Note distinct components (rails, doors, controllers) but they all map to elevator for our schema.',
+    'This sheet is an elevator / hoistway drawing (EV / ELV, シャフト, ピット, 機械室, 昇降機). Quantity lines map to elementType=elevator.',
   level_diagram:
     'This is the level / storey diagram (階高表). Skip — return {"rows":[]}.',
   general:

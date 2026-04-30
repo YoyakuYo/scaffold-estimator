@@ -22,6 +22,18 @@ export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'elevator',
 ] as const;
 
+/**
+ * Steel frame shapes only — used for erection schedule, truck packing, and steel weight rollups.
+ * Stair kits / elevator line items stay in the quantity takeoff but are excluded from these flows.
+ */
+export const STEEL_MEMBER_ELEMENT_TYPES: readonly StructuralElementType[] = [
+  'hashira',
+  'oobari',
+  'kobari',
+  'taifubari',
+  'brace',
+] as const;
+
 export type ExtractionSource = 'manual' | 'excel' | 'dxf' | 'ai' | 'ifc';
 
 export type ElementLineKind = 'member' | 'bolt' | 'connection' | 'misc';

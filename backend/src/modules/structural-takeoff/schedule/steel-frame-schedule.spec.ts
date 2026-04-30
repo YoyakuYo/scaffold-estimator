@@ -60,4 +60,14 @@ describe('aggregateSteelFrameLines', () => {
     expect(lines.length).toBe(1);
     expect(lines[0].lengthM).toBeCloseTo(12, 1);
   });
+
+  it('excludes stair / elevator kits from steel mass rollups', () => {
+    const lines = aggregateSteelFrameLines([
+      row({ qty: 2, pieceLengthMm: 6000, lineKind: 'member' }),
+      row({ elementType: 'kaidan', qty: 1, section: 'pre-fab', lineKind: 'member' }),
+      row({ elementType: 'elevator', qty: 1, section: 'kit', lineKind: 'member' }),
+    ]);
+    expect(lines.length).toBe(1);
+    expect(lines[0].elementType).toBe('oobari');
+  });
 });

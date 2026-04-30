@@ -75,8 +75,11 @@ export class ExcelElementImportService {
     [/小梁|small\s*beam|kobari|小ばり/i, 'kobari'],
     [/耐風梁|wind\s*beam|taifubari/i, 'taifubari'],
     [/ブレース|brace|bracing|筋交/i, 'brace'],
-    [/階段|stair|kaidan|stair\s*case/i, 'kaidan'],
-    [/エレベーター|エレベータ|elevator|^ev$|^elv$|elv\b|ev\s*shaft/i, 'elevator'],
+    [/階段|ステア|stair|kaidan|踊(り)?場|蹴込|stair\s*case/i, 'kaidan'],
+    [
+      /エレベーター|エレベータ|昇降機|elevator|^ev$|^elv$|elv\b|ev\s*shaft|機械室|シャフト製鉄/i,
+      'elevator',
+    ],
   ];
 
   async parseBuffer(buffer: Buffer, filename: string): Promise<ExcelImportResult> {

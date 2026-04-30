@@ -44,6 +44,7 @@ export default function ConstructionPlanSchedulePage() {
   const todayIso = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState<string>(todayIso);
   const [workSaturday, setWorkSaturday] = useState<boolean>(true);
+  const [includeTruckPlan, setIncludeTruckPlan] = useState<boolean>(false);
 
   // Foreman overrides on the generated truck plan. Keyed by `date|binNo`
   // so the user can swap truck types without re-running the sequencer.
@@ -59,10 +60,10 @@ export default function ConstructionPlanSchedulePage() {
   });
 
   const plan = useQuery({
-    queryKey: ['structural-takeoff', 'delivery-plan', setId, startDate, workSaturday],
+    queryKey: ['structural-takeoff', 'delivery-plan', setId, startDate, workSaturday, includeTruckPlan],
     queryFn: () =>
       structuralTakeoffApi.getDeliveryPlan(setId, { startDate, workSaturday }),
-    enabled: !!setId,
+    enabled: !!setId && includeTruckPlan,
   });
 
   useEffect(() => {
@@ -130,7 +131,11 @@ export default function ConstructionPlanSchedulePage() {
 
   const downloadExcel = async () => {
     try {
-      const blob = await structuralTakeoffApi.downloadExcel(setId, { startDate, workSaturday });
+      const blob = await structuralTakeoffApi.downloadExcel(setId, {
+        startDate,
+        workSaturday,
+        includeTruckPlan,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -143,7 +148,7 @@ export default function ConstructionPlanSchedulePage() {
     }
   };
 
-  if (sched.isLoading || plan.isLoading) {
+  if (sched.isLoading || !sched.data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
@@ -151,7 +156,7 @@ export default function ConstructionPlanSchedulePage() {
     );
   }
 
-  if (sched.isError || !sched.data || plan.isError || !plan.data) {
+  if (sched.isError) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="bg-white border border-red-200 rounded-xl p-6 max-w-md flex items-start gap-2 text-red-700">
@@ -204,6 +209,14 @@ export default function ConstructionPlanSchedulePage() {
               />
               {t('constructionPlanSchedule', 'workSaturday')}
             </label>
+            <label className="inline-flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={includeTruckPlan}
+                onChange={(e) => setIncludeTruckPlan(e.target.checked)}
+              />
+              {t('constructionPlanSchedule', 'includeTruckPlan')}
+            </label>
             <button
               onClick={downloadExcel}
               className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm"
@@ -213,6 +226,7 @@ export default function ConstructionPlanSchedulePage() {
             </button>
           </div>
           <p className="mt-3 text-xs text-gray-500">{t('constructionPlanSchedule', 'excelIncludesSteel')}</p>
+          <p className="mt-1 text-xs text-gray-500">{t('constructionPlanSchedule', 'excelTruckSheetsHint')}</p>
         </div>
 
         <div
@@ -227,6 +241,9 @@ export default function ConstructionPlanSchedulePage() {
               {sched.data.activities.length} {t('constructionPlanSchedule', 'activities')}
             </span>
           </div>
+          <p className="px-6 pb-3 text-xs text-gray-500 border-b border-gray-100">
+            {t('constructionPlanSchedule', 'scheduleSteelMembersNote')}
+          </p>
           <div className="overflow-x-auto">
             <table className="text-xs border-collapse">
               <thead>
@@ -310,186 +327,205 @@ export default function ConstructionPlanSchedulePage() {
               <Truck className="h-5 w-5 text-blue-500" />
               {t('constructionPlanSchedule', 'deliveryPlanTitle')}
             </h2>
-            <div className="flex items-center gap-2">
-              {overridesDirty && (
-                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-                  {t('constructionPlanSchedule', 'unsavedOverrides')}
-                </span>
-              )}
-              {overridesDirty && (
-                <button
-                  onClick={() => {
-                    const data = plan.data as unknown as
-                      | { overrides?: { trucks?: Array<{ date: string; binNo: number; truckType?: string }> } }
-                      | undefined;
-                    const trucks = data?.overrides?.trucks ?? [];
-                    const next: Record<string, { date: string; binNo: number; truckType: string }> = {};
-                    for (const tr of trucks) {
-                      if (tr?.date && typeof tr.binNo === 'number' && tr.truckType) {
-                        next[`${tr.date}|${tr.binNo}`] = { date: tr.date, binNo: tr.binNo, truckType: tr.truckType };
-                      }
-                    }
-                    setOverridesDraft(next);
-                  }}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border border-gray-200 hover:bg-gray-50"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  {t('constructionPlanSchedule', 'discardOverrides')}
-                </button>
-              )}
-              <button
-                onClick={() => saveOverrides.mutate()}
-                disabled={!overridesDirty || saveOverrides.isPending}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
-              >
-                {saveOverrides.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Save className="h-3 w-3" />
+            {includeTruckPlan && plan.data ? (
+              <div className="flex items-center gap-2">
+                {overridesDirty && (
+                  <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                    {t('constructionPlanSchedule', 'unsavedOverrides')}
+                  </span>
                 )}
-                {t('constructionPlanSchedule', 'saveOverrides')}
-              </button>
-              <span className="text-sm text-gray-500">
-                {plan.data.trucks.length} {t('constructionPlanSchedule', 'trucks')}
-              </span>
-            </div>
+                {overridesDirty && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const data = plan.data as unknown as
+                        | { overrides?: { trucks?: Array<{ date: string; binNo: number; truckType?: string }> } }
+                        | undefined;
+                      const trucks = data?.overrides?.trucks ?? [];
+                      const next: Record<string, { date: string; binNo: number; truckType: string }> = {};
+                      for (const tr of trucks) {
+                        if (tr?.date && typeof tr.binNo === 'number' && tr.truckType) {
+                          next[`${tr.date}|${tr.binNo}`] = { date: tr.date, binNo: tr.binNo, truckType: tr.truckType };
+                        }
+                      }
+                      setOverridesDraft(next);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border border-gray-200 hover:bg-gray-50"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    {t('constructionPlanSchedule', 'discardOverrides')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => saveOverrides.mutate()}
+                  disabled={!overridesDirty || saveOverrides.isPending}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40"
+                >
+                  {saveOverrides.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Save className="h-3 w-3" />
+                  )}
+                  {t('constructionPlanSchedule', 'saveOverrides')}
+                </button>
+                <span className="text-sm text-gray-500">
+                  {plan.data.trucks.length} {t('constructionPlanSchedule', 'trucks')}
+                </span>
+              </div>
+            ) : null}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-gray-500">
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'date')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'dow')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'binNo')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'truckType')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'block')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'level')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'items')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'pieces')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'weightT')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'lengthM')}</th>
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'notes')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {plan.data.trucks.map((tr, idx) => {
-                  const head = tr.load.items[0];
-                  const totalPieces = tr.load.items.reduce((s, i) => s + i.pieces, 0);
-                  return (
-                    <tr key={`${tr.date}-${tr.binNo}-${idx}`}>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">{tr.date}</td>
-                      <td className="px-3 py-2 text-gray-700">{DOW_JP[(tr.dow % 7 + 7) % 7]}</td>
-                      <td className="px-3 py-2 text-gray-700">{tr.binNo}</td>
-                      <td className="px-3 py-2 text-gray-900">
-                        <select
-                          value={
-                            overridesDraft[`${tr.date}|${tr.binNo}`]?.truckType ?? tr.load.truckType
-                          }
-                          onChange={(e) => {
-                            const k = `${tr.date}|${tr.binNo}`;
-                            setOverridesDraft((prev) => ({
-                              ...prev,
-                              [k]: { date: tr.date, binNo: tr.binNo, truckType: e.target.value },
-                            }));
-                          }}
-                          className="px-2 py-0.5 border border-gray-200 rounded-md text-xs"
-                        >
-                          <option value="4tunic">4tユニック</option>
-                          <option value="4t">4t平</option>
-                          <option value="10t">10t平</option>
-                          <option value="25t_trailer">25tトレーラー</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">{head?.block ?? '—'}</td>
-                      <td className="px-3 py-2 text-gray-700">{head?.level ?? '—'}</td>
-                      <td className="px-3 py-2 text-gray-700 text-xs">
-                        {tr.load.items
-                          .map((i) => `${elementTypeJa(i.elementType)}×${i.pieces}`)
-                          .join(' / ')}
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-900">{totalPieces}</td>
+          {!includeTruckPlan ? (
+            <p className="px-6 py-8 text-sm text-gray-600">{t('constructionPlanSchedule', 'truckPlanDisabledHint')}</p>
+          ) : plan.isLoading ? (
+            <div className="flex justify-center py-14">
+              <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+            </div>
+          ) : plan.isError || !plan.data ? (
+            <p className="px-6 py-8 text-sm text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              {t('constructionPlanSchedule', 'truckPlanLoadFailed')}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-gray-500">
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'date')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'dow')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'binNo')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'truckType')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'block')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'level')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'items')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'pieces')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'weightT')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'lengthM')}</th>
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'notes')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {plan.data.trucks.map((tr, idx) => {
+                    const head = tr.load.items[0];
+                    const totalPieces = tr.load.items.reduce((s, i) => s + i.pieces, 0);
+                    return (
+                      <tr key={`${tr.date}-${tr.binNo}-${idx}`}>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-700">{tr.date}</td>
+                        <td className="px-3 py-2 text-gray-700">{DOW_JP[(tr.dow % 7 + 7) % 7]}</td>
+                        <td className="px-3 py-2 text-gray-700">{tr.binNo}</td>
+                        <td className="px-3 py-2 text-gray-900">
+                          <select
+                            value={
+                              overridesDraft[`${tr.date}|${tr.binNo}`]?.truckType ?? tr.load.truckType
+                            }
+                            onChange={(e) => {
+                              const k = `${tr.date}|${tr.binNo}`;
+                              setOverridesDraft((prev) => ({
+                                ...prev,
+                                [k]: { date: tr.date, binNo: tr.binNo, truckType: e.target.value },
+                              }));
+                            }}
+                            className="px-2 py-0.5 border border-gray-200 rounded-md text-xs"
+                          >
+                            <option value="4tunic">4tユニック</option>
+                            <option value="4t">4t平</option>
+                            <option value="10t">10t平</option>
+                            <option value="25t_trailer">25tトレーラー</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-gray-700">{head?.block ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-700">{head?.level ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-700 text-xs">
+                          {tr.load.items
+                            .map((i) => `${elementTypeJa(i.elementType)}×${i.pieces}`)
+                            .join(' / ')}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-900">{totalPieces}</td>
+                        <td className="px-3 py-2 text-right text-gray-900">
+                          {(Math.round(tr.load.totalKg / 100) / 10).toFixed(1)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-900">
+                          {(Math.round(tr.load.totalLengthMm / 100) / 10).toFixed(1)}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-amber-700">
+                          {tr.load.notes.join(', ')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {includeTruckPlan && plan.data && !plan.isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {t('constructionPlanSchedule', 'monthlyTitle')}
+                </h2>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-gray-500">
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'month')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'days')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'pieces')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'weightT')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'trucksCount')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {plan.data.monthly.map((m) => (
+                    <tr key={m.month}>
+                      <td className="px-3 py-2 text-gray-900">{m.month}</td>
+                      <td className="px-3 py-2 text-right text-gray-900">{m.days}</td>
+                      <td className="px-3 py-2 text-right text-gray-900">{m.pieces}</td>
                       <td className="px-3 py-2 text-right text-gray-900">
-                        {(Math.round(tr.load.totalKg / 100) / 10).toFixed(1)}
+                        {(Math.round(m.kg / 100) / 10).toFixed(1)}
                       </td>
-                      <td className="px-3 py-2 text-right text-gray-900">
-                        {(Math.round(tr.load.totalLengthMm / 100) / 10).toFixed(1)}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-amber-700">
-                        {tr.load.notes.join(', ')}
-                      </td>
+                      <td className="px-3 py-2 text-right text-gray-900">{m.trucks}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-3 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {t('constructionPlanSchedule', 'monthlyTitle')}
-              </h2>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-gray-500">
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'month')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'days')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'pieces')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'weightT')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'trucksCount')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {plan.data.monthly.map((m) => (
-                  <tr key={m.month}>
-                    <td className="px-3 py-2 text-gray-900">{m.month}</td>
-                    <td className="px-3 py-2 text-right text-gray-900">{m.days}</td>
-                    <td className="px-3 py-2 text-right text-gray-900">{m.pieces}</td>
-                    <td className="px-3 py-2 text-right text-gray-900">
-                      {(Math.round(m.kg / 100) / 10).toFixed(1)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-900">{m.trucks}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 py-3 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {t('constructionPlanSchedule', 'weeklyTitle')}
-              </h2>
-            </div>
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-gray-500">
-                  <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'isoWeek')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'days')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'pieces')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'weightT')}</th>
-                  <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'trucksCount')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {plan.data.weekly.map((w) => (
-                  <tr key={w.isoWeek}>
-                    <td className="px-3 py-2 text-gray-900">{w.isoWeek}</td>
-                    <td className="px-3 py-2 text-right text-gray-900">{w.days}</td>
-                    <td className="px-3 py-2 text-right text-gray-900">{w.pieces}</td>
-                    <td className="px-3 py-2 text-right text-gray-900">
-                      {(Math.round(w.kg / 100) / 10).toFixed(1)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-900">{w.trucks}</td>
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {t('constructionPlanSchedule', 'weeklyTitle')}
+                </h2>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-gray-500">
+                    <th className="px-3 py-2 font-medium">{t('constructionPlanSchedule', 'isoWeek')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'days')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'pieces')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'weightT')}</th>
+                    <th className="px-3 py-2 font-medium text-right">{t('constructionPlanSchedule', 'trucksCount')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {plan.data.weekly.map((w) => (
+                    <tr key={w.isoWeek}>
+                      <td className="px-3 py-2 text-gray-900">{w.isoWeek}</td>
+                      <td className="px-3 py-2 text-right text-gray-900">{w.days}</td>
+                      <td className="px-3 py-2 text-right text-gray-900">{w.pieces}</td>
+                      <td className="px-3 py-2 text-right text-gray-900">
+                        {(Math.round(w.kg / 100) / 10).toFixed(1)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-gray-900">{w.trucks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

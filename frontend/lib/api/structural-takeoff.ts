@@ -384,13 +384,14 @@ export const structuralTakeoffApi = {
   },
   downloadExcel: async (
     setId: string,
-    params?: { startDate?: string; workSaturday?: boolean },
+    params?: { startDate?: string; workSaturday?: boolean; includeTruckPlan?: boolean },
   ): Promise<Blob> => {
     const res = await apiClient.get(`/structural-takeoff/sets/${setId}/excel`, {
       responseType: 'blob',
       params: {
         startDate: params?.startDate,
         workSaturday: params?.workSaturday === false ? 'false' : undefined,
+        includeTruckPlan: params?.includeTruckPlan === true ? 'true' : undefined,
       },
     });
     return res.data as Blob;

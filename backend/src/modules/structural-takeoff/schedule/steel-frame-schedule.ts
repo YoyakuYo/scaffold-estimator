@@ -4,7 +4,7 @@
  */
 import type { ExtractedElement } from '../extracted-element.entity';
 import type { StructuralElementType } from '../element-types';
-import { STRUCTURAL_ELEMENT_TYPES } from '../element-types';
+import { STEEL_MEMBER_ELEMENT_TYPES } from '../element-types';
 import { DEFAULT_PIECE_LENGTH_MM, pieceWeightKg, resolveKgPerM } from './jis-sections';
 
 const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
@@ -82,7 +82,7 @@ export function aggregateSteelFrameLines(
   const map = new Map<string, Acc>();
 
   for (const e of elements) {
-    if (!STRUCTURAL_ELEMENT_TYPES.includes(e.elementType)) continue;
+    if (!STEEL_MEMBER_ELEMENT_TYPES.includes(e.elementType)) continue;
     const lk = e.lineKind ?? 'member';
     if (lk !== 'member') continue;
     const qty = Number.isFinite(e.qty) ? Math.floor(e.qty) : 0;

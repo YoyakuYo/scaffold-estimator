@@ -597,16 +597,19 @@ export class StructuralTakeoffController {
     @Res() res: Response,
     @Query('startDate') startDate?: string,
     @Query('workSaturday') workSaturdayQuery?: string,
+    @Query('includeTruckPlan') includeTruckPlanQuery?: string,
   ) {
     const ctx = { userId: user.id, companyId: user.companyId ?? null, role: user.role };
     const review = await this.service.getSetReview(ctx, setId);
     const startDateIso = startDate || todayIso();
     const workSaturday = workSaturdayQuery !== 'false';
     const overrides = await this.service.getDeliveryOverrides(ctx, setId);
+    const includeTruckPlan = includeTruckPlanQuery === 'true';
     const { buffer, filename } = await this.excelExport.build(review.project, review.set, review.elements, {
       startDateIso,
       workSaturday,
       overrides,
+      includeTruckPlan,
     });
     res.setHeader(
       'Content-Type',

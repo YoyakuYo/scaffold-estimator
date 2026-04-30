@@ -173,7 +173,7 @@ export async function extractStructuralElementsFromIfc(buffer: Buffer): Promise<
     }
 
     if (rows.length === 0) {
-      warnings.push('No supported structural IFC entities (column/beam/member/stair/slab/fastener) were found.');
+      warnings.push('No supported structural IFC entities (column/beam/member/stair/fastener) were found.');
     }
     return { rows, warnings };
   } finally {

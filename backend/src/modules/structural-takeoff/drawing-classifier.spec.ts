@@ -53,6 +53,17 @@ describe('classifyDrawingFilename', () => {
     expect(r.kind).toBe('stair_detail');
   });
 
+  it('detects stair section-style filename', () => {
+    const r = classifyDrawingFilename('S-2F-階段セクション詳細.pdf');
+    expect(r.kind).toBe('stair_detail');
+    expect(r.level).toBe('2F');
+  });
+
+  it('detects elevator machine-room / hoistway detail filename', () => {
+    const r = classifyDrawingFilename('昇降機機械室詳細.pdf');
+    expect(r.kind).toBe('elevator_shaft');
+  });
+
   it('detects level diagram', () => {
     const r = classifyDrawingFilename('階高表.pdf');
     expect(r.kind).toBe('level_diagram');

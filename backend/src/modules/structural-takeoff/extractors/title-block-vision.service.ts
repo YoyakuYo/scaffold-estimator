@@ -21,8 +21,10 @@ block in the bottom-right or right edge of the sheet — and determine:
 1. The drawing kind (one of: framing_plan / column_list / beam_list /
    stair_detail / elevator_shaft / level_diagram / general / unknown).
    Map common Japanese names: 伏図 → framing_plan; 柱リスト → column_list;
-   大梁リスト or 小梁リスト or 梁リスト → beam_list; 階段詳細 → stair_detail;
-   EVシャフト → elevator_shaft; 階高表 → level_diagram.
+   大梁リスト or 小梁リスト or 梁リスト → beam_list;
+   階段詳細 / 階段セクション / 踊り場 / 蹴込図 → stair_detail;
+   エレベータシャフト / EVシャフト / 昇降機詳細 / 機械室 / ピット図 → elevator_shaft;
+   階高表 → level_diagram.
 2. The floor it represents, normalized to one of: 1F, 2F, ..., RF, B1, B2, PH.
    Recognize 1階, 2階, 屋階, 地下1階, 塔屋, etc.
 3. The construction block / 工区, if shown (A, B, C, D), else null.
