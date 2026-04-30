@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, UserProfile } from '@/lib/api/users';
 import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { subscriptionCombinedSummary } from '@/lib/billing/subscription-labels';
 import { useI18n } from '@/lib/i18n';
+import type { ProductCode } from '@/lib/api/access';
 import {
   User,
   Mail,
@@ -20,11 +21,22 @@ import {
 } from 'lucide-react';
 import { ChangePasswordForm } from '@/components/change-password-form';
 import { usePresence } from '@/lib/page-presence-context';
+import { useWorkspacePath } from '@/lib/workspace';
 
 export default function ProfilePage() {
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   usePresence({ pageKey: 'profile', label: 'Profile settings' });
+  const { workspace, base } = useWorkspacePath();
+
+  const workspaceLabel = useMemo(() => {
+    if (!workspace) return null;
+    return workspace === 'scaffold'
+      ? t('products', 'productScaffold')
+      : workspace === 'bim'
+        ? t('products', 'productBim')
+        : t('products', 'productConstructionPlan');
+  }, [workspace, t]);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -88,6 +100,19 @@ export default function ProfilePage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
+          {workspace && (
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <Link
+                href={`${base}/dashboard`}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                ← {t('products', 'backToAll')}
+              </Link>
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                {workspaceLabel}
+              </span>
+            </div>
+          )}
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <User className="h-8 w-8 text-blue-600" />
             {t('profile', 'title')}
@@ -122,7 +147,7 @@ export default function ProfilePage() {
                     {subscription.hasAccess ? t('billing', 'accessEnabled') : t('billing', 'accessDisabled')}
                   </p>
                   <Link
-                    href="/billing"
+                    href={workspace ? `${base}/billing` : '/billing'}
                     className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
                   >
                     <CreditCard className="h-4 w-4" />
@@ -143,7 +168,7 @@ export default function ProfilePage() {
             </h2>
             <p className="text-sm text-gray-600 mb-4">{t('profile', 'teamLinkCardBody')}</p>
             <Link
-              href="/team"
+              href={workspace ? `${base}/team` : '/team'}
               className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
             >
               {t('profile', 'teamLinkCta')}

@@ -118,13 +118,33 @@ export function ProductCard({ product, access, openHref, onActivate, isFocusLayo
         </p>
 
         {unlocked ? (
-          <Link
-            href={openHref}
-            className="inline-flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-xl bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors"
-          >
-            {t('products', 'openProduct')}
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          onActivate && !isFocusLayout ? (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => activate()}
+                className="inline-flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-xl bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+              >
+                {t('products', 'enterWorkspace')}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <Link
+                href={openHref}
+                className="inline-flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-xl border border-gray-900/20 bg-white/70 text-gray-800 font-medium hover:bg-white transition-colors"
+              >
+                {t('products', 'openProduct')}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          ) : (
+            <Link
+              href={openHref}
+              className="inline-flex items-center justify-center gap-1.5 w-full px-4 py-2.5 rounded-xl bg-gray-900 text-white font-medium hover:bg-gray-800 transition-colors"
+            >
+              {t('products', 'openProduct')}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          )
         ) : (
           <Link
             href={`/billing#${product}`}

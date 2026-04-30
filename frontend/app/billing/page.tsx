@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -23,6 +23,8 @@ import { usersApi } from '@/lib/api/users';
 import { Loader2, AlertTriangle, CheckCircle, CalendarDays, Shield, Landmark, Check } from 'lucide-react';
 import { usePresence } from '@/lib/page-presence-context';
 import { BillingProductOverview } from '@/components/product-portal/billing-product-overview';
+import type { ProductCode } from '@/lib/api/access';
+import { useWorkspacePath } from '@/lib/workspace';
 
 const BANK_TIER_ORDER: BankWirePlanTier[] = ['basic', 'medium', 'monthly', 'premium'];
 
@@ -192,6 +194,16 @@ export default function BillingPage() {
   const queryClient = useQueryClient();
   usePresence({ pageKey: 'billing', label: 'Billing & subscription' });
   const [isLocalhost, setIsLocalhost] = useState(false);
+  const { workspace, base } = useWorkspacePath();
+
+  const workspaceLabel = useMemo(() => {
+    if (!workspace) return null;
+    return workspace === 'scaffold'
+      ? t('products', 'productScaffold')
+      : workspace === 'bim'
+        ? t('products', 'productBim')
+        : t('products', 'productConstructionPlan');
+  }, [workspace, t]);
 
   useEffect(() => {
     setIsLocalhost(
@@ -216,14 +228,14 @@ export default function BillingPage() {
   useEffect(() => {
     if (!profile || profile.role === 'superadmin') return;
     if (profile.isCompanySeat === true || subscription?.companySeat === true) {
-      router.replace('/profile');
+      router.replace(base ? `${base}/profile` : '/profile');
       return;
     }
     if (isLoading || !subscription) return;
     if (subscription.managesBilling === false) {
-      router.replace('/profile');
+      router.replace(base ? `${base}/profile` : '/profile');
     }
-  }, [profile, subscription, isLoading, router]);
+  }, [profile, subscription, isLoading, router, base]);
 
   const wireIntentMutation = useMutation({
     mutationFn: (plan: BankWirePlanTier) => subscriptionsApi.createBankWireIntent(plan),
@@ -311,6 +323,19 @@ export default function BillingPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
+          {workspace && (
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <Link
+                href={`${base}/dashboard`}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                ← {t('products', 'backToAll')}
+              </Link>
+              <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                {workspaceLabel}
+              </span>
+            </div>
+          )}
           <h1 className="text-3xl font-bold text-gray-900">{t('billing', 'title')}</h1>
           <p className="text-gray-500 mt-1">{t('billing', 'subtitle')}</p>
         </div>

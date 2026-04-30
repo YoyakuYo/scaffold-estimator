@@ -60,6 +60,7 @@ export const translations = {
     badgeActive: { ja: '有効', en: 'Active', fr: 'Actif' },
     badgeTrial: { ja: 'トライアル中', en: 'Trial', fr: 'Essai' },
     badgeLocked: { ja: '未契約', en: 'Locked', fr: 'Verrouillé' },
+    enterWorkspace: { ja: 'ワークスペースに入る', en: 'Enter workspace', fr: "Entrer dans l'espace" },
     openProduct: { ja: '開く', en: 'Open', fr: 'Ouvrir' },
     subscribeCta: { ja: '契約する', en: 'Subscribe', fr: "S'abonner" },
     learnMore: { ja: '詳しくはこちら', en: 'Learn more', fr: 'En savoir plus' },

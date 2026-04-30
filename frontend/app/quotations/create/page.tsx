@@ -9,10 +9,12 @@ import { formatNumber } from '@/lib/formatters';
 import { Loader2, ArrowLeft, ArrowRight, FileText } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
+import { useWorkspacePath } from '@/lib/workspace';
 
 function CreateQuotationContent() {
   const router = useRouter();
   const { t } = useI18n();
+  const { base } = useWorkspacePath();
   const searchParams = useSearchParams();
   const configId = searchParams.get('configId') || '';
   const projectId = searchParams.get('projectId') || 'default-project';
@@ -45,7 +47,7 @@ function CreateQuotationContent() {
   const createMutation = useMutation({
     mutationFn: (dto: CreateQuotationDto) => quotationsApi.create(dto),
     onSuccess: (data) => {
-      router.push(`/quotations/${data.id}`);
+      router.push(`${base}/quotations/${data.id}`);
     },
     onError: (error: any) => {
       console.error('Quotation creation error:', error);
@@ -82,7 +84,7 @@ function CreateQuotationContent() {
         <div className="text-center">
           <p className="text-gray-500 mb-4">{t('quotationCreate', 'noConfig')}</p>
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push(base ? `${base}/dashboard` : '/dashboard')}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             {t('quotationCreate', 'goToDashboard')}

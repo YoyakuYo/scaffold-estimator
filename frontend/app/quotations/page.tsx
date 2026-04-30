@@ -8,6 +8,7 @@ import { formatDate, formatCurrency } from '@/lib/formatters';
 import { FileText, Loader2, Eye } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { usePresence } from '@/lib/page-presence-context';
+import { useWorkspacePath } from '@/lib/workspace';
 
 const scaffoldTypeLabels: Record<string, string> = {
   frame: '枠組足場',
@@ -18,6 +19,7 @@ const scaffoldTypeLabels: Record<string, string> = {
 export default function QuotationsListPage() {
   const router = useRouter();
   const { t } = useI18n();
+  const { base } = useWorkspacePath();
   const [projectId] = useState('default-project');
   usePresence({ pageKey: 'quotations/list', label: 'Quotations list' });
 
@@ -46,7 +48,7 @@ export default function QuotationsListPage() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">{t('quotationsList', 'noQuotations')}</h3>
             <p className="text-gray-500 mb-6">{t('quotationsList', 'noQuotationsHint')}</p>
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push(base ? `${base}/dashboard` : '/dashboard')}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               {t('quotationsList', 'goToDashboard')}
@@ -116,7 +118,7 @@ export default function QuotationsListPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => router.push(`/quotations/${q.id}`)}
+                        onClick={() => router.push(`${base}/quotations/${q.id}`)}
                         className="text-blue-600 hover:text-blue-900 inline-flex items-center space-x-1"
                       >
                         <Eye className="h-4 w-4" />

@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useState, useRef, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scaffoldConfigsApi, ScaffoldConfiguration } from '@/lib/api/scaffold-configs';
 import type { ProductCode } from '@/lib/api/access';
@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { usePresence } from '@/lib/page-presence-context';
 import { ProductPortal } from '@/components/product-portal/product-portal';
+import { parseWorkspaceFromPathname } from '@/lib/workspace';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -544,19 +545,22 @@ function ConstructionPlanWorkspacePanel() {
 
 function UserDashboard() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { locale, t } = useI18n();
   const queryClient = useQueryClient();
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const ws = searchParams.get('workspace');
+  const wsFromPath = parseWorkspaceFromPathname(pathname);
+  const wsFromQuery = searchParams.get('workspace');
   const focusedProduct: ProductCode | null =
-    ws === 'scaffold' || ws === 'bim' || ws === 'construction_plan' ? ws : null;
+    wsFromPath ??
+    (wsFromQuery === 'scaffold' || wsFromQuery === 'bim' || wsFromQuery === 'construction_plan' ? wsFromQuery : null);
 
   const setWorkspace = useCallback(
     (p: ProductCode | null) => {
-      if (p) router.replace(`/dashboard?workspace=${p}`, { scroll: false });
-      else router.replace('/dashboard', { scroll: false });
+      if (p) router.push(`/w/${p}/dashboard`);
+      else router.push('/dashboard');
     },
     [router],
   );

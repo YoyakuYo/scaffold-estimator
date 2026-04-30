@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, formatNumber } from '@/lib/formatters';
 import { useI18n } from '@/lib/i18n';
 import { usePresence } from '@/lib/page-presence-context';
 import { displaySizeSpecForUi } from '@/lib/scaffold-display-size-spec';
+import { useWorkspacePath } from '@/lib/workspace';
 import {
   Loader2,
   ArrowLeft,
@@ -22,6 +23,7 @@ import {
 export default function QuotationDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { base } = useWorkspacePath();
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const quotationId = params.id as string;
@@ -190,7 +192,7 @@ export default function QuotationDetailPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
             <button
-              onClick={() => router.push('/quotations')}
+              onClick={() => router.push(`${base}/quotations`)}
               className="flex items-center space-x-1 text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="h-4 w-4" />

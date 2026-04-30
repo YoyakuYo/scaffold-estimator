@@ -9,6 +9,7 @@ import { companyApi } from '@/lib/api/company';
 import { teamInvitesApi } from '@/lib/api/team-invites';
 import { useI18n } from '@/lib/i18n';
 import { usePresence } from '@/lib/page-presence-context';
+import { useWorkspacePath } from '@/lib/workspace';
 import {
   Users,
   Shield,
@@ -57,6 +58,20 @@ function UsersPage() {
   const { locale, t } = useI18n();
   usePresence({ pageKey: 'users', label: 'User management' });
   const queryClient = useQueryClient();
+  const { workspace: wsFromPath, base } = useWorkspacePath();
+  const workspaceParam = searchParams.get('workspace');
+  const wsFromQuery =
+    workspaceParam === 'scaffold' || workspaceParam === 'bim' || workspaceParam === 'construction_plan'
+      ? workspaceParam
+      : null;
+  const workspace = wsFromPath ?? wsFromQuery;
+  const workspaceLabel = workspace
+    ? workspace === 'scaffold'
+      ? t('products', 'productScaffold')
+      : workspace === 'bim'
+        ? t('products', 'productBim')
+        : t('products', 'productConstructionPlan')
+    : null;
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -362,6 +377,19 @@ function UsersPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
+            {workspace && (
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <Link
+                  href={workspace && base ? `${base}/dashboard` : workspace ? `/dashboard?workspace=${workspace}` : '/dashboard'}
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+                >
+                  ← {t('products', 'backToAll')}
+                </Link>
+                <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+                  {workspaceLabel}
+                </span>
+              </div>
+            )}
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
               <Users className="h-8 w-8 text-blue-600" />
               {t('usersAdmin', 'title')}

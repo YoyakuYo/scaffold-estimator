@@ -9,6 +9,7 @@ import { subscriptionsApi } from '@/lib/api/subscriptions';
 import { Home, ClipboardList, Calculator, LogOut, Globe, Settings, Users, UsersRound, User, MessageSquare, CreditCard, Menu, X } from 'lucide-react';
 import { NotificationBell } from '@/components/notification-bell';
 import { useI18n, type Locale } from '@/lib/i18n';
+import { parseWorkspaceFromPathname, workspaceBasePath } from '@/lib/workspace';
 
 export function Navigation() {
   const router = useRouter();
@@ -69,18 +70,61 @@ export function Navigation() {
 
   const localeLabels: Record<Locale, string> = { ja: '日本語', en: 'EN', fr: 'FR' };
 
-  const navItems = [
-    { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
-    { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
-    { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
-    ...(showBillingNav ? [{ path: '/billing', label: t('nav2', 'billing'), icon: CreditCard }] : []),
-    { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
-    ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
-      ? [{ path: '/team', label: t('nav2', 'team'), icon: UsersRound }]
-      : []),
-    ...(showUsersAdminLink ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
-    { path: '/settings', label: t('nav', 'settings'), icon: Settings },
-  ];
+  const activeWorkspace = parseWorkspaceFromPathname(pathname);
+  const base = workspaceBasePath(activeWorkspace);
+
+  const dashboardPath = activeWorkspace ? `${base}/dashboard` : '/dashboard';
+  const billingPath = activeWorkspace ? `${base}/billing` : '/billing';
+  const supportPath = activeWorkspace ? `${base}/support` : '/support';
+  const teamPath = activeWorkspace ? `${base}/team` : '/team';
+  const usersPath = activeWorkspace ? `${base}/users` : '/users';
+  const settingsPath = activeWorkspace ? `${base}/settings` : '/settings';
+  const quotationsPath = activeWorkspace ? `${base}/quotations` : '/quotations';
+
+  const productAppPath =
+    activeWorkspace === 'scaffold'
+      ? '/scaffold'
+      : activeWorkspace === 'bim'
+        ? '/bim'
+        : activeWorkspace === 'construction_plan'
+          ? '/construction-plan'
+          : '/scaffold';
+  const productAppLabel =
+    activeWorkspace === 'scaffold'
+      ? t('products', 'productScaffold')
+      : activeWorkspace === 'bim'
+        ? t('products', 'productBim')
+        : activeWorkspace === 'construction_plan'
+          ? t('products', 'productConstructionPlan')
+          : t('nav', 'scaffold');
+
+  const navItems = activeWorkspace
+    ? [
+        { path: dashboardPath, label: t('nav', 'dashboard'), icon: Home },
+        { path: productAppPath, label: productAppLabel, icon: Calculator },
+        ...(activeWorkspace === 'scaffold'
+          ? [{ path: quotationsPath, label: t('nav', 'quotations'), icon: ClipboardList }]
+          : []),
+        ...(showBillingNav ? [{ path: billingPath, label: t('nav2', 'billing'), icon: CreditCard }] : []),
+        { path: supportPath, label: t('nav2', 'support'), icon: MessageSquare },
+        ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
+          ? [{ path: teamPath, label: t('nav2', 'team'), icon: UsersRound }]
+          : []),
+        ...(showUsersAdminLink ? [{ path: usersPath, label: t('nav2', 'users'), icon: Users }] : []),
+        { path: settingsPath, label: t('nav', 'settings'), icon: Settings },
+      ]
+    : [
+        { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
+        { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
+        { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
+        ...(showBillingNav ? [{ path: '/billing', label: t('nav2', 'billing'), icon: CreditCard }] : []),
+        { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
+        ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
+          ? [{ path: '/team', label: t('nav2', 'team'), icon: UsersRound }]
+          : []),
+        ...(showUsersAdminLink ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
+        { path: '/settings', label: t('nav', 'settings'), icon: Settings },
+      ];
 
   return (
     <nav
@@ -102,7 +146,7 @@ export function Navigation() {
               <img src="/icons/icon-32x32.png" alt="" width={22} height={22} className="mr-2.5" />
               <h1
                 className="text-sm font-semibold text-white cursor-pointer tracking-wide"
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push(dashboardPath)}
                 suppressHydrationWarning
               >
                 {t('common', 'appName')}
@@ -136,7 +180,7 @@ export function Navigation() {
               <>
                 <NotificationBell />
                 <button
-                  onClick={() => router.push('/profile')}
+                  onClick={() => router.push(activeWorkspace ? `${base}/profile` : '/profile')}
                   className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                   title={t('nav2', 'profileTooltip')}
                 >
@@ -206,7 +250,7 @@ export function Navigation() {
             })}
             <button
               type="button"
-              onClick={() => { router.push('/profile'); setMobileOpen(false); }}
+              onClick={() => { router.push(activeWorkspace ? `${base}/profile` : '/profile'); setMobileOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                 pathname === '/profile' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               }`}
