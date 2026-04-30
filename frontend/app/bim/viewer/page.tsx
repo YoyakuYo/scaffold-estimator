@@ -13,6 +13,7 @@ import {
   Cloud,
   CheckCircle2,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -25,8 +26,9 @@ import { mimeTypeForRasterExtension, renderRasterImageToPlane } from '@/lib/bim/
 import { bimApi } from '@/lib/api/bim';
 import { accessApi } from '@/lib/api/access';
 import { authApi } from '@/lib/api/auth';
-import { visionBimApi } from '@/lib/api/vision-bim';
+import { visionBimApi, type VisionFootprintResult } from '@/lib/api/vision-bim';
 import { buildMeshesFromVisionFootprint } from '@/lib/bim/vision-footprint-bim-mesh';
+import { buildIfc4ShellFromVisionFootprint, downloadTextFile } from '@/lib/bim/vision-footprint-ifc-export';
 
 interface SceneStats {
   meshCount: number;
@@ -55,6 +57,8 @@ function BimViewerPageInner() {
   const lastPdfBufferRef = useRef<ArrayBuffer | null>(null);
   const lastPdfFilenameRef = useRef<string | null>(null);
   const loadedRemoteModelIdRef = useRef<string | null>(null);
+  /** Last AI footprint used to build the procedural shell — enables IFC download. */
+  const lastVisionFootprintRef = useRef<VisionFootprintResult | null>(null);
   const sceneStateRef = useRef<{
     dispose: (() => void) | null;
     addMeshes: ((meshes: IfcMeshData[]) => void) | null;
@@ -77,6 +81,7 @@ function BimViewerPageInner() {
   const [filename, setFilename] = useState<string | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfNumPages, setPdfNumPages] = useState(0);
+  const [aiShellExportReady, setAiShellExportReady] = useState(false);
 
   const hasToken = !!authApi.getToken();
   const accessQuery = useQuery({
@@ -359,6 +364,8 @@ function BimViewerPageInner() {
           });
           setFilename(fileLabel);
           setInfo(t('bimViewer', 'pdfReferenceHint'));
+          lastVisionFootprintRef.current = null;
+          setAiShellExportReady(false);
           if (!options?.skipTrack) {
             bimApi
               .trackUpload({
@@ -391,6 +398,8 @@ function BimViewerPageInner() {
           const durationMs = Math.round(performance.now() - start);
           setPdfNumPages(0);
           setPdfPage(1);
+          lastVisionFootprintRef.current = null;
+          setAiShellExportReady(false);
           setStats({
             meshCount: 1,
             byType: { ImageReferencePlane: 1 },
@@ -399,6 +408,8 @@ function BimViewerPageInner() {
           });
           setFilename(fileLabel);
           setInfo(t('bimViewer', 'imageReferenceHint'));
+          lastVisionFootprintRef.current = null;
+          setAiShellExportReady(false);
           if (!options?.skipTrack) {
             bimApi
               .trackUpload({
@@ -438,6 +449,8 @@ function BimViewerPageInner() {
         }
         const durationMs = Math.round(performance.now() - start);
         setStats({ meshCount: meshes.length, byType, durationMs });
+        lastVisionFootprintRef.current = null;
+        setAiShellExportReady(false);
         setFilename(fileLabel);
         if (warnings.length > 0) {
           setError(warnings.join(' / '));
@@ -541,6 +554,8 @@ function BimViewerPageInner() {
         setError(warnings.join(' ') || t('bimViewer', 'build3dNoMesh'));
         return;
       }
+      lastVisionFootprintRef.current = footprint;
+      setAiShellExportReady(true);
       sceneStateRef.current.clearMeshes?.();
       sceneStateRef.current.addMeshes?.(meshes);
       const byType: Record<string, number> = {};
@@ -567,6 +582,25 @@ function BimViewerPageInner() {
     presenceActions,
     t,
   ]);
+
+  const onDownloadAiIfc = useCallback(() => {
+    const footprint = lastVisionFootprintRef.current;
+    if (!footprint) return;
+    const base = (filename || 'ai-shell').replace(/\.[^./\\]+$/, '') || 'ai-shell';
+    const { ifcText, warnings } = buildIfc4ShellFromVisionFootprint(footprint, {
+      projectName: base,
+      sourceFilename: filename ?? undefined,
+    });
+    if (!ifcText) {
+      setError(t('bimViewer', 'downloadAiIfcEmpty'));
+      return;
+    }
+    downloadTextFile(`${base}-ai-shell.ifc`, ifcText, 'application/octet-stream');
+    presenceActions.recordAction(`Downloaded IFC shell derived from AI footprint (${base}-ai-shell.ifc)`);
+    if (warnings.length) {
+      setInfo((prev) => [prev, ...warnings].filter(Boolean).join(' '));
+    }
+  }, [filename, presenceActions, t]);
 
   useEffect(() => {
     const modelId = searchParams.get('model');
@@ -724,6 +758,16 @@ function BimViewerPageInner() {
             </button>
             <button
               type="button"
+              disabled={busy || !aiShellExportReady}
+              onClick={onDownloadAiIfc}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 disabled:opacity-50 text-sm"
+              title={t('bimViewer', 'downloadAiIfcHint')}
+            >
+              <Download className="h-4 w-4" />
+              {t('bimViewer', 'downloadAiIfc')}
+            </button>
+            <button
+              type="button"
               disabled={
                 busy ||
                 saveToCloud.isPending ||
@@ -763,6 +807,8 @@ function BimViewerPageInner() {
                 setPdfNumPages(0);
                 setPdfPage(1);
                 loadedRemoteModelIdRef.current = null;
+                lastVisionFootprintRef.current = null;
+                setAiShellExportReady(false);
               }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm"
             >

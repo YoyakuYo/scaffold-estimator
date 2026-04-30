@@ -3842,6 +3842,21 @@ export const translations = {
       en: 'AI processing failed. Try again in a moment.',
       fr: 'Échec du traitement IA. Réessayez plus tard.',
     },
+    downloadAiIfc: {
+      ja: 'IFC をダウンロード（AI 外形）',
+      en: 'Download IFC (AI shell)',
+      fr: 'Télécharger IFC (coque IA)',
+    },
+    downloadAiIfcHint: {
+      ja: '直近の「AI で外周を 3D 化」結果を IFC4 に出力します（押し出し立体・IfcBuildingElementProxy）。',
+      en: 'Exports the last “Build 3D shell (AI)” result as IFC4 extruded solids (IfcBuildingElementProxy).',
+      fr: 'Exporte la dernière coque IA en IFC4 (extrusions, IfcBuildingElementProxy).',
+    },
+    downloadAiIfcEmpty: {
+      ja: 'IFC を生成できませんでした。先に AI で 3D 外形を生成してください。',
+      en: 'Could not build IFC. Run “Build 3D shell (AI)” first.',
+      fr: 'Impossible de générer l’IFC. Lancez d’abord « Coque 3D (IA) ».',
+    },
   },
 
   // ─── Phase 4: Construction Plan schedule + delivery ────────

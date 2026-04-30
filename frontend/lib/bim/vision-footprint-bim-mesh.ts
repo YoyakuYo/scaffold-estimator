@@ -15,18 +15,25 @@ function toPlanMm(
   return toPlanM(verts).map((p) => ({ x: p.x * 1000, y: p.z * 1000 }));
 }
 
+/** One extruded prism in plan millimetres (horizontal x,y), vertical base/height in mm. */
+export type VisionFootprintExtrusionMm = {
+  baseMm: number;
+  heightMm: number;
+  ringMm: Array<{ x: number; y: number }>;
+};
+
 /**
- * Build one or more extruded meshes from an AI footprint (uniform height or massing tiers).
+ * Normalized footprint extrusions from AI (tiers or single block) — shared by viewer mesh + IFC export.
  */
-export function buildMeshesFromVisionFootprint(result: VisionFootprintResult): {
-  meshes: IfcMeshData[];
+export function getVisionFootprintExtrusionsPlanMm(result: VisionFootprintResult): {
+  extrusions: VisionFootprintExtrusionMm[];
   warnings: string[];
 } {
   const warnings: string[] = [];
   const vtx = result.vertices ?? [];
   if (vtx.length < 3) {
     return {
-      meshes: [],
+      extrusions: [],
       warnings: ['Extraction did not return a closed footprint (need at least 3 vertices).'],
     };
   }
@@ -37,7 +44,7 @@ export function buildMeshesFromVisionFootprint(result: VisionFootprintResult): {
     wallLengthsMm: result.wallLengthsMm,
   });
 
-  const meshes: IfcMeshData[] = [];
+  const extrusions: VisionFootprintExtrusionMm[] = [];
 
   const tiers = [...(result.massingTiers ?? [])]
     .filter((t) => Array.isArray(t.vertices) && t.vertices.length >= 3)
@@ -45,23 +52,24 @@ export function buildMeshesFromVisionFootprint(result: VisionFootprintResult): {
 
   if (tiers.length > 0) {
     for (const tier of tiers) {
-      const raw = toPlanMm(toPlanM, tier.vertices as BimPreviewVertex[]);
-      const base = Math.max(0, tier.baseHeightMm ?? 0);
-      const top = tier.topHeightMm ?? base;
-      const h = Math.max(0, top - base);
-      if (h < 100) continue;
-      const m = extrudePolygonToMesh(raw, base, h, 'wall', 1);
-      if (m) meshes.push(m);
+      const ringMm = toPlanMm(toPlanM, tier.vertices as BimPreviewVertex[]);
+      const baseMm = Math.max(0, tier.baseHeightMm ?? 0);
+      const top = tier.topHeightMm ?? baseMm;
+      const heightMm = Math.max(0, top - baseMm);
+      if (heightMm < 100 || ringMm.length < 3) continue;
+      extrusions.push({ baseMm, heightMm, ringMm });
     }
-    if (meshes.length === 0) {
+    if (extrusions.length === 0) {
       warnings.push('Massing tiers were present but none could be extruded (check heights).');
     }
   } else {
-    const h = Math.max(1000, result.buildingHeightMm || 9000);
-    const raw = toPlanMm(toPlanM, vtx as BimPreviewVertex[]);
-    const m = extrudePolygonToMesh(raw, 0, h, 'wall', 1);
-    if (m) meshes.push(m);
-    else warnings.push('Extrusion failed for the footprint polygon.');
+    const heightMm = Math.max(1000, result.buildingHeightMm || 9000);
+    const ringMm = toPlanMm(toPlanM, vtx as BimPreviewVertex[]);
+    if (ringMm.length >= 3) {
+      extrusions.push({ baseMm: 0, heightMm, ringMm });
+    } else {
+      warnings.push('Extrusion failed for the footprint polygon.');
+    }
   }
 
   if (result.heightConfidence === 'low' && !result.massingTiers?.length) {
@@ -70,5 +78,21 @@ export function buildMeshesFromVisionFootprint(result: VisionFootprintResult): {
     );
   }
 
+  return { extrusions, warnings };
+}
+
+/**
+ * Build one or more extruded meshes from an AI footprint (uniform height or massing tiers).
+ */
+export function buildMeshesFromVisionFootprint(result: VisionFootprintResult): {
+  meshes: IfcMeshData[];
+  warnings: string[];
+} {
+  const { extrusions, warnings } = getVisionFootprintExtrusionsPlanMm(result);
+  const meshes: IfcMeshData[] = [];
+  for (const ex of extrusions) {
+    const m = extrudePolygonToMesh(ex.ringMm, ex.baseMm, ex.heightMm, 'wall', 1);
+    if (m) meshes.push(m);
+  }
   return { meshes, warnings };
 }
