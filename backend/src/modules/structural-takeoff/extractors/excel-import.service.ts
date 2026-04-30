@@ -73,13 +73,16 @@ export class ExcelElementImportService {
     [/^柱$|column|hashira|^c\b|柱材/i, 'hashira'],
     [/孫梁|magobari|まごばり/i, 'magobari'],
     [
-      /片持ち?梁|cantilever(?:\s*beam|\s*girder)?|katamochibari|\bcg\d|\bcb\d|キャンチ/i,
+      /片持ち?梁|cantilever(?:\s*beam|\s*girder)?|katamochibari|\bcg\d+[a-z]?\b|\bcb\d+[a-z]?\b|キャンチ/i,
       'katamochibari',
     ],
     [/大梁|main\s*beam|girder|oobari|大ばり/i, 'oobari'],
-    [/小梁|small\s*beam|kobari|小ばり/i, 'kobari'],
-    [/\b[Hh][Bb]\d|耐風梁|wind\s*beam|taifubari/i, 'taifubari'],
-    [/ブレース|brace|bracing|筋交/i, 'brace'],
+    [/小梁|small\s*beam|kobari|小ばり|\bbg\d+[a-z]?\b/i, 'kobari'],
+    [
+      /\b[Hh][Bb]\d+\b|耐風梁|耐風\s*梁|\btaifu\b|wind\s*beam|taifubari/i,
+      'taifubari',
+    ],
+    [/ブレース|brace|bracing|筋交|鉛直ブレース|vertical\s*brace|水平ブレース|horizontal\s*brace/i, 'brace'],
     [/階段|ステア|stair|kaidan|踊(り)?場|蹴込|stair\s*case/i, 'kaidan'],
     [
       /エレベーター|エレベータ|昇降機|elevator|^ev$|^elv$|elv\b|ev\s*shaft|機械室|シャフト製鉄/i,
@@ -234,7 +237,10 @@ export class ExcelElementImportService {
       const level = get(colLevel);
       if (!level) continue;
       const typeRaw = get(colType);
-      const elementType = this.matchElementType(typeRaw);
+      let elementType = this.matchElementType(typeRaw);
+      if (!elementType && colLabel != null) {
+        elementType = this.matchElementType(get(colLabel));
+      }
       if (!elementType) {
         warnings.push(`Row ${rowIndex}: unknown element type "${typeRaw}"`);
         continue;
@@ -295,11 +301,41 @@ export class ExcelElementImportService {
     for (const [re, type] of this.ELEMENT_LABEL_MAP) {
       if (re.test(trimmed)) return type;
     }
+    const fromMark = this.inferTypeFromSteelMark(trimmed);
+    if (fromMark) return fromMark;
     // Last resort: exact canonical key match.
     const lower = trimmed.toLowerCase();
     if ((STRUCTURAL_ELEMENT_TYPES as readonly string[]).includes(lower)) {
       return lower as StructuralElementType;
     }
+    return null;
+  }
+
+  /**
+   * When the 「部材」 cell contains only a plan mark (common on 鉄骨数量表), map prefixes
+   * used in JP educational / vendor literature: G=oobari, B/b/BG=kobari, C=hashira,
+   * HB/Hb+n=taifubari (wind beam), CG/CB=katak..., V+n often brace.
+   */
+  private inferTypeFromSteelMark(text: string): StructuralElementType | null {
+    const t = text.trim();
+    if (!t) return null;
+
+    if (/\b[Hh][Bb]\d+\b/.test(t)) return 'taifubari';
+
+    if (/\bcg\d+[a-z]?\b/i.test(t) || /\bcb\d+[a-z]?\b/i.test(t)) return 'katamochibari';
+
+    if (/\bV\d+[A-Za-z]?\b/.test(t)) return 'brace';
+
+    if (/\bG\d+[A-Za-z]?\b/.test(t)) return 'oobari';
+
+    if (/\bBG\d+[A-Za-z]?\b/i.test(t)) return 'kobari';
+
+    if (/\bB\d+[A-Za-z]?\b/.test(t)) return 'kobari';
+
+    if (/\bb\d+[a-z]?\b/.test(t)) return 'kobari';
+
+    if (/\bC\d+[A-Za-z]?\b/.test(t)) return 'hashira';
+
     return null;
   }
 

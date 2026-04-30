@@ -46,7 +46,7 @@ export class DxfLayerExtractorService {
     [/(片持|cantilever|katamochibari)/i, 'katamochibari'],
     [/(大梁|main\s*beam|girder|oobari)/i, 'oobari'],
     [/(小梁|small\s*beam|kobari)/i, 'kobari'],
-    [/(耐風梁|wind\s*beam|taifubari)/i, 'taifubari'],
+    [/(耐風梁|wind\s*beam|taifubari|耐風|\b[Hh][Bb]\d+)/i, 'taifubari'],
     [/(ブレース|brace|筋交)/i, 'brace'],
     [/(階段|ステア|stair|踊(り)?場|蹴込)/i, 'kaidan'],
     [

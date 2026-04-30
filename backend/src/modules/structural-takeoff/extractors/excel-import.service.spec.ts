@@ -3,6 +3,31 @@ import { ExcelElementImportService } from './excel-import.service';
 describe('ExcelElementImportService — CSV parsing', () => {
   const svc = new ExcelElementImportService();
 
+  it('maps Hb/HB + digits (耐風梁 marks) to taifubari', async () => {
+    const csv = ['階,部材,数量', '2F,Hb30,4', '3F,HB125,2'].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.length).toBe(2);
+    expect(r.rows[0].elementType).toBe('taifubari');
+    expect(r.rows[1].elementType).toBe('taifubari');
+  });
+
+  it('maps CB/CG cantilever marks to katamochibari', async () => {
+    const csv = ['階,部材,数量', '2F,CB30,2', '3F,cg12,1'].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.length).toBe(2);
+    expect(r.rows[0].elementType).toBe('katamochibari');
+    expect(r.rows[1].elementType).toBe('katamochibari');
+  });
+
+  it('infers element type from 符号 when 部材 cell uses plan marks only', async () => {
+    const csv = ['階,部材,符号,数量', '2F,,Hb30,4', '3F,,G58,8', '1F,,V25,6'].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.length).toBe(3);
+    expect(r.rows[0].elementType).toBe('taifubari');
+    expect(r.rows[1].elementType).toBe('oobari');
+    expect(r.rows[2].elementType).toBe('brace');
+  });
+
   it('parses a Japanese-header CSV', async () => {
     const csv = [
       '階,工区,部材,符号,断面,数量,通り芯,備考',

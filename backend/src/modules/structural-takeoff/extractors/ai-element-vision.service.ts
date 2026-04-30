@@ -43,7 +43,7 @@ Element type mapping (field elementType):
 - 小梁 -> kobari
 - 孫梁 / tertiary beams between kobari (often still labeled "b" on plans; use magobari when the schedule names 孫梁) -> magobari
 - 片持ち梁 / cantilever marks CG (girder side) or CB (beam side) -> katamochibari
-- 耐風梁 / wind beam (plans often tag Hb/HB◯◯) -> taifubari
+- 耐風梁 / wind beam -> taifubari. On many JP steel framing plans the member tag is **Hb** or **HB** plus digits (e.g. HB30); map those to taifubari. Some offices abbreviate **horizontal brace** differently — if the legend says **水平ブレース** / horizontal brace, use brace; do not guess HB alone without digits or legend context.
 - ブレース / 筋交 -> brace
 - 階段 -> kaidan
 - エレベーター / EV / ELV -> elevator
@@ -70,7 +70,7 @@ OUTPUT RULES:
 
 const KIND_HINTS: Record<DrawingKind, string> = {
   framing_plan:
-    'This sheet is a framing plan (伏図). Look for column callouts (e.g. C1) AND beam callouts (G, B/b, CG/CB cantilever, Hb/HB wind beams). Each row corresponds to one element type.',
+    'This sheet is a framing plan (伏図). Member tags: G*=oobari, B/b/BG*=kobari, C*=hashira, CG/CB*=katamochibari, HB/Hb+digits=taifubari (wind beam), V*=often brace if shown as vertical brace on frame elevations.',
   column_list:
     'This sheet is a 柱リスト. Extract one row per column mark with its section + qty. Set elementType=hashira on every row.',
   beam_list:

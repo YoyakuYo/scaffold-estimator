@@ -11,7 +11,7 @@
  *   when the quantity row explicitly says 孫梁 / magobari.
  * - 片持ち梁 (cantilever): **CG** (cantilever girder → tie to `katamochibari`), **CB** (cantilever **b**
  *   beam → prefer `katamochibari` when explicitly cantilever; else sometimes folded into `oobari`/`kobari`).
- * - 耐風梁: plan marks often **Hb** / **HB** → `taifubari`.
+ * - 耐風梁: plan marks **Hb** / **HB** + digits (e.g. HB30) → `taifubari` (matches Excel/DXF/AI heuristics). Offices that use **HB** for horizontal brace should spell **水平ブレース** (mapped to `brace`).
  * - Vertical braces on elevations are commonly **V** (already folded into `brace`).
  *
  * Connection vocabulary used on legends but stored via {@link ElementLineKind}: ガセットプレート,
