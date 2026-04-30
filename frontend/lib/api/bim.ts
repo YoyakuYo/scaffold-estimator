@@ -1,6 +1,6 @@
 import apiClient from './client';
 
-export type BimFileKind = 'ifc' | 'dxf' | 'pdf' | 'dwg';
+export type BimFileKind = 'ifc' | 'dxf' | 'pdf' | 'dwg' | 'image';
 
 export interface BimViewerModel {
   id: string;

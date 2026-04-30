@@ -46,6 +46,7 @@ const KIND_BADGE_COLOR: Record<string, string> = {
   dxf: 'bg-violet-50 text-violet-700 border-violet-200',
   pdf: 'bg-rose-50 text-rose-700 border-rose-200',
   dwg: 'bg-amber-50 text-amber-700 border-amber-200',
+  image: 'bg-sky-50 text-sky-800 border-sky-200',
   bim_other: 'bg-slate-50 text-slate-700 border-slate-200',
 };
 
@@ -238,9 +239,14 @@ export default function BimHomePage() {
           />
           <KpiCard
             icon={<FileText className="h-5 w-5 text-rose-600" />}
-            label="DXF / DWG / PDF"
-            value={String((counts.dxf ?? 0) + (counts.dwg ?? 0) + (counts.pdf ?? 0))}
-            sub=".dxf / .dwg / .pdf"
+            label="DXF / DWG / PDF / images"
+            value={String(
+              (counts.dxf ?? 0) +
+                (counts.dwg ?? 0) +
+                (counts.pdf ?? 0) +
+                (counts.image ?? 0),
+            )}
+            sub=".dxf / .dwg / .pdf / .png …"
           />
           <KpiCard
             icon={<Activity className="h-5 w-5 text-blue-600" />}
@@ -346,7 +352,7 @@ export default function BimHomePage() {
             <Sparkles className="h-5 w-5 text-violet-500" />
             {t('bimLanding', 'supportedFormatsTitle')}
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 text-sm">
             <FormatCard
               ext=".ifc"
               colorClass="bg-emerald-50 border-emerald-200 text-emerald-900"
@@ -364,6 +370,12 @@ export default function BimHomePage() {
               colorClass="bg-rose-50 border-rose-200 text-rose-900"
               title="PDF"
               body={t('bimLanding', 'fmtPdf')}
+            />
+            <FormatCard
+              ext=".png / .jpg …"
+              colorClass="bg-sky-50 border-sky-200 text-sky-900"
+              title={t('bimLanding', 'fmtRasterTitle')}
+              body={t('bimLanding', 'fmtRaster')}
             />
             <FormatCard
               ext=".dwg"

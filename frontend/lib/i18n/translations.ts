@@ -3622,6 +3622,12 @@ export const translations = {
       en: 'DWG is a binary CAD format and cannot be parsed in-browser. Please convert to DXF in AutoCAD first.',
       fr: 'DWG est un format CAO binaire et ne peut être lu en navigateur. Convertissez-le en DXF (AutoCAD) au préalable.',
     },
+    fmtRasterTitle: { ja: '図面画像', en: 'Plan images', fr: 'Images de plan' },
+    fmtRaster: {
+      ja: 'PNG / JPEG / WebP などの図面・プラン画像を 3D 敷布として表示。建築フロアプランの参照用に利用できます。',
+      en: 'Floor-plan and sheet images (PNG, JPEG, WebP, GIF, BMP) as a 3D underlay — ideal for architectural references.',
+      fr: 'Plans et images (PNG, JPEG, WebP, GIF, BMP) comme sous-couche 3D pour référence architecturale.',
+    },
 
     recentTitle: { ja: '最近のアップロード', en: 'Recent uploads', fr: 'Téléversements récents' },
     recentEmpty: {
@@ -3717,20 +3723,25 @@ export const translations = {
     title: { ja: 'BIM ビューア', en: 'BIM Viewer', fr: 'Visionneuse BIM' },
     openIfc: { ja: 'IFC を開く', en: 'Open IFC', fr: 'Ouvrir IFC' },
     openFile: {
-      ja: 'IFC / DXF / PDF を開く',
-      en: 'Open IFC / DXF / PDF',
-      fr: 'Ouvrir IFC / DXF / PDF',
+      ja: 'IFC / DXF / PDF / 画像を開く',
+      en: 'Open IFC / DXF / PDF / image',
+      fr: 'Ouvrir IFC / DXF / PDF / image',
     },
     clear: { ja: 'クリア', en: 'Clear', fr: 'Effacer' },
     unsupportedFormat: {
-      ja: '対応フォーマットは .ifc / .dxf / .pdf / .dwg のみです。',
-      en: 'Supported formats: .ifc / .dxf / .pdf / .dwg.',
-      fr: 'Formats pris en charge : .ifc / .dxf / .pdf / .dwg.',
+      ja: '対応: .ifc / .dxf / .pdf / .dwg / 画像 (.png .jpg .jpeg .webp .gif .bmp)',
+      en: 'Supported: .ifc / .dxf / .pdf / .dwg / images (.png .jpg .jpeg .webp .gif .bmp).',
+      fr: 'Formats : .ifc / .dxf / .pdf / .dwg / images (.png .jpg .jpeg .webp .gif .bmp).',
     },
     dwgNotSupported: {
       ja: 'DWG はバイナリ CAD 形式のため、ブラウザでは解析できません。AutoCAD などで DXF に変換してから再度アップロードしてください。アップロードログには記録されています。',
       en: 'DWG is a binary CAD format and cannot be parsed in the browser. Please convert it to DXF in AutoCAD first, then re-upload. (The upload was logged in the audit feed.)',
       fr: 'DWG est un format CAO binaire et ne peut pas être lu dans le navigateur. Convertissez-le en DXF (AutoCAD) puis téléversez à nouveau. (Le téléversement est enregistré dans le journal d’audit.)',
+    },
+    imageReferenceHint: {
+      ja: '画像は 3D シーンの「敷布（リファレンスプレーン）」として表示しています。長辺を約 24 m に合わせています（図面の実寸とは異なる場合があります）。IFC や DXF をドロップするとその上に重ねて表示できます。',
+      en: 'The image is shown as a textured reference plane. The long edge is scaled to ~24 m for navigation (may differ from real drawing scale). Drop IFC or DXF to overlay BIM.',
+      fr: 'L’image est un plan de référence texturé ; le grand côté vaut ~24 m pour la navigation (pas l’échelle réelle). Glissez un IFC ou DXF pour superposer le BIM.',
     },
     pdfReferenceHint: {
       ja: 'PDF は 3D シーンの「敷布（リファレンスプレーン）」として表示しています。続けて IFC や DXF をドロップすると、その上に重ねて表示できます。',

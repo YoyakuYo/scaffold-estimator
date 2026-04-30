@@ -13,7 +13,7 @@ const BIM_BUCKET = 'bim-viewer-files';
 const SIGNED_URL_TTL_SECONDS = 60 * 15;
 const MAX_MODEL_BYTES = 120 * 1024 * 1024;
 
-export type BimFileKind = 'ifc' | 'dxf' | 'pdf' | 'dwg';
+export type BimFileKind = 'ifc' | 'dxf' | 'pdf' | 'dwg' | 'image';
 
 export interface BimViewerModel {
   id: string;
@@ -43,6 +43,16 @@ function kindFromFilename(name: string): BimFileKind | null {
   if (lower.endsWith('.dxf')) return 'dxf';
   if (lower.endsWith('.pdf')) return 'pdf';
   if (lower.endsWith('.dwg')) return 'dwg';
+  if (
+    lower.endsWith('.png') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.bmp')
+  ) {
+    return 'image';
+  }
   return null;
 }
 
@@ -125,7 +135,9 @@ export class BimService {
   ): Promise<BimViewerModel> {
     const kind = kindFromFilename(input.filename);
     if (!kind) {
-      throw new BadRequestException('Only .ifc, .dxf, .pdf, and .dwg are supported.');
+      throw new BadRequestException(
+        'Only .ifc, .dxf, .pdf, .dwg, and raster images (.png, .jpg, .jpeg, .webp, .gif, .bmp) are supported.',
+      );
     }
     if (!input.buffer?.length) {
       throw new BadRequestException('Empty file.');

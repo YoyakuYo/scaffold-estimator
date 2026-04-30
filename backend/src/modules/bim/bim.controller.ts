@@ -61,7 +61,14 @@ export class BimController {
           ? 'pdf'
           : lower.endsWith('.dwg')
             ? 'dwg'
-            : 'bim_other';
+            : lower.endsWith('.png') ||
+                lower.endsWith('.jpg') ||
+                lower.endsWith('.jpeg') ||
+                lower.endsWith('.webp') ||
+                lower.endsWith('.gif') ||
+                lower.endsWith('.bmp')
+              ? 'image'
+              : 'bim_other';
     await this.presence.recordUpload({
       userId: user.id,
       companyId: user.companyId ?? null,

@@ -20,6 +20,7 @@ import { parseIfcToMeshes, type IfcMeshData } from '@/lib/ifc-loader';
 import { createBimMaterialSet, getMaterialForElement } from '@/lib/ifc-bim-materials';
 import { buildBimFromDxf } from '@/lib/bim/dxf-procedural-bim';
 import { renderPdfPageToPlane } from '@/lib/bim/pdf-reference-plane';
+import { mimeTypeForRasterExtension, renderRasterImageToPlane } from '@/lib/bim/image-reference-plane';
 import { bimApi } from '@/lib/api/bim';
 import { accessApi } from '@/lib/api/access';
 import { authApi } from '@/lib/api/auth';
@@ -29,6 +30,11 @@ interface SceneStats {
   byType: Record<string, number>;
   durationMs: number;
   referenceOnly?: boolean;
+}
+
+function isRasterExtension(ext: string | undefined): boolean {
+  if (!ext) return false;
+  return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext.toLowerCase());
 }
 
 function BimViewerPageInner() {
@@ -280,8 +286,8 @@ function BimViewerPageInner() {
       options?: { skipTrack?: boolean; fromCloud?: boolean; pdfPage?: number },
     ) => {
       const ext = fileLabel.split('.').pop()?.toLowerCase();
-      const supported = new Set(['ifc', 'dxf', 'pdf', 'dwg']);
-      if (!ext || !supported.has(ext)) {
+      const knownCad = new Set(['ifc', 'dxf', 'pdf', 'dwg']);
+      if (!ext || (!knownCad.has(ext) && !isRasterExtension(ext))) {
         setError(t('bimViewer', 'unsupportedFormat'));
         return;
       }
@@ -365,6 +371,44 @@ function BimViewerPageInner() {
           presenceActions.recordAction(
             `Loaded PDF "${fileLabel}" page ${result.renderedPage}/${result.numPages} as reference plane`,
           );
+          return;
+        }
+
+        if (isRasterExtension(ext)) {
+          const mime = mimeTypeForRasterExtension(ext);
+          const result = await renderRasterImageToPlane(buffer, mime);
+          sceneStateRef.current.clearMeshes?.();
+          sceneStateRef.current.addReferencePlane?.(result.canvas, result.worldWidth, result.worldDepth);
+          const durationMs = Math.round(performance.now() - start);
+          setPdfNumPages(0);
+          setPdfPage(1);
+          setStats({
+            meshCount: 1,
+            byType: { ImageReferencePlane: 1 },
+            durationMs,
+            referenceOnly: true,
+          });
+          setFilename(fileLabel);
+          setInfo(t('bimViewer', 'imageReferenceHint'));
+          if (!options?.skipTrack) {
+            bimApi
+              .trackUpload({
+                filename: fileLabel,
+                mimeType: mime,
+                sizeBytes: buffer.byteLength,
+                metadata: {
+                  kind: 'image',
+                  referenceOnly: true,
+                  pixelWidth: result.pixelWidth,
+                  pixelHeight: result.pixelHeight,
+                  worldWidth: result.worldWidth,
+                  worldDepth: result.worldDepth,
+                  durationMs,
+                },
+              })
+              .catch(() => undefined);
+          }
+          presenceActions.recordAction(`Loaded image "${fileLabel}" as reference plane (${result.pixelWidth}×${result.pixelHeight}px)`);
           return;
         }
 
@@ -561,7 +605,7 @@ function BimViewerPageInner() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".ifc,.dxf,.pdf,.dwg"
+              accept=".ifc,.dxf,.pdf,.dwg,.png,.jpg,.jpeg,.webp,.gif,.bmp"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
