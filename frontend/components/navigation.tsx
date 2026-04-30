@@ -98,33 +98,44 @@ export function Navigation() {
           ? t('products', 'productConstructionPlan')
           : t('nav', 'scaffold');
 
-  const navItems = activeWorkspace
-    ? [
-        { path: dashboardPath, label: t('nav', 'dashboard'), icon: Home },
-        { path: productAppPath, label: productAppLabel, icon: Calculator },
-        ...(activeWorkspace === 'scaffold'
-          ? [{ path: quotationsPath, label: t('nav', 'quotations'), icon: ClipboardList }]
-          : []),
-        ...(showBillingNav ? [{ path: billingPath, label: t('nav2', 'billing'), icon: CreditCard }] : []),
-        { path: supportPath, label: t('nav2', 'support'), icon: MessageSquare },
-        ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
-          ? [{ path: teamPath, label: t('nav2', 'team'), icon: UsersRound }]
-          : []),
-        ...(showUsersAdminLink ? [{ path: usersPath, label: t('nav2', 'users'), icon: Users }] : []),
-        { path: settingsPath, label: t('nav', 'settings'), icon: Settings },
-      ]
-    : [
-        { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
-        { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
-        { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
-        ...(showBillingNav ? [{ path: '/billing', label: t('nav2', 'billing'), icon: CreditCard }] : []),
-        { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
-        ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
-          ? [{ path: '/team', label: t('nav2', 'team'), icon: UsersRound }]
-          : []),
-        ...(showUsersAdminLink ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
-        { path: '/settings', label: t('nav', 'settings'), icon: Settings },
-      ];
+  /** Top-level hub: only the three workspace cards. No product chrome until `/w/...`. */
+  const isWorkspaceHub = pathname === '/dashboard';
+
+  const hubNavItems = [
+    { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
+    { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
+    { path: '/settings', label: t('nav', 'settings'), icon: Settings },
+  ];
+
+  const globalLegacyNavItems = [
+    { path: '/dashboard', label: t('nav', 'dashboard'), icon: Home },
+    { path: '/scaffold', label: t('nav', 'scaffold'), icon: Calculator },
+    { path: '/quotations', label: t('nav', 'quotations'), icon: ClipboardList },
+    ...(showBillingNav ? [{ path: '/billing', label: t('nav2', 'billing'), icon: CreditCard }] : []),
+    { path: '/support', label: t('nav2', 'support'), icon: MessageSquare },
+    ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
+      ? [{ path: '/team', label: t('nav2', 'team'), icon: UsersRound }]
+      : []),
+    ...(showUsersAdminLink ? [{ path: '/users', label: t('nav2', 'users'), icon: Users }] : []),
+    { path: '/settings', label: t('nav', 'settings'), icon: Settings },
+  ];
+
+  const workspaceNavItems = [
+    { path: dashboardPath, label: t('nav', 'dashboard'), icon: Home },
+    { path: productAppPath, label: productAppLabel, icon: Calculator },
+    ...(activeWorkspace === 'scaffold'
+      ? [{ path: quotationsPath, label: t('nav', 'quotations'), icon: ClipboardList }]
+      : []),
+    ...(showBillingNav ? [{ path: billingPath, label: t('nav2', 'billing'), icon: CreditCard }] : []),
+    { path: supportPath, label: t('nav2', 'support'), icon: MessageSquare },
+    ...(currentUser?.role !== 'superadmin' && currentUser?.companyId
+      ? [{ path: teamPath, label: t('nav2', 'team'), icon: UsersRound }]
+      : []),
+    ...(showUsersAdminLink ? [{ path: usersPath, label: t('nav2', 'users'), icon: Users }] : []),
+    { path: settingsPath, label: t('nav', 'settings'), icon: Settings },
+  ];
+
+  const navItems = activeWorkspace ? workspaceNavItems : isWorkspaceHub ? hubNavItems : globalLegacyNavItems;
 
   return (
     <nav
@@ -146,10 +157,10 @@ export function Navigation() {
               <img src="/icons/icon-32x32.png" alt="" width={22} height={22} className="mr-2.5" />
               <h1
                 className="text-sm font-semibold text-white cursor-pointer tracking-wide"
-                onClick={() => router.push(dashboardPath)}
+                onClick={() => router.push('/dashboard')}
                 suppressHydrationWarning
               >
-                {t('common', 'appName')}
+                {isWorkspaceHub && !activeWorkspace ? t('products', 'sectionTitle') : t('common', 'appName')}
               </h1>
             </div>
             <div className="hidden md:flex md:items-center md:space-x-0.5">
@@ -252,7 +263,9 @@ export function Navigation() {
               type="button"
               onClick={() => { router.push(activeWorkspace ? `${base}/profile` : '/profile'); setMobileOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                pathname === '/profile' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                pathname === '/profile' || pathname.endsWith('/profile')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               }`}
             >
               <User className="h-5 w-5 flex-shrink-0" />
