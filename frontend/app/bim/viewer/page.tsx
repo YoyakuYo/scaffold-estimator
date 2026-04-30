@@ -220,9 +220,13 @@ function BimViewerPageInner() {
         worldWidth: number,
         worldDepth: number,
       ) => {
+        // IFC/DXF loads offset this group to center meshes; PDF/images must sit at origin.
+        meshGroup.position.set(0, 0, 0);
+        meshGroup.rotation.set(0, 0, 0);
         const tex = new THREE.CanvasTexture(canvas);
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.anisotropy = 8;
+        tex.needsUpdate = true;
         const mat = new THREE.MeshBasicMaterial({
           map: tex,
           side: THREE.DoubleSide,
@@ -250,6 +254,8 @@ function BimViewerPageInner() {
           if (mat?.map?.dispose) mat.map.dispose();
           if (mat?.dispose) mat.dispose();
         }
+        meshGroup.position.set(0, 0, 0);
+        meshGroup.rotation.set(0, 0, 0);
       };
 
       sceneStateRef.current.dispose = () => {

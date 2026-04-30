@@ -3739,9 +3739,9 @@ export const translations = {
       fr: 'DWG est un format CAO binaire et ne peut pas être lu dans le navigateur. Convertissez-le en DXF (AutoCAD) puis téléversez à nouveau. (Le téléversement est enregistré dans le journal d’audit.)',
     },
     imageReferenceHint: {
-      ja: '画像は 3D シーンの「敷布（リファレンスプレーン）」として表示しています。長辺を約 24 m に合わせています（図面の実寸とは異なる場合があります）。IFC や DXF をドロップするとその上に重ねて表示できます。',
-      en: 'The image is shown as a textured reference plane. The long edge is scaled to ~24 m for navigation (may differ from real drawing scale). Drop IFC or DXF to overlay BIM.',
-      fr: 'L’image est un plan de référence texturé ; le grand côté vaut ~24 m pour la navigation (pas l’échelle réelle). Glissez un IFC ou DXF pour superposer le BIM.',
+      ja: '※2D の図面画像は 3D 化（壁の自動押出し）しません。床面に「敷布」として表示します。3D モデルは IFC の読込み、または DXF（レイヤーからの押出）を使ってください。画像が真っ白なときは「クリア」してから再度開いてください。',
+      en: 'Note: a 2D floor-plan image is not auto-extruded into 3D walls — it is only a flat reference sheet on the ground. Use IFC, or DXF (layer-based extrusion), for 3D BIM. If the view looks empty, click Clear and open the file again.',
+      fr: 'Remarque : une image 2D n’est pas extrudée en murs 3D — ce n’est qu’un plan posé au sol. Pour du BIM 3D, utilisez l’IFC ou le DXF (extrusion par calques). Si la vue est vide, effacez puis rouvrez le fichier.',
     },
     pdfReferenceHint: {
       ja: 'PDF は 3D シーンの「敷布（リファレンスプレーン）」として表示しています。続けて IFC や DXF をドロップすると、その上に重ねて表示できます。',
