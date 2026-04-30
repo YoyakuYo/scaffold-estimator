@@ -71,9 +71,14 @@ export class ExcelElementImportService {
   /** Element-type label → canonical StructuralElementType. */
   private readonly ELEMENT_LABEL_MAP: Array<[RegExp, StructuralElementType]> = [
     [/^柱$|column|hashira|^c\b|柱材/i, 'hashira'],
+    [/孫梁|magobari|まごばり/i, 'magobari'],
+    [
+      /片持ち?梁|cantilever(?:\s*beam|\s*girder)?|katamochibari|\bcg\d|\bcb\d|キャンチ/i,
+      'katamochibari',
+    ],
     [/大梁|main\s*beam|girder|oobari|大ばり/i, 'oobari'],
     [/小梁|small\s*beam|kobari|小ばり/i, 'kobari'],
-    [/耐風梁|wind\s*beam|taifubari/i, 'taifubari'],
+    [/\b[Hh][Bb]\d|耐風梁|wind\s*beam|taifubari/i, 'taifubari'],
     [/ブレース|brace|bracing|筋交/i, 'brace'],
     [/階段|ステア|stair|kaidan|踊(り)?場|蹴込|stair\s*case/i, 'kaidan'],
     [

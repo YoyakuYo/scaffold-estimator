@@ -41,7 +41,9 @@ Element type mapping (field elementType):
 - 柱 -> hashira
 - 大梁 -> oobari
 - 小梁 -> kobari
-- 耐風梁 -> taifubari
+- 孫梁 / tertiary beams between kobari (often still labeled "b" on plans; use magobari when the schedule names 孫梁) -> magobari
+- 片持ち梁 / cantilever marks CG (girder side) or CB (beam side) -> katamochibari
+- 耐風梁 / wind beam (plans often tag Hb/HB◯◯) -> taifubari
 - ブレース / 筋交 -> brace
 - 階段 -> kaidan
 - エレベーター / EV / ELV -> elevator
@@ -68,11 +70,11 @@ OUTPUT RULES:
 
 const KIND_HINTS: Record<DrawingKind, string> = {
   framing_plan:
-    'This sheet is a framing plan (伏図). Look for column callouts (e.g. C1) AND beam callouts (G1, b1, W1). Each row corresponds to one element type.',
+    'This sheet is a framing plan (伏図). Look for column callouts (e.g. C1) AND beam callouts (G, B/b, CG/CB cantilever, Hb/HB wind beams). Each row corresponds to one element type.',
   column_list:
     'This sheet is a 柱リスト. Extract one row per column mark with its section + qty. Set elementType=hashira on every row.',
   beam_list:
-    'This sheet is a 梁リスト. Extract one row per beam mark; map 大梁/小梁/耐風梁 to oobari/kobari/taifubari.',
+    'This sheet is a 梁リスト. Extract one row per beam mark; map 大梁/小梁/孫梁/片持梁/耐風梁 to oobari/kobari/magobari/katamochibari/taifubari.',
   stair_detail:
     'This sheet is a stair detail / section (階段詳細, 踊り場, 蹴込, 平面/断面). Most quantity lines are elementType=kaidan (steel stair flights, landings, supports as listed).',
   elevator_shaft:

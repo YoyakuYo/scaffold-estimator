@@ -35,6 +35,8 @@ export const DEFAULT_DURATION_TEMPLATE: DurationTemplate = {
     hashira: 12, // 柱建方
     oobari: 16, // 大梁
     kobari: 24, // 小梁
+    magobari: 24,
+    katamochibari: 14,
     taifubari: 12,
     brace: 32,
     kaidan: 4,
@@ -42,5 +44,5 @@ export const DEFAULT_DURATION_TEMPLATE: DurationTemplate = {
   },
   slabCureDays: 3,
   blockOverlapFloors: 2,
-  cycleOrder: ['hashira', 'oobari', 'kobari', 'taifubari', 'brace'],
+  cycleOrder: ['hashira', 'oobari', 'katamochibari', 'kobari', 'magobari', 'taifubari', 'brace'],
 };

@@ -34,6 +34,8 @@ const ELEMENT_TYPE_TRUCK_PREFERENCE: Record<StructuralElementType, TruckType[]> 
   hashira: ['10t', '25t_trailer'],
   oobari: ['10t', '25t_trailer'],
   kobari: ['4t', '10t'],
+  magobari: ['4t', '10t'],
+  katamochibari: ['10t', '25t_trailer'],
   taifubari: ['25t_trailer', '10t'],
   brace: ['4t', '10t'],
   kaidan: ['4tunic', '4t'],

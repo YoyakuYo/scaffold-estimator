@@ -42,6 +42,8 @@ export class DxfLayerExtractorService {
    */
   private readonly LAYER_PATTERNS: Array<[RegExp, StructuralElementType]> = [
     [/(柱|hashira|column)/i, 'hashira'],
+    [/(孫梁|magobari)/i, 'magobari'],
+    [/(片持|cantilever|katamochibari)/i, 'katamochibari'],
     [/(大梁|main\s*beam|girder|oobari)/i, 'oobari'],
     [/(小梁|small\s*beam|kobari)/i, 'kobari'],
     [/(耐風梁|wind\s*beam|taifubari)/i, 'taifubari'],

@@ -3494,6 +3494,16 @@ export const translations = {
       en: 'Small beam — B-bari (小梁)',
       fr: 'Poutre secondaire — B-bari (小梁)',
     },
+    elementType_magobari: {
+      ja: '孫梁 / Mago-bari（マゴバリ）',
+      en: 'Tertiary beam — magobari (孫梁)',
+      fr: 'Poutre tertiaire — magobari (孫梁)',
+    },
+    elementType_katamochibari: {
+      ja: '片持ち梁 / Katamochi-bari（カタモチバリ）',
+      en: 'Cantilever beam — katamochibari (片持ち梁)',
+      fr: 'Poutre en console — katamochibari (片持ち梁)',
+    },
     elementType_taifubari: {
       ja: '耐風梁 / Tai-fu bari（タイフウバリ）',
       en: 'Wind beam — Tai-fu bari (耐風梁)',

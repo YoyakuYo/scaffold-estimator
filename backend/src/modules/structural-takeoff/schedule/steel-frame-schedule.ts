@@ -11,6 +11,8 @@ const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
   hashira: '柱 / Hashira（ハシラ）',
   oobari: '大梁 / G-bari（ジーバリ）',
   kobari: '小梁 / B-bari（ビーバリ）',
+  magobari: '孫梁 / Mago-bari（マゴバリ）',
+  katamochibari: '片持ち梁 / Katamochi-bari（カタモチバリ）',
   taifubari: '耐風梁 / Tai-fu bari（タイフウバリ）',
   brace: 'ブレース / Brace（ブレース）',
   kaidan: '階段 / Stair（ステア）',

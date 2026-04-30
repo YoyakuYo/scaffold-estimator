@@ -321,6 +321,8 @@ export const DEFAULT_PIECE_LENGTH_MM: Record<string, number> = {
   hashira: 4000,
   oobari: 6000,
   kobari: 4000,
+  magobari: 4000,
+  katamochibari: 5500,
   taifubari: 5000,
   brace: 4000,
   kaidan: 5000,

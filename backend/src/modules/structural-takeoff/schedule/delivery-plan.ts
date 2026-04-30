@@ -45,6 +45,8 @@ export function buildDeliveryPlan(
     hashira: { pieces: 0, kg: 0 },
     oobari: { pieces: 0, kg: 0 },
     kobari: { pieces: 0, kg: 0 },
+    magobari: { pieces: 0, kg: 0 },
+    katamochibari: { pieces: 0, kg: 0 },
     taifubari: { pieces: 0, kg: 0 },
     brace: { pieces: 0, kg: 0 },
     kaidan: { pieces: 0, kg: 0 },

@@ -1,21 +1,39 @@
 /**
  * Phase 3 — Construction Plan extraction.
  *
- * The seven structural steel categories tracked in the takeoff (no deck/slabs).
+ * Nine structural steel categories tracked in the takeoff (no deck/slabs).
+ *
+ * Common JP drawing notation (varies by office):
+ * - 柱: marks prefixed **C** (Column).
+ * - 大梁 / G梁: **G** (Girder) → `oobari`.
+ * - 小梁 / B梁 / b梁: **B** / **b** (Beam) → `kobari` (often includes tertiary beams labeled **b** only).
+ * - 孫梁: beams tying **kobari** to **kobari**; drawings often reuse **b** labels → use `magobari`
+ *   when the quantity row explicitly says 孫梁 / magobari.
+ * - 片持ち梁 (cantilever): **CG** (cantilever girder → tie to `katamochibari`), **CB** (cantilever **b**
+ *   beam → prefer `katamochibari` when explicitly cantilever; else sometimes folded into `oobari`/`kobari`).
+ * - 耐風梁: plan marks often **Hb** / **HB** → `taifubari`.
+ * - Vertical braces on elevations are commonly **V** (already folded into `brace`).
+ *
+ * Connection vocabulary used on legends but stored via {@link ElementLineKind}: ガセットプレート,
+ * スプライスプレート, 高力ボルト, ピン接合 — not separate structural categories.
  */
 export type StructuralElementType =
-  | 'hashira'    // 柱 (column)
-  | 'oobari'     // 大梁 (main beam)
-  | 'kobari'     // 小梁 (small beam)
-  | 'taifubari'  // 耐風梁 (wind beam)
-  | 'brace'      // ブレース (brace)
-  | 'kaidan'     // 階段 (stair)
-  | 'elevator'   // ELV / エレベーターシャフト等
+  | 'hashira'        // 柱 (column)
+  | 'oobari'         // 大梁 / G梁
+  | 'kobari'         // 小梁 / B梁・b梁
+  | 'magobari'       // 孫梁 — tertiary beams between kobari
+  | 'katamochibari'  // 片持ち梁 — cantilever girders/beams (CG/CB style marks)
+  | 'taifubari'      // 耐風梁 (wind beam; Hb/HB marks)
+  | 'brace'          // ブレース (brace)
+  | 'kaidan'         // 階段 (stair)
+  | 'elevator'       // ELV / エレベーターシャフト等
 
 export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'hashira',
   'oobari',
   'kobari',
+  'magobari',
+  'katamochibari',
   'taifubari',
   'brace',
   'kaidan',
@@ -30,6 +48,8 @@ export const STEEL_MEMBER_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'hashira',
   'oobari',
   'kobari',
+  'magobari',
+  'katamochibari',
   'taifubari',
   'brace',
 ] as const;

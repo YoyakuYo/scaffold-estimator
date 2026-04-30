@@ -4,6 +4,8 @@ export type StructuralElementType =
   | 'hashira'
   | 'oobari'
   | 'kobari'
+  | 'magobari'
+  | 'katamochibari'
   | 'taifubari'
   | 'brace'
   | 'kaidan'
@@ -13,6 +15,8 @@ export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'hashira',
   'oobari',
   'kobari',
+  'magobari',
+  'katamochibari',
   'taifubari',
   'brace',
   'kaidan',
