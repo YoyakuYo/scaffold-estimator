@@ -116,17 +116,6 @@ function generateElementsPerFloor(level: string, block: string): SampleElementRo
     });
   }
 
-  // デッキ — 30 deck plates per block per floor (slab area).
-  rows.push({
-    level,
-    block,
-    elementType: 'deck',
-    label: 'D1',
-    section: 'QL75-50',
-    qty: 30,
-    grid: 'slab',
-  });
-
   return rows.filter((r) => r.qty > 0);
 }
 

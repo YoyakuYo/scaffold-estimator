@@ -325,7 +325,6 @@ export const DEFAULT_PIECE_LENGTH_MM: Record<string, number> = {
   brace: 4000,
   kaidan: 5000,
   elevator: 3000,
-  deck: 3000,
 };
 
 /** Compute weight of one piece (kg). */

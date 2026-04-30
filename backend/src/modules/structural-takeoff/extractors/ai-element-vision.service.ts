@@ -34,7 +34,8 @@ export interface AiElementVisionResult {
 }
 
 const SYSTEM_PROMPT_BASE = `You are reading a Japanese structural-engineering drawing (possibly one sheet of a PDF set).
-Extract EVERY member line you can read: columns, beams, braces, stairs, deck/slab references, elevator shaft pieces, and bolt / 高力ボルト lines when shown in a table.
+Extract EVERY steel member line you can read: columns, beams, braces, stairs, elevator shaft pieces, and bolt / 高力ボルト lines when shown in a table.
+Do NOT output deck plates, floor slabs, or non-steel slab areas as rows (omit デッキ / 床スラブ quantity lines).
 
 Element type mapping (field elementType):
 - 柱 -> hashira
@@ -43,8 +44,7 @@ Element type mapping (field elementType):
 - 耐風梁 -> taifubari
 - ブレース / 筋交 -> brace
 - 階段 -> kaidan
-- エレベーター / EV -> elevator
-- デッキ / 床 / スラブ -> deck
+- エレベーター / EV / ELV -> elevator
 
 Line kind (field lineKind, default "member"):
 - Steel shapes H/□/L/CT/PL etc. -> "member"
@@ -76,7 +76,7 @@ const KIND_HINTS: Record<DrawingKind, string> = {
   stair_detail:
     'This sheet is a stair detail. Most rows have elementType=kaidan. Capture pre-fab unit counts.',
   elevator_shaft:
-    'This sheet is an elevator (EV) shaft drawing. Most rows have elementType=elevator. Note distinct components (rails, doors, controllers) but they all map to elevator for our schema.',
+    'This sheet is an elevator (EV / ELV) shaft drawing. Most rows have elementType=elevator. Note distinct components (rails, doors, controllers) but they all map to elevator for our schema.',
   level_diagram:
     'This is the level / storey diagram (階高表). Skip — return {"rows":[]}.',
   general:

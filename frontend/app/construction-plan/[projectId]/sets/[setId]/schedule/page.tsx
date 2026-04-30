@@ -21,17 +21,6 @@ import {
   type StructuralElementType,
 } from '@/lib/api/structural-takeoff';
 
-const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
-  hashira: '柱',
-  oobari: '大梁',
-  kobari: '小梁',
-  taifubari: '耐風梁',
-  brace: 'ブレース',
-  kaidan: '階段',
-  elevator: 'エレベーター',
-  deck: 'デッキ',
-};
-
 const DOW_JP = ['日', '月', '火', '水', '木', '金', '土'];
 
 function formatDateMonthDay(iso: string): string {
@@ -41,6 +30,8 @@ function formatDateMonthDay(iso: string): string {
 export default function ConstructionPlanSchedulePage() {
   const params = useParams();
   const { t } = useI18n();
+  const elementTypeJa = (et: StructuralElementType) =>
+    t('constructionPlanReview', `elementType_${et}` as 'elementType_hashira');
   const projectId = (params?.projectId as string) || '';
   const setId = (params?.setId as string) || '';
   usePresence({
@@ -279,7 +270,7 @@ export default function ConstructionPlanSchedulePage() {
                         <td className="sticky left-0 z-10 bg-white border border-gray-200 px-2 py-1">{a.block ?? '—'}</td>
                         <td className="sticky left-12 z-10 bg-white border border-gray-200 px-2 py-1">{a.level}</td>
                         <td className="sticky left-24 z-10 bg-white border border-gray-200 px-2 py-1">
-                          {ELEMENT_LABEL_JP[a.elementType] ?? a.elementType}
+                          {elementTypeJa(a.elementType)}
                         </td>
                         {dateColumns.map((d, ci) => {
                           const inSpan = startCol >= 0 && endCol >= 0 && ci >= startCol && ci <= endCol;
@@ -381,24 +372,24 @@ export default function ConstructionPlanSchedulePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {plan.data.trucks.map((t, idx) => {
-                  const head = t.load.items[0];
-                  const totalPieces = t.load.items.reduce((s, i) => s + i.pieces, 0);
+                {plan.data.trucks.map((tr, idx) => {
+                  const head = tr.load.items[0];
+                  const totalPieces = tr.load.items.reduce((s, i) => s + i.pieces, 0);
                   return (
-                    <tr key={`${t.date}-${t.binNo}-${idx}`}>
-                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">{t.date}</td>
-                      <td className="px-3 py-2 text-gray-700">{DOW_JP[(t.dow % 7 + 7) % 7]}</td>
-                      <td className="px-3 py-2 text-gray-700">{t.binNo}</td>
+                    <tr key={`${tr.date}-${tr.binNo}-${idx}`}>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">{tr.date}</td>
+                      <td className="px-3 py-2 text-gray-700">{DOW_JP[(tr.dow % 7 + 7) % 7]}</td>
+                      <td className="px-3 py-2 text-gray-700">{tr.binNo}</td>
                       <td className="px-3 py-2 text-gray-900">
                         <select
                           value={
-                            overridesDraft[`${t.date}|${t.binNo}`]?.truckType ?? t.load.truckType
+                            overridesDraft[`${tr.date}|${tr.binNo}`]?.truckType ?? tr.load.truckType
                           }
                           onChange={(e) => {
-                            const k = `${t.date}|${t.binNo}`;
+                            const k = `${tr.date}|${tr.binNo}`;
                             setOverridesDraft((prev) => ({
                               ...prev,
-                              [k]: { date: t.date, binNo: t.binNo, truckType: e.target.value },
+                              [k]: { date: tr.date, binNo: tr.binNo, truckType: e.target.value },
                             }));
                           }}
                           className="px-2 py-0.5 border border-gray-200 rounded-md text-xs"
@@ -412,19 +403,19 @@ export default function ConstructionPlanSchedulePage() {
                       <td className="px-3 py-2 text-gray-700">{head?.block ?? '—'}</td>
                       <td className="px-3 py-2 text-gray-700">{head?.level ?? '—'}</td>
                       <td className="px-3 py-2 text-gray-700 text-xs">
-                        {t.load.items
-                          .map((i) => `${ELEMENT_LABEL_JP[i.elementType]}×${i.pieces}`)
+                        {tr.load.items
+                          .map((i) => `${elementTypeJa(i.elementType)}×${i.pieces}`)
                           .join(' / ')}
                       </td>
                       <td className="px-3 py-2 text-right text-gray-900">{totalPieces}</td>
                       <td className="px-3 py-2 text-right text-gray-900">
-                        {(Math.round(t.load.totalKg / 100) / 10).toFixed(1)}
+                        {(Math.round(tr.load.totalKg / 100) / 10).toFixed(1)}
                       </td>
                       <td className="px-3 py-2 text-right text-gray-900">
-                        {(Math.round(t.load.totalLengthMm / 100) / 10).toFixed(1)}
+                        {(Math.round(tr.load.totalLengthMm / 100) / 10).toFixed(1)}
                       </td>
                       <td className="px-3 py-2 text-xs text-amber-700">
-                        {t.load.notes.join(', ')}
+                        {tr.load.notes.join(', ')}
                       </td>
                     </tr>
                   );

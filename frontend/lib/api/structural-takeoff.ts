@@ -7,8 +7,7 @@ export type StructuralElementType =
   | 'taifubari'
   | 'brace'
   | 'kaidan'
-  | 'elevator'
-  | 'deck';
+  | 'elevator';
 
 export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'hashira',
@@ -18,7 +17,6 @@ export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'brace',
   'kaidan',
   'elevator',
-  'deck',
 ] as const;
 
 export type DrawingKind =

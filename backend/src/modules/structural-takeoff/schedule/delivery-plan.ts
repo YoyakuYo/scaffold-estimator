@@ -49,7 +49,6 @@ export function buildDeliveryPlan(
     brace: { pieces: 0, kg: 0 },
     kaidan: { pieces: 0, kg: 0 },
     elevator: { pieces: 0, kg: 0 },
-    deck: { pieces: 0, kg: 0 },
   };
 
   const sortedDates = Object.keys(dailyDemand).sort();

@@ -1,8 +1,7 @@
 /**
  * Phase 3 — Construction Plan extraction.
  *
- * The eight structural element categories tracked in the takeoff. Names follow
- * Japanese steel-frame convention (柱・大梁・小梁・耐風梁・ブレース・階段・エレベーター・デッキ).
+ * The seven structural steel categories tracked in the takeoff (no deck/slabs).
  */
 export type StructuralElementType =
   | 'hashira'    // 柱 (column)
@@ -11,8 +10,7 @@ export type StructuralElementType =
   | 'taifubari'  // 耐風梁 (wind beam)
   | 'brace'      // ブレース (brace)
   | 'kaidan'     // 階段 (stair)
-  | 'elevator'   // エレベーター (elevator shaft / cab kit)
-  | 'deck';      // デッキ (deck plate / slab)
+  | 'elevator'   // ELV / エレベーターシャフト等
 
 export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'hashira',
@@ -22,7 +20,6 @@ export const STRUCTURAL_ELEMENT_TYPES: readonly StructuralElementType[] = [
   'brace',
   'kaidan',
   'elevator',
-  'deck',
 ] as const;
 
 export type ExtractionSource = 'manual' | 'excel' | 'dxf' | 'ai' | 'ifc';

@@ -38,7 +38,6 @@ const ELEMENT_TYPE_TRUCK_PREFERENCE: Record<StructuralElementType, TruckType[]> 
   brace: ['4t', '10t'],
   kaidan: ['4tunic', '4t'],
   elevator: ['4tunic', '4t'],
-  deck: ['10t', '4t'],
 };
 
 export interface TruckLoad {

@@ -3224,8 +3224,8 @@ export const translations = {
     },
     featureScheduleBody: {
       ja: '階・工区別に建方・床版・耐火被覆・階段の連鎖を自動生成。土日祝・働き方カレンダーを反映。',
-      en: 'Per-floor / per-block erection chain (frame → deck → fireproofing → stairs), JP holidays + work-Saturday rules.',
-      fr: 'Enchaînement par étage / zone (charpente → planchers → ignifugation → escaliers), avec jours fériés JP.',
+      en: 'Per-floor / per-block erection chain (steel frame → slab cure → fireproofing → stairs / ELV), JP holidays + work-Saturday rules.',
+      fr: 'Enchaînement par étage / zone (charpente métallique → durcissement dalle → ignifugation → escaliers / ascenseur), avec jours fériés JP.',
     },
     featureDeliveryTitle: {
       ja: '搬入便（トラック割付）',
@@ -3479,14 +3479,41 @@ export const translations = {
     needsReviewYes: { ja: '要', en: 'Yes', fr: 'Oui' },
     confidence: { ja: '確信度', en: 'Conf.', fr: 'Conf.' },
 
-    elementType_hashira: { ja: '柱', en: 'Column (柱)', fr: 'Poteau (柱)' },
-    elementType_oobari: { ja: '大梁', en: 'Main beam (大梁)', fr: 'Poutre principale (大梁)' },
-    elementType_kobari: { ja: '小梁', en: 'Small beam (小梁)', fr: 'Poutre secondaire (小梁)' },
-    elementType_taifubari: { ja: '耐風梁', en: 'Wind beam (耐風梁)', fr: 'Poutre antivent (耐風梁)' },
-    elementType_brace: { ja: 'ブレース', en: 'Brace', fr: 'Contreventement' },
-    elementType_kaidan: { ja: '階段', en: 'Stair (階段)', fr: 'Escalier (階段)' },
-    elementType_elevator: { ja: 'エレベーター', en: 'Elevator (EV)', fr: 'Ascenseur (EV)' },
-    elementType_deck: { ja: 'デッキ', en: 'Deck plate (デッキ)', fr: 'Plancher (デッキ)' },
+    elementType_hashira: {
+      ja: '柱 / Hashira（ハシラ）',
+      en: 'Column — Hashira (柱)',
+      fr: 'Poteau — Hashira (柱)',
+    },
+    elementType_oobari: {
+      ja: '大梁 / G-bari（ジーバリ）',
+      en: 'Main beam — G-bari (大梁)',
+      fr: 'Poutre principale — G-bari (大梁)',
+    },
+    elementType_kobari: {
+      ja: '小梁 / B-bari（ビーバリ）',
+      en: 'Small beam — B-bari (小梁)',
+      fr: 'Poutre secondaire — B-bari (小梁)',
+    },
+    elementType_taifubari: {
+      ja: '耐風梁 / Tai-fu bari（タイフウバリ）',
+      en: 'Wind beam — Tai-fu bari (耐風梁)',
+      fr: 'Poutre antivent — Tai-fu bari (耐風梁)',
+    },
+    elementType_brace: {
+      ja: 'ブレース / Brace（ブレース）',
+      en: 'Brace',
+      fr: 'Contreventement',
+    },
+    elementType_kaidan: {
+      ja: '階段 / Stair（ステア）',
+      en: 'Stair — Stair (階段)',
+      fr: 'Escalier — Stair (階段)',
+    },
+    elementType_elevator: {
+      ja: 'ELV（エレベーター）',
+      en: 'ELV (elevator)',
+      fr: 'ELV (ascenseur)',
+    },
 
     drawingKind_framing_plan: { ja: '構造伏図', en: 'Framing plan (伏図)', fr: 'Plan de structure (伏図)' },
     drawingKind_column_list: { ja: '柱リスト', en: 'Column list (柱リスト)', fr: 'Liste poteaux (柱リスト)' },

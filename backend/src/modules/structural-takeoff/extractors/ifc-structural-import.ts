@@ -9,7 +9,6 @@ import {
   IFCCOLUMN,
   IFCFASTENER,
   IFCMEMBER,
-  IFCSLAB,
   IFCSTAIR,
   IFCSTAIRFLIGHT,
 } from 'web-ifc';
@@ -82,7 +81,6 @@ export async function extractStructuralElementsFromIfc(buffer: Buffer): Promise<
     { typeCode: IFCMEMBER, elementType: 'brace', lineKind: 'member', sectionPrefix: 'IFC-Member' },
     { typeCode: IFCSTAIR, elementType: 'kaidan', lineKind: 'member', sectionPrefix: 'IFC-階段' },
     { typeCode: IFCSTAIRFLIGHT, elementType: 'kaidan', lineKind: 'member', sectionPrefix: 'IFC-階段' },
-    { typeCode: IFCSLAB, elementType: 'deck', lineKind: 'member', sectionPrefix: 'IFC-SLAB' },
     { typeCode: IFCFASTENER, elementType: 'brace', lineKind: 'bolt', sectionPrefix: 'IFC-Bolt' },
   ];
 

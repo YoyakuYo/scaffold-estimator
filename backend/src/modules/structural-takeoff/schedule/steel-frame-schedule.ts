@@ -8,14 +8,13 @@ import { STRUCTURAL_ELEMENT_TYPES } from '../element-types';
 import { DEFAULT_PIECE_LENGTH_MM, pieceWeightKg, resolveKgPerM } from './jis-sections';
 
 const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
-  hashira: '柱',
-  oobari: '大梁',
-  kobari: '小梁',
-  taifubari: '耐風梁',
-  brace: 'ブレース',
-  kaidan: '階段',
-  elevator: 'エレベーター',
-  deck: 'デッキ',
+  hashira: '柱 / Hashira（ハシラ）',
+  oobari: '大梁 / G-bari（ジーバリ）',
+  kobari: '小梁 / B-bari（ビーバリ）',
+  taifubari: '耐風梁 / Tai-fu bari（タイフウバリ）',
+  brace: 'ブレース / Brace（ブレース）',
+  kaidan: '階段 / Stair（ステア）',
+  elevator: 'ELV（エレベーター）',
 };
 
 /** Default fabrication loss (matches typical 鉄骨 5%). */

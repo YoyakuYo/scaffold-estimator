@@ -14,7 +14,7 @@ export interface DurationTemplate {
   piecesPerDay: Record<StructuralElementType, number>;
   /**
    * Slab cure delay in working days before the next floor's columns can start.
-   * Standard Japanese practice: ~3 days for デッキ + コンクリート.
+   * Standard Japanese practice: ~3 days after slab concrete placement.
    */
   slabCureDays: number;
   /**
@@ -37,11 +37,10 @@ export const DEFAULT_DURATION_TEMPLATE: DurationTemplate = {
     kobari: 24, // 小梁
     taifubari: 12,
     brace: 32,
-    deck: 40,
     kaidan: 4,
     elevator: 4,
   },
   slabCureDays: 3,
   blockOverlapFloors: 2,
-  cycleOrder: ['hashira', 'oobari', 'kobari', 'taifubari', 'brace', 'deck'],
+  cycleOrder: ['hashira', 'oobari', 'kobari', 'taifubari', 'brace'],
 };

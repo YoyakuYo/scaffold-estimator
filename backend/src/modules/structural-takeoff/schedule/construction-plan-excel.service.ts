@@ -22,14 +22,13 @@ import {
 } from './steel-frame-schedule';
 
 const ELEMENT_LABEL_JP: Record<StructuralElementType, string> = {
-  hashira: '柱',
-  oobari: '大梁',
-  kobari: '小梁',
-  taifubari: '耐風梁',
-  brace: 'ブレース',
-  kaidan: '階段',
-  elevator: 'エレベーター',
-  deck: 'デッキ',
+  hashira: '柱 / Hashira（ハシラ）',
+  oobari: '大梁 / G-bari（ジーバリ）',
+  kobari: '小梁 / B-bari（ビーバリ）',
+  taifubari: '耐風梁 / Tai-fu bari（タイフウバリ）',
+  brace: 'ブレース / Brace（ブレース）',
+  kaidan: '階段 / Stair（ステア）',
+  elevator: 'ELV（エレベーター）',
 };
 
 const LINE_KIND_LABEL_JP: Record<ElementLineKind, string> = {

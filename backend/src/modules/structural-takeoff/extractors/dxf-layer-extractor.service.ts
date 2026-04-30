@@ -47,8 +47,7 @@ export class DxfLayerExtractorService {
     [/(耐風梁|wind\s*beam|taifubari)/i, 'taifubari'],
     [/(ブレース|brace|筋交)/i, 'brace'],
     [/(階段|stair)/i, 'kaidan'],
-    [/(エレベーター|エレベータ|elevator|^ev$|ev[\s_-]?shaft)/i, 'elevator'],
-    [/(デッキ|deck)/i, 'deck'],
+    [/(エレベーター|エレベータ|elevator|^ev$|^elv$|elv\b|ev[\s_-]?shaft)/i, 'elevator'],
   ];
 
   /** Floor regex for inferring level from a layer name when present. */
