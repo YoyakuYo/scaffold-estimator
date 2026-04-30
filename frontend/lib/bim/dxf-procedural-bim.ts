@@ -501,7 +501,11 @@ function inferUnitScale(polys: DxfPolyline[]): number {
  * Returned mesh uses the same interleaved x,y,z,nx,ny,nz layout as the IFC
  * loader so it can ride through the existing material pipeline.
  */
-function extrudePolygonToMesh(
+/**
+ * Extrude a closed 2D polygon (plan: x,y in mm after unit scaling) into
+ * `IfcMeshData` for the BIM viewer. Exported for AI footprint → shell mesh.
+ */
+export function extrudePolygonToMesh(
   verts: RawVertex[],
   baseMm: number,
   heightMm: number,

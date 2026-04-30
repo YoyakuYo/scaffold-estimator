@@ -3810,6 +3810,38 @@ export const translations = {
       en: 'Page {n} of {total}',
       fr: 'Page {n} sur {total}',
     },
+    build3dFromDrawing: {
+      ja: 'AI で外周を 3D 化',
+      en: 'Build 3D shell (AI)',
+      fr: 'Coque 3D (IA)',
+    },
+    build3dPremiumRequired: {
+      ja: 'AI による 3D 化には BIM の Premium（AI 抽出）が必要です。課金ページからご確認ください。',
+      en: 'Building a 3D shell from drawings requires BIM Premium (AI extraction). Upgrade under Billing.',
+      fr: 'La coque 3D par IA nécessite l’offre BIM Premium (extraction IA). Passez par Facturation.',
+    },
+    build3dNoFile: {
+      ja: 'ファイルが見つかりません。PDF または画像を開いてから再度お試しください。',
+      en: 'No file loaded. Open a PDF or image first.',
+      fr: 'Aucun fichier. Ouvrez d’abord un PDF ou une image.',
+    },
+    build3dNoMesh: {
+      ja: '外形からメッシュを生成できませんでした。別のページ／画像を試すか、より明瞭な平面図をご利用ください。',
+      en: 'Could not build meshes from the footprint. Try another page/image or a clearer plan.',
+      fr: 'Impossible de générer les mailles. Essayez une autre page/image ou un plan plus lisible.',
+    },
+    build3dSuccessHint: {
+      ja: '外周を押し出した簡易 3D を表示しました（開口・室内は含みません）。IFC のような詳細 BIM ではありません。',
+      en:
+        'Showing a simplified extruded shell from the exterior outline (no openings or interior). This is not full IFC-grade BIM.',
+      fr:
+        'Affichage d’une coque extrudée simplifiée (sans ouvertures ni intérieur). Ce n’est pas du BIM IFC complet.',
+    },
+    build3dFailed: {
+      ja: 'AI 処理に失敗しました。しばらくしてから再度お試しください。',
+      en: 'AI processing failed. Try again in a moment.',
+      fr: 'Échec du traitement IA. Réessayez plus tard.',
+    },
   },
 
   // ─── Phase 4: Construction Plan schedule + delivery ────────

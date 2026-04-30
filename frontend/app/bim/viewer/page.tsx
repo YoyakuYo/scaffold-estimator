@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Cloud,
   CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n';
@@ -24,6 +25,8 @@ import { mimeTypeForRasterExtension, renderRasterImageToPlane } from '@/lib/bim/
 import { bimApi } from '@/lib/api/bim';
 import { accessApi } from '@/lib/api/access';
 import { authApi } from '@/lib/api/auth';
+import { visionBimApi } from '@/lib/api/vision-bim';
+import { buildMeshesFromVisionFootprint } from '@/lib/bim/vision-footprint-bim-mesh';
 
 interface SceneStats {
   meshCount: number;
@@ -494,6 +497,77 @@ function BimViewerPageInner() {
     [pdfNumPages],
   );
 
+  const prepareFileForVisionAnalyze = useCallback(async (): Promise<File | null> => {
+    const f = lastFileRef.current;
+    if (!f) return null;
+    const lower = f.name.toLowerCase();
+    if (lower.endsWith('.pdf')) {
+      const buf = lastPdfBufferRef.current;
+      if (!buf) return f;
+      const page = Math.max(1, pdfPage);
+      try {
+        const { canvas } = await renderPdfPageToPlane(buf, page);
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((b) => resolve(b), 'image/png', 0.92),
+        );
+        if (!blob) return f;
+        const base = f.name.replace(/\.pdf$/i, '') || 'plan';
+        return new File([blob], `${base}-page${page}.png`, { type: 'image/png' });
+      } catch {
+        return f;
+      }
+    }
+    return f;
+  }, [pdfPage]);
+
+  const onBuild3dFromDrawing = useCallback(async () => {
+    if (!accessQuery.data?.bim?.caps?.aiExtract) {
+      setError(t('bimViewer', 'build3dPremiumRequired'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const file = await prepareFileForVisionAnalyze();
+      if (!file) {
+        setError(t('bimViewer', 'build3dNoFile'));
+        return;
+      }
+      const start = performance.now();
+      const footprint = await visionBimApi.analyze(file);
+      const { meshes, warnings } = buildMeshesFromVisionFootprint(footprint);
+      if (meshes.length === 0) {
+        setError(warnings.join(' ') || t('bimViewer', 'build3dNoMesh'));
+        return;
+      }
+      sceneStateRef.current.clearMeshes?.();
+      sceneStateRef.current.addMeshes?.(meshes);
+      const byType: Record<string, number> = {};
+      for (const m of meshes) {
+        byType[m.elementType] = (byType[m.elementType] ?? 0) + 1;
+      }
+      const durationMs = Math.round(performance.now() - start);
+      setStats({ meshCount: meshes.length, byType, durationMs, referenceOnly: false });
+      setPdfNumPages(0);
+      setPdfPage(1);
+      const hint = t('bimViewer', 'build3dSuccessHint');
+      setInfo(warnings.length ? `${hint} ${warnings.join(' ')}` : hint);
+      presenceActions.recordAction(
+        `AI extruded footprint → ${meshes.length} mesh(es) from "${file.name}"`,
+      );
+    } catch (err) {
+      setError((err as Error)?.message || t('bimViewer', 'build3dFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    accessQuery.data?.bim?.caps?.aiExtract,
+    prepareFileForVisionAnalyze,
+    presenceActions,
+    t,
+  ]);
+
   useEffect(() => {
     const modelId = searchParams.get('model');
     if (!modelId || !sceneReady || !accessQuery.data?.bim?.hasAccess) return;
@@ -626,6 +700,27 @@ function BimViewerPageInner() {
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {t('bimViewer', 'openFile')}
+            </button>
+            <button
+              type="button"
+              disabled={
+                busy ||
+                saveToCloud.isPending ||
+                !stats?.referenceOnly ||
+                !lastFileRef.current ||
+                lastFileRef.current.name.toLowerCase().endsWith('.dwg') ||
+                !accessQuery.data?.bim?.caps?.aiExtract
+              }
+              onClick={() => void onBuild3dFromDrawing()}
+              title={
+                accessQuery.data?.bim?.caps?.aiExtract
+                  ? undefined
+                  : t('bimViewer', 'build3dPremiumRequired')
+              }
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-violet-300 text-violet-800 hover:bg-violet-50 disabled:opacity-50 text-sm"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {t('bimViewer', 'build3dFromDrawing')}
             </button>
             <button
               type="button"
