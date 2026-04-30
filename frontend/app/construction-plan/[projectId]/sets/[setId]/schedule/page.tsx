@@ -27,6 +27,26 @@ function formatDateMonthDay(iso: string): string {
   return iso.slice(5);
 }
 
+/** Same block+level → same tint so schedule rows align visually with erection grouping. */
+const SCHEDULE_ROW_TINTS = [
+  'bg-amber-50/90',
+  'bg-teal-50/90',
+  'bg-violet-50/90',
+  'bg-rose-50/90',
+  'bg-sky-50/90',
+  'bg-emerald-50/90',
+] as const;
+
+function scheduleActivityRowTint(block: string | null, level: string): string {
+  const s = `${block ?? ''}\u0000${level}`;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return SCHEDULE_ROW_TINTS[Math.abs(h) % SCHEDULE_ROW_TINTS.length]!;
+}
+
 export default function ConstructionPlanSchedulePage() {
   const params = useParams();
   const { t } = useI18n();
@@ -282,11 +302,16 @@ export default function ConstructionPlanSchedulePage() {
                   sched.data.activities.map((a, i) => {
                     const startCol = dateIndex.get(a.startIso) ?? -1;
                     const endCol = dateIndex.get(a.endIso) ?? -1;
+                    const rowTint = scheduleActivityRowTint(a.block, a.level);
                     return (
                       <tr key={`${a.block}-${a.level}-${a.elementType}-${i}`}>
-                        <td className="sticky left-0 z-10 bg-white border border-gray-200 px-2 py-1">{a.block ?? '—'}</td>
-                        <td className="sticky left-12 z-10 bg-white border border-gray-200 px-2 py-1">{a.level}</td>
-                        <td className="sticky left-24 z-10 bg-white border border-gray-200 px-2 py-1">
+                        <td className={`sticky left-0 z-10 border border-gray-200 px-2 py-1 ${rowTint}`}>
+                          {a.block ?? '—'}
+                        </td>
+                        <td className={`sticky left-12 z-10 border border-gray-200 px-2 py-1 ${rowTint}`}>
+                          {a.level}
+                        </td>
+                        <td className={`sticky left-24 z-10 border border-gray-200 px-2 py-1 ${rowTint}`}>
                           {elementTypeJa(a.elementType)}
                         </td>
                         {dateColumns.map((d, ci) => {
@@ -295,7 +320,7 @@ export default function ConstructionPlanSchedulePage() {
                           return (
                             <td
                               key={d}
-                              className={`border border-gray-100 ${inSpan ? 'bg-blue-200' : ''}`}
+                              className={`border border-gray-100 ${inSpan ? 'bg-blue-200' : rowTint}`}
                               style={{ minWidth: 22 }}
                               title={inSpan ? `${a.totalPieces}本 / ${a.totalWeightKg}kg` : undefined}
                             >

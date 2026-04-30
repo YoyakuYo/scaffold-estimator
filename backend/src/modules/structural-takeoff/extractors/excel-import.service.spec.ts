@@ -28,6 +28,34 @@ describe('ExcelElementImportService — CSV parsing', () => {
     expect(r.rows[2].elementType).toBe('brace');
   });
 
+  it('maps SS7 / structural-calc style RG RB storey-G storey-B BR P marks', async () => {
+    const csv = [
+      '階,部材,数量',
+      'RF,RG20,1',
+      'RF,RB20,2',
+      '3F,3G20,4',
+      '3F,3B20,5',
+      '2F,BR20,6',
+      'RF,P35,8',
+    ].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.map((x) => x.elementType)).toEqual([
+      'oobari',
+      'kobari',
+      'oobari',
+      'kobari',
+      'brace',
+      'kobari',
+    ]);
+  });
+
+  it('normalizes block labels (工区 prefix)', async () => {
+    const csv = ['階,工区,部材,数量', '2F,工区 B ,柱,3'].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.length).toBe(1);
+    expect(r.rows[0].block).toBe('B');
+  });
+
   it('parses a Japanese-header CSV', async () => {
     const csv = [
       '階,工区,部材,符号,断面,数量,通り芯,備考',

@@ -46,7 +46,7 @@ export class ExcelElementImportService {
   /** Header synonym map: canonical key → list of accepted column header tokens. */
   private readonly HEADER_SYNONYMS: Record<string, string[]> = {
     level: ['階', '階数', 'level', 'fl', 'floor', 'storey', 'story'],
-    block: ['工区', 'ブロック', 'block', 'zone'],
+    block: ['工区', 'ブロック', 'block', 'zone', '棟', 'エリア', 'area'],
     elementType: ['部材', '部材種別', '種別', '種類', 'type', 'element', '区分'],
     label: ['符号', '記号', 'mark', 'tag', 'id'],
     section: ['断面', 'section', 'spec', '形状', 'profile'],
@@ -76,8 +76,8 @@ export class ExcelElementImportService {
       /片持ち?梁|cantilever(?:\s*beam|\s*girder)?|katamochibari|\bcg\d+[a-z]?\b|\bcb\d+[a-z]?\b|キャンチ/i,
       'katamochibari',
     ],
-    [/大梁|main\s*beam|girder|oobari|大ばり/i, 'oobari'],
-    [/小梁|small\s*beam|kobari|小ばり|\bbg\d+[a-z]?\b/i, 'kobari'],
+    [/屋根大梁|roof\s*girder|大梁|main\s*beam|girder|oobari|大ばり/i, 'oobari'],
+    [/屋根小梁|roof\s*beam|母屋|パーリン|purlin|小梁|small\s*beam|kobari|小ばり|\bbg\d+[a-z]?\b/i, 'kobari'],
     [
       /\b[Hh][Bb]\d+\b|耐風梁|耐風\s*梁|\btaifu\b|wind\s*beam|taifubari/i,
       'taifubari',
@@ -266,7 +266,7 @@ export class ExcelElementImportService {
 
       rows.push({
         level: this.normalizeLevel(level),
-        block: get(colBlock) || null,
+        block: colBlock != null ? this.normalizeBlock(get(colBlock)) : null,
         elementType,
         label: get(colLabel) || null,
         section: get(colSection) || null,
@@ -312,9 +312,10 @@ export class ExcelElementImportService {
   }
 
   /**
-   * When the 「部材」 cell contains only a plan mark (common on 鉄骨数量表), map prefixes
-   * used in JP educational / vendor literature: G=oobari, B/b/BG=kobari, C=hashira,
-   * HB/Hb+n=taifubari (wind beam), CG/CB=katak..., V+n often brace.
+   * When the 「部材」 / 「符号」 cell is plan-style text (鉄骨数量表 / SS7-style 断面リスト),
+   * map common JP marks to canonical types:
+   * HB/Hb+n → taifubari; CG/CB → katamochibari; BR/V+n → brace (鉛直); RG/RB → roof girder/beam;
+   * optional storey prefix `3G20` / `2B20`; G/B/b/BG → beams; C → column; P → purlin tier → kobari.
    */
   private inferTypeFromSteelMark(text: string): StructuralElementType | null {
     const t = text.trim();
@@ -324,11 +325,23 @@ export class ExcelElementImportService {
 
     if (/\bcg\d+[a-z]?\b/i.test(t) || /\bcb\d+[a-z]?\b/i.test(t)) return 'katamochibari';
 
+    if (/\bBR\d+[A-Za-z0-9]*\b/.test(t)) return 'brace';
+
     if (/\bV\d+[A-Za-z]?\b/.test(t)) return 'brace';
 
-    if (/\bG\d+[A-Za-z]?\b/.test(t)) return 'oobari';
+    if (/\bRG\d+[A-Za-z0-9]*\b/i.test(t)) return 'oobari';
+
+    if (/\bRB\d+[A-Za-z0-9]*\b/i.test(t)) return 'kobari';
+
+    // SS7 / 構造計算書 style storey-prefixed girder & beam symbols (whole cell).
+    if (/^\d{1,3}[Gg]\d+[A-Za-z0-9]*$/i.test(t)) return 'oobari';
+    if (/^\d{1,3}[Bb]\d+[A-Za-z0-9]*$/i.test(t)) return 'kobari';
+
+    if (/\bP\d+[A-Za-z]?\b/.test(t)) return 'kobari';
 
     if (/\bBG\d+[A-Za-z]?\b/i.test(t)) return 'kobari';
+
+    if (/\bG\d+[A-Za-z]?\b/.test(t)) return 'oobari';
 
     if (/\bB\d+[A-Za-z]?\b/.test(t)) return 'kobari';
 
@@ -337,6 +350,22 @@ export class ExcelElementImportService {
     if (/\bC\d+[A-Za-z]?\b/.test(t)) return 'hashira';
 
     return null;
+  }
+
+  /** Normalize 工区 / block labels for grouping in UI + schedule (per-floor × per-block). */
+  private normalizeBlock(raw: string): string | null {
+    const s = raw
+      .trim()
+      .replace(/^工区\s*/i, '')
+      .replace(/^ブロック\s*/i, '')
+      .replace(/^block\s*/i, '')
+      .replace(/^zone\s*/i, '')
+      .replace(/^area\s*/i, '')
+      .replace(/^エリア\s*/i, '')
+      .replace(/^棟\s*/i, '')
+      .trim();
+    if (!s) return null;
+    return s.slice(0, 40);
   }
 
   private normalizeLevel(raw: string): string {

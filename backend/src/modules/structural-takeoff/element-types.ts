@@ -12,8 +12,9 @@
  * - 片持ち梁 (cantilever): **CG** (cantilever girder → tie to `katamochibari`), **CB** (cantilever **b**
  *   beam → prefer `katamochibari` when explicitly cantilever; else sometimes folded into `oobari`/`kobari`).
  * - 耐風梁: plan marks **Hb** / **HB** + digits (e.g. HB30) → `taifubari` (matches Excel/DXF/AI heuristics). Offices that use **HB** for horizontal brace should spell **水平ブレース** (mapped to `brace`).
- * - Vertical braces on elevations are commonly **V** (already folded into `brace`).
- *
+ * - SS7 / 構造計算書 style: **RG◯** roof girder → `oobari`, **RB◯** roof beam → `kobari`, storey-prefixed **3G20** / **2B20**, **BR◯** 鉛直ブレース → `brace`.
+ * - **P◯** perimeter / 母屋-class marks → `kobari` when imported as marks only.
+ * - Elevations: **V◯** vertical brace marks → `brace`.
  * Connection vocabulary used on legends but stored via {@link ElementLineKind}: ガセットプレート,
  * スプライスプレート, 高力ボルト, ピン接合 — not separate structural categories.
  */

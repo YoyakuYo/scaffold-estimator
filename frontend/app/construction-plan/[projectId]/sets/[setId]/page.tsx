@@ -48,6 +48,31 @@ function extractAxiosMessage(err: unknown): string | null {
   return typeof r.message === 'string' ? r.message : null;
 }
 
+/** Visual grouping for quantity rows by project floor × block (工区). */
+const FLOOR_BLOCK_ACCENTS: readonly { border: string; header: string }[] = [
+  { border: 'border-l-amber-500', header: 'bg-amber-50/85' },
+  { border: 'border-l-teal-600', header: 'bg-teal-50/85' },
+  { border: 'border-l-violet-600', header: 'bg-violet-50/85' },
+  { border: 'border-l-rose-500', header: 'bg-rose-50/85' },
+  { border: 'border-l-sky-600', header: 'bg-sky-50/85' },
+  { border: 'border-l-emerald-600', header: 'bg-emerald-50/85' },
+  { border: 'border-l-orange-600', header: 'bg-orange-50/85' },
+  { border: 'border-l-indigo-600', header: 'bg-indigo-50/85' },
+];
+
+function floorBlockSectionAccent(
+  level: string,
+  block: string | null,
+  levels: string[],
+  blocks: (string | null)[],
+): { border: string; header: string } {
+  const li = Math.max(0, levels.indexOf(level));
+  const bi = Math.max(0, blocks.findIndex((b) => b === block));
+  const stride = Math.max(1, blocks.length);
+  const idx = (li * stride + bi) % FLOOR_BLOCK_ACCENTS.length;
+  return FLOOR_BLOCK_ACCENTS[idx]!;
+}
+
 const ACCEPTED_EXT = [
   'pdf',
   'png',
@@ -815,9 +840,15 @@ export default function ConstructionPlanSetReviewPage() {
                   const sectionRows = draft
                     .map((r, idx) => ({ row: r, idx }))
                     .filter(({ row }) => row.level === level && row.block === block);
+                  const accent = floorBlockSectionAccent(level, block, levels, blocksWithFallback);
                   return (
-                    <div key={`${level}-${block ?? 'all'}`} className="border border-gray-200 rounded-xl">
-                      <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
+                    <div
+                      key={`${level}-${block ?? 'all'}`}
+                      className={`border border-gray-200 rounded-xl border-l-4 ${accent.border} shadow-sm`}
+                    >
+                      <div
+                        className={`px-4 py-2 border-b border-gray-100 flex items-center gap-2 ${accent.header}`}
+                      >
                         <span className="font-semibold text-gray-900">{level}</span>
                         {block && (
                           <span className="text-sm text-gray-600">
