@@ -28,6 +28,31 @@ describe('ExcelElementImportService — CSV parsing', () => {
     expect(r.rows[2].elementType).toBe('brace');
   });
 
+  it('maps tube brace, HV, SC/SQ columns, tie T, elevator marks, and foundation FG symbols', async () => {
+    const csv = [
+      '階,部材,数量',
+      '2F,TB-M30,2',
+      '2F,HV1,3',
+      '3F,SC5,4',
+      '3F,SQ2,1',
+      '2F,T15,5',
+      '1F,EV01,1',
+      '1F,ELV2,1',
+      '1F,1FG1,6',
+    ].join('\n');
+    const r = await svc.parseBuffer(Buffer.from(csv, 'utf-8'), 'x.csv');
+    expect(r.rows.map((x) => x.elementType)).toEqual([
+      'brace',
+      'brace',
+      'hashira',
+      'hashira',
+      'brace',
+      'elevator',
+      'elevator',
+      'oobari',
+    ]);
+  });
+
   it('maps SS7 / structural-calc style RG RB storey-G storey-B BR P marks', async () => {
     const csv = [
       '階,部材,数量',

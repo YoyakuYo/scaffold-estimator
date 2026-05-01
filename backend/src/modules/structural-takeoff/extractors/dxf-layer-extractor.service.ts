@@ -41,19 +41,19 @@ export class DxfLayerExtractorService {
    * naming, sometimes mixed.
    */
   private readonly LAYER_PATTERNS: Array<[RegExp, StructuralElementType]> = [
-    [/(柱|hashira|column)/i, 'hashira'],
+    [/(柱|hashira|column|鉄骨柱|鋼管柱)/i, 'hashira'],
     [/(屋根大梁|roof\s*girder|\bRG\d+)/i, 'oobari'],
     [/(屋根小梁|roof\s*beam|\bRB\d+)/i, 'kobari'],
     [/(母屋|purlin|パーリン)/i, 'kobari'],
     [/(孫梁|magobari)/i, 'magobari'],
     [/(片持|cantilever|katamochibari)/i, 'katamochibari'],
-    [/(大梁|main\s*beam|girder|oobari)/i, 'oobari'],
-    [/(小梁|small\s*beam|kobari)/i, 'kobari'],
+    [/(大梁|main\s*beam|girder|oobari|基礎大梁|基礎梁|foundation\s*girder)/i, 'oobari'],
+    [/(小梁|small\s*beam|kobari|軒桁)/i, 'kobari'],
     [/(耐風梁|wind\s*beam|taifubari|耐風|\b[Hh][Bb]\d+)/i, 'taifubari'],
-    [/(ブレース|brace|筋交)/i, 'brace'],
+    [/(ブレース|brace|筋交|\bHV\d|TB[-.]?M|tube|knee|ニー|パイプ)/i, 'brace'],
     [/(階段|ステア|stair|踊(り)?場|蹴込)/i, 'kaidan'],
     [
-      /(エレベータ|エレベーター|elevator|昇降機|機械室|シャフト|^ev$|^elv$|elv\b|ev[\s_-]?shaft)/i,
+      /(エレベータ|エレベーター|elevator|昇降機|機械室|シャフト|ホイス|lift|^ev$|^elv$|elv\b|ev[\s_-]?shaft)/i,
       'elevator',
     ],
   ];

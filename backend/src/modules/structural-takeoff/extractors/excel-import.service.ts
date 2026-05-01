@@ -70,22 +70,35 @@ export class ExcelElementImportService {
 
   /** Element-type label → canonical StructuralElementType. */
   private readonly ELEMENT_LABEL_MAP: Array<[RegExp, StructuralElementType]> = [
-    [/^柱$|column|hashira|^c\b|柱材/i, 'hashira'],
+    [
+      /^柱$|column|hashira|^c\b|柱材|鉄骨柱|鋼管柱|square\s*pipe\s*column|steel\s*column|立柱/i,
+      'hashira',
+    ],
     [/孫梁|magobari|まごばり/i, 'magobari'],
     [
       /片持ち?梁|cantilever(?:\s*beam|\s*girder)?|katamochibari|\bcg\d+[a-z]?\b|\bcb\d+[a-z]?\b|キャンチ/i,
       'katamochibari',
     ],
+    [/基礎大梁|基礎梁|地下大梁|foundation\s*girder|foundation\s*beam/i, 'oobari'],
     [/屋根大梁|roof\s*girder|大梁|main\s*beam|girder|oobari|大ばり/i, 'oobari'],
-    [/屋根小梁|roof\s*beam|母屋|パーリン|purlin|小梁|small\s*beam|kobari|小ばり|\bbg\d+[a-z]?\b/i, 'kobari'],
     [
-      /\b[Hh][Bb]\d+\b|耐風梁|耐風\s*梁|\btaifu\b|wind\s*beam|taifubari/i,
+      /屋根小梁|roof\s*beam|母屋|パーリン|purlin|軒桁|小梁|small\s*beam|kobari|ビーム|小ばり|\bbg\d+[a-z]?\b/i,
+      'kobari',
+    ],
+    [
+      /\b[Hh][Bb]\d+\b|耐風梁|耐風\s*梁|\btaifu\b|wind\s*beam|taifubari|ウィンドビーム/i,
       'taifubari',
     ],
-    [/ブレース|brace|bracing|筋交|鉛直ブレース|vertical\s*brace|水平ブレース|horizontal\s*brace/i, 'brace'],
-    [/階段|ステア|stair|kaidan|踊(り)?場|蹴込|stair\s*case/i, 'kaidan'],
     [
-      /エレベーター|エレベータ|昇降機|elevator|^ev$|^elv$|elv\b|ev\s*shaft|機械室|シャフト製鉄/i,
+      /ブレース|brace|bracing|筋交|斜材|横構|cross\s*brace|knee\s*brace|ニーブレース|パイプブレース|tube\s*brace|線材ブレース|rod\s*brace|鉛直ブレース|vertical\s*brace|水平ブレース|horizontal\s*brace/i,
+      'brace',
+    ],
+    [
+      /階段|ステア|stair|kaidan|踊(り)?場|蹴込|梯段|ラダー|避難階段|非常階段|stair\s*flight|stair\s*case/i,
+      'kaidan',
+    ],
+    [
+      /エレベーター|エレベータ|昇降機|elevator|^ev$|^elv$|elv\b|ev\s*shaft|機械室|シャフト製鉄|ホイス|lift\b/i,
       'elevator',
     ],
   ];
@@ -312,30 +325,47 @@ export class ExcelElementImportService {
   }
 
   /**
-   * When the 「部材」 / 「符号」 cell is plan-style text (鉄骨数量表 / SS7-style 断面リスト),
-   * map common JP marks to canonical types:
-   * HB/Hb+n → taifubari; CG/CB → katamochibari; BR/V+n → brace (鉛直); RG/RB → roof girder/beam;
-   * optional storey prefix `3G20` / `2B20`; G/B/b/BG → beams; C → column; P → purlin tier → kobari.
+   * 「部材」 / 「符号」-only cells: map JP steel BOQ / SS7 / vendor marks into the nine canonical types.
+   * Omits RC slabs/decks (デッキ・スラブ) — those are not StructuralElementType rows.
    */
   private inferTypeFromSteelMark(text: string): StructuralElementType | null {
     const t = text.trim();
     if (!t) return null;
 
+    // Whole-cell hoist / lift marks (avoid matching random words).
+    if (/^EV\d*[A-Za-z0-9]*$/i.test(t) || /^ELV\d*[A-Za-z0-9]*$/i.test(t) || /^EL\d+[A-Za-z0-9]*$/i.test(t)) {
+      return 'elevator';
+    }
+
+    // Foundation girder symbols like 1FG1 (Super Build / similar outputs).
+    if (/^\d+FG\d+[A-Za-z0-9]*$/i.test(t)) return 'oobari';
+
+    // Storey-prefixed girder / beam symbols (whole cell).
+    if (/^\d{1,3}[Gg]\d+[A-Za-z0-9]*$/i.test(t)) return 'oobari';
+    if (/^\d{1,3}[Bb]\d+[A-Za-z0-9]*$/i.test(t)) return 'kobari';
+
     if (/\b[Hh][Bb]\d+\b/.test(t)) return 'taifubari';
 
     if (/\bcg\d+[a-z]?\b/i.test(t) || /\bcb\d+[a-z]?\b/i.test(t)) return 'katamochibari';
+
+    // Tube brace TB-M30 etc.; TB+n alone when clearly brace lists.
+    if (/\bTB[-.]?M[-.]?\d+[A-Za-z]*\b/i.test(t) || /\bTB\d+[A-Za-z]*\b/i.test(t)) return 'brace';
+
+    if (/\bHV\d+[A-Za-z]*\b/i.test(t)) return 'brace';
 
     if (/\bBR\d+[A-Za-z0-9]*\b/.test(t)) return 'brace';
 
     if (/\bV\d+[A-Za-z]?\b/.test(t)) return 'brace';
 
+    // Steel column schedule marks (SC1, SQ2, …).
+    if (/\bSC\d+[A-Za-z]*\b/i.test(t) || /\bSQ\d+[A-Za-z]*\b/i.test(t)) return 'hashira';
+
+    // Tie rod / tension brace marks often labeled T+n on GA (after ST/TB/HV exclusions above).
+    if (/\bT\d+[A-Za-z]*\b/i.test(t)) return 'brace';
+
     if (/\bRG\d+[A-Za-z0-9]*\b/i.test(t)) return 'oobari';
 
     if (/\bRB\d+[A-Za-z0-9]*\b/i.test(t)) return 'kobari';
-
-    // SS7 / 構造計算書 style storey-prefixed girder & beam symbols (whole cell).
-    if (/^\d{1,3}[Gg]\d+[A-Za-z0-9]*$/i.test(t)) return 'oobari';
-    if (/^\d{1,3}[Bb]\d+[A-Za-z0-9]*$/i.test(t)) return 'kobari';
 
     if (/\bP\d+[A-Za-z]?\b/.test(t)) return 'kobari';
 
