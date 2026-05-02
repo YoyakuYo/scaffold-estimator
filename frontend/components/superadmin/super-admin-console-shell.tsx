@@ -24,12 +24,12 @@ const nav = [
   { href: '/superadmin/console', labelKey: ['superadminConsole', 'overview'] as const, icon: LayoutDashboard, exact: true },
   { href: '/superadmin/console/analytics', labelKey: ['superadminConsole', 'analytics'] as const, icon: BarChart3 },
   { href: '/superadmin/console/pending', labelKey: ['superadminConsole', 'pending'] as const, icon: ListChecks },
-  { href: '/users', labelKey: ['superadminNav', 'users'] as const, icon: Users },
-  { href: '/superadmin/subscribers', labelKey: ['superadminNav', 'subscribers'] as const, icon: CreditCard },
+  { href: '/superadmin/console/users', labelKey: ['superadminNav', 'users'] as const, icon: Users },
+  { href: '/superadmin/console/subscribers', labelKey: ['superadminNav', 'subscribers'] as const, icon: CreditCard },
   { href: '/superadmin/console/platform', labelKey: ['superadminConsole', 'platform'] as const, icon: SlidersHorizontal },
   { href: '/superadmin/console/security', labelKey: ['superadminConsole', 'security'] as const, icon: Shield },
-  { href: '/admin/messages', labelKey: ['superadminNav', 'messages'] as const, icon: MessageSquare },
-  { href: '/profile', labelKey: ['superadminNav', 'profile'] as const, icon: User },
+  { href: '/superadmin/console/messages', labelKey: ['superadminNav', 'messages'] as const, icon: MessageSquare },
+  { href: '/superadmin/console/profile', labelKey: ['superadminNav', 'profile'] as const, icon: User },
 ] as const;
 
 export function SuperAdminConsoleShell({ children }: { children: React.ReactNode }) {

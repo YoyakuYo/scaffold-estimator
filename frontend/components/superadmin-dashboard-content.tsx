@@ -198,7 +198,7 @@ export function SuperAdminDashboardContent() {
               </div>
               <p className="mt-2 text-2xl font-bold text-amber-600">{stats.pendingUsers}</p>
               <Link
-                href="/users?filter=pending"
+                href="/superadmin/console/users?filter=pending"
                 className="mt-2 inline-flex items-center text-sm text-blue-600 hover:text-blue-700"
               >
                 {t('adminDashboard', 'viewAll')}
@@ -349,7 +349,7 @@ export function SuperAdminDashboardContent() {
                 {t('adminDashboard', 'pendingApprovals')}
               </h2>
               <Link
-                href="/users?filter=pending"
+                href="/superadmin/console/users?filter=pending"
                 className="text-sm text-blue-600 hover:text-blue-700"
               >
                 {t('adminDashboard', 'viewAll')}
@@ -446,21 +446,21 @@ export function SuperAdminDashboardContent() {
 
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
-            href="/users"
+            href="/superadmin/console/users"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
           >
             <Users className="h-5 w-5" />
             {t('adminDashboard', 'manageUsers')}
           </Link>
           <Link
-            href="/admin/messages"
+            href="/superadmin/console/messages"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
           >
             <MessageSquare className="h-5 w-5" />
             {t('adminDashboard', 'supportMessages')}
           </Link>
           <Link
-            href="/superadmin/subscribers"
+            href="/superadmin/console/subscribers"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
           >
             <CreditCard className="h-5 w-5" />

@@ -30,10 +30,15 @@ export function SuperAdminNavigation() {
 
   const navItems = [
     { path: '/superadmin/console', matchAlso: ['/superadmin/dashboard', '/dashboard'], label: t('superadminNav', 'dashboard'), icon: Shield },
-    { path: '/users', matchAlso: [] as string[], label: t('superadminNav', 'users'), icon: Users },
-    { path: '/superadmin/subscribers', matchAlso: [] as string[], label: t('superadminNav', 'subscribers'), icon: CreditCard },
-    { path: '/admin/messages', matchAlso: [] as string[], label: t('superadminNav', 'messages'), icon: MessageSquare },
-    { path: '/profile', matchAlso: [] as string[], label: t('superadminNav', 'profile'), icon: User },
+    { path: '/superadmin/console/users', matchAlso: ['/users'], label: t('superadminNav', 'users'), icon: Users },
+    {
+      path: '/superadmin/console/subscribers',
+      matchAlso: ['/superadmin/subscribers'],
+      label: t('superadminNav', 'subscribers'),
+      icon: CreditCard,
+    },
+    { path: '/superadmin/console/messages', matchAlso: ['/admin/messages'], label: t('superadminNav', 'messages'), icon: MessageSquare },
+    { path: '/superadmin/console/profile', matchAlso: ['/profile'], label: t('superadminNav', 'profile'), icon: User },
   ];
 
   return (
