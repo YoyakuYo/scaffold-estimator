@@ -2871,6 +2871,31 @@ export const translations = {
       en: 'Read traffic, tenant health, and uploads in one place. Change the telemetry window anytime.',
       fr: 'Trafic, locataires et téléversements en un seul écran — changez la fenêtre de télémétrie à tout moment.',
     },
+    analyticsOperatorWhoSignedIn: {
+      ja: '直近のサインイン',
+      en: 'Who signed in',
+      fr: 'Connexions récentes',
+    },
+    analyticsOperatorWhoSignedInDesc: {
+      ja: 'ログイン履歴より。メールまたはユーザー ID・IP。',
+      en: 'From login history: email or user ID, with IP.',
+      fr: 'Historique de connexion : e-mail ou ID et IP.',
+    },
+    analyticsOperatorWhoUploaded: {
+      ja: '直近のアップロード',
+      en: 'Who uploaded',
+      fr: 'Derniers fichiers',
+    },
+    analyticsOperatorWhoUploadedDesc: {
+      ja: 'upload_events を直近 {days} 日表示（APIは最大80件まで）。',
+      en: 'Rows from upload_events within the trailing {days} days (up to eighty shown).',
+      fr: "Jusqu'à 80 entrées depuis upload_events ({days} j).",
+    },
+    analyticsOperatorNoUploads: {
+      ja: 'この期間に該当するアップロードはありません。',
+      en: 'No uploads in this window.',
+      fr: 'Aucun téléversement sur cette période.',
+    },
     analyticsOperatorWindow: { ja: '集計ウィンドウ', en: 'Telemetry window', fr: 'Fenêtre' },
     analyticsRange7: { ja: '7日', en: '7 days', fr: '7 j' },
     analyticsRange14: { ja: '14日', en: '14 days', fr: '14 j' },
@@ -2922,11 +2947,6 @@ export const translations = {
       ja: '`upload_events.product_code` で集計。',
       en: '`upload_events.product_code` aggregates.',
       fr: 'Agrégation par `product_code`.',
-    },
-    analyticsOperatorLoginsDesc: {
-      ja: '直近から最大75件。完全なリストは運用コンソールのセキュリティから。',
-      en: 'Latest seventy-five rows pulled for this board.',
-      fr: 'Soixante-quinze dernières entrées affichées ici.',
     },
     analyticsHudEyebrow: {
       ja: 'ライブ監視ターミナル · プラットフォーム',
