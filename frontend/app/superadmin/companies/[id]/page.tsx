@@ -113,7 +113,7 @@ export default function SuperadminCompanyVerifyPage() {
               <p className="font-semibold text-red-700">{t('companyVerify', 'loadFailed')}</p>
               <p className="text-sm text-red-600">{(error as Error)?.message || ''}</p>
               <Link
-                href="/superadmin/dashboard"
+                href="/superadmin/console"
                 className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:underline"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -142,7 +142,7 @@ export default function SuperadminCompanyVerifyPage() {
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex items-center justify-between">
           <Link
-            href="/superadmin/dashboard"
+            href="/superadmin/console"
             className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:underline"
           >
             <ArrowLeft className="h-4 w-4" />

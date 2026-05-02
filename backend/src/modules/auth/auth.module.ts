@@ -9,11 +9,13 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { PlatformModule } from '../platform/platform.module';
 
 @Module({
   imports: [
     forwardRef(() => SubscriptionModule),
     forwardRef(() => NotificationsModule),
+    PlatformModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

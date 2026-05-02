@@ -27,6 +27,9 @@ export interface UserProfile {
   bankActivationCodeExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Present when JWT is acting as tenant user (support session). */
+  impersonatedBy?: string;
+  impersonatedByEmail?: string | null;
 }
 
 export interface ApproveUserPayload {
@@ -156,6 +159,18 @@ export const usersApi = {
   /** Companies that have at least one non–super-admin user, with branches (superadmin only). */
   listCompanies: async (): Promise<Array<{ id: string; name: string; userCount: number; branches: Array<{ id: string; name: string; isHeadquarters: boolean }> }>> => {
     const res = await apiClient.get('/auth/admin/companies');
+    return res.data;
+  },
+
+  /** Approve multiple pending ids with the same approve options; superadmin only. */
+  bulkApproveUsers: async (ids: string[], payload?: ApproveUserPayload): Promise<{ processed: number }> => {
+    const res = await apiClient.post<{ processed: number }>('/auth/users/bulk-approve', { ids, ...payload });
+    return res.data;
+  },
+
+  /** Reject multiple pending ids; skipped rows are logged server-side only; superadmin only. */
+  bulkRejectUsers: async (ids: string[]): Promise<{ processed: number }> => {
+    const res = await apiClient.post<{ processed: number }>('/auth/users/bulk-reject', { ids });
     return res.data;
   },
 

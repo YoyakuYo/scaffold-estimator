@@ -273,6 +273,11 @@ export const translations = {
     goToLogin: { ja: 'ログインページへ', en: 'Go to Login', fr: 'Aller à la connexion' },
     alreadyHaveAccount: { ja: '既にアカウントをお持ちですか？', en: 'Already have an account?', fr: 'Vous avez déjà un compte ?' },
     signIn: { ja: 'ログイン', en: 'Log in', fr: 'Se connecter' },
+    signupPaused: {
+      ja: '新規登録は現在停止しています。また後ほどお試しください。',
+      en: 'New registrations are temporarily closed. Please try again later.',
+      fr: 'Les nouvelles inscriptions sont suspendues pour le moment. Réessayez plus tard.',
+    },
   },
 
   // ─── Dashboard ─────────────────────────────────────────────────
@@ -2839,6 +2844,53 @@ export const translations = {
     consoleTitle: { ja: 'スーパー管理者コンソール', en: 'Super Admin Console', fr: 'Console Super Admin' },
   },
 
+  /** Analytics-style operator shell (sidebar) */
+  superadminConsole: {
+    suiteLabel: { ja: 'コンパウンド', en: 'Control Plane', fr: 'Plan de contrôle' },
+    suiteTitle: { ja: 'オペレーション', en: 'Operations', fr: 'Opérations' },
+    suiteSubtitle: { ja: '分析・配信セキュリティ', en: 'Analytics, broadcasts & posture', fr: 'Analyses, diffusion et sécurité' },
+    overview: { ja: '概要', en: 'Overview', fr: 'Aperçu' },
+    analytics: { ja: 'アナリティクス', en: 'Analytics', fr: 'Analytique' },
+    pending: { ja: '一括承認', en: 'Bulk approvals', fr: 'Approbations groupées' },
+    platform: { ja: 'プラットフォーム', en: 'Platform controls', fr: 'Contrôles plate-forme' },
+    security: { ja: 'セキュリティ', en: 'Security', fr: 'Sécurité' },
+    accessTitle: { ja: 'ユーザーになりすまし', en: 'Impersonate user', fr: 'Usurpation utilisateur' },
+    accessSubtitle: {
+      ja: 'サポート用。監査ログに記録されます。',
+      en: 'Support only. Writes an audit trail.',
+      fr: 'Support uniquement. Laisse une trace d’audit.',
+    },
+    analyticsPageTitle: { ja: 'トラフィックとサインイン', en: 'Traffic & sign-ins', fr: 'Trafic et connexions' },
+    kpiPageViews24h: { ja: '24時間PV', en: 'Page views · 24h', fr: 'Pages vues · 24h' },
+    kpiPageViews7d: { ja: '7日PV', en: 'Page views · 7d', fr: 'Pages vues · 7j' },
+    kpiLogins24h: { ja: '24時間ログイン', en: 'Logins · 24h', fr: 'Connexions · 24h' },
+    kpiLogins7d: { ja: '7日ログイン', en: 'Logins · 7d', fr: 'Connexions · 7j' },
+    chartVisits: { ja: '14日間の訪問（PV）', en: 'Visits (14 days)', fr: 'Visites (14 jours)' },
+    recentLogins: { ja: '最近のログイン', en: 'Recent sign-ins', fr: 'Connexions récentes' },
+    platformFlagsTitle: { ja: '機能スイッチ', en: 'Feature switches', fr: 'Interrupteurs' },
+    signupClosed: { ja: 'サインアップ停止中', en: 'Signup closed', fr: 'Inscriptions fermées' },
+    maintenanceOn: { ja: 'メンテナンスモード', en: 'Maintenance mode', fr: 'Mode maintenance' },
+    disableAi: { ja: 'AI抽出を停止', en: 'Pause AI extraction', fr: 'Suspendre l’extraction IA' },
+    disableUploads: { ja: 'ファイルアップロードを停止', en: 'Pause uploads', fr: 'Suspendre les téléversements' },
+    auditTrail: { ja: '監査ログ', en: 'Audit trail', fr: 'Journal d’audit' },
+    broadcastCard: { ja: 'ユーザーへ通知', en: 'Notify subscribers', fr: 'Notifier les abonnés' },
+    broadcastAudience: { ja: '送信先', en: 'Audience', fr: 'Audience' },
+    broadcastSubscribed: { ja: '購読アクティブ', en: 'Active / trialing subscriptions', fr: 'Abonnements actifs / essais' },
+    broadcastAllApproved: { ja: '承認済み全員', en: 'All approved users', fr: 'Tous les comptes approuvés' },
+    sendEmailAlso: { ja: 'メールも送信（設定済みSMTP）', en: 'Also send email (when SMTP is configured)', fr: 'Envoyer aussi un e-mail (SMTP requis)' },
+    sendBroadcast: { ja: '送信', en: 'Send', fr: 'Envoyer' },
+    impersonateCta: { ja: '対象ユーザーID', en: 'Target user ID', fr: 'ID utilisateur cible' },
+    startSession: { ja: 'セッション開始', en: 'Start session', fr: 'Démarrer' },
+    bulkSelected: { ja: '選択中', en: 'Selected', fr: 'Sélection' },
+    approveSelected: { ja: '選択を承認', en: 'Approve selected', fr: 'Approuver la sélection' },
+    rejectSelected: { ja: '選択を却下', en: 'Reject selected', fr: 'Rejeter la sélection' },
+    totpHeading: { ja: 'Super Admin 二要素', en: 'Super Admin MFA', fr: 'MFA Super Admin' },
+    totpGenerate: { ja: 'シークレットを生成', en: 'Generate secret', fr: 'Générer un secret' },
+    totpConfirmPlaceholder: { ja: '6桁コード', en: '6-digit code', fr: 'Code à 6 chiffres' },
+    totpEnable: { ja: '有効化', en: 'Enable', fr: 'Activer' },
+    totpDisable: { ja: 'MFA をオフ', en: 'Disable MFA', fr: 'Désactiver MFA' },
+  },
+
   // ─── Super Admin Dashboard ─────────────────────────────────
   adminDashboard: {
     title: { ja: '管理者ダッシュボード', en: 'Super Admin', fr: 'Tableau de bord administrateur' },
@@ -3109,6 +3161,11 @@ export const translations = {
       fr: 'Échec de la connexion. Veuillez réessayer plus tard.',
     },
     forgotPasswordLink: { ja: 'パスワードをお忘れですか？', en: 'Forgot password?', fr: 'Mot de passe oublié ?' },
+    authenticatorCode: {
+      ja: '認証アプリのコード',
+      en: 'Authenticator code',
+      fr: 'Code d’authentification',
+    },
   },
 
   // ─── Admin / Messaging ──────────────────────────────────────

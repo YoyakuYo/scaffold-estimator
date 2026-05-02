@@ -1,7 +1,5 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { SuperAdminDashboardContent } from '@/components/superadmin-dashboard-content';
-
-export default function SuperAdminDashboardPage() {
-  return <SuperAdminDashboardContent />;
+export default function SuperAdminDashboardRedirectPage() {
+  redirect('/superadmin/console');
 }

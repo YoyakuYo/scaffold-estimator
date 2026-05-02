@@ -12,10 +12,13 @@ import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 import { AppTitlebar } from '@/components/app-titlebar';
 import { PushNotificationSetup } from '@/components/push-notification-setup';
 import { PresenceTracker } from '@/lib/page-presence-context';
+import { SiteVisitTracker } from '@/components/site-visit-tracker';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -38,6 +41,16 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   });
 
   const isSuperAdmin = profile?.role === 'superadmin';
+  const isSuperAdminConsole = pathname.startsWith('/superadmin/console');
+
+  const exitImpersonation = useMutation({
+    mutationFn: authApi.exitImpersonation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      router.refresh();
+    },
+  });
+
   const needsBankActivation = !!(profile && profile.role !== 'superadmin' && profile.pendingBankPlan);
   const bankActivationAllowlist = ['/activate-bank-subscription', '/billing', '/profile'];
   const onBankActivationAllowlist =
@@ -65,10 +78,26 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AppTitlebar />
+      {mounted && !isSuperAdminLogin && <SiteVisitTracker />}
       <div className="app-main-content">
         {showNav && (
           <>
-            {isSuperAdmin ? <SuperAdminNavigation /> : <Navigation />}
+            {profile?.impersonatedBy && (
+              <div className="sticky z-[48] bg-amber-500 text-slate-900 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold shadow-md border-b border-amber-600/80">
+                <span>
+                  Support session · acting as <span className="font-mono font-bold">{profile.email}</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={exitImpersonation.isPending}
+                  onClick={() => exitImpersonation.mutate()}
+                  className="rounded-md bg-slate-900 text-amber-100 px-3 py-1 text-xs font-semibold hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Exit impersonation
+                </button>
+              </div>
+            )}
+            {!isSuperAdminConsole && (isSuperAdmin ? <SuperAdminNavigation /> : <Navigation />)}
             <Heartbeat />
             <PresenceTracker />
             <PushNotificationSetup enabled={!!profile?.id} />

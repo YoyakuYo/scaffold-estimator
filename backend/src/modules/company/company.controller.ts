@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -30,6 +31,38 @@ export class CompanyController {
     return this.companyService.getCompanyVerifyDetail(id);
   }
 
+  @Put('admin/:companyId')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin')
+  async updateCompanyAsSuperadmin(@Param('companyId') companyId: string, @Body() dto: UpdateCompanyDto) {
+    return this.companyService.updateCompany(companyId, dto);
+  }
+
+  @Post('admin/:companyId/branches')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin')
+  async createBranchAsSuperadmin(@Param('companyId') companyId: string, @Body() dto: CreateBranchDto) {
+    return this.companyService.createBranch(companyId, dto);
+  }
+
+  @Put('admin/:companyId/branches/:branchId')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin')
+  async updateBranchAsSuperadmin(
+    @Param('companyId') companyId: string,
+    @Param('branchId') branchId: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
+    return this.companyService.updateBranch(companyId, branchId, dto);
+  }
+
+  @Delete('admin/:companyId/branches/:branchId')
+  @UseGuards(RolesGuard)
+  @Roles('superadmin')
+  async deleteBranchAsSuperadmin(@Param('companyId') companyId: string, @Param('branchId') branchId: string) {
+    return this.companyService.deleteBranch(companyId, branchId);
+  }
+
   // ─── Company Info ──────────────────────────────────────────
 
   @Get()
@@ -38,9 +71,8 @@ export class CompanyController {
   }
 
   @Put()
-  @UseGuards(RolesGuard)
-  @Roles('superadmin')
   async updateCompany(@CurrentUser() user: any, @Body() dto: UpdateCompanyDto) {
+    if (!user?.companyId) throw new ForbiddenException('No organization context.');
     return this.companyService.updateCompany(user.companyId, dto);
   }
 
@@ -57,27 +89,24 @@ export class CompanyController {
   }
 
   @Post('branches')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin')
   async createBranch(@CurrentUser() user: any, @Body() dto: CreateBranchDto) {
+    if (!user?.companyId) throw new ForbiddenException('No organization context.');
     return this.companyService.createBranch(user.companyId, dto);
   }
 
   @Put('branches/:branchId')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin')
   async updateBranch(
     @CurrentUser() user: any,
     @Param('branchId') branchId: string,
     @Body() dto: UpdateBranchDto,
   ) {
+    if (!user?.companyId) throw new ForbiddenException('No organization context.');
     return this.companyService.updateBranch(user.companyId, branchId, dto);
   }
 
   @Delete('branches/:branchId')
-  @UseGuards(RolesGuard)
-  @Roles('superadmin')
   async deleteBranch(@CurrentUser() user: any, @Param('branchId') branchId: string) {
+    if (!user?.companyId) throw new ForbiddenException('No organization context.');
     return this.companyService.deleteBranch(user.companyId, branchId);
   }
 }

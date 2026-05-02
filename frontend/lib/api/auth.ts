@@ -9,6 +9,8 @@ export interface LoginCredentials {
   password: string;
   /** Set true only when logging in via /superadmin. Backend rejects cross-use. */
   superadmin?: boolean;
+  /** Required when MFA is enabled for this Super Admin account. */
+  totpCode?: string;
 }
 
 export interface AuthResponse {
@@ -97,5 +99,33 @@ export const authApi = {
   verifyBankActivation: async (code: string): Promise<{ ok: true; plan: string }> => {
     const response = await apiClient.post<{ ok: true; plan: string }>('/auth/verify-bank-activation', { code });
     return response.data;
+  },
+
+  impersonateUser: async (userId: string): Promise<AuthResponse> => {
+    const response = await apiClient.post<AuthResponse>(`/auth/superadmin/impersonate/${userId}`, {});
+    Cookies.set('access_token', response.data.access_token, accessTokenCookieWriteAttributes());
+    return response.data;
+  },
+
+  exitImpersonation: async (): Promise<AuthResponse> => {
+    const response = await apiClient.post<AuthResponse>('/auth/superadmin/exit-impersonation', {});
+    Cookies.set('access_token', response.data.access_token, accessTokenCookieWriteAttributes());
+    return response.data;
+  },
+
+  /** Super Admin TOTP (Google Authenticator, etc.). */
+  beginTotp: async (): Promise<{ secret: string; otpauthUri: string }> => {
+    const res = await apiClient.post<{ secret: string; otpauthUri: string }>('/auth/superadmin/totp/begin', {});
+    return res.data;
+  },
+
+  confirmTotp: async (secret: string, token: string): Promise<{ ok: boolean }> => {
+    const res = await apiClient.post<{ ok: boolean }>('/auth/superadmin/totp/confirm', { secret, token });
+    return res.data;
+  },
+
+  disableTotp: async (): Promise<{ ok: boolean }> => {
+    const res = await apiClient.delete<{ ok: boolean }>('/auth/superadmin/totp');
+    return res.data;
   },
 };

@@ -23,6 +23,7 @@ import { PresenceModule } from './modules/presence/presence.module';
 import { StructuralTakeoffModule } from './modules/structural-takeoff/structural-takeoff.module';
 import { BimModule } from './modules/bim/bim.module';
 import { StructuralBimModule } from './modules/structural-bim/structural-bim.module';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { StructuralBimModule } from './modules/structural-bim/structural-bim.mod
     StructuralTakeoffModule,
     BimModule,
     StructuralBimModule,
+    PlatformModule,
   ],
   providers: [
     {

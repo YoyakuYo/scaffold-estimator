@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi, RegisterPayload } from '@/lib/api/auth';
+import { platformApi } from '@/lib/api/platform';
 import { isAuthTransportOrGatewayFailure, safeRegisterErrorLines } from '@/lib/api/safe-auth-flow-error';
 import { useMutation } from '@tanstack/react-query';
 import { Globe, UserPlus, Building2, CheckCircle, AlertCircle } from 'lucide-react';
@@ -39,6 +40,8 @@ export default function RegisterPage() {
 
   const [missingFieldError, setMissingFieldError] = useState<string | null>(null);
 
+  const [signupBlocked, setSignupBlocked] = useState(false);
+
   const registerMutation = useMutation({
     mutationFn: authApi.register,
     onSuccess: () => {
@@ -54,6 +57,7 @@ export default function RegisterPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (signupBlocked) return;
     if (!formData.companyName.trim() || requiredCompanyAddressMissing) {
       setMissingFieldError(t('register', 'companyAddressRequired'));
       return;
@@ -76,6 +80,10 @@ export default function RegisterPage() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    void platformApi.getPublicStatus().then((s) => setSignupBlocked(!!s.signupDisabled));
   }, []);
 
   if (success) {
@@ -142,6 +150,13 @@ export default function RegisterPage() {
               {t('register', 'subtitle')}
             </p>
           </div>
+
+          {signupBlocked && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg flex items-start gap-2 text-sm">
+              <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+              <p>{t('register', 'signupPaused')}</p>
+            </div>
+          )}
 
           {registerMutation.isError && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2">
@@ -298,7 +313,7 @@ export default function RegisterPage() {
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 type="submit"
-                disabled={registerMutation.isPending || requiredCompanyAddressMissing || !formData.companyName.trim()}
+                disabled={registerMutation.isPending || signupBlocked || requiredCompanyAddressMissing || !formData.companyName.trim()}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
               >
                 {registerMutation.isPending ? (

@@ -24,6 +24,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DrawingService } from './drawing.service';
 import { DrawingFileFormat } from './drawing.entity';
 import { PresenceService } from '../presence/presence.service';
+import { PlatformService } from '../platform/platform.service';
 
 @Controller('drawings')
 @UseGuards(JwtAuthGuard)
@@ -33,6 +34,7 @@ export class DrawingController {
   constructor(
     private readonly drawingService: DrawingService,
     private readonly presenceService: PresenceService,
+    private readonly platformService: PlatformService,
   ) {}
 
   @Post('upload')
@@ -98,6 +100,10 @@ export class DrawingController {
 
       if (!projectId) {
         throw new BadRequestException('projectId is required');
+      }
+
+      if (user.role !== 'superadmin') {
+        await this.platformService.assertFileUploadAllowed();
       }
 
       this.logger.log(`Uploading file: ${file.originalname}, size: ${file.size}, format: ${extname(file.originalname)}`);

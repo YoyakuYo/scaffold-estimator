@@ -21,10 +21,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub?: string; id?: string }) {
+  async validate(payload: { sub?: string; id?: string; imp?: string }) {
     const userId = payload.sub || payload.id;
     if (!userId || typeof userId !== 'string') {
       throw new UnauthorizedException('Invalid token');
+    }
+    if (payload.imp) {
+      const actor = await this.authService.getUserForJwtPayload(userId);
+      if ((actor as { role?: string }).role !== 'superadmin') {
+        throw new UnauthorizedException('Invalid token');
+      }
+      const target = await this.authService.getUserForJwtPayload(payload.imp);
+      return {
+        ...target,
+        impersonatedBy: actor.id,
+        impersonatedByEmail: (actor as { email?: string }).email ?? null,
+      };
     }
     return this.authService.getUserForJwtPayload(userId);
   }

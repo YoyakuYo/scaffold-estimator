@@ -27,6 +27,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import { mapRowToCamel, mapRowsToCamel, mapPayloadToSnake } from '../../common/utils/db-mapper';
 import { LANDING_CONTACT_USER_EMAIL, isSyntheticListedUser } from '../../common/constants/system-users';
+import { PlatformService } from '../platform/platform.service';
+import { authenticator } from 'otplib';
 
 @Injectable()
 export class AuthService {
@@ -41,6 +43,7 @@ export class AuthService {
     @Inject(forwardRef(() => SubscriptionService))
     private subscriptionService: SubscriptionService,
     private mailerService: MailerService,
+    private readonly platformService: PlatformService,
   ) {}
 
   /** Create trial subscription when user is approved/created. Non-blocking so register never fails. */
@@ -147,10 +150,20 @@ export class AuthService {
     return result;
   }
 
-  async login(user: any) {
-    const payload = { email: user.email, sub: user.id, role: user.role, companyId: user.companyId };
+  async login(user: any): Promise<{ access_token: string; user: Record<string, unknown> }> {
+    const expiresInRaw =
+      user.role === 'superadmin'
+        ? this.configService.get<string>('SUPERADMIN_JWT_EXPIRES_IN')
+        : this.configService.get<string>('JWT_EXPIRES_IN');
+    const expiresIn = (expiresInRaw || (user.role === 'superadmin' ? '7200s' : '1800s')) as `${number}s` | string;
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      role: user.role,
+      companyId: user.companyId,
+    };
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: this.jwtService.sign(payload, { expiresIn }),
       user: {
         id: user.id,
         email: user.email,
@@ -162,6 +175,43 @@ export class AuthService {
     };
   }
 
+  issueImpersonationToken(superadminRow: Record<string, unknown>, targetRow: Record<string, unknown>): { access_token: string; user: Record<string, unknown> } {
+    const expRaw = this.configService.get<string>('SUPERADMIN_JWT_EXPIRES_IN') || '7200s';
+    const access_token = this.jwtService.sign(
+      { sub: superadminRow.id, imp: targetRow.id },
+      { expiresIn: expRaw as `${number}s` },
+    );
+    return {
+      access_token,
+      user: {
+        id: targetRow.id,
+        email: targetRow.email,
+        role: targetRow.role,
+        companyId: targetRow.companyId,
+        firstName: targetRow.firstName,
+        lastName: targetRow.lastName,
+      },
+    };
+  }
+
+  async exitImpersonation(superadminUserId: string): Promise<{ access_token: string; user: Record<string, unknown> }> {
+    const u = await this.getUser(superadminUserId);
+    return this.login(u);
+  }
+
+  assertSuperadminIpAllowed(clientIpRaw?: string): void {
+    const cfg = (this.configService.get<string>('SUPERADMIN_IP_ALLOWLIST') || '').trim();
+    if (!cfg) return;
+    const allowed = cfg
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const ip = (clientIpRaw || '').trim();
+    if (!ip) throw new ForbiddenException('Super Admin login requires a recognizable client IP.');
+    const ok = allowed.some((a) => ip === a || ip.startsWith(a));
+    if (!ok) throw new ForbiddenException('Super Admin login is not allowed from this network.');
+  }
+
   /** Call after successful login: record login history and set last_active_at. */
   async onLoginSuccess(userId: string, ip?: string, userAgent?: string): Promise<void> {
     const client = this.supabase.getClient();
@@ -169,6 +219,32 @@ export class AuthService {
     await client.from('login_history').insert(
       mapPayloadToSnake({ userId, ipAddress: ip || null, userAgent: userAgent || null }),
     );
+
+    const { data: urow } = await client.from('users').select('email, role').eq('id', userId).maybeSingle();
+    const role = String((urow as { role?: string } | null)?.role || '');
+    const email = String((urow as { email?: string } | null)?.email || '');
+    if (role === 'superadmin' || email === LANDING_CONTACT_USER_EMAIL) return;
+
+    const { data: sas } = await client.from('users').select('id, email').eq('role', 'superadmin').eq('is_active', true);
+    const title = `Login: ${email}`;
+    const body = [`IP: ${ip || 'unknown'}`, userAgent ? `UA: ${userAgent.slice(0, 280)}` : null].filter(Boolean).join('\n');
+    for (const sa of sas || []) {
+      const sid = String((sa as { id: string }).id);
+      await this.notificationsService.create(sid, 'system', title, { body, link: '/superadmin/console/analytics' }).catch(() => {});
+    }
+
+    const emailAlerts = ['true', '1', 'yes'].includes((this.configService.get<string>('PLATFORM_EMAIL_LOGIN_ALERTS') || '').toLowerCase());
+    if (!emailAlerts) return;
+
+    try {
+      for (const sa of sas || []) {
+        const to = String((sa as { email: string }).email || '');
+        if (!to) continue;
+        await this.mailerService.send(to, '[Platform] User login alert', `${title}\n\n${body}`).catch(() => {});
+      }
+    } catch {
+      //
+    }
   }
 
   /** Heartbeat: update last_active_at (call from frontend every ~60s). */
@@ -273,6 +349,7 @@ export class AuthService {
   // ─── Public Registration ─────────────────────────────────────
 
   async register(dto: RegisterDto): Promise<{ success: boolean; message: string; userId: string }> {
+    await this.platformService.assertSignupAllowed();
     const client = this.supabase.getClient();
 
     const { data: existing } = await client.from('users').select('id').eq('email', dto.email).maybeSingle();
@@ -430,7 +507,8 @@ export class AuthService {
     if (error || !row) throw new NotFoundException('ユーザーが見つかりません。');
     const u = mapRowToCamel<User & { companies?: { name: string } | null }>(row as unknown as Record<string, unknown>);
     if (!u) throw new NotFoundException('ユーザーが見つかりません。');
-    const { passwordHash, bankActivationCodeHash: _bah, companies, ...rest } = u;
+    const { passwordHash, bankActivationCodeHash: _bah, companies, totpSecret: _ts, ...rest } = u;
+    void _ts;
     const result: any = rest;
     if (companies && typeof companies === 'object' && 'name' in companies) result.companyName = (companies as { name: string }).name;
     return result;
@@ -447,6 +525,29 @@ export class AuthService {
     if (!user) throw new NotFoundException('ユーザーが見つかりません。');
     if (actor && actor.role !== 'superadmin' && user.companyId !== actor.companyId) {
       throw new ForbiddenException();
+    }
+
+    const actorIsSuperadmin = actor?.role === 'superadmin';
+    if (dto.role !== undefined) {
+      if (dto.role === 'superadmin' && !actorIsSuperadmin) {
+        throw new ForbiddenException('Only a platform operator can assign the superadmin role.');
+      }
+      if (user.role === 'superadmin' && dto.role !== 'superadmin') {
+        if (!actorIsSuperadmin) throw new ForbiddenException();
+        const { count, error } = await this.supabase.getClient().from('users').select('*', { count: 'exact', head: true }).eq('role', 'superadmin');
+        void error;
+        if ((count ?? 0) <= 1) {
+          throw new BadRequestException('At least one platform superadmin must remain.');
+        }
+      }
+    }
+    if (dto.isActive === false && user.role === 'superadmin') {
+      if (!actorIsSuperadmin) throw new ForbiddenException();
+      const { count, error } = await this.supabase.getClient().from('users').select('*', { count: 'exact', head: true }).eq('role', 'superadmin').eq('is_active', true);
+      void error;
+      if ((count ?? 0) <= 1) {
+        throw new BadRequestException('You cannot deactivate the last active platform superadmin.');
+      }
     }
 
     const updates: Record<string, unknown> = {};
@@ -645,6 +746,19 @@ export class AuthService {
       throw new BadRequestException(
         'Transfer the company admin role to another member before deactivating this account.',
       );
+    }
+    if (target.role === 'superadmin') {
+      if (actor?.role !== 'superadmin') throw new ForbiddenException();
+      const { count, error } = await this.supabase
+        .getClient()
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'superadmin')
+        .eq('is_active', true);
+      void error;
+      if ((count ?? 0) <= 1) {
+        throw new BadRequestException('You cannot deactivate the last active platform superadmin.');
+      }
     }
     await this.supabase.getClient().from('users').update({ is_active: false }).eq('id', userId);
     if (target.isCompanyAdmin && target.companyId && actor?.role === 'superadmin') {
@@ -873,6 +987,103 @@ export class AuthService {
     }
 
     return { success: true };
+  }
+
+  async bulkApproveUsers(ids: string[], dto?: ApproveUserDto): Promise<{ processed: number }> {
+    const unique = [...new Set(ids)].filter(Boolean);
+    let processed = 0;
+    for (const id of unique) {
+      try {
+        await this.approveUser(id, dto);
+        processed++;
+      } catch (err) {
+        this.logger.warn(`bulkApproveUsers skip ${id}: ${(err as Error).message}`);
+      }
+    }
+    return { processed };
+  }
+
+  async bulkRejectUsers(ids: string[]): Promise<{ processed: number }> {
+    const unique = [...new Set(ids)].filter(Boolean);
+    let processed = 0;
+    for (const id of unique) {
+      try {
+        await this.rejectUser(id);
+        processed++;
+      } catch (err) {
+        this.logger.warn(`bulkRejectUsers skip ${id}: ${(err as Error).message}`);
+      }
+    }
+    return { processed };
+  }
+
+  async beginSuperadminTotpSetup(superadminUserId: string): Promise<{ secret: string; otpauthUri: string }> {
+    const row = await this.getUser(superadminUserId);
+    if (row.role !== 'superadmin') throw new ForbiddenException();
+    const secret = authenticator.generateSecret();
+    const app = (this.configService.get<string>('PUBLIC_APP_NAME') || 'Zoomen Scaffold').trim();
+    const uri = authenticator.keyuri(row.email, app, secret);
+    return { secret, otpauthUri: uri };
+  }
+
+  async confirmSuperadminTotp(superadminUserId: string, secret: string, token: string): Promise<{ ok: boolean }> {
+    const row = await this.getUser(superadminUserId);
+    if (row.role !== 'superadmin') throw new ForbiddenException();
+    if (!authenticator.verify({ token, secret })) {
+      throw new BadRequestException('Invalid authenticator code.');
+    }
+    await this.supabase
+      .getClient()
+      .from('users')
+      .update(mapPayloadToSnake({ totpSecret: secret, totpEnabled: true }))
+      .eq('id', superadminUserId);
+    await this.platformService.appendAudit(superadminUserId, 'superadmin_totp.enable', 'user', superadminUserId, {});
+    return { ok: true };
+  }
+
+  async disableSuperadminTotp(superadminUserId: string): Promise<{ ok: boolean }> {
+    const row = await this.getUser(superadminUserId);
+    if (row.role !== 'superadmin') throw new ForbiddenException();
+    await this.supabase
+      .getClient()
+      .from('users')
+      .update(mapPayloadToSnake({ totpSecret: null, totpEnabled: false }))
+      .eq('id', superadminUserId);
+    await this.platformService.appendAudit(superadminUserId, 'superadmin_totp.disable', 'user', superadminUserId, {});
+    return { ok: true };
+  }
+
+  async assertSuperadminLoginTotp(userId: string, totpCode?: string): Promise<void> {
+    const { data: raw } = await this.supabase
+      .getClient()
+      .from('users')
+      .select('role, totp_secret, totp_enabled')
+      .eq('id', userId)
+      .maybeSingle();
+    const r = raw as { role?: string; totp_secret?: string | null; totp_enabled?: boolean } | null;
+    if (!r || r.role !== 'superadmin') return;
+    if (!r.totp_enabled) return;
+    const secret = r.totp_secret;
+    if (!secret) throw new UnauthorizedException('Authenticator enrollment is incomplete.');
+    const code = totpCode?.trim() ?? '';
+    if (!code || !authenticator.verify({ token: code, secret })) {
+      throw new UnauthorizedException('Two-factor authentication code is invalid or missing.');
+    }
+  }
+
+  async startImpersonation(
+    superadminActorId: string,
+    targetUserId: string,
+  ): Promise<{ access_token: string; user: Record<string, unknown> }> {
+    const actorRow = await this.getUser(superadminActorId);
+    const targetRow = await this.getUser(targetUserId);
+    if (actorRow.role !== 'superadmin') throw new ForbiddenException();
+    if (targetRow.role === 'superadmin') throw new BadRequestException('Cannot impersonate another platform operator.');
+    const out = this.issueImpersonationToken(actorRow, targetRow);
+    await this.platformService.appendAudit(superadminActorId, 'impersonation.start', 'user', targetUserId, {
+      targetEmail: targetRow.email,
+    });
+    return out;
   }
 
   async getPendingUsersCount(): Promise<number> {

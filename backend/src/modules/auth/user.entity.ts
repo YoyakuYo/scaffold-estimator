@@ -98,6 +98,12 @@ export class User {
   @Column({ name: 'bank_wire_intent_product_code', type: 'text', default: 'scaffold' })
   bankWireIntentProductCode: 'scaffold' | 'bim' | 'construction_plan';
 
+  @Column({ name: 'totp_secret', type: 'text', nullable: true })
+  totpSecret: string | null;
+
+  @Column({ name: 'totp_enabled', default: false })
+  totpEnabled: boolean;
+
   @Column({ name: 'last_active_at', type: 'timestamptz', nullable: true })
   lastActiveAt: Date | null;
 

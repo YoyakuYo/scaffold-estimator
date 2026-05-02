@@ -9,9 +9,10 @@ import { ConstructionPlanExcelService } from './schedule/construction-plan-excel
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { PresenceModule } from '../presence/presence.module';
 import { SubscriptionAiGuard } from '../../common/guards/subscription-ai.guard';
+import { PlatformModule } from '../platform/platform.module';
 
 @Module({
-  imports: [SubscriptionModule, PresenceModule],
+  imports: [SubscriptionModule, PresenceModule, PlatformModule],
   controllers: [StructuralTakeoffController],
   providers: [
     StructuralTakeoffService,

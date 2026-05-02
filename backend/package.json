@@ -22,7 +22,8 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
-    "seed": "ts-node -r tsconfig-paths/register src/database/seeds/run-seed.ts"
+    "seed": "ts-node -r tsconfig-paths/register src/database/seeds/run-seed.ts",
+    "bootstrap:superadmin": "ts-node -r tsconfig-paths/register scripts/bootstrap-superadmin.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -52,6 +53,7 @@
     "mathjs": "^12.2.0",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.4",
+    "otplib": "^12.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",

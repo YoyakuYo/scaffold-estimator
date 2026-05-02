@@ -23,8 +23,16 @@ DB_NAME=postgres
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 # Access token TTL (e.g. 1800s, 30m, 1h). Default in code is 30 minutes if unset.
 JWT_EXPIRES_IN=1800
+# Shorter TTL for platform operator sessions (recommended in production).
+# SUPERADMIN_JWT_EXPIRES_IN=7200
 JWT_REFRESH_SECRET=your-refresh-secret-key-also-change-this
 JWT_REFRESH_EXPIRES_IN=86400
+
+# ── Platform operator (seed / login hardening)
+# PLATFORM_BOOTSTRAP_SUPERADMIN_EMAIL=you@yourdomain.com
+# SUPERADMIN_IP_ALLOWLIST=203.0.113.10,192.168.1.0
+# PLATFORM_EMAIL_LOGIN_ALERTS=true   # Email every superadmin on each tenant login (set false to use in-app only)
+# PUBLIC_APP_NAME=Your product name # Used in authenticator app label for Super Admin TOTP
 
 # ============================================
 # REDIS CONFIGURATION

@@ -14,4 +14,9 @@ export class LoginDto {
   @IsBoolean()
   @Transform(({ value }) => value === true || value === 'true')
   superadmin?: boolean;
+
+  /** Required on Super Admin login when TOTP is enabled for the operator account. */
+  @IsOptional()
+  @IsString()
+  totpCode?: string;
 }

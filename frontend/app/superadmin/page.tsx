@@ -27,12 +27,14 @@ export default function SuperAdminPage() {
     retry: false,
   });
 
+  const [totpCode, setTotpCode] = useState('');
+
   const loginMutation = useMutation({
-    mutationFn: (creds: { email: string; password: string }) =>
+    mutationFn: (creds: { email: string; password: string; totpCode?: string }) =>
       authApi.login({ ...creds, superadmin: true }),
     onSuccess: (res) => {
       if (res.user?.role === 'superadmin') {
-        router.push('/superadmin/dashboard');
+        router.push('/superadmin/console');
         return;
       }
       setErrorKey(null);
@@ -48,7 +50,7 @@ export default function SuperAdminPage() {
     e.preventDefault();
     setErrorKey(null);
     setPostLoginDenied(false);
-    loginMutation.mutate({ email, password });
+    loginMutation.mutate({ email, password, totpCode: totpCode.trim() || undefined });
   };
 
   const errorBody =
@@ -57,7 +59,7 @@ export default function SuperAdminPage() {
 
   useEffect(() => {
     if (profile?.role === 'superadmin') {
-      router.replace('/superadmin/dashboard');
+      router.replace('/superadmin/console');
     }
   }, [profile, router]);
 
@@ -113,6 +115,20 @@ export default function SuperAdminPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-gray-50"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('superadminLogin', 'authenticatorCode')} <span className="text-xs text-gray-500">(optional)</span>
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\s/g, ''))}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-gray-50"
+                placeholder="000000"
               />
             </div>
             <div className="text-right">

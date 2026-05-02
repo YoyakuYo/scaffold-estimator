@@ -30,7 +30,19 @@ import { ApproveUserDto } from './dto/approve-user.dto';
 import { VerifyBankActivationDto } from './dto/verify-bank-activation.dto';
 import { CreateTeamInviteDto } from './dto/create-team-invite.dto';
 import { AcceptTeamInviteSignupDto, AcceptTeamInviteSessionDto } from './dto/accept-team-invite.dto';
+import { BulkApproveBodyDto, BulkRejectBodyDto } from './dto/bulk-users.dto';
 import { TransferCompanyAdminDto } from './dto/transfer-company-admin.dto';
+
+function clientIp(req: { ip?: string; socket?: { remoteAddress?: string }; headers?: Record<string, unknown> }): string {
+  const xf = req.headers?.['x-forwarded-for'];
+  if (typeof xf === 'string' && xf.trim()) {
+    return xf.split(',')[0]!.trim();
+  }
+  if (Array.isArray(xf) && xf[0]) {
+    return String(xf[0]).trim();
+  }
+  return req.ip || req.socket?.remoteAddress || '';
+}
 
 @Controller('auth')
 export class AuthController {
@@ -54,6 +66,9 @@ export class AuthController {
           'This account must use the normal login page. Super Admin login is only for platform administrators.',
         );
       }
+      const ip = clientIp(req);
+      this.authService.assertSuperadminIpAllowed(ip);
+      await this.authService.assertSuperadminLoginTotp(req.user.id, loginDto.totpCode);
     } else {
       if (userRole === 'superadmin') {
         throw new ForbiddenException(
@@ -62,12 +77,9 @@ export class AuthController {
       }
     }
 
+    const ip = clientIp(req);
     const result = await this.authService.login(req.user);
-    await this.authService.onLoginSuccess(
-      req.user.id,
-      req.ip || req.connection?.remoteAddress,
-      req.headers?.['user-agent'],
-    );
+    await this.authService.onLoginSuccess(req.user.id, ip, req.headers?.['user-agent']);
     return result;
   }
 
@@ -163,7 +175,15 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   async getProfile(@CurrentUser() user: any) {
-    return this.authService.getProfile(user.id);
+    const profile = await this.authService.getProfile(user.id);
+    if (user.impersonatedBy) {
+      return {
+        ...profile,
+        impersonatedBy: user.impersonatedBy,
+        impersonatedByEmail: user.impersonatedByEmail ?? null,
+      };
+    }
+    return profile;
   }
 
   @UseGuards(JwtAuthGuard)
@@ -197,6 +217,46 @@ export class AuthController {
   @Post('heartbeat')
   async heartbeat(@CurrentUser() user: any) {
     return this.authService.heartbeat(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('superadmin/exit-impersonation')
+  async exitImpersonation(@CurrentUser() user: any) {
+    if (!user.impersonatedBy) {
+      throw new BadRequestException('Not impersonating.');
+    }
+    return this.authService.exitImpersonation(user.impersonatedBy);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('superadmin/impersonate/:userId')
+  async startImpersonate(@CurrentUser() user: any, @Param('userId') targetUserId: string) {
+    return this.authService.startImpersonation(user.id, targetUserId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('superadmin/totp/begin')
+  async totpBegin(@CurrentUser() user: any) {
+    return this.authService.beginSuperadminTotpSetup(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('superadmin/totp/confirm')
+  async totpConfirm(
+    @CurrentUser() user: any,
+    @Body() body: { secret: string; token: string },
+  ) {
+    return this.authService.confirmSuperadminTotp(user.id, body.secret, body.token);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Delete('superadmin/totp')
+  async totpDisable(@CurrentUser() user: any) {
+    return this.authService.disableSuperadminTotp(user.id);
   }
 
   // ─── User Management: Super Admin (all) or company admin (org roster / CRUD) ─
@@ -237,6 +297,21 @@ export class AuthController {
   async getPendingUsersCount() {
     const count = await this.authService.getPendingUsersCount();
     return { count };
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('users/bulk-approve')
+  async bulkApprove(@Body() body: BulkApproveBodyDto) {
+    const { ids, ...dto } = body;
+    return this.authService.bulkApproveUsers(ids, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('superadmin')
+  @Post('users/bulk-reject')
+  async bulkReject(@Body() body: BulkRejectBodyDto) {
+    return this.authService.bulkRejectUsers(body.ids);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

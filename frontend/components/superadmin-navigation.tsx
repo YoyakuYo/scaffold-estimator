@@ -29,7 +29,7 @@ export function SuperAdminNavigation() {
   }, []);
 
   const navItems = [
-    { path: '/superadmin/dashboard', matchAlso: ['/dashboard'], label: t('superadminNav', 'dashboard'), icon: Shield },
+    { path: '/superadmin/console', matchAlso: ['/superadmin/dashboard', '/dashboard'], label: t('superadminNav', 'dashboard'), icon: Shield },
     { path: '/users', matchAlso: [] as string[], label: t('superadminNav', 'users'), icon: Users },
     { path: '/superadmin/subscribers', matchAlso: [] as string[], label: t('superadminNav', 'subscribers'), icon: CreditCard },
     { path: '/admin/messages', matchAlso: [] as string[], label: t('superadminNav', 'messages'), icon: MessageSquare },
@@ -55,7 +55,7 @@ export function SuperAdminNavigation() {
             <Shield className="h-4 w-4 text-amber-400" />
           </span>
           <button
-            onClick={() => router.push('/superadmin/dashboard')}
+            onClick={() => router.push('/superadmin/console')}
             className="text-sm font-semibold text-white"
           >
             {t('superadminNav', 'consoleTitle')}

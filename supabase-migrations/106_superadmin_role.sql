@@ -1,25 +1,14 @@
 -- ============================================================
 -- Migration 106: Introduce 'superadmin' as a first-class role
 -- ============================================================
--- Updates the platform owner user from role='admin' to role='superadmin'.
--- The backend RolesGuard now auto-grants superadmin full access to all
--- admin-protected endpoints, so no per-endpoint changes are needed in SQL.
+-- Historical note: Earlier versions promoted a fixed email/UUID here.
+-- That is intentionally removed — do not assign platform operators in migrations.
+--
+-- Operators: promotion via Platform Console (/superadmin/console) as an existing
+-- superadmin, or one-off bootstrap: backend `npm run bootstrap:superadmin` with
+-- PLATFORM_BOOTSTRAP_SUPERADMIN_EMAIL in .env (see ENV_SETUP.md).
+--
+-- RolesGuard treats role = 'superadmin' as bypass for @Roles(...) checks.
 -- ============================================================
 
--- Force superadmin by email — always, regardless of current role
-UPDATE users
-SET role = 'superadmin',
-    updated_at = now()
-WHERE email = 'omarsowbarca45@gmail.com';
-
--- Also by fixed UUID (from migration 105)
-UPDATE users
-SET role = 'superadmin',
-    updated_at = now()
-WHERE id = 'b0000000-0000-0000-0000-000000000099'
-  AND role != 'superadmin';
-
--- Verify
-SELECT id, email, role, is_active, approval_status
-FROM users
-WHERE email = 'omarsowbarca45@gmail.com';
+SELECT 1;

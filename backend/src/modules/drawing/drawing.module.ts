@@ -18,11 +18,13 @@ import { GeometryCleanerService } from './parsers/geometry-cleaner.service';
 import { OuterBoundaryDetectorService } from './parsers/outer-boundary-detector.service';
 import { WallSegmentExtractorService } from './parsers/wall-segment-extractor.service';
 import { CadProcessingPipelineService } from './parsers/cad-processing-pipeline.service';
+import { PlatformModule } from '../platform/platform.module';
 
 @Module({
   imports: [
     SubscriptionModule,
     PresenceModule,
+    PlatformModule,
     BullModule.registerQueue({
       name: 'drawing-processing',
     }),
