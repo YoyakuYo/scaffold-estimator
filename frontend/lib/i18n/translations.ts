@@ -2871,6 +2871,131 @@ export const translations = {
       en: 'Platform analytics observatory',
       fr: 'Observatoire analytique de la plateforme',
     },
+    analyticsHudSourceNote: {
+      ja: 'site_analytics_events・login_history・upload_events・users から集計（スーパー管理者とランディング連絡用ユーザーをテナント集計から除外）。',
+      en: 'Aggregated from site analytics page views, login history, upload_events, and tenant user rows (superadmin and the landing inbox user are excluded from tenant totals).',
+      fr: 'Agrégé depuis les vues `site_analytics_events`, l’historique de connexion, `upload_events` et les comptes locataires (superadmin et contact landing exclus des totaux locataires).',
+    },
+    analyticsHudRibbonApproved: {
+      ja: '承認済みユーザー',
+      en: 'Approved users',
+      fr: 'Comptes approuvés',
+    },
+    analyticsHudRibbonPending: {
+      ja: '承認待ち',
+      en: 'Pending approval',
+      fr: 'En attente',
+    },
+    analyticsHudRibbonCompanies: {
+      ja: '会社（メンバーあり）',
+      en: 'Companies w/ members',
+      fr: 'Entreprises actives',
+    },
+    analyticsHudRibbonUploads7d: {
+      ja: '7日・アップロード',
+      en: 'Upload rows · 7d',
+      fr: 'Fichiers · 7 j',
+    },
+    analyticsHudTopRoutes: {
+      ja: '主要ルート（7日PV上位）',
+      en: 'Top routes by page-view traffic',
+      fr: 'Itinéraires dominants (PV 7 j)',
+    },
+    analyticsHudTopRoutesSub: {
+      ja: 'サイト解析テーブルの path で集約（クエリ文字列除去）。',
+      en: 'Grouped by normalized pathname from telemetry (strip querystrings).',
+      fr: 'Regroupement par chemin normalisé (sans paramètres de requête).',
+    },
+    analyticsHudEmptyPaths: {
+      ja: '過去7日間にページビューイベントの path がありません。',
+      en: 'No instrumented routes in the trailing 7 days yet.',
+      fr: 'Aucun chemin enregistré sur les 7 derniers jours.',
+    },
+    analyticsHudPathHits: {
+      ja: 'ヒット・7日',
+      en: 'hits · 7d',
+      fr: 'hits · 7 j',
+    },
+    analyticsHudUploadKinds: {
+      ja: 'アップロード種別（7日）',
+      en: 'Upload kinds · 7d',
+      fr: 'Types de fichiers · 7 j',
+    },
+    analyticsHudUploadKindsSub: {
+      ja: 'upload_events の kind で集約。',
+      en: 'Breakdown uses the persisted `upload_events.kind` values.',
+      fr: 'Répartition selon `upload_events.kind`.',
+    },
+    analyticsHudEmptyUploadKinds: {
+      ja: 'この期間の upload_events がありません。',
+      en: 'No upload telemetry for this trailing window.',
+      fr: 'Aucun téléversement sur cette fenêtre.',
+    },
+    analyticsHudOtherKinds: {
+      ja: 'その他の種類',
+      en: 'Other kinds',
+      fr: 'Autres types',
+    },
+    analyticsHudProductMix: {
+      ja: 'プロダクト別アップロード（7日）',
+      en: 'Uploads by workspace product',
+      fr: 'Téléversements par produit',
+    },
+    analyticsHudProductMixSub: {
+      ja: 'upload_events の product_code。',
+      en: '`upload_events.product_code` volume.',
+      fr: 'Volume selon `product_code`.',
+    },
+    analyticsHudEmptyProducts: {
+      ja: 'プロダクト別の行がありません。',
+      en: 'No product-scoped uploads in this window.',
+      fr: 'Aucune donnée produit.',
+    },
+    analyticsHudUploads: {
+      ja: '件',
+      en: 'uploads',
+      fr: 'fichiers',
+    },
+    analyticsHudTenantShare: {
+      ja: 'テナント承認状態',
+      en: 'Tenant approval cohorts',
+      fr: 'Cohortes locataires',
+    },
+    analyticsHudTenantShareSub: {
+      ja: '承認済み vs 保留（スーパー管理者などは除外済み）。',
+      en: 'Approved vs pending (non-tenant/system accounts excluded upstream).',
+      fr: 'Approuvés vs en attente (comptes système exclus en amont).',
+    },
+    analyticsHudApprovedSlice: {
+      ja: '承認済み',
+      en: 'Approved',
+      fr: 'Approuvés',
+    },
+    analyticsHudPendingSlice: {
+      ja: '保留',
+      en: 'Pending',
+      fr: 'En attente',
+    },
+    analyticsHudApprovedUsers: {
+      ja: '承認済みアカウント全体',
+      en: 'Approved accounts (total)',
+      fr: 'Comptes approuvés (total)',
+    },
+    analyticsHudPendingUsers: {
+      ja: '承認フローの待ち行列',
+      en: 'Queued in onboarding',
+      fr: 'En file d’activation',
+    },
+    analyticsHudTenantShareFoot: {
+      ja: '数値そのものです（合成スコアではありません）。',
+      en: 'Raw counts — not blended scores.',
+      fr: 'Volumes bruts, pas de scores composés.',
+    },
+    analyticsHudEmptyTenantPie: {
+      ja: '承認済み・保留ともにカウントがありません。',
+      en: 'No approved or pending tenant users to chart.',
+      fr: 'Pas de données locataires à afficher.',
+    },
     analyticsHudPanelActivity: {
       ja: 'アクティビティ構成',
       en: 'Telemetry mix · 24h',

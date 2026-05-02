@@ -22,6 +22,15 @@ export interface PlatformAnalyticsSummary {
   logins24h: number;
   logins7d: number;
   visitsByDay: { day: string; count: number }[];
+  /** From site_analytics_events (7d window), sorted by volume. */
+  pageViewsTopPaths: { path: string; count: number }[];
+  /** From upload_events (7d window). */
+  uploadEventsByKind: { kind: string; count: number }[];
+  uploadEventsByProduct: { productCode: string; count: number }[];
+  uploads7dTotal: number;
+  tenantApprovedUsers: number;
+  tenantPendingUsers: number;
+  tenantCompaniesWithMembers: number;
 }
 
 export const platformApi = {

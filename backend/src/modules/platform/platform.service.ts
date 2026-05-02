@@ -3,6 +3,7 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { mapPayloadToSnake, mapRowToCamel, mapRowsToCamel } from '../../common/utils/db-mapper';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailerService } from '../mailer/mailer.service';
+import { LANDING_CONTACT_USER_EMAIL } from '../../common/constants/system-users';
 
 export type PlatformSettingsView = {
   featureDisableSignup: boolean;
@@ -189,35 +190,72 @@ export class PlatformService {
     logins24h: number;
     logins7d: number;
     visitsByDay: { day: string; count: number }[];
+    /** Real page_view paths (7d), highest traffic first. */
+    pageViewsTopPaths: { path: string; count: number }[];
+    /** upload_events rows grouped by `kind` for the last 7 days. */
+    uploadEventsByKind: { kind: string; count: number }[];
+    /** upload_events grouped by product_code (7d). */
+    uploadEventsByProduct: { productCode: string; count: number }[];
+    uploads7dTotal: number;
+    tenantApprovedUsers: number;
+    tenantPendingUsers: number;
+    tenantCompaniesWithMembers: number;
   }> {
     const client = this.supabase.getClient();
     const now = Date.now();
     const d24 = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const d7 = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const pv24 = await client
-      .from('site_analytics_events')
-      .select('*', { count: 'exact', head: true })
-      .eq('event_type', 'page_view')
-      .gte('created_at', d24);
+    const [
+      pv24,
+      pv7,
+      lg24,
+      lg7,
+      visitsByDay,
+      pathAgg,
+      uploadRows,
+      tenantPending,
+      tenantApproved,
+      companyIds,
+    ] = await Promise.all([
+      client.from('site_analytics_events').select('*', { count: 'exact', head: true }).eq('event_type', 'page_view').gte('created_at', d24),
+      client.from('site_analytics_events').select('*', { count: 'exact', head: true }).eq('event_type', 'page_view').gte('created_at', d7),
+      client.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', d24),
+      client.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', d7),
+      this.fallbackPageViewsByDay(client, 14),
+      client.from('site_analytics_events').select('path').eq('event_type', 'page_view').gte('created_at', d7),
+      client.from('upload_events').select('kind, product_code').gte('created_at', d7),
+      client
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .neq('role', 'superadmin')
+        .neq('email', LANDING_CONTACT_USER_EMAIL)
+        .eq('approval_status', 'pending'),
+      client
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .neq('role', 'superadmin')
+        .neq('email', LANDING_CONTACT_USER_EMAIL)
+        .eq('approval_status', 'approved')
+        .eq('is_active', true),
+      client
+        .from('users')
+        .select('company_id')
+        .neq('role', 'superadmin')
+        .neq('email', LANDING_CONTACT_USER_EMAIL)
+        .not('company_id', 'is', null),
+    ]);
 
-    const pv7 = await client
-      .from('site_analytics_events')
-      .select('*', { count: 'exact', head: true })
-      .eq('event_type', 'page_view')
-      .gte('created_at', d7);
+    const pageViewsTopPaths = this.countStringFieldFromRows(pathAgg.data as Array<{ path: string | null }> | null, 'path', 15, (raw) =>
+      this.normalizeAnalyticsPath(raw),
+    );
+    const { byKind, byProduct, total: uploads7dTotal } = this.countUploadBreakdown(uploadRows.data as Array<{ kind?: string | null; product_code?: string | null }> | null);
 
-    const lg24 = await client
-      .from('login_history')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', d24);
-
-    const lg7 = await client
-      .from('login_history')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', d7);
-
-    const visitsByDay = await this.fallbackPageViewsByDay(client, 14);
+    const companyKeySet = new Set<string>();
+    for (const r of companyIds.data || []) {
+      const cid = (r as { company_id?: string }).company_id;
+      if (cid) companyKeySet.add(String(cid));
+    }
 
     return {
       pageViews24h: pv24.count ?? 0,
@@ -225,7 +263,63 @@ export class PlatformService {
       logins24h: lg24.count ?? 0,
       logins7d: lg7.count ?? 0,
       visitsByDay,
+      pageViewsTopPaths,
+      uploadEventsByKind: byKind,
+      uploadEventsByProduct: byProduct,
+      uploads7dTotal,
+      tenantApprovedUsers: tenantApproved.count ?? 0,
+      tenantPendingUsers: tenantPending.count ?? 0,
+      tenantCompaniesWithMembers: companyKeySet.size,
     };
+  }
+
+  private normalizeAnalyticsPath(raw: string | null | undefined): string {
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    if (!s) return '(unknown)';
+    const noQuery = s.split('?')[0].trim() || '/';
+    return noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+  }
+
+  private countStringFieldFromRows<R extends Record<string, unknown>>(
+    rows: R[] | null,
+    key: keyof R,
+    limit: number,
+    normalize?: (raw: string) => string,
+  ): { path: string; count: number }[] {
+    const counts = new Map<string, number>();
+    for (const row of rows || []) {
+      const raw = row[key];
+      const segment = normalize ? normalize(String(raw ?? '')) : String(raw ?? '(unknown)');
+      counts.set(segment, (counts.get(segment) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([path, count]) => ({ path, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  }
+
+  private countUploadBreakdown(rows: Array<{ kind?: string | null; product_code?: string | null }> | null): {
+    byKind: { kind: string; count: number }[];
+    byProduct: { productCode: string; count: number }[];
+    total: number;
+  } {
+    const kindMap = new Map<string, number>();
+    const productMap = new Map<string, number>();
+    let total = 0;
+    for (const r of rows || []) {
+      total++;
+      const k = (r.kind && String(r.kind).trim()) || '(unknown)';
+      kindMap.set(k, (kindMap.get(k) || 0) + 1);
+      const p = (r.product_code && String(r.product_code).trim()) || 'scaffold';
+      productMap.set(p, (productMap.get(p) || 0) + 1);
+    }
+    const byKind = [...kindMap.entries()]
+      .map(([kind, count]) => ({ kind, count }))
+      .sort((a, b) => b.count - a.count);
+    const byProduct = [...productMap.entries()]
+      .map(([productCode, count]) => ({ productCode, count }))
+      .sort((a, b) => b.count - a.count);
+    return { byKind, byProduct, total };
   }
 
   private async fallbackPageViewsByDay(client: any, days: number): Promise<{ day: string; count: number }[]> {
