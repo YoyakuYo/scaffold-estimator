@@ -27,6 +27,7 @@ const AXIS = '#64748b';
 type LoginRow = Record<string, unknown> & {
   created_at?: string;
   userEmail?: string | null;
+  companyName?: string | null;
   user_id?: string;
   ip_address?: string | null;
 };
@@ -212,13 +213,14 @@ export function AnalyticsOperatorConsole({
                   <tr>
                     <th className="px-3 py-2 font-medium">{t('adminDashboard', 'colTime')}</th>
                     <th className="px-3 py-2 font-medium">{t('adminDashboard', 'colUser')}</th>
+                    <th className="px-3 py-2 font-medium">{t('adminDashboard', 'colCompany')}</th>
                     <th className="px-3 py-2 font-medium">IP</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-[12px] text-slate-700">
                   {recentLoginsRows.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-3 py-8 text-center text-slate-500">
+                      <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
                         {t('superadminConsole', 'analyticsHudNoLogins')}
                       </td>
                     </tr>
@@ -229,6 +231,12 @@ export function AnalyticsOperatorConsole({
                           {row.created_at ? new Date(row.created_at as string).toLocaleString() : '—'}
                         </td>
                         <td className="px-3 py-2 font-medium text-slate-900">{String(row.userEmail ?? row.user_id ?? '—')}</td>
+                        <td
+                          className="max-w-[220px] truncate px-3 py-2 text-slate-700"
+                          title={String(row.companyName ?? '')}
+                        >
+                          {row.companyName ? String(row.companyName) : '—'}
+                        </td>
                         <td className="px-3 py-2 text-slate-500">{String(row.ip_address ?? '—')}</td>
                       </tr>
                     ))

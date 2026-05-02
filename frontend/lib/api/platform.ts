@@ -67,7 +67,7 @@ export const platformApi = {
     return res.data;
   },
 
-  listRecentLogins: async (): Promise<Array<Record<string, unknown> & { userEmail?: string | null }>> => {
+  listRecentLogins: async (): Promise<Array<Record<string, unknown> & { userEmail?: string | null; companyName?: string | null }>> => {
     const res = await apiClient.get('/platform/analytics/logins?limit=100');
     return res.data;
   },

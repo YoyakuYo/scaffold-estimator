@@ -354,13 +354,29 @@ export class PlatformService {
   async listRecentLoginsWithEmails(limit = 80): Promise<any[]> {
     const rows = await this.listRecentLogins(limit);
     const ids = [...new Set(rows.map((r: any) => r.user_id).filter(Boolean))];
-    if (!ids.length) return rows;
-    const { data: users } = await this.supabase.getClient().from('users').select('id, email').in('id', ids);
-    const map = new Map((users || []).map((u: any) => [String(u.id), String(u.email || '')]));
-    return rows.map((r: any) => ({
-      ...r,
-      userEmail: map.get(String(r.user_id)) || null,
-    }));
+    if (!ids.length) {
+      return rows.map((r: any) => ({ ...r, userEmail: null, companyName: null }));
+    }
+    const { data: users } = await this.supabase.getClient().from('users').select('id, email, company_id').in('id', ids);
+    const emailMap = new Map((users || []).map((u: any) => [String(u.id), String(u.email || '')]));
+    const companyIds = [...new Set((users || []).map((u: any) => u.company_id).filter(Boolean))];
+    const companyMap = new Map<string, string>();
+    if (companyIds.length) {
+      const { data: comps } = await this.supabase.getClient().from('companies').select('id, name').in('id', companyIds);
+      for (const c of comps || []) {
+        companyMap.set(String((c as any).id), String((c as any).name || ''));
+      }
+    }
+    const userCompanyId = new Map((users || []).map((u: any) => [String(u.id), u.company_id ? String(u.company_id) : null]));
+    return rows.map((r: any) => {
+      const uid = String(r.user_id);
+      const cid = userCompanyId.get(uid);
+      return {
+        ...r,
+        userEmail: emailMap.get(uid) || null,
+        companyName: cid ? companyMap.get(cid) || null : null,
+      };
+    });
   }
 
   async broadcastToAudience(input: {

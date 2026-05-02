@@ -2877,9 +2877,9 @@ export const translations = {
       fr: 'Connexions récentes',
     },
     analyticsOperatorWhoSignedInDesc: {
-      ja: 'ログイン履歴より。メールまたはユーザー ID・IP。',
-      en: 'From login history: email or user ID, with IP.',
-      fr: 'Historique de connexion : e-mail ou ID et IP.',
+      ja: 'ログイン履歴より。メール、会社名、IP。',
+      en: 'From login history: email, company, and IP.',
+      fr: 'Historique des connexions : e-mail, entreprise et IP.',
     },
     analyticsOperatorWhoUploaded: {
       ja: '直近のアップロード',
