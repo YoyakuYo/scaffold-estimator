@@ -184,19 +184,17 @@ export class PlatformService {
     if (error) this.logger.debug?.(`site_analytics_events: ${error.message}`);
   }
 
-  async getAnalyticsSummary(): Promise<{
+  async getAnalyticsSummary(opts?: { telemetryDays?: number }): Promise<{
+    telemetryWindowDays: number;
     pageViews24h: number;
     pageViews7d: number;
     logins24h: number;
     logins7d: number;
     visitsByDay: { day: string; count: number }[];
-    /** Real page_view paths (7d), highest traffic first. */
     pageViewsTopPaths: { path: string; count: number }[];
-    /** upload_events rows grouped by `kind` for the last 7 days. */
     uploadEventsByKind: { kind: string; count: number }[];
-    /** upload_events grouped by product_code (7d). */
     uploadEventsByProduct: { productCode: string; count: number }[];
-    uploads7dTotal: number;
+    uploadsPeriodTotal: number;
     tenantApprovedUsers: number;
     tenantPendingUsers: number;
     tenantCompaniesWithMembers: number;
@@ -205,6 +203,9 @@ export class PlatformService {
     const now = Date.now();
     const d24 = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const d7 = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const telemetryWindowDays =
+      opts?.telemetryDays === 7 || opts?.telemetryDays === 14 || opts?.telemetryDays === 28 ? opts.telemetryDays : 14;
+    const dTel = new Date(now - telemetryWindowDays * 24 * 60 * 60 * 1000).toISOString();
 
     const [
       pv24,
@@ -222,9 +223,9 @@ export class PlatformService {
       client.from('site_analytics_events').select('*', { count: 'exact', head: true }).eq('event_type', 'page_view').gte('created_at', d7),
       client.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', d24),
       client.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', d7),
-      this.fallbackPageViewsByDay(client, 14),
-      client.from('site_analytics_events').select('path').eq('event_type', 'page_view').gte('created_at', d7),
-      client.from('upload_events').select('kind, product_code').gte('created_at', d7),
+      this.fallbackPageViewsByDay(client, telemetryWindowDays),
+      client.from('site_analytics_events').select('path').eq('event_type', 'page_view').gte('created_at', dTel),
+      client.from('upload_events').select('kind, product_code').gte('created_at', dTel),
       client
         .from('users')
         .select('*', { count: 'exact', head: true })
@@ -246,10 +247,12 @@ export class PlatformService {
         .not('company_id', 'is', null),
     ]);
 
-    const pageViewsTopPaths = this.countStringFieldFromRows(pathAgg.data as Array<{ path: string | null }> | null, 'path', 15, (raw) =>
+    const pageViewsTopPaths = this.countStringFieldFromRows(pathAgg.data as Array<{ path: string | null }> | null, 'path', 25, (raw) =>
       this.normalizeAnalyticsPath(raw),
     );
-    const { byKind, byProduct, total: uploads7dTotal } = this.countUploadBreakdown(uploadRows.data as Array<{ kind?: string | null; product_code?: string | null }> | null);
+    const { byKind, byProduct, total: uploadsPeriodTotal } = this.countUploadBreakdown(
+      uploadRows.data as Array<{ kind?: string | null; product_code?: string | null }> | null,
+    );
 
     const companyKeySet = new Set<string>();
     for (const r of companyIds.data || []) {
@@ -258,6 +261,7 @@ export class PlatformService {
     }
 
     return {
+      telemetryWindowDays,
       pageViews24h: pv24.count ?? 0,
       pageViews7d: pv7.count ?? 0,
       logins24h: lg24.count ?? 0,
@@ -266,7 +270,7 @@ export class PlatformService {
       pageViewsTopPaths,
       uploadEventsByKind: byKind,
       uploadEventsByProduct: byProduct,
-      uploads7dTotal,
+      uploadsPeriodTotal,
       tenantApprovedUsers: tenantApproved.count ?? 0,
       tenantPendingUsers: tenantPending.count ?? 0,
       tenantCompaniesWithMembers: companyKeySet.size,

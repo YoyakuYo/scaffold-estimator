@@ -67,8 +67,12 @@ export class PlatformController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('superadmin')
   @Get('analytics/summary')
-  analyticsSummary() {
-    return this.platformService.getAnalyticsSummary();
+  analyticsSummary(@Query('telemetryDays') telemetryDaysRaw?: string) {
+    let telemetryDays = 14;
+    if (telemetryDaysRaw === '7' || telemetryDaysRaw === '14' || telemetryDaysRaw === '28') {
+      telemetryDays = parseInt(telemetryDaysRaw, 10);
+    }
+    return this.platformService.getAnalyticsSummary({ telemetryDays });
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

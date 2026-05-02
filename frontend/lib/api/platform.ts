@@ -17,21 +17,23 @@ export interface PlatformSettings extends PlatformPublicStatus {
 }
 
 export interface PlatformAnalyticsSummary {
+  /** Rows / paths aggregated over this trailing window (7, 14, or 28). */
+  telemetryWindowDays: number;
   pageViews24h: number;
   pageViews7d: number;
   logins24h: number;
   logins7d: number;
   visitsByDay: { day: string; count: number }[];
-  /** From site_analytics_events (7d window), sorted by volume. */
   pageViewsTopPaths: { path: string; count: number }[];
-  /** From upload_events (7d window). */
   uploadEventsByKind: { kind: string; count: number }[];
   uploadEventsByProduct: { productCode: string; count: number }[];
-  uploads7dTotal: number;
+  uploadsPeriodTotal: number;
   tenantApprovedUsers: number;
   tenantPendingUsers: number;
   tenantCompaniesWithMembers: number;
 }
+
+export type TelemetryWindowDays = 7 | 14 | 28;
 
 export const platformApi = {
   getPublicStatus: async (): Promise<PlatformPublicStatus> => {
@@ -57,8 +59,11 @@ export const platformApi = {
     return res.data;
   },
 
-  getAnalyticsSummary: async (): Promise<PlatformAnalyticsSummary> => {
-    const res = await apiClient.get<PlatformAnalyticsSummary>('/platform/analytics/summary');
+  getAnalyticsSummary: async (params?: { telemetryDays?: TelemetryWindowDays }): Promise<PlatformAnalyticsSummary> => {
+    const res = await apiClient.get<PlatformAnalyticsSummary>('/platform/analytics/summary', {
+      params:
+        params?.telemetryDays !== undefined ? { telemetryDays: params.telemetryDays } : undefined,
+    });
     return res.data;
   },
 
